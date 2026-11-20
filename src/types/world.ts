@@ -257,6 +257,7 @@ export interface Cultivator {
   herbs: Record<HerbId, number>;
   pills: Record<PillId, number>;
   pillToxicity: number;
+  exploredTileIds: string[];
   artifacts: Artifact[];
   memories: MemoryEntry[];
   coreMemories: MemoryEntry[];
@@ -400,6 +401,24 @@ export interface BountyEntry {
   settledTick?: number;
 }
 
+export type TerrainBiome = '灵山' | '毒沼' | '剑冢' | '荒漠' | '魔渊' | '坊市';
+
+export interface MapTile {
+  id: string;
+  col: number;
+  row: number;
+  biome: TerrainBiome;
+  spiritQi: number;
+  ownerSectId?: string;
+}
+
+export interface WorldTerrain {
+  seed: number;
+  columns: number;
+  rows: number;
+  tiles: MapTile[];
+}
+
 export interface WorldState {
   tick: number;
   interventionSequence: number;
@@ -412,6 +431,7 @@ export interface WorldState {
   occasions: WorldOccasion[];
   bounties: BountyEntry[];
   locations: LocationNode[];
+  terrain: WorldTerrain;
   cultivators: Cultivator[];
   relationships: RelationshipEdge[];
   events: WorldEvent[];

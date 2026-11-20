@@ -1,5 +1,6 @@
 import { memoryDecayRate } from '../engine/memoryEngine';
-import { CultivationRealm, HerbId, PillId, WorldState } from '../types/world';
+import { generateTerrain, noteTerrainVisit } from '../engine/terrainEngine';
+import { CultivationRealm, HerbId, LocationNode, PillId, WorldState } from '../types/world';
 
 export const REALM_ORDER: CultivationRealm[] = [
   '练气',
@@ -41,87 +42,8 @@ const herbs = (jade_leaf = 0, earth_root = 0, star_bloom = 0, shadow_moss = 0): 
   ({ jade_leaf, earth_root, star_bloom, shadow_moss });
 const noPills = (): Record<PillId, number> => ({ foundation: 0, golden: 0, barrier: 0, heart_poison: 0 });
 
-export function createInitialWorld(): WorldState {
-  return {
-    tick: 1,
-    interventionSequence: 0,
-    year: 1001,
-    month: 1,
-    sects: [
-      {
-        id: 'sect-qingyun',
-        name: '太虚剑宗',
-        alignment: '正道',
-        color: '#38bdf8',
-        doctrine: '以剑证道，斩妖除魔，护佑苍生',
-        reputation: 85,
-        spiritStones: 5000,
-        headquartersId: 'loc-taixu',
-        pavilion: [],
-        leaderId: 'npc-1',
-        facilities: { qi_array: 1, alchemy_hall: 0, scripture_pavilion: 1, defense_array: 0, spirit_mine: 0 },
-        arrayHp: 0,
-        arrayMaxHp: 0,
-      },
-      {
-        id: 'sect-bloodmoon',
-        name: '血月魔宗',
-        alignment: '魔道',
-        color: '#f43f5e',
-        doctrine: '弱肉强食，夺天地造化侵日月玄机',
-        reputation: -70,
-        spiritStones: 4600,
-        headquartersId: 'loc-blood',
-        pavilion: [],
-        leaderId: 'npc-3',
-        facilities: { qi_array: 0, alchemy_hall: 0, scripture_pavilion: 0, defense_array: 0, spirit_mine: 1 },
-        arrayHp: 0,
-        arrayMaxHp: 0,
-      },
-      {
-        id: 'sect-danxia',
-        name: '丹霞谷',
-        alignment: '中立',
-        color: '#34d399',
-        doctrine: '炼百草神丹，结万界善缘，明哲保身',
-        reputation: 50,
-        spiritStones: 8200,
-        headquartersId: 'loc-danxia',
-        pavilion: [],
-        leaderId: 'npc-5',
-        facilities: { qi_array: 1, alchemy_hall: 1, scripture_pavilion: 1, defense_array: 0, spirit_mine: 0 },
-        arrayHp: 0,
-        arrayMaxHp: 0,
-      },
-      {
-        id: 'sect-tianji',
-        name: '天机阁',
-        alignment: '中立',
-        color: '#a78bfa',
-        doctrine: '推演天道因果，布局天下棋局',
-        reputation: 60,
-        spiritStones: 6400,
-        headquartersId: 'loc-tianji',
-        pavilion: [],
-        leaderId: 'npc-7',
-        facilities: { qi_array: 0, alchemy_hall: 1, scripture_pavilion: 1, defense_array: 0, spirit_mine: 0 },
-        arrayHp: 0,
-        arrayMaxHp: 0,
-      },
-    ],
-    diplomacy: [
-      { sectAId: 'sect-bloodmoon', sectBId: 'sect-qingyun', affinity: -65, pact: 'neutral', sinceTick: 1 },
-      { sectAId: 'sect-bloodmoon', sectBId: 'sect-danxia', affinity: -30, pact: 'neutral', sinceTick: 1 },
-      { sectAId: 'sect-bloodmoon', sectBId: 'sect-tianji', affinity: -18, pact: 'neutral', sinceTick: 1 },
-      { sectAId: 'sect-danxia', sectBId: 'sect-qingyun', affinity: 65, pact: 'neutral', sinceTick: 1 },
-      { sectAId: 'sect-danxia', sectBId: 'sect-tianji', affinity: 50, pact: 'neutral', sinceTick: 1 },
-      { sectAId: 'sect-qingyun', sectBId: 'sect-tianji', affinity: 62, pact: 'neutral', sinceTick: 1 },
-    ],
-    sieges: [],
-    tributeDemands: [],
-    occasions: [],
-    bounties: [],
-    locations: [
+export function createInitialWorld(seed = 2031): WorldState {
+  const locations: LocationNode[] = [
       {
         id: 'loc-taixu',
         name: '太虚剑峰',
@@ -224,7 +146,88 @@ export function createInitialWorld(): WorldState {
         furnaceGrade: 0,
         description: '孕育极品冰系灵石的野生灵脉，常有修士争夺。',
       },
+    ];
+  const world: WorldState = {
+    tick: 1,
+    interventionSequence: 0,
+    year: 1001,
+    month: 1,
+    sects: [
+      {
+        id: 'sect-qingyun',
+        name: '太虚剑宗',
+        alignment: '正道',
+        color: '#38bdf8',
+        doctrine: '以剑证道，斩妖除魔，护佑苍生',
+        reputation: 85,
+        spiritStones: 5000,
+        headquartersId: 'loc-taixu',
+        pavilion: [],
+        leaderId: 'npc-1',
+        facilities: { qi_array: 1, alchemy_hall: 0, scripture_pavilion: 1, defense_array: 0, spirit_mine: 0 },
+        arrayHp: 0,
+        arrayMaxHp: 0,
+      },
+      {
+        id: 'sect-bloodmoon',
+        name: '血月魔宗',
+        alignment: '魔道',
+        color: '#f43f5e',
+        doctrine: '弱肉强食，夺天地造化侵日月玄机',
+        reputation: -70,
+        spiritStones: 4600,
+        headquartersId: 'loc-blood',
+        pavilion: [],
+        leaderId: 'npc-3',
+        facilities: { qi_array: 0, alchemy_hall: 0, scripture_pavilion: 0, defense_array: 0, spirit_mine: 1 },
+        arrayHp: 0,
+        arrayMaxHp: 0,
+      },
+      {
+        id: 'sect-danxia',
+        name: '丹霞谷',
+        alignment: '中立',
+        color: '#34d399',
+        doctrine: '炼百草神丹，结万界善缘，明哲保身',
+        reputation: 50,
+        spiritStones: 8200,
+        headquartersId: 'loc-danxia',
+        pavilion: [],
+        leaderId: 'npc-5',
+        facilities: { qi_array: 1, alchemy_hall: 1, scripture_pavilion: 1, defense_array: 0, spirit_mine: 0 },
+        arrayHp: 0,
+        arrayMaxHp: 0,
+      },
+      {
+        id: 'sect-tianji',
+        name: '天机阁',
+        alignment: '中立',
+        color: '#a78bfa',
+        doctrine: '推演天道因果，布局天下棋局',
+        reputation: 60,
+        spiritStones: 6400,
+        headquartersId: 'loc-tianji',
+        pavilion: [],
+        leaderId: 'npc-7',
+        facilities: { qi_array: 0, alchemy_hall: 1, scripture_pavilion: 1, defense_array: 0, spirit_mine: 0 },
+        arrayHp: 0,
+        arrayMaxHp: 0,
+      },
     ],
+    diplomacy: [
+      { sectAId: 'sect-bloodmoon', sectBId: 'sect-qingyun', affinity: -65, pact: 'neutral', sinceTick: 1 },
+      { sectAId: 'sect-bloodmoon', sectBId: 'sect-danxia', affinity: -30, pact: 'neutral', sinceTick: 1 },
+      { sectAId: 'sect-bloodmoon', sectBId: 'sect-tianji', affinity: -18, pact: 'neutral', sinceTick: 1 },
+      { sectAId: 'sect-danxia', sectBId: 'sect-qingyun', affinity: 65, pact: 'neutral', sinceTick: 1 },
+      { sectAId: 'sect-danxia', sectBId: 'sect-tianji', affinity: 50, pact: 'neutral', sinceTick: 1 },
+      { sectAId: 'sect-qingyun', sectBId: 'sect-tianji', affinity: 62, pact: 'neutral', sinceTick: 1 },
+    ],
+    sieges: [],
+    tributeDemands: [],
+    occasions: [],
+    bounties: [],
+    locations,
+    terrain: generateTerrain(locations, seed),
     cultivators: [
       {
         id: 'npc-1',
@@ -255,6 +258,7 @@ export function createInitialWorld(): WorldState {
         herbs: herbs(),
         pills: noPills(),
         pillToxicity: 0,
+        exploredTileIds: [],
         artifacts: [{ id: 'artifact-npc-1-1', tier: '法宝', durability: 120, maxDurability: 120, name: '太虚青莲剑', spiritRoot: '金', boundTo: 'npc-1' }, { id: 'artifact-npc-1-2', tier: '灵器', durability: 100, maxDurability: 100, name: '九霄护心镜', spiritRoot: '雷' }],
         memories: [
           {
@@ -302,6 +306,7 @@ export function createInitialWorld(): WorldState {
         herbs: herbs(),
         pills: noPills(),
         pillToxicity: 0,
+        exploredTileIds: [],
         artifacts: [{ id: 'artifact-npc-2-1', tier: '灵器', durability: 100, maxDurability: 100, name: '霜华飞剑', spiritRoot: '水', boundTo: 'npc-2' }],
         memories: [
           {
@@ -349,6 +354,7 @@ export function createInitialWorld(): WorldState {
         herbs: herbs(),
         pills: noPills(),
         pillToxicity: 0,
+        exploredTileIds: [],
         artifacts: [{ id: 'artifact-npc-3-1', tier: '法宝', durability: 120, maxDurability: 120, name: '万魂血幡', spiritRoot: '暗', boundTo: 'npc-3' }, { id: 'artifact-npc-3-2', tier: '灵器', durability: 100, maxDurability: 100, name: '白骨魔珠', spiritRoot: '土' }],
         memories: [
           {
@@ -396,6 +402,7 @@ export function createInitialWorld(): WorldState {
         herbs: herbs(),
         pills: noPills(),
         pillToxicity: 0,
+        exploredTileIds: [],
         artifacts: [{ id: 'artifact-npc-4-1', tier: '灵器', durability: 100, maxDurability: 100, name: '天魔合欢铃', spiritRoot: '火', boundTo: 'npc-4' }, { id: 'artifact-npc-4-2', tier: '灵器', durability: 100, maxDurability: 100, name: '隐匿血衣', spiritRoot: '暗' }],
         memories: [
           {
@@ -443,6 +450,7 @@ export function createInitialWorld(): WorldState {
         herbs: herbs(),
         pills: noPills(),
         pillToxicity: 0,
+        exploredTileIds: [],
         artifacts: [{ id: 'artifact-npc-5-1', tier: '法宝', durability: 120, maxDurability: 120, name: '乾坤八卦炉', spiritRoot: '火', boundTo: 'npc-5' }, { id: 'artifact-npc-5-2', tier: '灵器', durability: 100, maxDurability: 100, name: '百草木灵鼎', spiritRoot: '木' }],
         memories: [
           {
@@ -490,6 +498,7 @@ export function createInitialWorld(): WorldState {
         herbs: herbs(),
         pills: noPills(),
         pillToxicity: 0,
+        exploredTileIds: [],
         artifacts: [{ id: 'artifact-npc-6-1', tier: '法器', durability: 80, maxDurability: 80, name: '青竹蜂云剑', spiritRoot: '木', boundTo: 'npc-6' }, { id: 'artifact-npc-6-2', tier: '法器', durability: 80, maxDurability: 80, name: '神行遁甲符', spiritRoot: '土' }],
         memories: [
           {
@@ -537,6 +546,7 @@ export function createInitialWorld(): WorldState {
         herbs: herbs(),
         pills: noPills(),
         pillToxicity: 0,
+        exploredTileIds: [],
         artifacts: [{ id: 'artifact-npc-7-1', tier: '法宝', durability: 120, maxDurability: 120, name: '河图洛书盘', spiritRoot: '水', boundTo: 'npc-7' }, { id: 'artifact-npc-7-2', tier: '灵器', durability: 100, maxDurability: 100, name: '星辰罗盘', spiritRoot: '雷' }],
         memories: [
           {
@@ -584,6 +594,7 @@ export function createInitialWorld(): WorldState {
         herbs: herbs(),
         pills: noPills(),
         pillToxicity: 0,
+        exploredTileIds: [],
         artifacts: [{ id: 'artifact-npc-8-1', tier: '灵器', durability: 100, maxDurability: 100, name: '九霄环佩琴', spiritRoot: '天灵根', boundTo: 'npc-8' }],
         memories: [
           {
@@ -662,4 +673,6 @@ export function createInitialWorld(): WorldState {
       },
     ],
   };
+  for (const actor of world.cultivators) noteTerrainVisit(world, actor);
+  return world;
 }

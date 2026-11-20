@@ -13,7 +13,7 @@ import {
 import { computeHeuristicDecision } from './llmBrain';
 import { maintainMemories, recordMemory } from './memoryEngine';
 import { synthesizeReflections } from './reflectionEngine';
-import { fabricateRumor, spreadRumors, witnessEvent } from './rumorEngine';
+import { fabricateRumor, knownRumorLead, spreadRumors, witnessEvent } from './rumorEngine';
 import { expireScheme, pursueScheme } from './schemeEngine';
 import { scriptedDialogue } from './dialogueEngine';
 import { resolveEncounter } from './encounterEngine';
@@ -27,6 +27,7 @@ import { maintainSectEconomy, mitigateSectArray, resolveSectEconomyAction, sectQ
 import { activeSiegeForActor, advanceDiplomacy, resolveDiplomacyAction } from './diplomacyEngine';
 import { activeOccasionForActor, advanceOccasions, joinOccasion } from './occasionEngine';
 import { advanceBounties, pursueBounty, recordTransgression } from './bountyEngine';
+import { knownMapLocations, noteTerrainVisit } from './terrainEngine';
 
 export type GodInterventionType =
   | 'SPAWN_TREASURE'
@@ -197,11 +198,16 @@ export function applyCultivatorBrainDecision(
     }
 
     case 'EXPLORE': {
-      const dest =
-        world.locations.find((l) => l.id === decision.targetLocationId) ??
-        world.locations[Math.floor(rng() * world.locations.length)];
+      const known = knownMapLocations(world, cultivator);
+      const unknown = world.locations.filter((place) => place.id !== cultivator.locationId && !known.includes(place));
+      const candidates = unknown.length ? unknown : world.locations.filter((place) => place.id !== cultivator.locationId);
+      const dest = decision.targetLocationId
+        ? known.find((place) => place.id === decision.targetLocationId) ??
+          (knownRumorLead(cultivator, world) === decision.targetLocationId ? world.locations.find((site) => site.id === decision.targetLocationId) : undefined)
+        : candidates[Math.floor(rng() * candidates.length)];
       if (dest && dest.id !== cultivator.locationId) {
         cultivator.locationId = dest.id;
+        noteTerrainVisit(world, cultivator);
         // Random chance of finding spirit stones or herbs while exploring
         if (rng() < 0.35) {
           const foundStones = Math.round(40 + rng() * 120);
@@ -582,6 +588,7 @@ export function advanceWorldTick(
     newEvents.push(event);
     witnessEvent(nextState, event);
   }
+  for (const actor of nextState.cultivators) if (actor.alive) noteTerrainVisit(nextState, actor);
   spreadRumors(nextState);
   nextState.events = [...newEvents, ...nextState.events].slice(0, 120);
   return nextState;
