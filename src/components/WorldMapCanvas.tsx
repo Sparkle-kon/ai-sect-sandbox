@@ -8,6 +8,7 @@ import { countHerbs } from './AlchemyPanel';
 import { durabilityOf, equippedArtifact, maxDurabilityOf } from '../engine/artifactEngine';
 import { isActiveTrial, TRIAL_STAGE } from './TribulationPanel';
 import { isGuardOnDuty } from './SectEconomyPanel';
+import { isActiveCampaign, SIEGE_LABELS } from './SectDiplomacyPanel';
 
 interface WorldMapCanvasProps {
   world: WorldState;
@@ -28,6 +29,10 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const selectedArtifact = selected?.alive ? equippedArtifact(selected) : undefined;
   const selectedLocation = selected && world.locations.find((loc) => loc.id === selected.locationId);
   const selectedTrial = selected?.tribulation;
+  const activeSieges = world.sieges.filter(isActiveCampaign);
+  const selectedSiege = selected?.alive ? activeSieges.find((siege) => siege.participantIds.includes(selected.id)) : undefined;
+  const siegeLocation = selectedSiege && world.locations.find(({ id }) => id === selectedSiege.destinationId);
+  const besiegedLocationIds = new Set(activeSieges.filter(({ status }) => status === 'sieging').map(({ destinationId }) => destinationId));
   const trialsByLocation = new Map<string, number>();
   const guardsByLocation = new Map<string, number>();
   const headquarters = new Map(world.sects.map((sect) => [sect.headquartersId, sect]));
@@ -150,6 +155,16 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       ctx.arc(loc.x, loc.y, 18, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
+
+      if (besiegedLocationIds.has(loc.id)) {
+        ctx.strokeStyle = '#fb7185';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.arc(loc.x, loc.y, 23, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
 
       // Keep the element beside the location name so it doesn't add a competing row.
       ctx.font = 'bold 13px sans-serif';
@@ -328,7 +343,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         height={560}
         onClick={handleCanvasClick}
         className="w-full h-auto cursor-pointer block"
-        aria-label="修仙世界地图。选择修士可查看下方识海状态摘要；也可通过识海面板的修士按钮切换。雷劫用静态闪电标注；各地渡劫与驻守状态可在下方列表查看。"
+        aria-label="修仙世界地图。选择修士可查看下方识海状态摘要；也可通过识海面板的修士按钮切换。雷劫用静态闪电标注；围攻地点用玫红虚线圈标注；各地渡劫、驻守和围攻状态可在下方列表查看。"
       />
       <div className="px-4 py-2 border-t border-slate-800/80 bg-slate-900/60 text-[11px] text-slate-400 flex flex-wrap gap-x-4 gap-y-1" aria-label="选中修士记忆摘要">
         {selected ? (
@@ -372,6 +387,9 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                 {!selected.alive ? ' · 留档' : ''}
               </span>
             )}
+            {selectedSiege && (
+              <span className="text-rose-300">参与战役：{SIEGE_LABELS[selectedSiege.status]} · {siegeLocation?.name ?? '地点未详'}</span>
+            )}
             <span>情景记忆 {selected.memories.length} 条</span>
             <span className="text-violet-300">核心记忆 {selected.coreMemories.length} 条{selected.alive && selected.coreMemories.length > 0 ? " · 紫弧标记" : ""}</span>
             <span>最强记忆 {strongestMemory.toFixed(1)}/10</span>
@@ -412,6 +430,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                 {homeSect && homeSect.arrayMaxHp > 0 && (
                   <span className="text-indigo-300">· 护山阵 {homeSect.arrayHp}/{homeSect.arrayMaxHp}</span>
                 )}
+                {besiegedLocationIds.has(location.id) && <span className="text-rose-300">· 围攻中</span>}
                 {trialCount > 0 && <span className="text-sky-300">· 渡劫中 {trialCount} 人</span>}
                 {herbCount > 0 && <span className="text-emerald-300">· 灵草 {herbCount} 株</span>}
                 {location.inheritanceScrolls.length > 0 && (

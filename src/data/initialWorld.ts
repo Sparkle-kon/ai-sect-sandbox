@@ -109,6 +109,16 @@ export function createInitialWorld(): WorldState {
         arrayMaxHp: 0,
       },
     ],
+    diplomacy: [
+      { sectAId: 'sect-bloodmoon', sectBId: 'sect-qingyun', affinity: -65, pact: 'neutral', sinceTick: 1 },
+      { sectAId: 'sect-bloodmoon', sectBId: 'sect-danxia', affinity: -30, pact: 'neutral', sinceTick: 1 },
+      { sectAId: 'sect-bloodmoon', sectBId: 'sect-tianji', affinity: -18, pact: 'neutral', sinceTick: 1 },
+      { sectAId: 'sect-danxia', sectBId: 'sect-qingyun', affinity: 65, pact: 'neutral', sinceTick: 1 },
+      { sectAId: 'sect-danxia', sectBId: 'sect-tianji', affinity: 50, pact: 'neutral', sinceTick: 1 },
+      { sectAId: 'sect-qingyun', sectBId: 'sect-tianji', affinity: 62, pact: 'neutral', sinceTick: 1 },
+    ],
+    sieges: [],
+    tributeDemands: [],
     locations: [
       {
         id: 'loc-taixu',

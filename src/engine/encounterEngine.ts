@@ -2,6 +2,7 @@ import type { Cultivator, LLMDecisionPayload, WorldEvent, WorldState } from '../
 import { scriptedDialogue } from './dialogueEngine';
 import { recordMemory } from './memoryEngine';
 import { gainMastery } from './techniqueEngine';
+import { adjustSectAffinity } from './diplomacyEngine';
 
 type EncounterAction = 'TRADE' | 'DUAL_CULTIVATE' | 'SECT_DIPLOMACY';
 export const ARTIFACT_TRADE_PRICE = 120;
@@ -79,6 +80,7 @@ export function resolveEncounter(
       first.reputation += 2;
       second.reputation += 2;
       adjust(target, 9);
+      adjustSectAffinity(world, first.id, second.id, 8);
       kind = 'sect_diplomacy';
       title = `会晤：${first.name}与${second.name}`;
       outcome = '两宗各出三十灵石置办信物，互递善意，各增两点声望，未签盟约。';

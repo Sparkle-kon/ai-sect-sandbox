@@ -70,6 +70,10 @@ export type ActionType =
   | 'BUILD_FACILITY'
   | 'DISPATCH_GUARD'
   | 'GUARD_DUTY'
+  | 'OFFER_ALLIANCE'
+  | 'DECLARE_WAR'
+  | 'DEMAND_TRIBUTE'
+  | 'LAUNCH_SIEGE'
   | 'TRADE'
   | 'DUAL_CULTIVATE'
   | 'SECT_DIPLOMACY'
@@ -310,6 +314,39 @@ export interface LLMDecisionPayload {
   forgeTier?: ArtifactTier;
   tribulationStance?: TribulationStance;
   facilityKind?: FacilityKind;
+  targetSectId?: string;
+}
+
+export interface SectDiplomaticRelation {
+  sectAId: string;
+  sectBId: string;
+  affinity: number; // -100 to 100
+  pact: 'neutral' | 'alliance' | 'war';
+  sinceTick: number;
+  lastActionTick?: number;
+}
+
+export interface SectSiege {
+  id: string;
+  attackerSectId: string;
+  defenderSectId: string;
+  destinationId: string;
+  participantIds: string[];
+  status: 'marching' | 'sieging' | 'victory' | 'repelled';
+  startedTick: number;
+  rounds: number;
+  lastResolvedTick?: number;
+  outcome?: string;
+}
+
+export interface SectTribute {
+  id: string;
+  demanderSectId: string;
+  targetSectId: string;
+  amount: number;
+  status: 'pending' | 'paid' | 'rejected';
+  startedTick: number;
+  resolvedTick?: number;
 }
 
 export interface WorldState {
@@ -318,6 +355,9 @@ export interface WorldState {
   year: number;
   month: number;
   sects: Sect[];
+  diplomacy: SectDiplomaticRelation[];
+  sieges: SectSiege[];
+  tributeDemands: SectTribute[];
   locations: LocationNode[];
   cultivators: Cultivator[];
   relationships: RelationshipEdge[];

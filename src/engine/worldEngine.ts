@@ -24,6 +24,7 @@ import { lootStorageRing, resolveArtifactAction, wearArtifact } from './artifact
 import { interfereTribulation, isTribulationActive, recommendedTribulationStance, resolveTribulation, tribulationTarget, triggerTribulation } from './tribulationEngine';
 import { maintainSectPolitics, resolveLeadershipAction, rewardContribution } from './sectPoliticsEngine';
 import { maintainSectEconomy, mitigateSectArray, resolveSectEconomyAction, sectQiBonus } from './sectEconomyEngine';
+import { activeSiegeForActor, advanceDiplomacy, resolveDiplomacyAction } from './diplomacyEngine';
 
 export type GodInterventionType =
   | 'SPAWN_TREASURE'
@@ -105,6 +106,11 @@ export function applyCultivatorBrainDecision(
   const qiFactor = (location?.spiritQi ?? 50) / 50;
 
   switch (decision.chosenAction) {
+    case 'OFFER_ALLIANCE':
+    case 'DECLARE_WAR':
+    case 'DEMAND_TRIBUTE':
+    case 'LAUNCH_SIEGE':
+      return resolveDiplomacyAction(world, cultivator, decision);
     case 'BUILD_FACILITY':
     case 'DISPATCH_GUARD':
     case 'GUARD_DUTY':
@@ -517,6 +523,12 @@ export function advanceWorldTick(
       }
     }
 
+    if (activeSiegeForActor(nextState, cultivator)) {
+      cultivator.currentAction = 'LAUNCH_SIEGE';
+      cultivator.innerMonologue = '军令已下，今月随本阵行军攻山。';
+      continue;
+    }
+
     const decision =
       precomputedDecisions?.[cultivator.id] ??
       computeHeuristicDecision(cultivator, nextState, rng);
@@ -540,7 +552,7 @@ export function advanceWorldTick(
     if (yearly) cultivator.reflections = synthesizeReflections(cultivator, nextState.tick);
   }
 
-  for (const event of maintainSectPolitics(nextState)) {
+  for (const event of [...advanceDiplomacy(nextState, rng), ...maintainSectPolitics(nextState)]) {
     newEvents.push(event);
     witnessEvent(nextState, event);
   }
