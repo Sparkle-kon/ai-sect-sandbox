@@ -1,0 +1,184 @@
+import React from 'react';
+import { Brain, Shield, Coins, Compass, Heart, Sparkles } from 'lucide-react';
+import { Cultivator, WorldState } from '../types/world';
+
+interface AgentInspectorProps {
+  world: WorldState;
+  cultivator: Cultivator | undefined;
+  onSelectCultivator: (id: string) => void;
+}
+
+export const AgentInspector: React.FC<AgentInspectorProps> = ({
+  world,
+  cultivator,
+  onSelectCultivator,
+}) => {
+  if (!cultivator) {
+    return (
+      <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 text-xs text-slate-400">
+        请在地图或下方列表中选择一位修士以洞察其识海。
+      </div>
+    );
+  }
+
+  const sect = world.sects.find((s) => s.id === cultivator.sectId);
+  const location = world.locations.find((l) => l.id === cultivator.locationId);
+
+  return (
+    <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3.5">
+      {/* Quick Switch Roster */}
+      <div className="flex flex-wrap gap-1.5 pb-2 border-b border-slate-800">
+        {world.cultivators.map((c) => (
+          <button
+            key={c.id}
+            type="button"
+            onClick={() => onSelectCultivator(c.id)}
+            className={`px-2 py-1 rounded text-xs font-medium transition ${
+              c.id === cultivator.id
+                ? 'bg-amber-500/25 text-amber-200 border border-amber-500/50'
+                : c.alive
+                  ? 'bg-slate-800/80 text-slate-300 hover:bg-slate-700'
+                  : 'bg-slate-900 text-slate-600 line-through'
+            }`}
+          >
+            {c.name}
+          </button>
+        ))}
+      </div>
+
+      {/* Header */}
+      <div className="flex items-start justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <h3 className="text-base font-bold text-slate-100">
+              {cultivator.name}
+            </h3>
+            <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-800 text-amber-300 border border-amber-500/30">
+              {cultivator.realm} {cultivator.realmStage}层
+            </span>
+            <span className="px-2 py-0.5 rounded text-[11px] bg-slate-800 text-slate-300">
+              性格：{cultivator.personality}
+            </span>
+          </div>
+          <p className="text-xs text-slate-400 mt-0.5">
+            {sect?.name ?? '散修'} · {cultivator.title} · 寿元 {cultivator.age}/
+            {cultivator.lifespan}载
+          </p>
+        </div>
+
+        <span
+          className={`px-2 py-0.5 rounded text-xs font-semibold ${
+            cultivator.alive
+              ? 'bg-emerald-500/20 text-emerald-300'
+              : 'bg-rose-500/20 text-rose-400'
+          }`}
+        >
+          {cultivator.alive ? `当前: ${cultivator.currentAction}` : '已陨落'}
+        </span>
+      </div>
+
+      {/* Inner Monologue (Chain of Thought) */}
+      <div className="p-3 rounded-lg bg-slate-950/90 border border-indigo-500/30 space-y-1.5">
+        <div className="flex items-center gap-1.5 text-xs font-semibold text-indigo-300">
+          <Brain className="w-3.5 h-3.5" />
+          <span>识海内心独白 (Agent Chain-of-Thought)</span>
+        </div>
+        <p className="text-xs text-slate-200 italic leading-relaxed">
+          “{cultivator.innerMonologue}”
+        </p>
+        <div className="pt-1 text-[11px] text-amber-300/90 flex items-center gap-1">
+          <Sparkles className="w-3 h-3" />
+          <span>深层执念：{cultivator.secretGoal}</span>
+        </div>
+      </div>
+
+      {/* Vital Stats Grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+        <div className="p-2 rounded bg-slate-950/60 border border-slate-800/80">
+          <div className="text-slate-400 flex items-center gap-1">
+            <Heart className="w-3 h-3 text-rose-400" /> 气血 (HP)
+          </div>
+          <div className="font-semibold text-slate-100 mt-0.5">
+            {cultivator.hp} / {cultivator.maxHp}
+          </div>
+        </div>
+        <div className="p-2 rounded bg-slate-950/60 border border-slate-800/80">
+          <div className="text-slate-400 flex items-center gap-1">
+            <Shield className="w-3 h-3 text-sky-400" /> 综合战力
+          </div>
+          <div className="font-semibold text-slate-100 mt-0.5">
+            {cultivator.combatPower}
+          </div>
+        </div>
+        <div className="p-2 rounded bg-slate-950/60 border border-slate-800/80">
+          <div className="text-slate-400 flex items-center gap-1">
+            <Coins className="w-3 h-3 text-amber-400" /> 灵石储备
+          </div>
+          <div className="font-semibold text-slate-100 mt-0.5">
+            {cultivator.spiritStones}
+          </div>
+        </div>
+        <div className="p-2 rounded bg-slate-950/60 border border-slate-800/80">
+          <div className="text-slate-400 flex items-center gap-1">
+            <Compass className="w-3 h-3 text-emerald-400" /> 所在灵地
+          </div>
+          <div className="font-semibold text-slate-100 mt-0.5 truncate">
+            {location?.name ?? cultivator.locationId}
+          </div>
+        </div>
+      </div>
+
+      {/* Qi Progress Bar */}
+      <div className="space-y-1">
+        <div className="flex justify-between text-xs">
+          <span className="text-slate-400">当前境界灵气圆满度</span>
+          <span className="text-amber-300 font-semibold">
+            {cultivator.qiProgress}%
+          </span>
+        </div>
+        <div className="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
+          <div
+            className="h-full bg-gradient-to-r from-sky-500 to-amber-400 transition-all duration-300"
+            style={{ width: `${cultivator.qiProgress}%` }}
+          />
+        </div>
+      </div>
+
+      {/* Artifacts */}
+      <div className="flex items-center gap-1.5 flex-wrap text-xs">
+        <span className="text-slate-400">本命与随身法宝：</span>
+        {cultivator.artifacts.map((art, i) => (
+          <span
+            key={`${art}-${i}`}
+            className="px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30"
+          >
+            {art}
+          </span>
+        ))}
+      </div>
+
+      {/* Memory Stream */}
+      <div className="space-y-1.5">
+        <h4 className="text-xs font-semibold text-slate-300">
+          近期记忆流 (Episodic Memory Stream)
+        </h4>
+        <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
+          {cultivator.memories
+            .slice()
+            .reverse()
+            .map((mem) => (
+              <div
+                key={mem.id}
+                className="text-xs p-2 rounded bg-slate-950/70 border border-slate-800/80 flex items-start justify-between gap-2"
+              >
+                <span className="text-slate-300">{mem.content}</span>
+                <span className="text-[10px] text-slate-500 whitespace-nowrap">
+                  Tick #{mem.tick} · 权重{mem.importance}
+                </span>
+              </div>
+            ))}
+        </div>
+      </div>
+    </div>
+  );
+};
