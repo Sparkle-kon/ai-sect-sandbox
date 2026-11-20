@@ -29,6 +29,7 @@ import { activeOccasionForActor, advanceOccasions, joinOccasion } from './occasi
 import { advanceBounties, pursueBounty, recordTransgression } from './bountyEngine';
 import { knownMapLocations, noteTerrainVisit } from './terrainEngine';
 import { deriveMapPresentation } from './mapMotionEngine';
+import { advanceMapHazards } from './mapBrushEngine';
 
 export type GodInterventionType =
   | 'SPAWN_TREASURE'
@@ -526,7 +527,8 @@ export function advanceWorldTick(
 
   maintainAlchemy(nextState);
   maintainSectEconomy(nextState);
-  const newEvents: WorldEvent[] = [];
+  const newEvents: WorldEvent[] = advanceMapHazards(nextState);
+  for (const event of newEvents) witnessEvent(nextState, event);
 
   for (const cultivator of nextState.cultivators) {
     if (!cultivator.alive) continue;

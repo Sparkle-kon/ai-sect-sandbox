@@ -11,7 +11,8 @@ import { enrichAnnualReflections } from './engine/reflectionEngine';
 import { enrichTickDialogues } from './engine/dialogueEngine';
 import { activeSiegeForActor } from './engine/diplomacyEngine';
 import { activeOccasionForActor } from './engine/occasionEngine';
-import { LLMConfig, LLMDecisionPayload, WorldState } from './types/world';
+import { applyMapBrush } from './engine/mapBrushEngine';
+import { GodBrushKind, LLMConfig, LLMDecisionPayload, MapPoint, WorldState } from './types/world';
 import { WorldMapCanvas } from './components/WorldMapCanvas';
 import { RelationshipGraph } from './components/RelationshipGraph';
 import { GodConsole } from './components/GodConsole';
@@ -75,6 +76,10 @@ export const App: React.FC = () => {
 
   const handleGodIntervene = (cmd: GodInterventionCommand) => {
     setWorld((prev) => executeGodIntervention(prev, cmd));
+  };
+
+  const handleBrushStroke = (kind: GodBrushKind, points: MapPoint[]) => {
+    setWorld((previous) => applyMapBrush(previous, kind, points));
   };
 
   const handleReset = () => {
@@ -170,6 +175,7 @@ export const App: React.FC = () => {
             world={world}
             selectedCultivatorId={selectedCultivatorId}
             onSelectCultivator={setSelectedCultivatorId}
+            onBrushStroke={handleBrushStroke}
           />
           <BountyBoard world={world} />
           <GodConsole

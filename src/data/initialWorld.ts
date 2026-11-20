@@ -229,6 +229,7 @@ export function createInitialWorld(seed = 2031): WorldState {
     locations,
     terrain: generateTerrain(locations, seed),
     mapPresentation: { tick: 1, trails: [], effects: [] },
+    mapHazards: [],
     cultivators: [
       {
         id: 'npc-1',

@@ -448,6 +448,17 @@ export interface MapPresentation {
   effects: MapEffect[];
 }
 
+export type GodBrushKind = 'paint_vein' | 'meteor' | 'beast_tide' | 'cursed_miasma';
+
+export interface MapHazard {
+  id: string;
+  kind: Exclude<GodBrushKind, 'paint_vein'>;
+  tileId: string;
+  createdTick: number;
+  expiresTick: number;
+  intensity: number;
+}
+
 export interface WorldState {
   tick: number;
   interventionSequence: number;
@@ -462,6 +473,7 @@ export interface WorldState {
   locations: LocationNode[];
   terrain: WorldTerrain;
   mapPresentation: MapPresentation;
+  mapHazards: MapHazard[];
   cultivators: Cultivator[];
   relationships: RelationshipEdge[];
   events: WorldEvent[];
