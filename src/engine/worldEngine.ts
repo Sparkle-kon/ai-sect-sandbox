@@ -30,6 +30,7 @@ import { advanceBounties, pursueBounty, recordTransgression } from './bountyEngi
 import { knownMapLocations, noteTerrainVisit } from './terrainEngine';
 import { deriveMapPresentation } from './mapMotionEngine';
 import { advanceMapHazards } from './mapBrushEngine';
+import { advanceSpiritBeasts, petCombatBonus, tameSpiritBeast } from './spiritBeastEngine';
 
 export type GodInterventionType =
   | 'SPAWN_TREASURE'
@@ -112,6 +113,8 @@ export function applyCultivatorBrainDecision(
   const qiFactor = (location?.spiritQi ?? 50) / 50;
 
   switch (decision.chosenAction) {
+    case 'TAME_BEAST':
+      return tameSpiritBeast(world, cultivator, decision, rng);
     case 'PURSUE_BOUNTY': {
       return pursueBounty(world, cultivator, decision, (target) => {
         const result = applyCultivatorBrainDecision(world, cultivator, {
@@ -405,8 +408,8 @@ export function applyCultivatorBrainDecision(
       );
       if (!defender) return null;
 
-      const attackerScore = cultivator.combatPower * (0.85 + rng() * 0.3) * strikeMultiplier(cultivator, defender) * masteryMultiplier(cultivator);
-      const defenderScore = defender.combatPower * (0.85 + rng() * 0.3) * strikeMultiplier(defender, cultivator) * masteryMultiplier(defender);
+      const attackerScore = cultivator.combatPower * (0.85 + rng() * 0.3) * strikeMultiplier(cultivator, defender) * masteryMultiplier(cultivator) * petCombatBonus(world, cultivator);
+      const defenderScore = defender.combatPower * (0.85 + rng() * 0.3) * strikeMultiplier(defender, cultivator) * masteryMultiplier(defender) * petCombatBonus(world, defender);
       const winner = attackerScore >= defenderScore ? cultivator : defender;
       const loser = winner.id === cultivator.id ? defender : cultivator;
 
@@ -527,7 +530,7 @@ export function advanceWorldTick(
 
   maintainAlchemy(nextState);
   maintainSectEconomy(nextState);
-  const newEvents: WorldEvent[] = advanceMapHazards(nextState);
+  const newEvents: WorldEvent[] = [...advanceMapHazards(nextState), ...advanceSpiritBeasts(nextState, rng)];
   for (const event of newEvents) witnessEvent(nextState, event);
 
   for (const cultivator of nextState.cultivators) {

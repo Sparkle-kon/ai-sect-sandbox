@@ -15,6 +15,7 @@ import { SectEconomyPanel } from './SectEconomyPanel';
 import { SectDiplomacyPanel } from './SectDiplomacyPanel';
 import { WorldOccasionsPanel } from './WorldOccasionsPanel';
 import { BOUNTY_STATUS, relevantBounty } from './BountyBoard';
+import { SpiritBeastPanel } from './SpiritBeastPanel';
 
 interface AgentInspectorProps {
   world: WorldState;
@@ -189,6 +190,7 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
       <SectEconomyPanel cultivator={cultivator} sect={sect} world={world} />
       <SectDiplomacyPanel sect={sect} world={world} />
       <WorldOccasionsPanel world={world} cultivator={cultivator} />
+      <SpiritBeastPanel cultivator={cultivator} location={location} beasts={world.spiritBeasts ?? []} />
       <TribulationPanel cultivator={cultivator} />
       <TechniquePanel cultivator={cultivator} sect={sect} location={location} cultivators={world.cultivators} />
       <AlchemyPanel cultivator={cultivator} location={location} />

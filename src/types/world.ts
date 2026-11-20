@@ -76,6 +76,7 @@ export type ActionType =
   | 'LAUNCH_SIEGE'
   | 'JOIN_OCCASION'
   | 'PURSUE_BOUNTY'
+  | 'TAME_BEAST'
   | 'TRADE'
   | 'DUAL_CULTIVATE'
   | 'SECT_DIPLOMACY'
@@ -323,6 +324,7 @@ export interface LLMDecisionPayload {
   targetSectId?: string;
   targetOccasionId?: string;
   targetBountyId?: string;
+  targetBeastId?: string;
 }
 
 export interface SectDiplomaticRelation {
@@ -459,6 +461,21 @@ export interface MapHazard {
   intensity: number;
 }
 
+export interface SpiritBeast {
+  id: string;
+  name: string;
+  kind: '妖兽' | '凶兽' | '瑞兽';
+  locationId: string;
+  homeLocationId: string;
+  hp: number;
+  maxHp: number;
+  power: number;
+  cultivation: number;
+  alive: boolean;
+  tamedBy?: string;
+  nextActionTick: number;
+}
+
 export interface WorldState {
   tick: number;
   interventionSequence: number;
@@ -474,6 +491,7 @@ export interface WorldState {
   terrain: WorldTerrain;
   mapPresentation: MapPresentation;
   mapHazards: MapHazard[];
+  spiritBeasts: SpiritBeast[];
   cultivators: Cultivator[];
   relationships: RelationshipEdge[];
   events: WorldEvent[];

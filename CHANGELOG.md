@@ -1,6 +1,7 @@
 # CHANGELOG.md — Automated Evolution Log
 
 ## [Unreleased]
+- **P4-4:** Native spirit beasts cultivate, roam, guard herbs, threaten weaker cultivators and trigger periodic beast tides. Both brains can tame eligible beasts; bound companions follow owners and lend actual combat support. The Inspector and fog-aware map show current wildlife and companions. All 182 deterministic tests, type checking and production build passed.
 - **P4-3:** The Canvas supports pointer-anchored zoom, keyboard and drag panning, a navigable minimap and four world-state brushes. Painted veins persist; meteor strikes, beast tides and miasma retain bounded effects and alter actual NPC decisions. All 173 deterministic tests, type checking and production build passed. Added ten Phase 8 tasks when the backlog fell to 19 open items.
 - **P4-2:** Weighted terrain pathfinding yields smooth sword-flight paths for actual simulation movement. Combat clash beams, true damage popups, breakthrough labels and heavenly strike lightning derive from model outcomes rather than invented visuals. Fog and reduced-motion rules apply to rendering and hit testing. All 163 deterministic tests, type checking and production build passed.
 - **P4-1:** Seeded biome tiles, spatial qi and sect boundaries now render on the world map. Optional heat and selected-agent fog respect visibility and reduced motion; both brains use discovered geography, with clearly unverified rumor routes distinct from confirmed locations. All 155 deterministic tests, type checking and production build passed.

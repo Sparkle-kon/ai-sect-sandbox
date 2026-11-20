@@ -18,6 +18,7 @@ import { drawFlights, drawMapEffects } from './mapPresentationDraw';
 import { centerCamera, clientToMapViewport, DEFAULT_CAMERA, MAP_HEIGHT, MAP_WIDTH, MAX_ZOOM, panCamera, screenToMap, zoomCamera } from './mapCamera';
 import type { CameraPoint, MapCamera } from './mapCamera';
 import { BRUSH_LABELS, brushPoint, drawHazards, getVisibleHazards } from './mapBrushView';
+import { BEAST_COLORS, visibleBeastsByLocation } from './spiritBeastView';
 
 interface WorldMapCanvasProps {
   world: WorldState;
@@ -51,6 +52,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const mapView = useMemo(() => createTerrainMapView(world, selected, fog), [world, selected, fog]);
   const { seenLocations, liveActors, isCurrentLocation } = mapView;
   const hazards = useMemo(() => getVisibleHazards(world, mapView), [world, mapView]);
+  const beastsByLocation = useMemo(() => visibleBeastsByLocation(world, mapView), [world, mapView]);
   const armedBrush = !fog && onBrushStroke && brush !== 'browse' ? brush : undefined;
   const actorPositions = useMemo(() => mapActorPositions(seenLocations, liveActors), [seenLocations, liveActors]);
   const presentation = useMemo(() => buildMapPresentation(world, mapView, actorPositions), [world, mapView, actorPositions]);
@@ -250,6 +252,17 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           ctx.fillStyle = '#67e8f9';
           ctx.fillText('会', loc.x + 28, loc.y - 4);
         }
+        const localBeasts = beastsByLocation.get(loc.id);
+        if (localBeasts?.length) {
+          ctx.save();
+          ctx.font = 'bold 11px sans-serif';
+          ctx.textAlign = 'right';
+          ctx.shadowColor = '#020617';
+          ctx.shadowBlur = 4;
+          ctx.fillStyle = localBeasts.some(({ kind, tamedBy }) => kind === '凶兽' && !tamedBy) ? '#fda4af' : '#86efac';
+          ctx.fillText(`兽 ${localBeasts.length}`, loc.x - 22, loc.y - 4);
+          ctx.restore();
+        }
         ctx.textAlign = 'center';
         ctx.fillStyle = '#94a3b8';
         ctx.font = '11px sans-serif';
@@ -362,7 +375,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener('change', stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, hazards, armedBrush, preview]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, hazards, beastsByLocation, armedBrush, preview]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -518,7 +531,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         onPointerCancel={cancelGesture}
         onLostPointerCapture={cancelGesture}
         className={`w-full h-auto touch-none select-none block ${armedBrush ? 'cursor-crosshair' : 'cursor-grab active:cursor-grabbing'}`}
-        aria-label="修仙世界地图。选择修士可查看下方识海状态摘要；也可通过识海面板的修士按钮切换。雷劫用静态闪电标注；围攻地点用玫红虚线圈标注；各地渡劫、驻守、围攻和活跃盛会可在下方列表查看；本月移动与交锋也有文字摘要。"
+        aria-label="修仙世界地图。选择修士可查看下方识海状态摘要；也可通过识海面板的修士按钮切换。雷劫用静态闪电标注；围攻地点用玫红虚线圈标注；各地渡劫、驻守、围攻和活跃盛会可在下方列表查看；本月移动、交锋和可见灵兽也有文字摘要。"
       />
         <button
           type="button"
@@ -664,6 +677,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
             const guardCount = guardsByLocation.get(location.id) ?? 0;
             const homeSect = headquarters.get(location.id);
             const localOccasions = occasionsByLocation.get(location.id) ?? [];
+            const localBeasts = beastsByLocation.get(location.id) ?? [];
             return (
               <li key={location.id} className="inline-flex items-center gap-1.5">
                 <span>{location.name} · 灵脉</span>
@@ -686,6 +700,16 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                     · {OCCASION_KIND[occasion.kind]}：{occasion.title}（{OCCASION_STATUS[occasion.status]}）
                   </span>
                 ))}
+                {localBeasts.length > 0 && (
+                  <span className="inline-flex flex-wrap gap-x-1">
+                    <span>· 可见灵兽 {localBeasts.length} 只：</span>
+                    {localBeasts.map((beast) => (
+                      <span key={beast.id} style={{ color: BEAST_COLORS[beast.kind] }}>
+                        {beast.name}（{beast.kind}{beast.tamedBy ? ' · 已结契' : ' · 野生'}）
+                      </span>
+                    ))}
+                  </span>
+                )}
                 {trialCount > 0 && <span className="text-sky-300">· 渡劫中 {trialCount} 人</span>}
                 {herbCount > 0 && <span className="text-emerald-300">· 灵草 {herbCount} 株</span>}
                 {location.inheritanceScrolls.length > 0 && (

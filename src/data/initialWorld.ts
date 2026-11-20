@@ -1,5 +1,6 @@
 import { memoryDecayRate } from '../engine/memoryEngine';
 import { generateTerrain, noteTerrainVisit } from '../engine/terrainEngine';
+import { spawnInitialBeasts } from '../engine/spiritBeastEngine';
 import { CultivationRealm, HerbId, LocationNode, PillId, WorldState } from '../types/world';
 
 export const REALM_ORDER: CultivationRealm[] = [
@@ -230,6 +231,7 @@ export function createInitialWorld(seed = 2031): WorldState {
     terrain: generateTerrain(locations, seed),
     mapPresentation: { tick: 1, trails: [], effects: [] },
     mapHazards: [],
+    spiritBeasts: spawnInitialBeasts(locations),
     cultivators: [
       {
         id: 'npc-1',

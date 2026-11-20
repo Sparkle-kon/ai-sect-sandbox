@@ -1,5 +1,6 @@
 import type { Cultivator, HerbId, LLMDecisionPayload, PillId, WorldEvent, WorldState } from '../types/world';
 import { recordMemory } from './memoryEngine';
+import { guardingHerbBeast } from './spiritBeastEngine';
 
 export const HERB_LABELS: Record<HerbId, string> = {
   jade_leaf: '翡翠灵叶', earth_root: '玄土根', star_bloom: '星露花', shadow_moss: '幽影苔',
@@ -55,8 +56,9 @@ export function availableAlchemy(actor: Cultivator, world: WorldState): AlchemyO
   const place = world.locations.find((node) => node.id === actor.locationId);
   if (!actor.alive || actor.hp <= 0 || !place) return [];
   const result: AlchemyOption[] = [];
+  const guarding = guardingHerbBeast(world, actor);
   for (const herb of HERBS) {
-    if (place.herbs[herb] >= 1 && actor.herbs[herb] < 99) result.push({ action: 'GATHER_HERBS', targetHerbId: herb });
+    if ((!guarding || actor.combatPower >= guarding.power * 1.25) && place.herbs[herb] >= 1 && actor.herbs[herb] < 99) result.push({ action: 'GATHER_HERBS', targetHerbId: herb });
   }
   for (const pill of PILLS) {
     const recipe = ALCHEMY_RECIPES[pill];
