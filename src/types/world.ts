@@ -11,7 +11,16 @@ export interface Technique {
   spiritRoot: SpiritRoot;
 }
 
+export type ArtifactTier = '法器' | '灵器' | '法宝' | '通天灵宝';
+
 export interface Artifact {
+  id?: string;
+  tier?: ArtifactTier;
+  durability?: number;
+  maxDurability?: number;
+  boundTo?: string;
+  soul?: { name: string; experience: number };
+  resonance?: number;
   name: string;
   spiritRoot: SpiritRoot;
 }
@@ -50,6 +59,10 @@ export type ActionType =
   | 'GATHER_HERBS'
   | 'BREW_PILL'
   | 'USE_PILL'
+  | 'FORGE_ARTIFACT'
+  | 'BIND_ARTIFACT'
+  | 'REPAIR_ARTIFACT'
+  | 'AWAKEN_ARTIFACT'
   | 'TRADE'
   | 'DUAL_CULTIVATE'
   | 'SECT_DIPLOMACY'
@@ -234,6 +247,8 @@ export interface LLMDecisionPayload {
   targetTechniqueId?: string;
   targetHerbId?: HerbId;
   targetPillId?: PillId;
+  targetArtifactId?: string;
+  forgeTier?: ArtifactTier;
 }
 
 export interface WorldState {

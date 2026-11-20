@@ -20,6 +20,7 @@ import { resolveEncounter } from './encounterEngine';
 import { cultivationMultiplier, strikeMultiplier } from './elementalEngine';
 import { authorTechnique, dropInheritance, gainMastery, masteryMultiplier, studyTechnique } from './techniqueEngine';
 import { maintainAlchemy, resolveAlchemy } from './alchemyEngine';
+import { lootStorageRing, resolveArtifactAction, wearArtifact } from './artifactEngine';
 
 export type GodInterventionType =
   | 'SPAWN_TREASURE'
@@ -85,6 +86,11 @@ export function applyCultivatorBrainDecision(
   const qiFactor = (location?.spiritQi ?? 50) / 50;
 
   switch (decision.chosenAction) {
+    case 'FORGE_ARTIFACT':
+    case 'BIND_ARTIFACT':
+    case 'REPAIR_ARTIFACT':
+    case 'AWAKEN_ARTIFACT':
+      return resolveArtifactAction(world, cultivator, decision, rng);
     case 'GATHER_HERBS':
     case 'BREW_PILL':
     case 'USE_PILL':
@@ -345,6 +351,8 @@ export function applyCultivatorBrainDecision(
       const dmgToWinner = Math.round(winner.maxHp * (0.1 + rng() * 0.15) * strikeMultiplier(loser, winner));
       loser.hp = Math.max(0, loser.hp - dmgToLoser);
       winner.hp = Math.max(1, winner.hp - dmgToWinner);
+      wearArtifact(winner, true);
+      wearArtifact(loser, false);
 
       adjustRelationship(
         world,
@@ -358,17 +366,12 @@ export function applyCultivatorBrainDecision(
       if (loser.hp <= 0) {
         loser.alive = false;
         dropInheritance(loser, world);
-        const lootedStones = loser.spiritStones;
-        winner.spiritStones += lootedStones;
-        loser.spiritStones = 0;
-        if (loser.artifacts.length > 0) {
-          const [loot] = loser.artifacts.splice(0, 1);
-          winner.artifacts.push(loot);
-        }
+        const loot = lootStorageRing(winner, loser);
+        const lootedStones = loot.stones;
         recordMemory(
           winner,
           world.tick,
-          `在生死斗法中斩杀【${loser.name}】，搜刮其储物袋获 ${lootedStones} 灵石！`,
+          `在生死斗法中斩杀【${loser.name}】，接收其储物戒，得 ${lootedStones} 灵石及 ${loot.artifacts} 件法宝！`,
           10,
           'combat', 4
         );
@@ -378,7 +381,7 @@ export function applyCultivatorBrainDecision(
           year: world.year,
           month: world.month,
           title: `陨落：${winner.name}斩杀${loser.name}！`,
-          description: `【${location?.name ?? '秘境'}】剑气纵横，${cultivator.name}与${defender.name}爆发生死决战！最终${winner.name}技高一筹，将${loser.name}当场斩杀并夺其法宝储物袋！`,
+          description: `【${location?.name ?? '秘境'}】剑气纵横，${cultivator.name}与${defender.name}爆发生死决战！最终${winner.name}技高一筹，将${loser.name}当场斩杀并收缴其储物戒：${lootedStones} 灵石及 ${loot.artifacts} 件法宝。`,
           category: 'death',
           actorIds: [cultivator.id, defender.id],
           dialogue: scriptedDialogue('combat', cultivator, defender, `${winner.name}胜出，${loser.name}当场陨落。`, decision.spokenLine),
@@ -511,7 +514,7 @@ export function executeGodIntervention(
         c.qiProgress = clamp(c.qiProgress + 30, 0, 100);
         c.spiritStones += 500;
         if (!c.artifacts.some((artifact) => artifact.name === '天道造化玉碟')) {
-          c.artifacts.push({ name: '天道造化玉碟', spiritRoot: '天灵根' });
+          c.artifacts.push({ id: `artifact-jade-tablet-${c.id}-${nextState.interventionSequence + 1}`, name: '天道造化玉碟', spiritRoot: '天灵根', tier: '通天灵宝', durability: 160, maxDurability: 160 });
         }
         recordMemory(
           c,

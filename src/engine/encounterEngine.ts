@@ -16,7 +16,7 @@ export function availableEncounters(actor: Cultivator, world: WorldState) {
     const opportunities: { action: EncounterAction; targetId: string }[] = [];
     if (location?.type === 'market' && actor.spiritStones >= ARTIFACT_TRADE_PRICE &&
         affinity >= -15 && other.artifacts.length > 1 &&
-        other.artifacts.slice(1).some((item) => !actor.artifacts.some((owned) => owned.name === item.name))) {
+        other.artifacts.slice(1).some((item) => !item.boundTo && !actor.artifacts.some((owned) => owned.name === item.name))) {
       opportunities.push({ action: 'TRADE', targetId: other.id });
     }
     if (affinity >= 65 && actor.qiProgress <= 88 && other.qiProgress <= 88 &&
@@ -48,10 +48,10 @@ export function resolveEncounter(
   let outcome: string;
   switch (action) {
     case 'TRADE': {
-      const item = target.artifacts.slice(1).find((artifact) => !actor.artifacts.some((owned) => owned.name === artifact.name));
+      const item = target.artifacts.slice(1).find((artifact) => !artifact.boundTo && !actor.artifacts.some((owned) => owned.name === artifact.name));
       if (!item) return null;
       target.artifacts.splice(target.artifacts.indexOf(item, 1), 1);
-      actor.artifacts.push(item);
+      actor.artifacts.push({ ...item, boundTo: undefined });
       actor.spiritStones -= ARTIFACT_TRADE_PRICE;
       target.spiritStones += ARTIFACT_TRADE_PRICE;
       adjust(target, 5);

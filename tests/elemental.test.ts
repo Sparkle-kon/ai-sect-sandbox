@@ -71,7 +71,7 @@ describe('elemental affinity', () => {
     const actor = start.cultivators[0];
     const world = executeGodIntervention(start, { type: 'SPAWN_TREASURE', targetLocationId: actor.locationId });
     const current = world.cultivators[0];
-    expect(current.artifacts).toContainEqual({ name: '天道造化玉碟', spiritRoot: '天灵根' });
+    expect(current.artifacts).toContainEqual(expect.objectContaining({ name: '天道造化玉碟', spiritRoot: '天灵根', tier: '通天灵宝' }));
     const mock = vi.fn(async (_url: string, _request: RequestInit) => new Response(JSON.stringify({
       choices: [{ message: { content: '{"chosenAction":"CULTIVATE","innerMonologue":"入定"}' } }],
     })));

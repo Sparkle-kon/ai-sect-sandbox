@@ -8,6 +8,7 @@ import { SchemePanel } from './SchemePanel';
 import { SpiritRootBadge } from './SpiritRootBadge';
 import { TechniquePanel } from './TechniquePanel';
 import { AlchemyPanel } from './AlchemyPanel';
+import { ArtifactPanel } from './ArtifactPanel';
 
 interface AgentInspectorProps {
   world: WorldState;
@@ -169,19 +170,7 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
               : <span className="text-slate-500">未详</span>}
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-1.5 text-xs">
-          <span className="text-slate-400">本命与随身法宝：</span>
-          {cultivator.artifacts.length === 0 && <span className="text-slate-500">暂无</span>}
-          {cultivator.artifacts.map((artifact, index) => (
-            <span
-              key={`${artifact.name}-${index}`}
-              className="inline-flex items-center gap-1.5 rounded border border-slate-700 bg-slate-800/50 px-2 py-0.5 text-slate-200"
-            >
-              {artifact.name}
-              <SpiritRootBadge root={artifact.spiritRoot} />
-            </span>
-          ))}
-        </div>
+        <ArtifactPanel cultivator={cultivator} cultivators={world.cultivators} />
       </section>
 
       <TechniquePanel cultivator={cultivator} sect={sect} location={location} cultivators={world.cultivators} />

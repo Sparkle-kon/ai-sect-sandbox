@@ -234,7 +234,7 @@ export function pursueScheme(
           const odds = Math.min(0.85, Math.max(0.2, actor.combatPower / (actor.combatPower + target.combatPower)));
           if (rng() < odds) {
             const [stolen] = target.artifacts.splice(index, 1);
-            actor.artifacts.push(stolen);
+            actor.artifacts.push({ ...stolen, boundTo: undefined });
             changeAffinity(target, -20);
             plan.outcome = `已取得【${item}】。`;
             completeStep(plan, tick);

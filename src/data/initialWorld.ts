@@ -224,7 +224,7 @@ export function createInitialWorld(): WorldState {
         herbs: herbs(),
         pills: noPills(),
         pillToxicity: 0,
-        artifacts: [{ name: '太虚青莲剑', spiritRoot: '金' }, { name: '九霄护心镜', spiritRoot: '雷' }],
+        artifacts: [{ id: 'artifact-npc-1-1', tier: '法宝', durability: 120, maxDurability: 120, name: '太虚青莲剑', spiritRoot: '金', boundTo: 'npc-1' }, { id: 'artifact-npc-1-2', tier: '灵器', durability: 100, maxDurability: 100, name: '九霄护心镜', spiritRoot: '雷' }],
         memories: [
           {
             id: 'mem-init-1',
@@ -268,7 +268,7 @@ export function createInitialWorld(): WorldState {
         herbs: herbs(),
         pills: noPills(),
         pillToxicity: 0,
-        artifacts: [{ name: '霜华飞剑', spiritRoot: '水' }],
+        artifacts: [{ id: 'artifact-npc-2-1', tier: '灵器', durability: 100, maxDurability: 100, name: '霜华飞剑', spiritRoot: '水', boundTo: 'npc-2' }],
         memories: [
           {
             id: 'mem-init-2',
@@ -312,7 +312,7 @@ export function createInitialWorld(): WorldState {
         herbs: herbs(),
         pills: noPills(),
         pillToxicity: 0,
-        artifacts: [{ name: '万魂血幡', spiritRoot: '暗' }, { name: '白骨魔珠', spiritRoot: '土' }],
+        artifacts: [{ id: 'artifact-npc-3-1', tier: '法宝', durability: 120, maxDurability: 120, name: '万魂血幡', spiritRoot: '暗', boundTo: 'npc-3' }, { id: 'artifact-npc-3-2', tier: '灵器', durability: 100, maxDurability: 100, name: '白骨魔珠', spiritRoot: '土' }],
         memories: [
           {
             id: 'mem-init-3',
@@ -356,7 +356,7 @@ export function createInitialWorld(): WorldState {
         herbs: herbs(),
         pills: noPills(),
         pillToxicity: 0,
-        artifacts: [{ name: '天魔合欢铃', spiritRoot: '火' }, { name: '隐匿血衣', spiritRoot: '暗' }],
+        artifacts: [{ id: 'artifact-npc-4-1', tier: '灵器', durability: 100, maxDurability: 100, name: '天魔合欢铃', spiritRoot: '火', boundTo: 'npc-4' }, { id: 'artifact-npc-4-2', tier: '灵器', durability: 100, maxDurability: 100, name: '隐匿血衣', spiritRoot: '暗' }],
         memories: [
           {
             id: 'mem-init-4',
@@ -400,7 +400,7 @@ export function createInitialWorld(): WorldState {
         herbs: herbs(),
         pills: noPills(),
         pillToxicity: 0,
-        artifacts: [{ name: '乾坤八卦炉', spiritRoot: '火' }, { name: '百草木灵鼎', spiritRoot: '木' }],
+        artifacts: [{ id: 'artifact-npc-5-1', tier: '法宝', durability: 120, maxDurability: 120, name: '乾坤八卦炉', spiritRoot: '火', boundTo: 'npc-5' }, { id: 'artifact-npc-5-2', tier: '灵器', durability: 100, maxDurability: 100, name: '百草木灵鼎', spiritRoot: '木' }],
         memories: [
           {
             id: 'mem-init-5',
@@ -444,7 +444,7 @@ export function createInitialWorld(): WorldState {
         herbs: herbs(),
         pills: noPills(),
         pillToxicity: 0,
-        artifacts: [{ name: '青竹蜂云剑', spiritRoot: '木' }, { name: '神行遁甲符', spiritRoot: '土' }],
+        artifacts: [{ id: 'artifact-npc-6-1', tier: '法器', durability: 80, maxDurability: 80, name: '青竹蜂云剑', spiritRoot: '木', boundTo: 'npc-6' }, { id: 'artifact-npc-6-2', tier: '法器', durability: 80, maxDurability: 80, name: '神行遁甲符', spiritRoot: '土' }],
         memories: [
           {
             id: 'mem-init-6',
@@ -488,7 +488,7 @@ export function createInitialWorld(): WorldState {
         herbs: herbs(),
         pills: noPills(),
         pillToxicity: 0,
-        artifacts: [{ name: '河图洛书盘', spiritRoot: '水' }, { name: '星辰罗盘', spiritRoot: '雷' }],
+        artifacts: [{ id: 'artifact-npc-7-1', tier: '法宝', durability: 120, maxDurability: 120, name: '河图洛书盘', spiritRoot: '水', boundTo: 'npc-7' }, { id: 'artifact-npc-7-2', tier: '灵器', durability: 100, maxDurability: 100, name: '星辰罗盘', spiritRoot: '雷' }],
         memories: [
           {
             id: 'mem-init-7',
@@ -532,7 +532,7 @@ export function createInitialWorld(): WorldState {
         herbs: herbs(),
         pills: noPills(),
         pillToxicity: 0,
-        artifacts: [{ name: '九霄环佩琴', spiritRoot: '天灵根' }],
+        artifacts: [{ id: 'artifact-npc-8-1', tier: '灵器', durability: 100, maxDurability: 100, name: '九霄环佩琴', spiritRoot: '天灵根', boundTo: 'npc-8' }],
         memories: [
           {
             id: 'mem-init-8',

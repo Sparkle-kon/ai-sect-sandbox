@@ -43,7 +43,7 @@ describe('dialogues and encounters', () => {
     expect(perform('TRADE')?.dialogue?.kind).toBe('trade');
     expect(actor.spiritStones).toBe(originalBuyerStones - ARTIFACT_TRADE_PRICE);
     expect(actor.spiritStones + target.spiritStones).toBe(wealth);
-    expect(actor.artifacts).toContain(artifact);
+    expect(actor.artifacts.some((item) => item.id === artifact.id)).toBe(true);
     expect(target.artifacts).not.toContain(artifact);
     expect(perform('TRADE')).toBeNull();
   });

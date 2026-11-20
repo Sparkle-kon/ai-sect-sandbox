@@ -5,6 +5,7 @@ import { countCompletedSchemeSteps, SCHEME_STATUS } from './SchemePanel';
 import { DIALOGUE_KIND_LABELS } from './DialogueTranscript';
 import { SPIRIT_ROOT_COLORS, SpiritRootBadge } from './SpiritRootBadge';
 import { countHerbs } from './AlchemyPanel';
+import { durabilityOf, equippedArtifact, maxDurabilityOf } from '../engine/artifactEngine';
 
 interface WorldMapCanvasProps {
   world: WorldState;
@@ -21,6 +22,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const selected = world.cultivators.find((c) => c.id === selectedCultivatorId);
   const selectedScheme = selected?.activeScheme;
+  const selectedArtifact = selected?.alive ? equippedArtifact(selected) : undefined;
   const selectedLocation = selected && world.locations.find((loc) => loc.id === selected.locationId);
   const strongestMemory = selected
     ? [...selected.memories, ...selected.coreMemories].reduce(
@@ -309,6 +311,13 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                   此地丹道：{selectedLocation.furnaceGrade > 0 ? `${selectedLocation.furnaceGrade} 阶丹炉` : '无丹炉'} · 灵草 {countHerbs(selectedLocation.herbs)} 株
                 </span>
               </>
+            )}
+            {selectedArtifact ? (
+              <span className="text-violet-300">
+                装备法宝：{selectedArtifact.name} · 耐久 {durabilityOf(selectedArtifact)}/{maxDurabilityOf(selectedArtifact)}
+              </span>
+            ) : selected.alive && selected.artifacts.length > 0 && (
+              <span className="text-slate-400">未装备法宝</span>
             )}
             <span>情景记忆 {selected.memories.length} 条</span>
             <span className="text-violet-300">核心记忆 {selected.coreMemories.length} 条{selected.alive && selected.coreMemories.length > 0 ? " · 紫弧标记" : ""}</span>

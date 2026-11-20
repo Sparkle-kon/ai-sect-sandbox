@@ -1,3 +1,4 @@
+import { artifactPowerMultiplier, equippedArtifact } from './artifactEngine';
 import type { Cultivator, LocationNode, SpiritRoot } from '../types/world';
 
 type Phase = Exclude<SpiritRoot, '雷' | '暗' | '天灵根'>;
@@ -29,13 +30,13 @@ export function cultivationMultiplier(actor: Cultivator, place: LocationNode | u
 
 export function strikeMultiplier(attacker: Cultivator, defender: Cultivator): number {
   const technique = attacker.technique.spiritRoot;
-  const gear = attacker.artifacts[0]?.spiritRoot;
+  const gear = equippedArtifact(attacker)?.spiritRoot;
   const edge = elementalRelation(technique, defender.spiritRoot);
   const reverse = elementalRelation(defender.spiritRoot, technique);
   const matchup = edge === 'overcoming' ? 1.22 : reverse === 'overcoming' ? 0.84 : 1;
   const resonance = gear === undefined ? 'neutral' : elementalRelation(gear, technique);
   const gearFactor = resonance === 'matching' ? 1.1 : resonance === 'nurturing' ? 1.05 : resonance === 'overcoming' ? 0.95 : 1;
-  return matchup * gearFactor;
+  return matchup * gearFactor * artifactPowerMultiplier(attacker);
 }
 
 export function compareCultivationSites(actor: Cultivator, a: LocationNode, b: LocationNode): number {
