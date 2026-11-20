@@ -40,6 +40,7 @@ const isAlly = (world: WorldState, a: string, b: string) => a === b || sectRelat
 function forceCandidates(world: WorldState, attacker: Sect, defender: Sect, actor: Cultivator): Cultivator[] {
   const candidates = world.cultivators.filter((person) => live(person) && isAlly(world, attacker.id, person.sectId) &&
     person.sectId !== defender.id && !isAlly(world, defender.id, person.sectId) && !activeSiegeForActor(world, person) &&
+    !world.occasions.some((item) => (item.status === 'registration' || item.status === 'running') && item.participantIds.includes(person.id)) &&
     person.tribulation?.stage !== 'lightning' && person.tribulation?.stage !== 'heart_demon')
     .sort((a, b) => Number(b.id === actor.id) - Number(a.id === actor.id) || Number(b.sectId === attacker.id) - Number(a.sectId === attacker.id) ||
       b.combatPower - a.combatPower || a.id.localeCompare(b.id));

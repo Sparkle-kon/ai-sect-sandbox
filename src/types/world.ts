@@ -74,6 +74,7 @@ export type ActionType =
   | 'DECLARE_WAR'
   | 'DEMAND_TRIBUTE'
   | 'LAUNCH_SIEGE'
+  | 'JOIN_OCCASION'
   | 'TRADE'
   | 'DUAL_CULTIVATE'
   | 'SECT_DIPLOMACY'
@@ -315,6 +316,7 @@ export interface LLMDecisionPayload {
   tribulationStance?: TribulationStance;
   facilityKind?: FacilityKind;
   targetSectId?: string;
+  targetOccasionId?: string;
 }
 
 export interface SectDiplomaticRelation {
@@ -349,6 +351,38 @@ export interface SectTribute {
   resolvedTick?: number;
 }
 
+export interface TournamentBout {
+  round: number;
+  firstId: string;
+  secondId?: string;
+  winnerId: string;
+}
+
+export interface ExpeditionResult {
+  cultivatorId: string;
+  tick: number;
+  outcome: 'loot' | 'wounded' | 'death' | 'escaped';
+  description: string;
+}
+
+export interface WorldOccasion {
+  id: string;
+  kind: 'tournament' | 'expedition';
+  title: string;
+  locationId: string;
+  startedTick: number;
+  registrationClosesTick: number;
+  expiresTick: number;
+  status: 'registration' | 'running' | 'completed' | 'cancelled';
+  participantIds: string[];
+  remainingIds: string[];
+  bouts: TournamentBout[];
+  expeditions: ExpeditionResult[];
+  round: number;
+  championId?: string;
+  lastResolvedTick?: number;
+}
+
 export interface WorldState {
   tick: number;
   interventionSequence: number;
@@ -358,6 +392,7 @@ export interface WorldState {
   diplomacy: SectDiplomaticRelation[];
   sieges: SectSiege[];
   tributeDemands: SectTribute[];
+  occasions: WorldOccasion[];
   locations: LocationNode[];
   cultivators: Cultivator[];
   relationships: RelationshipEdge[];

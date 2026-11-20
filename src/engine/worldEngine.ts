@@ -25,6 +25,7 @@ import { interfereTribulation, isTribulationActive, recommendedTribulationStance
 import { maintainSectPolitics, resolveLeadershipAction, rewardContribution } from './sectPoliticsEngine';
 import { maintainSectEconomy, mitigateSectArray, resolveSectEconomyAction, sectQiBonus } from './sectEconomyEngine';
 import { activeSiegeForActor, advanceDiplomacy, resolveDiplomacyAction } from './diplomacyEngine';
+import { activeOccasionForActor, advanceOccasions, joinOccasion } from './occasionEngine';
 
 export type GodInterventionType =
   | 'SPAWN_TREASURE'
@@ -106,6 +107,8 @@ export function applyCultivatorBrainDecision(
   const qiFactor = (location?.spiritQi ?? 50) / 50;
 
   switch (decision.chosenAction) {
+    case 'JOIN_OCCASION':
+      return joinOccasion(world, cultivator, decision);
     case 'OFFER_ALLIANCE':
     case 'DECLARE_WAR':
     case 'DEMAND_TRIBUTE':
@@ -529,6 +532,12 @@ export function advanceWorldTick(
       continue;
     }
 
+    if (activeOccasionForActor(nextState, cultivator)) {
+      cultivator.currentAction = 'JOIN_OCCASION';
+      cultivator.innerMonologue = '已入大会或秘境名册，眼下须静候下一轮。';
+      continue;
+    }
+
     const decision =
       precomputedDecisions?.[cultivator.id] ??
       computeHeuristicDecision(cultivator, nextState, rng);
@@ -552,7 +561,7 @@ export function advanceWorldTick(
     if (yearly) cultivator.reflections = synthesizeReflections(cultivator, nextState.tick);
   }
 
-  for (const event of [...advanceDiplomacy(nextState, rng), ...maintainSectPolitics(nextState)]) {
+  for (const event of [...advanceDiplomacy(nextState, rng), ...advanceOccasions(nextState, rng), ...maintainSectPolitics(nextState)]) {
     newEvents.push(event);
     witnessEvent(nextState, event);
   }

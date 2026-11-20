@@ -9,6 +9,7 @@ import { durabilityOf, equippedArtifact, maxDurabilityOf } from '../engine/artif
 import { isActiveTrial, TRIAL_STAGE } from './TribulationPanel';
 import { isGuardOnDuty } from './SectEconomyPanel';
 import { isActiveCampaign, SIEGE_LABELS } from './SectDiplomacyPanel';
+import { isOpenOccasion, OCCASION_KIND, OCCASION_STATUS } from './WorldOccasionsPanel';
 
 interface WorldMapCanvasProps {
   world: WorldState;
@@ -30,6 +31,12 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const selectedLocation = selected && world.locations.find((loc) => loc.id === selected.locationId);
   const selectedTrial = selected?.tribulation;
   const activeSieges = world.sieges.filter(isActiveCampaign);
+  const occasionsByLocation = new Map<string, WorldState['occasions']>();
+  for (const occasion of world.occasions.filter(isOpenOccasion)) {
+    const local = occasionsByLocation.get(occasion.locationId) ?? [];
+    local.push(occasion);
+    occasionsByLocation.set(occasion.locationId, local);
+  }
   const selectedSiege = selected?.alive ? activeSieges.find((siege) => siege.participantIds.includes(selected.id)) : undefined;
   const siegeLocation = selectedSiege && world.locations.find(({ id }) => id === selectedSiege.destinationId);
   const besiegedLocationIds = new Set(activeSieges.filter(({ status }) => status === 'sieging').map(({ destinationId }) => destinationId));
@@ -198,6 +205,12 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         ctx.fillStyle = '#a5b4fc';
         ctx.fillText(guardMarker, labelStart + placeWidth + markerWidth + scrollWidth + furnaceWidth, loc.y - 26);
       }
+      if (occasionsByLocation.has(loc.id)) {
+        ctx.font = 'bold 11px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#67e8f9';
+        ctx.fillText('会', loc.x + 28, loc.y - 4);
+      }
       ctx.textAlign = 'center';
       ctx.fillStyle = '#94a3b8';
       ctx.font = '11px sans-serif';
@@ -343,7 +356,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         height={560}
         onClick={handleCanvasClick}
         className="w-full h-auto cursor-pointer block"
-        aria-label="修仙世界地图。选择修士可查看下方识海状态摘要；也可通过识海面板的修士按钮切换。雷劫用静态闪电标注；围攻地点用玫红虚线圈标注；各地渡劫、驻守和围攻状态可在下方列表查看。"
+        aria-label="修仙世界地图。选择修士可查看下方识海状态摘要；也可通过识海面板的修士按钮切换。雷劫用静态闪电标注；围攻地点用玫红虚线圈标注；各地渡劫、驻守、围攻和活跃盛会可在下方列表查看。"
       />
       <div className="px-4 py-2 border-t border-slate-800/80 bg-slate-900/60 text-[11px] text-slate-400 flex flex-wrap gap-x-4 gap-y-1" aria-label="选中修士记忆摘要">
         {selected ? (
@@ -420,6 +433,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
             const trialCount = trialsByLocation.get(location.id) ?? 0;
             const guardCount = guardsByLocation.get(location.id) ?? 0;
             const homeSect = headquarters.get(location.id);
+            const localOccasions = occasionsByLocation.get(location.id) ?? [];
             return (
               <li key={location.id} className="inline-flex items-center gap-1.5">
                 <span>{location.name} · 灵脉</span>
@@ -431,6 +445,11 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                   <span className="text-indigo-300">· 护山阵 {homeSect.arrayHp}/{homeSect.arrayMaxHp}</span>
                 )}
                 {besiegedLocationIds.has(location.id) && <span className="text-rose-300">· 围攻中</span>}
+                {localOccasions.map((occasion) => (
+                  <span key={occasion.id} className="text-cyan-300">
+                    · {OCCASION_KIND[occasion.kind]}：{occasion.title}（{OCCASION_STATUS[occasion.status]}）
+                  </span>
+                ))}
                 {trialCount > 0 && <span className="text-sky-300">· 渡劫中 {trialCount} 人</span>}
                 {herbCount > 0 && <span className="text-emerald-300">· 灵草 {herbCount} 株</span>}
                 {location.inheritanceScrolls.length > 0 && (

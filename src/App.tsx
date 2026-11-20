@@ -10,6 +10,7 @@ import { queryCultivatorLLMDecision } from './engine/llmBrain';
 import { enrichAnnualReflections } from './engine/reflectionEngine';
 import { enrichTickDialogues } from './engine/dialogueEngine';
 import { activeSiegeForActor } from './engine/diplomacyEngine';
+import { activeOccasionForActor } from './engine/occasionEngine';
 import { LLMConfig, LLMDecisionPayload, WorldState } from './types/world';
 import { WorldMapCanvas } from './components/WorldMapCanvas';
 import { RelationshipGraph } from './components/RelationshipGraph';
@@ -39,7 +40,7 @@ export const App: React.FC = () => {
     setIsStepping(true);
     try {
       if (llmConfig.enabled && llmConfig.apiKey.trim()) {
-        const alive = world.cultivators.filter((c) => c.alive && !activeSiegeForActor(world, c));
+        const alive = world.cultivators.filter((c) => c.alive && !activeSiegeForActor(world, c) && !activeOccasionForActor(world, c));
         const results = await Promise.all(
           alive.map(async (c) => {
             const dec = await queryCultivatorLLMDecision(c, world, llmConfig);

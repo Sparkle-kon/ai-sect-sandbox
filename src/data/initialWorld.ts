@@ -119,6 +119,7 @@ export function createInitialWorld(): WorldState {
     ],
     sieges: [],
     tributeDemands: [],
+    occasions: [],
     locations: [
       {
         id: 'loc-taixu',
