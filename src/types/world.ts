@@ -26,6 +26,7 @@ export type ActionType =
   | 'SOCIALIZE'
   | 'DUEL'
   | 'SCHEMING'
+  | 'PURSUE_SCHEME'
   | 'REST';
 
 export type RelationType = '师徒' | '同门' | '道侣' | '血仇' | '挚友' | '竞争';
@@ -98,6 +99,28 @@ export interface Rumor {
   lead?: boolean;
 }
 
+export type SchemeKind = 'infiltration' | 'foundation_pill' | 'vengeance' | 'artifact_heist';
+
+export interface SchemeStep {
+  label: string;
+  completedTick?: number;
+}
+
+export interface CultivatorScheme {
+  id: string;
+  kind: SchemeKind;
+  title: string;
+  status: 'active' | 'completed' | 'failed';
+  startedTick: number;
+  finishedTick?: number;
+  stepIndex: number;
+  steps: SchemeStep[];
+  targetCultivatorId?: string;
+  targetLocationId?: string;
+  artifactName?: string;
+  outcome?: string;
+}
+
 export interface Cultivator {
   id: string;
   name: string;
@@ -124,6 +147,7 @@ export interface Cultivator {
   memorySequence: number; // Monotonic across evictions
   reflections: CultivatorReflection[];
   rumors: Rumor[];
+  activeScheme?: CultivatorScheme;
   alive: boolean;
 }
 
@@ -154,6 +178,7 @@ export interface LLMDecisionPayload {
   targetCultivatorId?: string;
   spokenLine?: string;
   rumorIntent?: 'FABRICATE' | 'EXAGGERATE';
+  proposedScheme?: SchemeKind;
 }
 
 export interface WorldState {

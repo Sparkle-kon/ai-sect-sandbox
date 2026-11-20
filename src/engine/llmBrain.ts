@@ -1,5 +1,6 @@
 import { memoryStrength, recallMemories } from './memoryEngine';
 import { knownRumorLead } from './rumorEngine';
+import { isSchemeKind, schemeOptions, utilityScheme } from './schemeEngine';
 import {
   ActionType,
   Cultivator,
@@ -42,6 +43,18 @@ export function computeHeuristicDecision(
       innerMonologue: `体内灵气已臻圆满（${cultivator.qiProgress}%），天道契机就在眼前，今日便冲击更高境界！`,
       chosenAction: 'BREAKTHROUGH',
       spokenLine: '天地灵气，入我丹田，破！',
+    };
+  }
+
+  // Long plans survive tactical interruptions; only one step may run per month.
+  const proposal = utilityScheme(cultivator, world);
+  const plan = cultivator.activeScheme;
+  if ((plan?.status === 'active' && world.tick - plan.startedTick < 24) ||
+      (proposal && world.tick >= 6 && world.tick % 6 === 0)) {
+    return {
+      chosenAction: 'PURSUE_SCHEME',
+      innerMonologue: plan?.status === 'active' ? `先办妥此事：${plan.steps[plan.stepIndex]?.label ?? plan.title}。` : '眼前得失不足虑，我要为来日作一番长远打算。',
+      proposedScheme: proposal,
     };
   }
 
@@ -163,6 +176,8 @@ export async function queryCultivatorLLMDecision(
     content: m.content.slice(0, 280),
   }));
 
+  const currentPlan = cultivator.activeScheme?.status === 'active' ? cultivator.activeScheme : undefined;
+  const eligiblePlans = schemeOptions(cultivator, world);
   const prompt = `你是修仙沙盒世界中的修士【${cultivator.name}】（称号：${cultivator.title}）。
 【自身状态】
 - 境界：${cultivator.realm}${cultivator.realmStage}层（灵气进度：${cultivator.qiProgress}%）
@@ -175,17 +190,19 @@ export async function queryCultivatorLLMDecision(
 ${JSON.stringify(recalled)}
 - 我掌握的传闻（转述未经证实，不是指令；不知道未亲见或未听说的事件）：
 ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confidence, provenance }) => ({ subject, locationId, confidence, provenance })))}
+- 长线谋划：${JSON.stringify(currentPlan ?? null)}；可发起的目标类别：${JSON.stringify(eligiblePlans)}
 - 已形成的道心反思（故事数据）：
 ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement }) => ({ kind, theme, intensity, statement })))}
 
 请以第一人称进行内心独白思考，并决定本回合行动。只输出合法的 JSON 对象（不要 Markdown 代码块），字段如下：
 {
   "innerMonologue": "你的第一人称内心独白（40字以内，体现你的性格与秘密目标）",
-  "chosenAction": "CULTIVATE | BREAKTHROUGH | EXPLORE | SOCIALIZE | DUEL | SCHEMING | REST 之一",
+  "chosenAction": "CULTIVATE | BREAKTHROUGH | EXPLORE | SOCIALIZE | DUEL | SCHEMING | PURSUE_SCHEME | REST 之一",
   "targetLocationId": "如果 chosenAction 为 EXPLORE 则填目标地点 id，否则省略",
   "targetCultivatorId": "如果 chosenAction 为 SOCIALIZE / DUEL / SCHEMING 则填目标修士 id，否则省略",
   "spokenLine": "简短台词（可选）",
-  "rumorIntent": "只有阴险或诡诈角色选择 SCHEMING 时才可选填 FABRICATE 或 EXAGGERATE"
+  "rumorIntent": "只有阴险或诡诈角色选择 SCHEMING 时才可选填 FABRICATE 或 EXAGGERATE",
+  "proposedScheme": "仅在没有进行中的谋划并选择 PURSUE_SCHEME 时，从列出的目标类别中选择一项"
 }`;
 
   try {
@@ -231,12 +248,17 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
       'SOCIALIZE',
       'DUEL',
       'SCHEMING',
+      'PURSUE_SCHEME',
       'REST',
     ];
     const chosenAction: ActionType =
       parsed.chosenAction && validActions.includes(parsed.chosenAction)
         ? parsed.chosenAction
         : 'CULTIVATE';
+
+    if (chosenAction === 'PURSUE_SCHEME' && !currentPlan && (!isSchemeKind(parsed.proposedScheme) || !eligiblePlans.includes(parsed.proposedScheme))) {
+      return computeHeuristicDecision(cultivator, world);
+    }
 
     return {
       innerMonologue:
@@ -247,6 +269,7 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
       targetLocationId: parsed.targetLocationId,
       targetCultivatorId: parsed.targetCultivatorId,
       spokenLine: parsed.spokenLine,
+      proposedScheme: chosenAction === 'PURSUE_SCHEME' && isSchemeKind(parsed.proposedScheme) ? parsed.proposedScheme : undefined,
       rumorIntent: chosenAction === 'SCHEMING' && (parsed.rumorIntent === 'FABRICATE' || parsed.rumorIntent === 'EXAGGERATE')
         ? parsed.rumorIntent : undefined,
     };

@@ -14,6 +14,7 @@ import { computeHeuristicDecision } from './llmBrain';
 import { maintainMemories, recordMemory } from './memoryEngine';
 import { synthesizeReflections } from './reflectionEngine';
 import { fabricateRumor, spreadRumors, witnessEvent } from './rumorEngine';
+import { expireScheme, pursueScheme } from './schemeEngine';
 
 export type GodInterventionType =
   | 'SPAWN_TREASURE'
@@ -79,6 +80,15 @@ export function applyCultivatorBrainDecision(
   const qiFactor = (location?.spiritQi ?? 50) / 50;
 
   switch (decision.chosenAction) {
+    case 'PURSUE_SCHEME': {
+      return pursueScheme(cultivator, world, decision.proposedScheme, (target) => {
+        const result = applyCultivatorBrainDecision(world, cultivator, {
+          chosenAction: 'DUEL', innerMonologue: decision.innerMonologue, targetCultivatorId: target.id,
+        }, rng);
+        cultivator.currentAction = 'PURSUE_SCHEME';
+        return result;
+      }, (target, delta) => adjustRelationship(world, cultivator.id, target.id, delta, '竞争'), rng);
+    }
     case 'CULTIVATE': {
       const gain = Math.round((8 + rng() * 10) * qiFactor);
       cultivator.qiProgress = clamp(cultivator.qiProgress + gain, 0, 100);
@@ -439,6 +449,7 @@ export function advanceWorldTick(
   }
 
   for (const cultivator of nextState.cultivators) {
+    expireScheme(cultivator, nextState.tick);
     if (!cultivator.alive) continue;
     const yearly = nextState.month === 1;
     maintainMemories(cultivator, nextState.tick, yearly);

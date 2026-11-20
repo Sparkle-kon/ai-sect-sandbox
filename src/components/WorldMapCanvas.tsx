@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Cultivator, LocationNode, WorldState } from '../types/world';
 import { memoryStrength } from '../engine/memoryEngine';
+import { countCompletedSchemeSteps, SCHEME_STATUS } from './SchemePanel';
 
 interface WorldMapCanvasProps {
   world: WorldState;
@@ -16,6 +17,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const selected = world.cultivators.find((c) => c.id === selectedCultivatorId);
+  const selectedScheme = selected?.activeScheme;
   const strongestMemory = selected
     ? [...selected.memories, ...selected.coreMemories].reduce(
         (strongest, entry) => Math.max(strongest, memoryStrength(entry, world.tick)),
@@ -258,7 +260,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         height={560}
         onClick={handleCanvasClick}
         className="w-full h-auto cursor-pointer block"
-        aria-label="修仙世界地图。选择修士可查看下方记忆与见闻摘要；也可通过识海面板的修士按钮切换。"
+        aria-label="修仙世界地图。选择修士可查看下方识海状态摘要；也可通过识海面板的修士按钮切换。"
       />
       <div className="px-4 py-2 border-t border-slate-800/80 bg-slate-900/60 text-[11px] text-slate-400 flex flex-wrap gap-x-4 gap-y-1" aria-label="选中修士记忆摘要">
         {selected ? (
@@ -271,6 +273,11 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
               {selected.alive ? '道心' : '道心留影'}：信念 {reflectionCounts?.belief} · 执念 {reflectionCounts?.obsession} · 心魔 {reflectionCounts?.heart_demon}
             </span>
             <span className="text-indigo-300">见闻与流言 {selected.rumors.length} 条 · 转述 {relayedRumorCount} 条</span>
+            {selectedScheme && (
+              <span className={SCHEME_STATUS[selectedScheme.status].color}>
+                长线计划：{SCHEME_STATUS[selectedScheme.status].label} · {countCompletedSchemeSteps(selectedScheme)}/{selectedScheme.steps.length} 步
+              </span>
+            )}
           </>
         ) : (
           <span>选择一位修士查看其当前记忆状态。</span>
