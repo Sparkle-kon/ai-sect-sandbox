@@ -294,6 +294,7 @@ export interface WorldEvent {
   witnessScope?: 'participants';
   dialogue?: DialogueExchange;
   duelWinnerId?: string;
+  damage?: Array<{ cultivatorId: string; amount: number }>;
   locationId?: string;
 }
 
@@ -419,6 +420,34 @@ export interface WorldTerrain {
   tiles: MapTile[];
 }
 
+export interface MapPoint {
+  x: number;
+  y: number;
+}
+
+export interface MapMovementTrail {
+  cultivatorId: string;
+  tick: number;
+  fromLocationId: string;
+  toLocationId: string;
+  points: MapPoint[];
+}
+
+export interface MapEffect {
+  id: string;
+  tick: number;
+  kind: 'damage' | 'breakthrough' | 'clash' | 'lightning';
+  locationId: string;
+  actorIds: string[];
+  text?: string;
+}
+
+export interface MapPresentation {
+  tick: number;
+  trails: MapMovementTrail[];
+  effects: MapEffect[];
+}
+
 export interface WorldState {
   tick: number;
   interventionSequence: number;
@@ -432,6 +461,7 @@ export interface WorldState {
   bounties: BountyEntry[];
   locations: LocationNode[];
   terrain: WorldTerrain;
+  mapPresentation: MapPresentation;
   cultivators: Cultivator[];
   relationships: RelationshipEdge[];
   events: WorldEvent[];

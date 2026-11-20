@@ -28,6 +28,7 @@ import { activeSiegeForActor, advanceDiplomacy, resolveDiplomacyAction } from '.
 import { activeOccasionForActor, advanceOccasions, joinOccasion } from './occasionEngine';
 import { advanceBounties, pursueBounty, recordTransgression } from './bountyEngine';
 import { knownMapLocations, noteTerrainVisit } from './terrainEngine';
+import { deriveMapPresentation } from './mapMotionEngine';
 
 export type GodInterventionType =
   | 'SPAWN_TREASURE'
@@ -412,8 +413,12 @@ export function applyCultivatorBrainDecision(
       const dmgToWinner = Math.round(winner.maxHp * (0.1 + rng() * 0.15) * strikeMultiplier(loser, winner));
       const sufferedByLoser = mitigateSectArray(world, loser, winner, dmgToLoser);
       const sufferedByWinner = mitigateSectArray(world, winner, loser, dmgToWinner);
+      const loserBeforeHp = loser.hp;
+      const winnerBeforeHp = winner.hp;
       loser.hp = Math.max(0, loser.hp - sufferedByLoser);
       winner.hp = Math.max(1, winner.hp - sufferedByWinner);
+      const damage = [{cultivatorId: loser.id, amount: loserBeforeHp - loser.hp},
+        {cultivatorId: winner.id, amount: winnerBeforeHp - winner.hp}].filter((item) => item.amount > 0);
       wearArtifact(winner, true);
       wearArtifact(loser, false);
 
@@ -450,6 +455,7 @@ export function applyCultivatorBrainDecision(
           category: 'death',
           actorIds: [cultivator.id, defender.id],
           duelWinnerId: winner.id,
+          damage,
           dialogue: scriptedDialogue('combat', cultivator, defender, `${winner.name}胜出，${loser.name}当场陨落。`, decision.spokenLine),
           locationId: cultivator.locationId,
         };
@@ -475,10 +481,11 @@ export function applyCultivatorBrainDecision(
         year: world.year,
         month: world.month,
         title: `惊天斗法：${cultivator.name}激战${defender.name}`,
-        description: `${cultivator.name}于【${location?.name ?? '秘境'}】向${defender.name}悍然出手！一番激斗后，${winner.name}占据上风，${loser.name}受创（-${sufferedByLoser} HP）化作血光遁走。`,
+        description: `${cultivator.name}于【${location?.name ?? '秘境'}】向${defender.name}悍然出手！一番激斗后，${winner.name}占据上风，${loser.name}受创（-${loserBeforeHp - loser.hp} HP）化作血光遁走。`,
         category: 'combat',
         actorIds: [cultivator.id, defender.id],
         duelWinnerId: winner.id,
+        damage,
         dialogue: scriptedDialogue('combat', cultivator, defender, `${winner.name}占得上风，${loser.name}负伤离去。`, decision.spokenLine),
         locationId: cultivator.locationId,
       };
@@ -591,6 +598,7 @@ export function advanceWorldTick(
   for (const actor of nextState.cultivators) if (actor.alive) noteTerrainVisit(nextState, actor);
   spreadRumors(nextState);
   nextState.events = [...newEvents, ...nextState.events].slice(0, 120);
+  nextState.mapPresentation = deriveMapPresentation(prevState, nextState, newEvents);
   return nextState;
 }
 
@@ -644,12 +652,13 @@ export function executeGodIntervention(
 
     case 'TRIBULATION_STRIKE': {
       const target =
-        nextState.cultivators.find((c) => c.id === cmd.targetCultivatorId) ??
+        cmd.targetCultivatorId ? nextState.cultivators.find((c) => c.alive && c.id === cmd.targetCultivatorId) :
         nextState.cultivators.find((c) => c.alive);
       if (!target) break;
 
-      const dmg = Math.round(target.maxHp * 0.45);
-      target.hp = clamp(target.hp - dmg, 1, target.maxHp);
+      const beforeHp = target.hp;
+      target.hp = clamp(target.hp - Math.round(target.maxHp * 0.45), 1, target.maxHp);
+      const dmg = beforeHp - target.hp;
       target.innerMonologue = '为何苍天突然降下紫霄神雷劈我？！莫非我逆天行事触怒了天道？！';
       recordMemory(
         target,
@@ -668,6 +677,7 @@ export function executeGodIntervention(
         description: `晴空霹雳！一道毁天灭地的紫霄神雷直劈${target.name}，令其重伤吐血（-${dmg} HP）！`,
         category: 'heavenly',
         actorIds: [target.id],
+        damage: dmg > 0 ? [{ cultivatorId: target.id, amount: dmg }] : [],
         locationId: target.locationId,
       });
       break;
@@ -731,6 +741,9 @@ export function executeGodIntervention(
   }
 
   const head = nextState.events[0];
-  if (head && head.id !== prevState.events[0]?.id) witnessEvent(nextState, head);
+  if (head && head.id !== prevState.events[0]?.id) {
+    witnessEvent(nextState, head);
+    nextState.mapPresentation = deriveMapPresentation(prevState, nextState, [head]);
+  }
   return nextState;
 }

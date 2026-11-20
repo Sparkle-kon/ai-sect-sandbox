@@ -13,6 +13,8 @@ import { isOpenOccasion, OCCASION_KIND, OCCASION_STATUS } from './WorldOccasions
 import { BOUNTY_STATUS, relevantBounty } from './BountyBoard';
 import { BIOME_PALETTE, createTerrainMapView, mapActorPositions } from './terrainMapView';
 import { drawTerrain } from './terrainMapDraw';
+import { buildMapPresentation, MAP_EFFECT_LABELS, MOTION_MS } from './mapPresentationView';
+import { drawFlights, drawMapEffects } from './mapPresentationDraw';
 
 interface WorldMapCanvasProps {
   world: WorldState;
@@ -34,6 +36,9 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const mapView = useMemo(() => createTerrainMapView(world, selected, fog), [world, selected, fog]);
   const { seenLocations, liveActors, isCurrentLocation } = mapView;
   const actorPositions = useMemo(() => mapActorPositions(seenLocations, liveActors), [seenLocations, liveActors]);
+  const presentation = useMemo(() => buildMapPresentation(world, mapView, actorPositions), [world, mapView, actorPositions]);
+  const paintedActors = useRef<typeof actorPositions>([]);
+  const playback = useRef<{ source: WorldState['mapPresentation']; start: number } | undefined>();
   const selectedScheme = selected?.activeScheme;
   const selectedSect = selected && world.sects.find((sect) => sect.id === selected.sectId);
   const selectedArtifact = selected?.alive ? equippedArtifact(selected) : undefined;
@@ -97,7 +102,12 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     const width = canvas.width;
     const height = canvas.height;
 
-    const draw = (phase: number) => {
+    const hasMotion = presentation.routes.size > 0 || presentation.effects.length > 0;
+    if (playback.current?.source !== world.mapPresentation) {
+      playback.current = { source: world.mapPresentation, start: performance.now() };
+    }
+    const motionStart = playback.current?.start ?? performance.now();
+    const draw = (phase: number, elapsed: number, animate: boolean) => {
       // 1. Background gradient
       const bgGrad = ctx.createRadialGradient(
         width / 2,
@@ -226,7 +236,9 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       }
 
       // 5. Draw only actors in the current field of view.
-      for (const { actor: cultivator, x: cx, y: cy } of actorPositions) {
+      const frameActors = drawFlights(ctx, actorPositions, presentation.routes, elapsed, animate);
+      paintedActors.current = frameActors;
+      for (const { actor: cultivator, x: cx, y: cy } of frameActors) {
           const sect = world.sects.find((s) => s.id === cultivator.sectId);
           const color = sect?.color ?? '#38bdf8';
           const isSelected = cultivator.id === selectedCultivatorId;
@@ -281,35 +293,40 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
             cy + 36
           );
       }
+      drawMapEffects(ctx, presentation.effects, frameActors, elapsed, animate);
     };
 
-    draw(0);
-    if (!heat || typeof window.matchMedia !== 'function') return;
-    const preference = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const preference = typeof window.matchMedia === 'function' ? window.matchMedia('(prefers-reduced-motion: reduce)') : undefined;
     let frame: number | undefined;
     let previous = 0;
     const run = (now: number) => {
-      if (now - previous >= 80) {
-        draw(now / 1350);
+      const elapsed = now - motionStart;
+      const moving = hasMotion && elapsed < MOTION_MS;
+      if (now - previous >= (moving ? 33 : 80) || !moving && !heat) {
+        draw(now / 1350, elapsed, true);
         previous = now;
       }
-      frame = window.requestAnimationFrame(run);
+      frame = heat || moving ? window.requestAnimationFrame(run) : undefined;
     };
     const stopOrStart = () => {
       if (frame !== undefined) window.cancelAnimationFrame(frame);
       frame = undefined;
-      if (!preference.matches && !document.hidden) frame = window.requestAnimationFrame(run);
-      else draw(0);
+      const now = performance.now();
+      const animate = !!preference && !preference.matches && !document.hidden;
+      draw(0, now - motionStart, animate);
+      if (animate && (heat || hasMotion && now - motionStart < MOTION_MS)) {
+        frame = window.requestAnimationFrame(run);
+      }
     };
-    preference.addEventListener('change', stopOrStart);
+    preference?.addEventListener('change', stopOrStart);
     document.addEventListener('visibilitychange', stopOrStart);
     stopOrStart();
     return () => {
       if (frame !== undefined) window.cancelAnimationFrame(frame);
-      preference.removeEventListener('change', stopOrStart);
+      preference?.removeEventListener('change', stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation]);
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
@@ -321,8 +338,9 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     const clickX = (e.clientX - rect.left) * scaleX;
     const clickY = (e.clientY - rect.top) * scaleY;
 
-    for (const { actor, x, y } of actorPositions) {
-      if (Math.hypot(clickX - x, clickY - y) <= 20) {
+    const currentIds = new Set(actorPositions.map(({ actor }) => actor.id));
+    for (const { actor, x, y } of paintedActors.current) {
+      if (currentIds.has(actor.id) && Math.hypot(clickX - x, clickY - y) <= 20) {
         onSelectCultivator(actor.id);
         return;
       }
@@ -371,7 +389,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         height={600}
         onClick={handleCanvasClick}
         className="w-full h-auto cursor-pointer block"
-        aria-label="修仙世界地图。选择修士可查看下方识海状态摘要；也可通过识海面板的修士按钮切换。雷劫用静态闪电标注；围攻地点用玫红虚线圈标注；各地渡劫、驻守、围攻和活跃盛会可在下方列表查看。"
+        aria-label="修仙世界地图。选择修士可查看下方识海状态摘要；也可通过识海面板的修士按钮切换。雷劫用静态闪电标注；围攻地点用玫红虚线圈标注；各地渡劫、驻守、围攻和活跃盛会可在下方列表查看；本月移动与交锋也有文字摘要。"
       />
       <div className="px-4 py-2 border-t border-slate-800/80 bg-slate-900/60 text-[11px] text-slate-400 flex flex-wrap gap-x-4 gap-y-1" aria-label="选中修士记忆摘要">
         {selected ? (
@@ -445,6 +463,20 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           <span>选择一位修士查看其当前记忆状态。</span>
         )}
       </div>
+      {(presentation.routes.size > 0 || presentation.effects.length > 0) && (
+        <details className="border-t border-slate-800/80 bg-slate-900/40 px-4 py-2 text-[11px] text-slate-300">
+          <summary className="cursor-pointer">本月地图动态 · 移动 {presentation.routes.size} · 事件 {presentation.effects.length}</summary>
+          <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto">
+            {actorPositions.flatMap(({ actor }) => {
+              const route = presentation.routes.get(actor.id);
+              return route ? [<li key={actor.id}>{actor.name}飞往：{route.fromName} → {route.toName}</li>] : [];
+            })}
+            {presentation.effects.map((effect) => (
+              <li key={effect.id}>{effect.location.name} · {MAP_EFFECT_LABELS[effect.kind]}{effect.text ? `：${effect.text}` : ''}</li>
+            ))}
+          </ul>
+        </details>
+      )}
       <details className="border-t border-slate-800/80 bg-slate-900/40 px-4 py-2 text-[11px] text-slate-300">
         <summary className="cursor-pointer">{fog ? '查看已发现地点与当前所见' : '查看各地点灵脉属性'}</summary>
         <div aria-label="地形图例" className="mt-2 flex flex-wrap gap-x-3 gap-y-1">

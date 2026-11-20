@@ -91,14 +91,16 @@ export function resolveTribulation(world: WorldState, actor: Cultivator, stance:
       pillUsed = true;
     }
     const damage = Math.max(1, Math.round(actor.maxHp * fraction));
+    const previousHp = actor.hp;
     actor.hp = Math.max(0, actor.hp - damage);
+    const impact = [{ cultivatorId: actor.id, amount: previousHp - actor.hp }];
     wearArtifact(actor, actor.hp > 0);
     trial.pressure = clamp(trial.pressure + posture.pressure, 0, 100);
-    if (actor.hp === 0) return failTrial(world, actor, trial, `未能承受第${wave}重劫雷${pillUsed ? '，破障丹护持亦告破' : ''}`);
+    if (actor.hp === 0) return { ...failTrial(world, actor, trial, `未能承受第${wave}重劫雷${pillUsed ? '，破障丹护持亦告破' : ''}`), damage: impact };
     trial.nextWave++;
     if (wave >= trial.totalWaves) trial.stage = 'heart_demon';
     trial.lastOutcome = `${actor.name}以${posture.name}扛过第${wave}/${trial.totalWaves}重劫雷，损失${damage}气血${pillUsed ? '，耗费一枚破障丹抵消部分雷力' : ''}。${trial.stage === 'heart_demon' ? '雷云消退，心魔随即浮现。' : ''}`;
-    return trialEvent(world, actor, `wave-${wave}`, `第${wave}重雷劫`, trial.lastOutcome);
+    return { ...trialEvent(world, actor, `wave-${wave}`, `第${wave}重雷劫`, trial.lastOutcome), damage: impact };
   }
   const grudges = world.relationships.filter((edge) => (edge.fromId === actor.id || edge.toId === actor.id) &&
     (edge.type === '血仇' || edge.affinity <= -40)).reduce((total, edge) => total + (edge.affinity <= -60 ? 6 : 4), 0);
