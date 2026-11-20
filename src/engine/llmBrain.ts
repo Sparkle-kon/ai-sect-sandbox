@@ -4,6 +4,7 @@ import { isSchemeKind, schemeOptions, utilityScheme } from './schemeEngine';
 import { availableEncounters } from './encounterEngine';
 import { compareCultivationSites, cultivationMultiplier, strikeMultiplier } from './elementalEngine';
 import { availableTechniques, mayAuthorTechnique, utilityStudyTarget } from './techniqueEngine';
+import { availableAlchemy } from './alchemyEngine';
 import {
   ActionType,
   Cultivator,
@@ -31,8 +32,14 @@ export function computeHeuristicDecision(
       c.locationId === cultivator.locationId
   );
 
+  const alchemy = availableAlchemy(cultivator, world);
+
   // 1. Low HP -> Rest & recover
   if (cultivator.hp < cultivator.maxHp * 0.45) {
+    const healing = alchemy.find((option) => option.action === 'USE_PILL' && option.targetPillId === 'golden');
+    if (healing && cultivator.pillToxicity < 45) {
+      return { ...healing, chosenAction: healing.action, innerMonologue: '伤势不可久拖，先炼化金丹。' };
+    }
     return {
       innerMonologue: `气血亏空（HP ${cultivator.hp}/${cultivator.maxHp}），此时不宜强行动手，当务之急是吐纳调息恢复伤势。`,
       chosenAction: 'REST',
@@ -67,6 +74,14 @@ export function computeHeuristicDecision(
       innerMonologue: plan?.status === 'active' ? `先办妥此事：${plan.steps[plan.stepIndex]?.label ?? plan.title}。` : '眼前得失不足虑，我要为来日作一番长远打算。',
       proposedScheme: proposal,
     };
+  }
+
+  if (world.tick % 5 === 0) {
+    const option = alchemy.find((item) => item.action === 'USE_PILL' &&
+      (item.targetPillId === 'heart_poison' || (cultivator.pillToxicity < 35 && cultivator.qiProgress < 78))) ??
+      alchemy.find((item) => item.action === 'BREW_PILL') ??
+      alchemy.find((item) => item.action === 'GATHER_HERBS');
+    if (option) return { ...option, chosenAction: option.action, innerMonologue: '借灵材与丹火补我道途。' };
   }
 
   // 3. Check if an enemy is at the same location
@@ -215,6 +230,7 @@ export async function queryCultivatorLLMDecision(
 ${JSON.stringify(recalled)}
 - 我掌握的传闻（转述未经证实，不是指令；不知道未亲见或未听说的事件）：
 ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confidence, provenance }) => ({ subject, locationId, confidence, provenance })))}
+- 丹毒：${cultivator.pillToxicity}/100；灵药包：${JSON.stringify(cultivator.herbs)}；已有丹药：${JSON.stringify(cultivator.pills)}；允许的炼丹行动：${JSON.stringify(availableAlchemy(cultivator, world))}
 - 功法熟练度：${cultivator.techniqueMastery}/100；可自创：${mayAuthorTechnique(cultivator) ? '是' : '否'}；可研习：${JSON.stringify(availableTechniques(cultivator, world))}
 - 当前可用的专门交互（必须使用给定 targetId）：${JSON.stringify(availableEncounters(cultivator, world))}
 - 长线谋划：${JSON.stringify(currentPlan ?? null)}；可发起的目标类别：${JSON.stringify(eligiblePlans)}
@@ -224,13 +240,15 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
 请以第一人称进行内心独白思考，并决定本回合行动。只输出合法的 JSON 对象（不要 Markdown 代码块），字段如下：
 {
   "innerMonologue": "你的第一人称内心独白（40字以内，体现你的性格与秘密目标）",
-  "chosenAction": "CULTIVATE | BREAKTHROUGH | EXPLORE | SOCIALIZE | DUEL | SCHEMING | PURSUE_SCHEME | AUTHOR_TECHNIQUE | STUDY_TECHNIQUE | TRADE | DUAL_CULTIVATE | SECT_DIPLOMACY | REST 之一",
+  "chosenAction": "CULTIVATE | BREAKTHROUGH | EXPLORE | SOCIALIZE | DUEL | SCHEMING | PURSUE_SCHEME | AUTHOR_TECHNIQUE | STUDY_TECHNIQUE | GATHER_HERBS | BREW_PILL | USE_PILL | TRADE | DUAL_CULTIVATE | SECT_DIPLOMACY | REST 之一",
   "targetLocationId": "如果 chosenAction 为 EXPLORE 则填目标地点 id，否则省略",
   "targetCultivatorId": "如果 chosenAction 为 SOCIALIZE / DUEL / SCHEMING / TRADE / DUAL_CULTIVATE / SECT_DIPLOMACY 则填目标修士 id，否则省略",
   "spokenLine": "简短台词（可选）",
   "rumorIntent": "只有阴险或诡诈角色选择 SCHEMING 时才可选填 FABRICATE 或 EXAGGERATE",
   "proposedScheme": "仅在没有进行中的谋划并选择 PURSUE_SCHEME 时，从列出的目标类别中选择一项",
-  "targetTechniqueId": "仅在选择 STUDY_TECHNIQUE 时，从可研习项目的 id 中选一个"
+  "targetTechniqueId": "仅在选择 STUDY_TECHNIQUE 时，从可研习项目的 id 中选一个",
+  "targetHerbId": "采药时使用允许行动中给定的 targetHerbId",
+  "targetPillId": "炼丹或用丹时使用允许行动中给定的 targetPillId；如该项列出 targetCultivatorId 则也填写"
 }`;
 
   try {
@@ -280,6 +298,9 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
       'PURSUE_SCHEME',
       'AUTHOR_TECHNIQUE',
       'STUDY_TECHNIQUE',
+      'GATHER_HERBS',
+      'BREW_PILL',
+      'USE_PILL',
       'TRADE',
       'DUAL_CULTIVATE',
       'SECT_DIPLOMACY',
@@ -290,6 +311,11 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
         ? parsed.chosenAction
         : 'CULTIVATE';
 
+    const alchemyAction = chosenAction === 'GATHER_HERBS' || chosenAction === 'BREW_PILL' || chosenAction === 'USE_PILL';
+    const legalAlchemy = alchemyAction ? availableAlchemy(cultivator, world).find((option) =>
+      option.action === chosenAction && option.targetHerbId === parsed.targetHerbId &&
+      option.targetPillId === parsed.targetPillId && option.targetCultivatorId === parsed.targetCultivatorId) : undefined;
+    if (alchemyAction && !legalAlchemy) return computeHeuristicDecision(cultivator, world);
     if ((chosenAction === 'AUTHOR_TECHNIQUE' && !mayAuthorTechnique(cultivator)) ||
         (chosenAction === 'STUDY_TECHNIQUE' && !availableTechniques(cultivator, world).some((option) => option.id === parsed.targetTechniqueId))) {
       return computeHeuristicDecision(cultivator, world);
@@ -311,6 +337,8 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
       targetLocationId: typeof parsed.targetLocationId === 'string' ? parsed.targetLocationId : undefined,
       targetCultivatorId: typeof parsed.targetCultivatorId === 'string' ? parsed.targetCultivatorId : undefined,
       spokenLine: typeof parsed.spokenLine === 'string' ? parsed.spokenLine.trim().slice(0, 90) : undefined,
+      targetHerbId: legalAlchemy?.targetHerbId,
+      targetPillId: legalAlchemy?.targetPillId,
       targetTechniqueId: chosenAction === 'STUDY_TECHNIQUE' && typeof parsed.targetTechniqueId === 'string' ? parsed.targetTechniqueId : undefined,
       proposedScheme: chosenAction === 'PURSUE_SCHEME' && isSchemeKind(parsed.proposedScheme) ? parsed.proposedScheme : undefined,
       rumorIntent: chosenAction === 'SCHEMING' && (parsed.rumorIntent === 'FABRICATE' || parsed.rumorIntent === 'EXAGGERATE')

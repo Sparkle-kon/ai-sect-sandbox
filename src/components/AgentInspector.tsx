@@ -7,6 +7,7 @@ import { RumorPanel } from './RumorPanel';
 import { SchemePanel } from './SchemePanel';
 import { SpiritRootBadge } from './SpiritRootBadge';
 import { TechniquePanel } from './TechniquePanel';
+import { AlchemyPanel } from './AlchemyPanel';
 
 interface AgentInspectorProps {
   world: WorldState;
@@ -184,6 +185,7 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
       </section>
 
       <TechniquePanel cultivator={cultivator} sect={sect} location={location} cultivators={world.cultivators} />
+      <AlchemyPanel cultivator={cultivator} location={location} />
       <ReflectionPanel cultivator={cultivator} />
       <RumorPanel cultivator={cultivator} locations={world.locations} cultivators={world.cultivators} />
       <SchemePanel cultivator={cultivator} locations={world.locations} cultivators={world.cultivators} />

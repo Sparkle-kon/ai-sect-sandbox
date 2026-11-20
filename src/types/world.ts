@@ -1,5 +1,8 @@
 export type SpiritRoot = '金' | '木' | '水' | '火' | '土' | '雷' | '暗' | '天灵根';
 
+export type HerbId = 'jade_leaf' | 'earth_root' | 'star_bloom' | 'shadow_moss';
+export type PillId = 'foundation' | 'golden' | 'barrier' | 'heart_poison';
+
 export interface Technique {
   id?: string;
   authorId?: string;
@@ -44,6 +47,9 @@ export type ActionType =
   | 'PURSUE_SCHEME'
   | 'AUTHOR_TECHNIQUE'
   | 'STUDY_TECHNIQUE'
+  | 'GATHER_HERBS'
+  | 'BREW_PILL'
+  | 'USE_PILL'
   | 'TRADE'
   | 'DUAL_CULTIVATE'
   | 'SECT_DIPLOMACY'
@@ -94,6 +100,9 @@ export interface LocationNode {
   spiritQi: number; // 10 to 100
   ownerSectId?: string;
   inheritanceScrolls: Technique[];
+  herbs: Record<HerbId, number>;
+  herbCapacity: Record<HerbId, number>;
+  furnaceGrade: 0 | 1 | 2 | 3;
   description: string;
 }
 
@@ -168,6 +177,9 @@ export interface Cultivator {
   technique: Technique;
   techniqueMastery: number;
   authoredTechnique?: Technique;
+  herbs: Record<HerbId, number>;
+  pills: Record<PillId, number>;
+  pillToxicity: number;
   artifacts: Artifact[];
   memories: MemoryEntry[];
   coreMemories: MemoryEntry[];
@@ -220,6 +232,8 @@ export interface LLMDecisionPayload {
   rumorIntent?: 'FABRICATE' | 'EXAGGERATE';
   proposedScheme?: SchemeKind;
   targetTechniqueId?: string;
+  targetHerbId?: HerbId;
+  targetPillId?: PillId;
 }
 
 export interface WorldState {

@@ -19,6 +19,7 @@ import { scriptedDialogue } from './dialogueEngine';
 import { resolveEncounter } from './encounterEngine';
 import { cultivationMultiplier, strikeMultiplier } from './elementalEngine';
 import { authorTechnique, dropInheritance, gainMastery, masteryMultiplier, studyTechnique } from './techniqueEngine';
+import { maintainAlchemy, resolveAlchemy } from './alchemyEngine';
 
 export type GodInterventionType =
   | 'SPAWN_TREASURE'
@@ -84,6 +85,10 @@ export function applyCultivatorBrainDecision(
   const qiFactor = (location?.spiritQi ?? 50) / 50;
 
   switch (decision.chosenAction) {
+    case 'GATHER_HERBS':
+    case 'BREW_PILL':
+    case 'USE_PILL':
+      return resolveAlchemy(world, cultivator, decision, rng);
     case 'AUTHOR_TECHNIQUE':
       return authorTechnique(cultivator, world);
     case 'STUDY_TECHNIQUE':
@@ -116,6 +121,7 @@ export function applyCultivatorBrainDecision(
     }
 
     case 'REST': {
+      cultivator.pillToxicity = Math.max(0, cultivator.pillToxicity - 4);
       const previousHp = cultivator.hp;
       const heal = Math.round(cultivator.maxHp * 0.35);
       cultivator.hp = clamp(cultivator.hp + heal, 1, cultivator.maxHp);
@@ -428,6 +434,7 @@ export function advanceWorldTick(
     nextState.month += 1;
   }
 
+  maintainAlchemy(nextState);
   const newEvents: WorldEvent[] = [];
 
   for (const cultivator of nextState.cultivators) {

@@ -1,5 +1,5 @@
 import { memoryDecayRate } from '../engine/memoryEngine';
-import { CultivationRealm, WorldState } from '../types/world';
+import { CultivationRealm, HerbId, PillId, WorldState } from '../types/world';
 
 export const REALM_ORDER: CultivationRealm[] = [
   '练气',
@@ -36,6 +36,10 @@ export const REALM_LIFESPAN: Record<CultivationRealm, number> = {
   大乘: 30000,
   渡劫: 99999,
 };
+
+const herbs = (jade_leaf = 0, earth_root = 0, star_bloom = 0, shadow_moss = 0): Record<HerbId, number> =>
+  ({ jade_leaf, earth_root, star_bloom, shadow_moss });
+const noPills = (): Record<PillId, number> => ({ foundation: 0, golden: 0, barrier: 0, heart_poison: 0 });
 
 export function createInitialWorld(): WorldState {
   return {
@@ -99,6 +103,9 @@ export function createInitialWorld(): WorldState {
         spiritRoot: '金',
         spiritQi: 85,
         inheritanceScrolls: [],
+        herbs: herbs(6, 4, 0, 0),
+        herbCapacity: herbs(6, 4, 0, 0),
+        furnaceGrade: 2,
         ownerSectId: 'sect-qingyun',
         description: '万剑归宗之地，云海翻腾，浩然剑气直冲霄汉。',
       },
@@ -111,6 +118,9 @@ export function createInitialWorld(): WorldState {
         spiritRoot: '暗',
         spiritQi: 80,
         inheritanceScrolls: [],
+        herbs: herbs(0, 3, 0, 8),
+        herbCapacity: herbs(0, 3, 0, 8),
+        furnaceGrade: 1,
         ownerSectId: 'sect-bloodmoon',
         description: '终年血雾弥漫，阴煞之气浓郁，白骨累累。',
       },
@@ -123,6 +133,9 @@ export function createInitialWorld(): WorldState {
         spiritRoot: '木',
         spiritQi: 78,
         inheritanceScrolls: [],
+        herbs: herbs(14, 9, 3, 0),
+        herbCapacity: herbs(14, 9, 3, 0),
+        furnaceGrade: 3,
         ownerSectId: 'sect-danxia',
         description: '奇花异草遍地，丹香四溢的世外桃源。',
       },
@@ -135,6 +148,9 @@ export function createInitialWorld(): WorldState {
         spiritRoot: '天灵根',
         spiritQi: 82,
         inheritanceScrolls: [],
+        herbs: herbs(2, 3, 7, 0),
+        herbCapacity: herbs(2, 3, 7, 0),
+        furnaceGrade: 2,
         ownerSectId: 'sect-tianji',
         description: '悬空浮岛，星辰之力汇聚，可窥探天机因果。',
       },
@@ -147,6 +163,9 @@ export function createInitialWorld(): WorldState {
         spiritRoot: '雷',
         spiritQi: 98,
         inheritanceScrolls: [],
+        herbs: herbs(6, 1, 10, 6),
+        herbCapacity: herbs(6, 1, 10, 6),
+        furnaceGrade: 0,
         description: '沙盒中央的上古战场遗迹，机缘与杀机并存。',
       },
       {
@@ -158,6 +177,9 @@ export function createInitialWorld(): WorldState {
         spiritRoot: '土',
         spiritQi: 45,
         inheritanceScrolls: [],
+        herbs: herbs(3, 2, 0, 0),
+        herbCapacity: herbs(3, 2, 0, 0),
+        furnaceGrade: 1,
         description: '正魔两道默认的交易之所，暗流涌动。',
       },
       {
@@ -169,6 +191,9 @@ export function createInitialWorld(): WorldState {
         spiritRoot: '水',
         spiritQi: 90,
         inheritanceScrolls: [],
+        herbs: herbs(4, 9, 3, 0),
+        herbCapacity: herbs(4, 9, 3, 0),
+        furnaceGrade: 0,
         description: '孕育极品冰系灵石的野生灵脉，常有修士争夺。',
       },
     ],
@@ -196,6 +221,9 @@ export function createInitialWorld(): WorldState {
         spiritRoot: '金',
         technique: { name: '太虚御剑经', spiritRoot: '金' },
         techniqueMastery: 25,
+        herbs: herbs(),
+        pills: noPills(),
+        pillToxicity: 0,
         artifacts: [{ name: '太虚青莲剑', spiritRoot: '金' }, { name: '九霄护心镜', spiritRoot: '雷' }],
         memories: [
           {
@@ -237,6 +265,9 @@ export function createInitialWorld(): WorldState {
         spiritRoot: '水',
         technique: { name: '寒潮剑诀', spiritRoot: '水' },
         techniqueMastery: 25,
+        herbs: herbs(),
+        pills: noPills(),
+        pillToxicity: 0,
         artifacts: [{ name: '霜华飞剑', spiritRoot: '水' }],
         memories: [
           {
@@ -278,6 +309,9 @@ export function createInitialWorld(): WorldState {
         spiritRoot: '暗',
         technique: { name: '血月观想法', spiritRoot: '暗' },
         techniqueMastery: 25,
+        herbs: herbs(),
+        pills: noPills(),
+        pillToxicity: 0,
         artifacts: [{ name: '万魂血幡', spiritRoot: '暗' }, { name: '白骨魔珠', spiritRoot: '土' }],
         memories: [
           {
@@ -319,6 +353,9 @@ export function createInitialWorld(): WorldState {
         spiritRoot: '火',
         technique: { name: '浮屠燃心诀', spiritRoot: '火' },
         techniqueMastery: 25,
+        herbs: herbs(),
+        pills: noPills(),
+        pillToxicity: 0,
         artifacts: [{ name: '天魔合欢铃', spiritRoot: '火' }, { name: '隐匿血衣', spiritRoot: '暗' }],
         memories: [
           {
@@ -360,6 +397,9 @@ export function createInitialWorld(): WorldState {
         spiritRoot: '木',
         technique: { name: '百草回春经', spiritRoot: '木' },
         techniqueMastery: 25,
+        herbs: herbs(),
+        pills: noPills(),
+        pillToxicity: 0,
         artifacts: [{ name: '乾坤八卦炉', spiritRoot: '火' }, { name: '百草木灵鼎', spiritRoot: '木' }],
         memories: [
           {
@@ -401,6 +441,9 @@ export function createInitialWorld(): WorldState {
         spiritRoot: '土',
         technique: { name: '厚土遁形诀', spiritRoot: '土' },
         techniqueMastery: 25,
+        herbs: herbs(),
+        pills: noPills(),
+        pillToxicity: 0,
         artifacts: [{ name: '青竹蜂云剑', spiritRoot: '木' }, { name: '神行遁甲符', spiritRoot: '土' }],
         memories: [
           {
@@ -442,6 +485,9 @@ export function createInitialWorld(): WorldState {
         spiritRoot: '雷',
         technique: { name: '天枢引雷法', spiritRoot: '雷' },
         techniqueMastery: 25,
+        herbs: herbs(),
+        pills: noPills(),
+        pillToxicity: 0,
         artifacts: [{ name: '河图洛书盘', spiritRoot: '水' }, { name: '星辰罗盘', spiritRoot: '雷' }],
         memories: [
           {
@@ -483,6 +529,9 @@ export function createInitialWorld(): WorldState {
         spiritRoot: '天灵根',
         technique: { name: '九霄回响诀', spiritRoot: '天灵根' },
         techniqueMastery: 25,
+        herbs: herbs(),
+        pills: noPills(),
+        pillToxicity: 0,
         artifacts: [{ name: '九霄环佩琴', spiritRoot: '天灵根' }],
         memories: [
           {
