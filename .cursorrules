@@ -1,0 +1,9 @@
+Read and strictly follow `AGENTS.md` and `BACKLOG.md` at the root of this repository.
+You are operating in UNATTENDED AUTONOMOUS EVOLUTION MODE.
+Work through `BACKLOG.md` continuously task by task:
+1. Pick the top unchecked `- [ ]` task in `BACKLOG.md`.
+2. Implement complete, production-ready TypeScript + React code (no stubs, no `any`, no placeholders).
+3. Write/update deterministic Vitest tests in `tests/`.
+4. Verify with `npm run verify` (`npm run typecheck && npm run test && npm run build`).
+5. Mark `- [x]` in `BACKLOG.md`, log in `CHANGELOG.md`, and if fewer than 20 unchecked tasks remain in `BACKLOG.md`, append 8-12 new deep tasks.
+6. Commit to git and IMMEDIATELY proceed to the next `- [ ]` task without stopping to ask for confirmation.
