@@ -67,6 +67,9 @@ export type ActionType =
   | 'AMBUSH_TRIBULATION'
   | 'CHALLENGE_LEADERSHIP'
   | 'PLOT_COUP'
+  | 'BUILD_FACILITY'
+  | 'DISPATCH_GUARD'
+  | 'GUARD_DUTY'
   | 'TRADE'
   | 'DUAL_CULTIVATE'
   | 'SECT_DIPLOMACY'
@@ -133,6 +136,22 @@ export interface SectSuccession {
   supporterIds: string[];
 }
 
+export type FacilityKind = 'qi_array' | 'alchemy_hall' | 'scripture_pavilion' | 'defense_array' | 'spirit_mine';
+
+export interface SectMonthlyEconomy {
+  tick: number;
+  taxes: number;
+  mining: number;
+  upkeep: number;
+  net: number;
+}
+
+export interface GuardAssignment {
+  locationId: string;
+  assignedTick: number;
+  expiresTick: number;
+}
+
 export interface Sect {
   id: string;
   name: string;
@@ -145,6 +164,10 @@ export interface Sect {
   pavilion: Technique[];
   leaderId?: string;
   succession?: SectSuccession;
+  facilities: Record<FacilityKind, number>;
+  arrayHp: number;
+  arrayMaxHp: number;
+  monthlyEconomy?: SectMonthlyEconomy;
 }
 
 export interface Rumor {
@@ -235,6 +258,7 @@ export interface Cultivator {
   rumors: Rumor[];
   activeScheme?: CultivatorScheme;
   tribulation?: TribulationTrial;
+  guardAssignment?: GuardAssignment;
   alive: boolean;
 }
 
@@ -285,6 +309,7 @@ export interface LLMDecisionPayload {
   targetArtifactId?: string;
   forgeTier?: ArtifactTier;
   tribulationStance?: TribulationStance;
+  facilityKind?: FacilityKind;
 }
 
 export interface WorldState {

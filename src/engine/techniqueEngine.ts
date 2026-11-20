@@ -95,7 +95,9 @@ export function studyTechnique(actor: Cultivator, world: WorldState, techniqueId
   const option = availableTechniques(actor, world).find((entry) => entry.id === techniqueId);
   if (!option) return null;
   actor.technique = { ...option.scripture };
-  actor.techniqueMastery = option.scripture.authorId === actor.id ? 50 : 15;
+  const school = option.source === 'pavilion'
+    ? world.sects.find((sect) => sect.id === actor.sectId)?.facilities.scripture_pavilion ?? 0 : 0;
+  actor.techniqueMastery = option.scripture.authorId === actor.id ? 50 : 15 + school * 5;
   if (option.source === 'inheritance') {
     const location = world.locations.find((item) => item.id === actor.locationId);
     if (location) location.inheritanceScrolls = location.inheritanceScrolls.filter((item) => item.id !== techniqueId);

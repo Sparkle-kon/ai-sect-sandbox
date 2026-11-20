@@ -23,6 +23,7 @@ import { maintainAlchemy, resolveAlchemy } from './alchemyEngine';
 import { lootStorageRing, resolveArtifactAction, wearArtifact } from './artifactEngine';
 import { interfereTribulation, isTribulationActive, recommendedTribulationStance, resolveTribulation, tribulationTarget, triggerTribulation } from './tribulationEngine';
 import { maintainSectPolitics, resolveLeadershipAction, rewardContribution } from './sectPoliticsEngine';
+import { maintainSectEconomy, mitigateSectArray, resolveSectEconomyAction, sectQiBonus } from './sectEconomyEngine';
 
 export type GodInterventionType =
   | 'SPAWN_TREASURE'
@@ -104,6 +105,10 @@ export function applyCultivatorBrainDecision(
   const qiFactor = (location?.spiritQi ?? 50) / 50;
 
   switch (decision.chosenAction) {
+    case 'BUILD_FACILITY':
+    case 'DISPATCH_GUARD':
+    case 'GUARD_DUTY':
+      return resolveSectEconomyAction(world, cultivator, decision);
     case 'CHALLENGE_LEADERSHIP':
     case 'PLOT_COUP':
       return resolveLeadershipAction(world, cultivator, decision, rng);
@@ -140,7 +145,7 @@ export function applyCultivatorBrainDecision(
         (target, amount) => adjustRelationship(world, cultivator.id, target.id, amount,
           cultivator.sectId === target.sectId ? '同门' : '竞争'));
     case 'CULTIVATE': {
-      const gain = Math.round((8 + rng() * 10) * qiFactor * cultivationMultiplier(cultivator, location) * masteryMultiplier(cultivator));
+      const gain = Math.round((8 + rng() * 10) * qiFactor * cultivationMultiplier(cultivator, location) * masteryMultiplier(cultivator) * sectQiBonus(world, cultivator));
       cultivator.qiProgress = clamp(cultivator.qiProgress + gain, 0, 100);
       gainMastery(cultivator, 3);
       cultivator.hp = clamp(
@@ -376,8 +381,10 @@ export function applyCultivatorBrainDecision(
 
       const dmgToLoser = Math.round(loser.maxHp * (0.35 + rng() * 0.35) * strikeMultiplier(winner, loser));
       const dmgToWinner = Math.round(winner.maxHp * (0.1 + rng() * 0.15) * strikeMultiplier(loser, winner));
-      loser.hp = Math.max(0, loser.hp - dmgToLoser);
-      winner.hp = Math.max(1, winner.hp - dmgToWinner);
+      const sufferedByLoser = mitigateSectArray(world, loser, winner, dmgToLoser);
+      const sufferedByWinner = mitigateSectArray(world, winner, loser, dmgToWinner);
+      loser.hp = Math.max(0, loser.hp - sufferedByLoser);
+      winner.hp = Math.max(1, winner.hp - sufferedByWinner);
       wearArtifact(winner, true);
       wearArtifact(loser, false);
 
@@ -437,7 +444,7 @@ export function applyCultivatorBrainDecision(
         year: world.year,
         month: world.month,
         title: `惊天斗法：${cultivator.name}激战${defender.name}`,
-        description: `${cultivator.name}于【${location?.name ?? '秘境'}】向${defender.name}悍然出手！一番激斗后，${winner.name}占据上风，${loser.name}受创（-${dmgToLoser} HP）化作血光遁走。`,
+        description: `${cultivator.name}于【${location?.name ?? '秘境'}】向${defender.name}悍然出手！一番激斗后，${winner.name}占据上风，${loser.name}受创（-${sufferedByLoser} HP）化作血光遁走。`,
         category: 'combat',
         actorIds: [cultivator.id, defender.id],
         dialogue: scriptedDialogue('combat', cultivator, defender, `${winner.name}占得上风，${loser.name}负伤离去。`, decision.spokenLine),
@@ -479,6 +486,7 @@ export function advanceWorldTick(
   }
 
   maintainAlchemy(nextState);
+  maintainSectEconomy(nextState);
   const newEvents: WorldEvent[] = [];
 
   for (const cultivator of nextState.cultivators) {

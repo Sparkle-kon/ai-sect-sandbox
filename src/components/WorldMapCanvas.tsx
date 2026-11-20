@@ -7,6 +7,7 @@ import { SPIRIT_ROOT_COLORS, SpiritRootBadge } from './SpiritRootBadge';
 import { countHerbs } from './AlchemyPanel';
 import { durabilityOf, equippedArtifact, maxDurabilityOf } from '../engine/artifactEngine';
 import { isActiveTrial, TRIAL_STAGE } from './TribulationPanel';
+import { isGuardOnDuty } from './SectEconomyPanel';
 
 interface WorldMapCanvasProps {
   world: WorldState;
@@ -28,12 +29,18 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const selectedLocation = selected && world.locations.find((loc) => loc.id === selected.locationId);
   const selectedTrial = selected?.tribulation;
   const trialsByLocation = new Map<string, number>();
+  const guardsByLocation = new Map<string, number>();
+  const headquarters = new Map(world.sects.map((sect) => [sect.headquartersId, sect]));
   for (const actor of world.cultivators) {
+    if (isGuardOnDuty(actor, world)) {
+      guardsByLocation.set(actor.locationId, (guardsByLocation.get(actor.locationId) ?? 0) + 1);
+    }
     if (actor.alive && isActiveTrial(actor.tribulation)) {
       trialsByLocation.set(actor.locationId, (trialsByLocation.get(actor.locationId) ?? 0) + 1);
     }
   }
   const selectedSiteTrials = selectedLocation ? trialsByLocation.get(selectedLocation.id) ?? 0 : 0;
+  const selectedSiteGuards = selectedLocation ? guardsByLocation.get(selectedLocation.id) ?? 0 : 0;
   const strongestMemory = selected
     ? [...selected.memories, ...selected.coreMemories].reduce(
         (strongest, entry) => Math.max(strongest, memoryStrength(entry, world.tick)),
@@ -154,7 +161,10 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       const scrollWidth = ctx.measureText(scrollMarker).width;
       const furnaceMarker = loc.furnaceGrade > 0 ? ` 炉${loc.furnaceGrade}` : '';
       const furnaceWidth = ctx.measureText(furnaceMarker).width;
-      const labelStart = loc.x - (placeWidth + markerWidth + scrollWidth + furnaceWidth) / 2;
+      const guardCount = guardsByLocation.get(loc.id) ?? 0;
+      const guardMarker = guardCount > 0 ? ` 卫${guardCount}` : '';
+      const guardWidth = ctx.measureText(guardMarker).width;
+      const labelStart = loc.x - (placeWidth + markerWidth + scrollWidth + furnaceWidth + guardWidth) / 2;
       ctx.textAlign = 'left';
       ctx.fillStyle = '#e2e8f0';
       ctx.fillText(loc.name, labelStart, loc.y - 26);
@@ -168,6 +178,10 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       if (furnaceMarker) {
         ctx.fillStyle = '#86efac';
         ctx.fillText(furnaceMarker, labelStart + placeWidth + markerWidth + scrollWidth, loc.y - 26);
+      }
+      if (guardMarker) {
+        ctx.fillStyle = '#a5b4fc';
+        ctx.fillText(guardMarker, labelStart + placeWidth + markerWidth + scrollWidth + furnaceWidth, loc.y - 26);
       }
       ctx.textAlign = 'center';
       ctx.fillStyle = '#94a3b8';
@@ -314,7 +328,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         height={560}
         onClick={handleCanvasClick}
         className="w-full h-auto cursor-pointer block"
-        aria-label="修仙世界地图。选择修士可查看下方识海状态摘要；也可通过识海面板的修士按钮切换。雷劫用静态闪电标注；各地渡劫状态可在下方列表查看。"
+        aria-label="修仙世界地图。选择修士可查看下方识海状态摘要；也可通过识海面板的修士按钮切换。雷劫用静态闪电标注；各地渡劫与驻守状态可在下方列表查看。"
       />
       <div className="px-4 py-2 border-t border-slate-800/80 bg-slate-900/60 text-[11px] text-slate-400 flex flex-wrap gap-x-4 gap-y-1" aria-label="选中修士记忆摘要">
         {selected ? (
@@ -322,6 +336,9 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
             <span className="text-slate-200">{selected.name}{!selected.alive ? '（已陨落，不在地图上显示）' : ''}</span>
             {selectedSect && (
               <span className="text-amber-200">宗门位阶：{selectedSect.name} · {selected.sectRank}{selected.alive ? '' : ' · 留档'}</span>
+            )}
+            {selectedSect && selectedSect.arrayMaxHp > 0 && (
+              <span className="text-indigo-300">本宗护山阵 {selectedSect.arrayHp}/{selectedSect.arrayMaxHp}</span>
             )}
             <span className="inline-flex items-center gap-1">灵根 <SpiritRootBadge root={selected.spiritRoot} /></span>
             {selectedLocation && (
@@ -331,6 +348,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
             )}
             {selected.alive && selectedLocation && (
               <>
+                {selectedSiteGuards > 0 && <span className="text-indigo-300">此地驻守 {selectedSiteGuards} 人</span>}
                 {selectedSiteTrials > 0 && (
                   <span className="text-sky-300">此地渡劫中 {selectedSiteTrials} 人</span>
                 )}
@@ -382,12 +400,18 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           {world.locations.map((location) => {
             const herbCount = countHerbs(location.herbs);
             const trialCount = trialsByLocation.get(location.id) ?? 0;
+            const guardCount = guardsByLocation.get(location.id) ?? 0;
+            const homeSect = headquarters.get(location.id);
             return (
               <li key={location.id} className="inline-flex items-center gap-1.5">
                 <span>{location.name} · 灵脉</span>
                 <SpiritRootBadge root={location.spiritRoot} />
                 <span className="text-slate-400">· 灵气 {location.spiritQi}</span>
                 {location.furnaceGrade > 0 && <span className="text-emerald-300">· {location.furnaceGrade} 阶丹炉</span>}
+                {guardCount > 0 && <span className="text-indigo-300">· 驻守 {guardCount} 人</span>}
+                {homeSect && homeSect.arrayMaxHp > 0 && (
+                  <span className="text-indigo-300">· 护山阵 {homeSect.arrayHp}/{homeSect.arrayMaxHp}</span>
+                )}
                 {trialCount > 0 && <span className="text-sky-300">· 渡劫中 {trialCount} 人</span>}
                 {herbCount > 0 && <span className="text-emerald-300">· 灵草 {herbCount} 株</span>}
                 {location.inheritanceScrolls.length > 0 && (

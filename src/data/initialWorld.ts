@@ -59,6 +59,9 @@ export function createInitialWorld(): WorldState {
         headquartersId: 'loc-taixu',
         pavilion: [],
         leaderId: 'npc-1',
+        facilities: { qi_array: 1, alchemy_hall: 0, scripture_pavilion: 1, defense_array: 0, spirit_mine: 0 },
+        arrayHp: 0,
+        arrayMaxHp: 0,
       },
       {
         id: 'sect-bloodmoon',
@@ -71,6 +74,9 @@ export function createInitialWorld(): WorldState {
         headquartersId: 'loc-blood',
         pavilion: [],
         leaderId: 'npc-3',
+        facilities: { qi_array: 0, alchemy_hall: 0, scripture_pavilion: 0, defense_array: 0, spirit_mine: 1 },
+        arrayHp: 0,
+        arrayMaxHp: 0,
       },
       {
         id: 'sect-danxia',
@@ -83,6 +89,9 @@ export function createInitialWorld(): WorldState {
         headquartersId: 'loc-danxia',
         pavilion: [],
         leaderId: 'npc-5',
+        facilities: { qi_array: 1, alchemy_hall: 1, scripture_pavilion: 1, defense_array: 0, spirit_mine: 0 },
+        arrayHp: 0,
+        arrayMaxHp: 0,
       },
       {
         id: 'sect-tianji',
@@ -95,6 +104,9 @@ export function createInitialWorld(): WorldState {
         headquartersId: 'loc-tianji',
         pavilion: [],
         leaderId: 'npc-7',
+        facilities: { qi_array: 0, alchemy_hall: 1, scripture_pavilion: 1, defense_array: 0, spirit_mine: 0 },
+        arrayHp: 0,
+        arrayMaxHp: 0,
       },
     ],
     locations: [

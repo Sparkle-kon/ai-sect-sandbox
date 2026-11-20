@@ -42,7 +42,7 @@ describe('original techniques, mastery, and inheritance', () => {
       chosenAction: 'STUDY_TECHNIQUE', innerMonologue: '观经', targetTechniqueId: original?.id,
     });
     expect(pupil.technique).toEqual(original);
-    expect(pupil.techniqueMastery).toBe(15);
+    expect(pupil.techniqueMastery).toBe(15 + world.sects[0].facilities.scripture_pavilion * 5);
     expect(world.sects[0].pavilion).toHaveLength(1);
   });
 
