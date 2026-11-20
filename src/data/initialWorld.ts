@@ -92,6 +92,7 @@ export function createInitialWorld(): WorldState {
         x: 180,
         y: 150,
         type: 'sect_hq',
+        spiritRoot: '金',
         spiritQi: 85,
         ownerSectId: 'sect-qingyun',
         description: '万剑归宗之地，云海翻腾，浩然剑气直冲霄汉。',
@@ -102,6 +103,7 @@ export function createInitialWorld(): WorldState {
         x: 820,
         y: 440,
         type: 'abyss',
+        spiritRoot: '暗',
         spiritQi: 80,
         ownerSectId: 'sect-bloodmoon',
         description: '终年血雾弥漫，阴煞之气浓郁，白骨累累。',
@@ -112,6 +114,7 @@ export function createInitialWorld(): WorldState {
         x: 210,
         y: 450,
         type: 'sect_hq',
+        spiritRoot: '木',
         spiritQi: 78,
         ownerSectId: 'sect-danxia',
         description: '奇花异草遍地，丹香四溢的世外桃源。',
@@ -122,6 +125,7 @@ export function createInitialWorld(): WorldState {
         x: 790,
         y: 140,
         type: 'sect_hq',
+        spiritRoot: '天灵根',
         spiritQi: 82,
         ownerSectId: 'sect-tianji',
         description: '悬空浮岛，星辰之力汇聚，可窥探天机因果。',
@@ -132,6 +136,7 @@ export function createInitialWorld(): WorldState {
         x: 500,
         y: 290,
         type: 'secret_realm',
+        spiritRoot: '雷',
         spiritQi: 98,
         description: '沙盒中央的上古战场遗迹，机缘与杀机并存。',
       },
@@ -141,6 +146,7 @@ export function createInitialWorld(): WorldState {
         x: 500,
         y: 490,
         type: 'market',
+        spiritRoot: '土',
         spiritQi: 45,
         description: '正魔两道默认的交易之所，暗流涌动。',
       },
@@ -150,6 +156,7 @@ export function createInitialWorld(): WorldState {
         x: 490,
         y: 110,
         type: 'spirit_vein',
+        spiritRoot: '水',
         spiritQi: 90,
         description: '孕育极品冰系灵石的野生灵脉，常有修士争夺。',
       },
@@ -175,7 +182,9 @@ export function createInitialWorld(): WorldState {
         currentAction: 'CULTIVATE',
         innerMonologue: '血月魔宗蠢蠢欲动，我须早日突破元婴中期，镇压气运。',
         secretGoal: '剿灭血月魔宗，夺回太虚古剑残片',
-        artifacts: ['太虚青莲剑', '九霄护心镜'],
+        spiritRoot: '金',
+        technique: { name: '太虚御剑经', spiritRoot: '金' },
+        artifacts: [{ name: '太虚青莲剑', spiritRoot: '金' }, { name: '九霄护心镜', spiritRoot: '雷' }],
         memories: [
           {
             id: 'mem-init-1',
@@ -213,7 +222,9 @@ export function createInitialWorld(): WorldState {
         currentAction: 'EXPLORE',
         innerMonologue: '极北寒玉脉正合我冰魄剑意，谁敢与我争锋，一剑斩之！',
         secretGoal: '百年内凝结元婴，成为天下第一剑修',
-        artifacts: ['霜华飞剑'],
+        spiritRoot: '水',
+        technique: { name: '寒潮剑诀', spiritRoot: '水' },
+        artifacts: [{ name: '霜华飞剑', spiritRoot: '水' }],
         memories: [
           {
             id: 'mem-init-2',
@@ -251,7 +262,9 @@ export function createInitialWorld(): WorldState {
         currentAction: 'SCHEMING',
         innerMonologue: '凌尘子那伪君子以为能压住本座？待我血海魔幡大成，定叫太虚剑峰血流成河！',
         secretGoal: '献祭十名金丹修士，炼成万魂血幡',
-        artifacts: ['万魂血幡', '白骨魔珠'],
+        spiritRoot: '暗',
+        technique: { name: '血月观想法', spiritRoot: '暗' },
+        artifacts: [{ name: '万魂血幡', spiritRoot: '暗' }, { name: '白骨魔珠', spiritRoot: '土' }],
         memories: [
           {
             id: 'mem-init-3',
@@ -289,7 +302,9 @@ export function createInitialWorld(): WorldState {
         currentAction: 'EXPLORE',
         innerMonologue: '老祖视我们如刍狗，我若不在陨仙墟寻得上古奇遇，迟早沦为他的炉鼎或祭品。',
         secretGoal: '暗中积蓄力量，趁厉苍天渡劫时反噬夺位',
-        artifacts: ['天魔合欢铃', '隐匿血衣'],
+        spiritRoot: '火',
+        technique: { name: '浮屠燃心诀', spiritRoot: '火' },
+        artifacts: [{ name: '天魔合欢铃', spiritRoot: '火' }, { name: '隐匿血衣', spiritRoot: '暗' }],
         memories: [
           {
             id: 'mem-init-4',
@@ -327,7 +342,9 @@ export function createInitialWorld(): WorldState {
         currentAction: 'CULTIVATE',
         innerMonologue: '正魔打生打死，最后还不是要求到老夫门下买疗伤灵丹？稳健发育方是大道。',
         secretGoal: '炼出传说中的九转渡劫金丹，长生久视',
-        artifacts: ['乾坤八卦炉', '百草木灵鼎'],
+        spiritRoot: '木',
+        technique: { name: '百草回春经', spiritRoot: '木' },
+        artifacts: [{ name: '乾坤八卦炉', spiritRoot: '火' }, { name: '百草木灵鼎', spiritRoot: '木' }],
         memories: [
           {
             id: 'mem-init-5',
@@ -365,7 +382,9 @@ export function createInitialWorld(): WorldState {
         currentAction: 'BREAKTHROUGH',
         innerMonologue: '筑基大圆满已久，万事俱备，若能凝结金丹便立刻遁入深山苦修，绝不沾染是非。',
         secretGoal: '低调攒齐底牌，苟到渡劫飞升',
-        artifacts: ['青竹蜂云剑', '神行遁甲符'],
+        spiritRoot: '土',
+        technique: { name: '厚土遁形诀', spiritRoot: '土' },
+        artifacts: [{ name: '青竹蜂云剑', spiritRoot: '木' }, { name: '神行遁甲符', spiritRoot: '土' }],
         memories: [
           {
             id: 'mem-init-6',
@@ -403,7 +422,9 @@ export function createInitialWorld(): WorldState {
         currentAction: 'SCHEMING',
         innerMonologue: '陨仙墟中魔宗妖女幽姬也在，若能挑动她与血月老祖内斗，天机阁便可坐收渔利。',
         secretGoal: '推演天机榜，掌控四大宗门的气运走向',
-        artifacts: ['河图洛书盘', '星辰罗盘'],
+        spiritRoot: '雷',
+        technique: { name: '天枢引雷法', spiritRoot: '雷' },
+        artifacts: [{ name: '河图洛书盘', spiritRoot: '水' }, { name: '星辰罗盘', spiritRoot: '雷' }],
         memories: [
           {
             id: 'mem-init-7',
@@ -441,7 +462,9 @@ export function createInitialWorld(): WorldState {
         currentAction: 'SOCIALIZE',
         innerMonologue: '清寒师姐独自去极北苦修，也不知寒毒是否发作，改日当携丹霞灵酒前去探望。',
         secretGoal: '护佑挚友苏清寒渡过金丹破婴之劫',
-        artifacts: ['九霄环佩琴'],
+        spiritRoot: '天灵根',
+        technique: { name: '九霄回响诀', spiritRoot: '天灵根' },
+        artifacts: [{ name: '九霄环佩琴', spiritRoot: '天灵根' }],
         memories: [
           {
             id: 'mem-init-8',

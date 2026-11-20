@@ -1,3 +1,15 @@
+export type SpiritRoot = '金' | '木' | '水' | '火' | '土' | '雷' | '暗' | '天灵根';
+
+export interface Technique {
+  name: string;
+  spiritRoot: SpiritRoot;
+}
+
+export interface Artifact {
+  name: string;
+  spiritRoot: SpiritRoot;
+}
+
 export type CultivationRealm =
   | '练气'
   | '筑基'
@@ -73,6 +85,7 @@ export interface LocationNode {
   x: number; // 0-1000 canvas coordinate
   y: number; // 0-600 canvas coordinate
   type: 'sect_hq' | 'spirit_vein' | 'secret_realm' | 'market' | 'abyss';
+  spiritRoot: SpiritRoot;
   spiritQi: number; // 10 to 100
   ownerSectId?: string;
   description: string;
@@ -144,7 +157,9 @@ export interface Cultivator {
   currentAction: ActionType;
   innerMonologue: string; // Latest CoT / inner thought
   secretGoal: string;
-  artifacts: string[];
+  spiritRoot: SpiritRoot;
+  technique: Technique;
+  artifacts: Artifact[];
   memories: MemoryEntry[];
   coreMemories: MemoryEntry[];
   memorySequence: number; // Monotonic across evictions

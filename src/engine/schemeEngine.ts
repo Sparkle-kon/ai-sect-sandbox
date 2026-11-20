@@ -62,8 +62,8 @@ function buildPlan(actor: Cultivator, world: WorldState, kind: SchemeKind): Cult
     case 'artifact_heist': {
       const target = world.cultivators.find((other) => other.alive && other.id !== actor.id &&
         other.sectId !== actor.sectId && other.locationId === actor.locationId &&
-        other.artifacts.some((artifact) => !actor.artifacts.includes(artifact)));
-      const artifactName = target?.artifacts.find((artifact) => !actor.artifacts.includes(artifact));
+        other.artifacts.some((artifact) => !actor.artifacts.some((owned) => owned.name === artifact.name)));
+      const artifactName = target?.artifacts.find((artifact) => !actor.artifacts.some((owned) => owned.name === artifact.name))?.name;
       if (deception && target && artifactName) {
         return { ...base, title: `夺取${target.name}的${artifactName}`, targetCultivatorId: target.id, artifactName };
       }
@@ -228,13 +228,13 @@ export function pursueScheme(
       else if (stage === 2) completeStep(plan, tick);
       else {
         const item = plan.artifactName;
-        const index = item ? target.artifacts.indexOf(item) : -1;
-        if (index < 0 || !item || actor.artifacts.includes(item)) fail(plan, tick, '目标已不再持有可盗取的法宝。');
+        const index = item ? target.artifacts.findIndex((artifact) => artifact.name === item) : -1;
+        if (index < 0 || !item || actor.artifacts.some((owned) => owned.name === item)) fail(plan, tick, '目标已不再持有可盗取的法宝。');
         else {
           const odds = Math.min(0.85, Math.max(0.2, actor.combatPower / (actor.combatPower + target.combatPower)));
           if (rng() < odds) {
-            target.artifacts.splice(index, 1);
-            actor.artifacts.push(item);
+            const [stolen] = target.artifacts.splice(index, 1);
+            actor.artifacts.push(stolen);
             changeAffinity(target, -20);
             plan.outcome = `已取得【${item}】。`;
             completeStep(plan, tick);

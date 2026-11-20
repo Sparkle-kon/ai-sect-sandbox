@@ -87,8 +87,8 @@ describe('multi-tick schemes', () => {
       let world = step(setup(), 'artifact_heist', roll);
       for (let i = 0; i < 4; i++) world = step(world, undefined, roll);
       expect(world.cultivators[0].activeScheme?.status).toBe(expected);
-      expect(world.cultivators[0].artifacts.includes(artifact)).toBe(expected === 'completed');
-      expect(world.cultivators[1].artifacts.includes(artifact)).toBe(expected === 'failed');
+      expect(world.cultivators[0].artifacts.some((item) => item.name === artifact.name)).toBe(expected === 'completed');
+      expect(world.cultivators[1].artifacts.some((item) => item.name === artifact.name)).toBe(expected === 'failed');
     }
   });
 

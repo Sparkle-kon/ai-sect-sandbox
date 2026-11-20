@@ -17,6 +17,7 @@ import { fabricateRumor, spreadRumors, witnessEvent } from './rumorEngine';
 import { expireScheme, pursueScheme } from './schemeEngine';
 import { scriptedDialogue } from './dialogueEngine';
 import { resolveEncounter } from './encounterEngine';
+import { cultivationMultiplier, strikeMultiplier } from './elementalEngine';
 
 export type GodInterventionType =
   | 'SPAWN_TREASURE'
@@ -98,7 +99,7 @@ export function applyCultivatorBrainDecision(
         (target, amount) => adjustRelationship(world, cultivator.id, target.id, amount,
           cultivator.sectId === target.sectId ? '同门' : '竞争'));
     case 'CULTIVATE': {
-      const gain = Math.round((8 + rng() * 10) * qiFactor);
+      const gain = Math.round((8 + rng() * 10) * qiFactor * cultivationMultiplier(cultivator, location));
       cultivator.qiProgress = clamp(cultivator.qiProgress + gain, 0, 100);
       cultivator.hp = clamp(
         cultivator.hp + Math.round(cultivator.maxHp * 0.08),
@@ -323,13 +324,13 @@ export function applyCultivatorBrainDecision(
       );
       if (!defender) return null;
 
-      const attackerScore = cultivator.combatPower * (0.85 + rng() * 0.3);
-      const defenderScore = defender.combatPower * (0.85 + rng() * 0.3);
+      const attackerScore = cultivator.combatPower * (0.85 + rng() * 0.3) * strikeMultiplier(cultivator, defender);
+      const defenderScore = defender.combatPower * (0.85 + rng() * 0.3) * strikeMultiplier(defender, cultivator);
       const winner = attackerScore >= defenderScore ? cultivator : defender;
       const loser = winner.id === cultivator.id ? defender : cultivator;
 
-      const dmgToLoser = Math.round(loser.maxHp * (0.35 + rng() * 0.35));
-      const dmgToWinner = Math.round(winner.maxHp * (0.1 + rng() * 0.15));
+      const dmgToLoser = Math.round(loser.maxHp * (0.35 + rng() * 0.35) * strikeMultiplier(winner, loser));
+      const dmgToWinner = Math.round(winner.maxHp * (0.1 + rng() * 0.15) * strikeMultiplier(loser, winner));
       loser.hp = Math.max(0, loser.hp - dmgToLoser);
       winner.hp = Math.max(1, winner.hp - dmgToWinner);
 
@@ -348,7 +349,8 @@ export function applyCultivatorBrainDecision(
         winner.spiritStones += lootedStones;
         loser.spiritStones = 0;
         if (loser.artifacts.length > 0) {
-          winner.artifacts.push(loser.artifacts[0]);
+          const [loot] = loser.artifacts.splice(0, 1);
+          winner.artifacts.push(loot);
         }
         recordMemory(
           winner,
@@ -493,8 +495,8 @@ export function executeGodIntervention(
       for (const c of luckyOnes) {
         c.qiProgress = clamp(c.qiProgress + 30, 0, 100);
         c.spiritStones += 500;
-        if (!c.artifacts.includes('天道造化玉碟')) {
-          c.artifacts.push('天道造化玉碟');
+        if (!c.artifacts.some((artifact) => artifact.name === '天道造化玉碟')) {
+          c.artifacts.push({ name: '天道造化玉碟', spiritRoot: '天灵根' });
         }
         recordMemory(
           c,

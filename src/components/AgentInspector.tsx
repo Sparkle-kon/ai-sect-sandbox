@@ -5,6 +5,7 @@ import { MemoryPanel } from './MemoryPanel';
 import { ReflectionPanel } from './ReflectionPanel';
 import { RumorPanel } from './RumorPanel';
 import { SchemePanel } from './SchemePanel';
+import { SpiritRootBadge } from './SpiritRootBadge';
 
 interface AgentInspectorProps {
   world: WorldState;
@@ -148,18 +149,38 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
         </div>
       </div>
 
-      {/* Artifacts */}
-      <div className="flex items-center gap-1.5 flex-wrap text-xs">
-        <span className="text-slate-400">本命与随身法宝：</span>
-        {cultivator.artifacts.map((art, i) => (
-          <span
-            key={`${art}-${i}`}
-            className="px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30"
-          >
-            {art}
-          </span>
-        ))}
-      </div>
+      <section aria-label="灵根、功法与法宝" className="space-y-2">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
+          <div className="inline-flex items-center gap-1.5">
+            <span className="text-slate-400">灵根：</span>
+            <SpiritRootBadge root={cultivator.spiritRoot} />
+          </div>
+          <div className="inline-flex flex-wrap items-center gap-1.5">
+            <span className="text-slate-400">功法：</span>
+            <span className="text-slate-200">{cultivator.technique.name}</span>
+            <SpiritRootBadge root={cultivator.technique.spiritRoot} />
+          </div>
+          <div className="inline-flex items-center gap-1.5">
+            <span className="text-slate-400">所在灵脉：</span>
+            {location
+              ? <SpiritRootBadge root={location.spiritRoot} />
+              : <span className="text-slate-500">未详</span>}
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+          <span className="text-slate-400">本命与随身法宝：</span>
+          {cultivator.artifacts.length === 0 && <span className="text-slate-500">暂无</span>}
+          {cultivator.artifacts.map((artifact, index) => (
+            <span
+              key={`${artifact.name}-${index}`}
+              className="inline-flex items-center gap-1.5 rounded border border-slate-700 bg-slate-800/50 px-2 py-0.5 text-slate-200"
+            >
+              {artifact.name}
+              <SpiritRootBadge root={artifact.spiritRoot} />
+            </span>
+          ))}
+        </div>
+      </section>
 
       <ReflectionPanel cultivator={cultivator} />
       <RumorPanel cultivator={cultivator} locations={world.locations} cultivators={world.cultivators} />

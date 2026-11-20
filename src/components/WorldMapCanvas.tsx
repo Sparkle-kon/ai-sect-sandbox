@@ -3,6 +3,7 @@ import { Cultivator, LocationNode, WorldEvent, WorldState } from '../types/world
 import { memoryStrength } from '../engine/memoryEngine';
 import { countCompletedSchemeSteps, SCHEME_STATUS } from './SchemePanel';
 import { DIALOGUE_KIND_LABELS } from './DialogueTranscript';
+import { SPIRIT_ROOT_COLORS, SpiritRootBadge } from './SpiritRootBadge';
 
 interface WorldMapCanvasProps {
   world: WorldState;
@@ -19,6 +20,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const selected = world.cultivators.find((c) => c.id === selectedCultivatorId);
   const selectedScheme = selected?.activeScheme;
+  const selectedLocation = selected && world.locations.find((loc) => loc.id === selected.locationId);
   const strongestMemory = selected
     ? [...selected.memories, ...selected.coreMemories].reduce(
         (strongest, entry) => Math.max(strongest, memoryStrength(entry, world.tick)),
@@ -129,12 +131,19 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       ctx.fill();
       ctx.stroke();
 
-      // Location label
-      ctx.fillStyle = '#e2e8f0';
+      // Keep the element beside the location name so it doesn't add a competing row.
       ctx.font = 'bold 13px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(loc.name, loc.x, loc.y - 26);
+      const marker = `〈${loc.spiritRoot}〉`;
+      const placeWidth = ctx.measureText(loc.name).width;
+      const markerWidth = ctx.measureText(marker).width;
+      const labelStart = loc.x - (placeWidth + markerWidth) / 2;
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#e2e8f0';
+      ctx.fillText(loc.name, labelStart, loc.y - 26);
+      ctx.fillStyle = SPIRIT_ROOT_COLORS[loc.spiritRoot];
+      ctx.fillText(marker, labelStart + placeWidth, loc.y - 26);
 
+      ctx.textAlign = 'center';
       ctx.fillStyle = '#94a3b8';
       ctx.font = '11px sans-serif';
       ctx.fillText(`灵气 ${loc.spiritQi}`, loc.x, loc.y + 33);
@@ -267,12 +276,18 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         height={560}
         onClick={handleCanvasClick}
         className="w-full h-auto cursor-pointer block"
-        aria-label="修仙世界地图。选择修士可查看下方识海状态摘要；也可通过识海面板的修士按钮切换。"
+        aria-label="修仙世界地图。选择修士可查看下方识海状态摘要；也可通过识海面板的修士按钮切换。地点灵脉属性见下方列表。"
       />
       <div className="px-4 py-2 border-t border-slate-800/80 bg-slate-900/60 text-[11px] text-slate-400 flex flex-wrap gap-x-4 gap-y-1" aria-label="选中修士记忆摘要">
         {selected ? (
           <>
             <span className="text-slate-200">{selected.name}{!selected.alive ? '（已陨落，不在地图上显示）' : ''}</span>
+            <span className="inline-flex items-center gap-1">灵根 <SpiritRootBadge root={selected.spiritRoot} /></span>
+            {selectedLocation && (
+              <span className="inline-flex items-center gap-1">
+                {selectedLocation.name} · 灵脉 <SpiritRootBadge root={selectedLocation.spiritRoot} />
+              </span>
+            )}
             <span>情景记忆 {selected.memories.length} 条</span>
             <span className="text-violet-300">核心记忆 {selected.coreMemories.length} 条{selected.alive && selected.coreMemories.length > 0 ? " · 紫弧标记" : ""}</span>
             <span>最强记忆 {strongestMemory.toFixed(1)}/10</span>
@@ -295,6 +310,18 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           <span>选择一位修士查看其当前记忆状态。</span>
         )}
       </div>
+      <details className="border-t border-slate-800/80 bg-slate-900/40 px-4 py-2 text-[11px] text-slate-300">
+        <summary className="cursor-pointer">查看各地点灵脉属性</summary>
+        <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-2">
+          {world.locations.map((location) => (
+            <li key={location.id} className="inline-flex items-center gap-1.5">
+              <span>{location.name} · 灵脉</span>
+              <SpiritRootBadge root={location.spiritRoot} />
+              <span className="text-slate-400">· 灵气 {location.spiritQi}</span>
+            </li>
+          ))}
+        </ul>
+      </details>
     </div>
   );
 };

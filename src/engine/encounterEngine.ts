@@ -15,7 +15,7 @@ export function availableEncounters(actor: Cultivator, world: WorldState) {
     const opportunities: { action: EncounterAction; targetId: string }[] = [];
     if (location?.type === 'market' && actor.spiritStones >= ARTIFACT_TRADE_PRICE &&
         affinity >= -15 && other.artifacts.length > 1 &&
-        other.artifacts.slice(1).some((item) => !actor.artifacts.includes(item))) {
+        other.artifacts.slice(1).some((item) => !actor.artifacts.some((owned) => owned.name === item.name))) {
       opportunities.push({ action: 'TRADE', targetId: other.id });
     }
     if (affinity >= 65 && actor.qiProgress <= 88 && other.qiProgress <= 88 &&
@@ -47,7 +47,7 @@ export function resolveEncounter(
   let outcome: string;
   switch (action) {
     case 'TRADE': {
-      const item = target.artifacts.slice(1).find((artifact) => !actor.artifacts.includes(artifact));
+      const item = target.artifacts.slice(1).find((artifact) => !actor.artifacts.some((owned) => owned.name === artifact.name));
       if (!item) return null;
       target.artifacts.splice(target.artifacts.indexOf(item, 1), 1);
       actor.artifacts.push(item);
@@ -56,7 +56,7 @@ export function resolveEncounter(
       adjust(target, 5);
       kind = 'trade';
       title = `坊市易宝：${actor.name}与${target.name}`;
-      outcome = `${actor.name}以 ${ARTIFACT_TRADE_PRICE} 灵石换得【${item}】，双方当面交割。`;
+      outcome = `${actor.name}以 ${ARTIFACT_TRADE_PRICE} 灵石换得【${item.name}】，双方当面交割。`;
       break;
     }
     case 'DUAL_CULTIVATE':
