@@ -11,6 +11,7 @@ import {
   WorldState,
 } from '../types/world';
 import { computeHeuristicDecision } from './llmBrain';
+import { maintainMemories, recordMemory } from './memoryEngine';
 
 export type GodInterventionType =
   | 'SPAWN_TREASURE'
@@ -27,25 +28,6 @@ export interface GodInterventionCommand {
 
 function clamp(val: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, val));
-}
-
-function appendMemory(
-  cultivator: Cultivator,
-  tick: number,
-  content: string,
-  importance: number,
-  category: Cultivator['memories'][number]['category']
-): void {
-  cultivator.memories = [
-    ...cultivator.memories.slice(-24),
-    {
-      id: `mem-${tick}-${cultivator.id}-${Math.random().toString(36).slice(2, 7)}`,
-      tick,
-      content,
-      importance,
-      category,
-    },
-  ];
 }
 
 export function adjustRelationship(
@@ -107,15 +89,18 @@ export function applyCultivatorBrainDecision(
     }
 
     case 'REST': {
+      const previousHp = cultivator.hp;
       const heal = Math.round(cultivator.maxHp * 0.35);
       cultivator.hp = clamp(cultivator.hp + heal, 1, cultivator.maxHp);
-      appendMemory(
-        cultivator,
-        world.tick,
-        `在【${location?.name ?? '洞府'}】闭关调息，恢复了 ${heal} 点气血。`,
-        4,
-        'cultivation'
-      );
+      if (cultivator.hp > previousHp) {
+        recordMemory(
+          cultivator,
+          world.tick,
+          `在【${location?.name ?? '洞府'}】闭关调息，恢复了 ${cultivator.hp - previousHp} 点气血。`,
+          4,
+          'cultivation', 1
+        );
+      }
       return null;
     }
 
@@ -129,12 +114,12 @@ export function applyCultivatorBrainDecision(
         if (rng() < 0.35) {
           const foundStones = Math.round(40 + rng() * 120);
           cultivator.spiritStones += foundStones;
-          appendMemory(
+          recordMemory(
             cultivator,
             world.tick,
             `御剑游历至【${dest.name}】，偶得机缘收获 ${foundStones} 枚灵石。`,
             6,
-            'cultivation'
+            'cultivation', 2
           );
           return {
             id: `evt-${world.tick}-${cultivator.id}-explore`,
@@ -183,7 +168,7 @@ export function applyCultivatorBrainDecision(
           ? `渡过天劫，成功破境踏入【${cultivator.realm}期】！寿元与战力暴涨！`
           : `突破瓶颈，修为精进至【${cultivator.realm}${cultivator.realmStage}层】！`;
 
-        appendMemory(cultivator, world.tick, msg, majorRealmUp ? 10 : 7, 'cultivation');
+        recordMemory(cultivator, world.tick, msg, majorRealmUp ? 10 : 7, 'cultivation', majorRealmUp ? 5 : 3);
         return {
           id: `evt-${world.tick}-${cultivator.id}-break`,
           tick: world.tick,
@@ -202,12 +187,12 @@ export function applyCultivatorBrainDecision(
         const backlashDamage = Math.round(cultivator.maxHp * 0.28);
         cultivator.hp = clamp(cultivator.hp - backlashDamage, 10, cultivator.maxHp);
         cultivator.qiProgress = 45;
-        appendMemory(
+        recordMemory(
           cultivator,
           world.tick,
           `冲击更高境界时心魔丛生，惨遭反噬受损 ${backlashDamage} 点气血！`,
           8,
-          'cultivation'
+          'cultivation', -4
         );
         return {
           id: `evt-${world.tick}-${cultivator.id}-fail`,
@@ -246,12 +231,12 @@ export function applyCultivatorBrainDecision(
       );
       cultivator.qiProgress = clamp(cultivator.qiProgress + 6, 0, 100);
       target.qiProgress = clamp(target.qiProgress + 6, 0, 100);
-      appendMemory(
+      recordMemory(
         cultivator,
         world.tick,
         `与【${target.name}】在【${location?.name ?? '坊市'}】论道交流，双方修为皆有精进。`,
         6,
-        'social'
+        'social', 3
       );
       return {
         id: `evt-${world.tick}-${cultivator.id}-social`,
@@ -287,19 +272,19 @@ export function applyCultivatorBrainDecision(
         '竞争',
         `${cultivator.name}暗中设局算计了${target.name}`
       );
-      appendMemory(
+      recordMemory(
         cultivator,
         world.tick,
         `施展阴谋算计【${target.name}】，截获其 ${stolenStones} 枚灵石与修行情报。`,
         7,
-        'social'
+        'social', 2
       );
-      appendMemory(
+      recordMemory(
         target,
         world.tick,
         `遭【${cultivator.name}】暗中算计，损失了 ${stolenStones} 枚灵石，心中暗恨！`,
         8,
-        'social'
+        'social', -4
       );
       return {
         id: `evt-${world.tick}-${cultivator.id}-scheme`,
@@ -354,12 +339,12 @@ export function applyCultivatorBrainDecision(
         if (loser.artifacts.length > 0) {
           winner.artifacts.push(loser.artifacts[0]);
         }
-        appendMemory(
+        recordMemory(
           winner,
           world.tick,
           `在生死斗法中斩杀【${loser.name}】，搜刮其储物袋获 ${lootedStones} 灵石！`,
           10,
-          'combat'
+          'combat', 4
         );
         return {
           id: `evt-${world.tick}-${cultivator.id}-kill`,
@@ -374,19 +359,19 @@ export function applyCultivatorBrainDecision(
         };
       }
 
-      appendMemory(
+      recordMemory(
         winner,
         world.tick,
         `与【${loser.name}】激战一场将其击败重创。`,
         8,
-        'combat'
+        'combat', 3
       );
-      appendMemory(
+      recordMemory(
         loser,
         world.tick,
         `不敌【${winner.name}】身受重伤，燃血遁走，此仇必报！`,
         9,
-        'combat'
+        'combat', -5
       );
       return {
         id: `evt-${world.tick}-${cultivator.id}-duel`,
@@ -457,6 +442,10 @@ export function advanceWorldTick(
     }
   }
 
+  for (const cultivator of nextState.cultivators) {
+    if (cultivator.alive) maintainMemories(cultivator, nextState.tick, nextState.month === 1);
+  }
+
   nextState.events = [...newEvents, ...nextState.events].slice(0, 120);
   return nextState;
 }
@@ -486,12 +475,12 @@ export function executeGodIntervention(
         if (!c.artifacts.includes('天道造化玉碟')) {
           c.artifacts.push('天道造化玉碟');
         }
-        appendMemory(
+        recordMemory(
           c,
           nextState.tick,
           `天降祥瑞于【${loc.name}】，我沐浴仙光获得天材地宝，修为大进！`,
           10,
-          'heavenly'
+          'heavenly', 5
         );
       }
 
@@ -518,12 +507,12 @@ export function executeGodIntervention(
       const dmg = Math.round(target.maxHp * 0.45);
       target.hp = clamp(target.hp - dmg, 1, target.maxHp);
       target.innerMonologue = '为何苍天突然降下紫霄神雷劈我？！莫非我逆天行事触怒了天道？！';
-      appendMemory(
+      recordMemory(
         target,
         nextState.tick,
         `无故遭九天紫霄神雷劈中，损失 ${dmg} 点气血，道心巨震！`,
         10,
-        'heavenly'
+        'heavenly', -5
       );
 
       nextState.events.unshift({
@@ -573,12 +562,12 @@ export function executeGodIntervention(
       const whisper = cmd.whisperText.trim();
       target.innerMonologue = `脑海中突然响起神秘天道法旨：“${whisper}”……我定当遵从这冥冥中的指引！`;
       target.secretGoal = whisper;
-      appendMemory(
+      recordMemory(
         target,
         nextState.tick,
         `聆听天道传音：“${whisper}”，从此道心执念彻底改变。`,
         10,
-        'whisper'
+        'whisper', 5
       );
 
       nextState.events.unshift({

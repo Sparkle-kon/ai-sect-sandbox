@@ -34,7 +34,10 @@ export interface MemoryEntry {
   id: string;
   tick: number;
   content: string;
-  importance: number; // 1 to 10
+  importance: number; // 1 to 10, original impact
+  emotionalValence: number; // -5 to +5
+  decayRate: number; // Exponential forgetting constant per tick
+  consolidatedAtTick?: number;
   category: 'cultivation' | 'combat' | 'social' | 'heavenly' | 'whisper';
 }
 
@@ -90,6 +93,8 @@ export interface Cultivator {
   secretGoal: string;
   artifacts: string[];
   memories: MemoryEntry[];
+  coreMemories: MemoryEntry[];
+  memorySequence: number; // Monotonic across evictions
   alive: boolean;
 }
 

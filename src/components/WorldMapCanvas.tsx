@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Cultivator, LocationNode, WorldState } from '../types/world';
+import { memoryStrength } from '../engine/memoryEngine';
 
 interface WorldMapCanvasProps {
   world: WorldState;
@@ -14,6 +15,13 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   onSelectCultivator,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const selected = world.cultivators.find((c) => c.id === selectedCultivatorId);
+  const strongestMemory = selected
+    ? [...selected.memories, ...selected.coreMemories].reduce(
+        (strongest, entry) => Math.max(strongest, memoryStrength(entry, world.tick)),
+        0
+      )
+    : 0;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -139,6 +147,14 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           ctx.beginPath();
           ctx.arc(cx, cy, 17, 0, Math.PI * 2);
           ctx.stroke();
+          // A quiet outer arc indicates core-memory presence only on the selected NPC.
+          if (cultivator.coreMemories.length > 0) {
+            ctx.strokeStyle = '#c4b5fd';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(cx, cy, 21, -Math.PI / 2, Math.PI / 2);
+            ctx.stroke();
+          }
         }
 
         ctx.fillStyle = color;
@@ -230,7 +246,20 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         height={560}
         onClick={handleCanvasClick}
         className="w-full h-auto cursor-pointer block"
+        aria-label="修仙世界地图。选择修士可查看下方记忆摘要；也可通过识海面板的修士按钮切换。"
       />
+      <div className="px-4 py-2 border-t border-slate-800/80 bg-slate-900/60 text-[11px] text-slate-400 flex flex-wrap gap-x-4 gap-y-1" aria-label="选中修士记忆摘要">
+        {selected ? (
+          <>
+            <span className="text-slate-200">{selected.name}{!selected.alive ? '（已陨落，不在地图上显示）' : ''}</span>
+            <span>情景记忆 {selected.memories.length} 条</span>
+            <span className="text-violet-300">核心记忆 {selected.coreMemories.length} 条{selected.alive && selected.coreMemories.length > 0 ? " · 紫弧标记" : ""}</span>
+            <span>最强记忆 {strongestMemory.toFixed(1)}/10</span>
+          </>
+        ) : (
+          <span>选择一位修士查看其当前记忆状态。</span>
+        )}
+      </div>
     </div>
   );
 };

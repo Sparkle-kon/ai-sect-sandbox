@@ -1,6 +1,7 @@
 import React from 'react';
 import { Brain, Shield, Coins, Compass, Heart, Sparkles } from 'lucide-react';
 import { Cultivator, WorldState } from '../types/world';
+import { MemoryPanel } from './MemoryPanel';
 
 interface AgentInspectorProps {
   world: WorldState;
@@ -157,27 +158,13 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
         ))}
       </div>
 
-      {/* Memory Stream */}
-      <div className="space-y-1.5">
-        <h4 className="text-xs font-semibold text-slate-300">
-          近期记忆流 (Episodic Memory Stream)
-        </h4>
-        <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
-          {cultivator.memories
-            .slice()
-            .reverse()
-            .map((mem) => (
-              <div
-                key={mem.id}
-                className="text-xs p-2 rounded bg-slate-950/70 border border-slate-800/80 flex items-start justify-between gap-2"
-              >
-                <span className="text-slate-300">{mem.content}</span>
-                <span className="text-[10px] text-slate-500 whitespace-nowrap">
-                  Tick #{mem.tick} · 权重{mem.importance}
-                </span>
-              </div>
-            ))}
-        </div>
+      {/* Both banks are the engine's current state, not a separate UI cache. */}
+      <div className="space-y-3 pt-2 border-t border-slate-800">
+        <p className="text-[11px] text-slate-400 leading-relaxed">
+          情景记忆会逐月淡忘，每12个月凝练重要经历；核心记忆衰减更慢，但也会淡忘并受容量限制。
+        </p>
+        <MemoryPanel memories={cultivator.coreMemories} tick={world.tick} core />
+        <MemoryPanel memories={cultivator.memories} tick={world.tick} />
       </div>
     </div>
   );
