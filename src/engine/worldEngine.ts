@@ -12,6 +12,7 @@ import {
 } from '../types/world';
 import { computeHeuristicDecision } from './llmBrain';
 import { maintainMemories, recordMemory } from './memoryEngine';
+import { synthesizeReflections } from './reflectionEngine';
 
 export type GodInterventionType =
   | 'SPAWN_TREASURE'
@@ -443,7 +444,10 @@ export function advanceWorldTick(
   }
 
   for (const cultivator of nextState.cultivators) {
-    if (cultivator.alive) maintainMemories(cultivator, nextState.tick, nextState.month === 1);
+    if (!cultivator.alive) continue;
+    const yearly = nextState.month === 1;
+    maintainMemories(cultivator, nextState.tick, yearly);
+    if (yearly) cultivator.reflections = synthesizeReflections(cultivator, nextState.tick);
   }
 
   nextState.events = [...newEvents, ...nextState.events].slice(0, 120);

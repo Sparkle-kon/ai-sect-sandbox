@@ -188,6 +188,7 @@ export function createInitialWorld(): WorldState {
         ],
         coreMemories: [],
         memorySequence: 0,
+        reflections: [],
         alive: true,
       },
       {
@@ -224,6 +225,7 @@ export function createInitialWorld(): WorldState {
         ],
         coreMemories: [],
         memorySequence: 0,
+        reflections: [],
         alive: true,
       },
       {
@@ -260,6 +262,7 @@ export function createInitialWorld(): WorldState {
         ],
         coreMemories: [],
         memorySequence: 0,
+        reflections: [],
         alive: true,
       },
       {
@@ -296,6 +299,7 @@ export function createInitialWorld(): WorldState {
         ],
         coreMemories: [],
         memorySequence: 0,
+        reflections: [],
         alive: true,
       },
       {
@@ -332,6 +336,7 @@ export function createInitialWorld(): WorldState {
         ],
         coreMemories: [],
         memorySequence: 0,
+        reflections: [],
         alive: true,
       },
       {
@@ -368,6 +373,7 @@ export function createInitialWorld(): WorldState {
         ],
         coreMemories: [],
         memorySequence: 0,
+        reflections: [],
         alive: true,
       },
       {
@@ -404,6 +410,7 @@ export function createInitialWorld(): WorldState {
         ],
         coreMemories: [],
         memorySequence: 0,
+        reflections: [],
         alive: true,
       },
       {
@@ -440,6 +447,7 @@ export function createInitialWorld(): WorldState {
         ],
         coreMemories: [],
         memorySequence: 0,
+        reflections: [],
         alive: true,
       },
     ],

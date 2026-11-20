@@ -1,6 +1,7 @@
 # CHANGELOG.md — Automated Evolution Log
 
 ## [Unreleased]
+- **P1-2:** Annual reflection builds bounded beliefs, obsessions and heart demons from recent memories, with expiring influence and traceable evidence. Utility AI uses those findings; optional validated JSON narration keeps mechanics in the simulation. The Inspector and map show active reflections. All 18 deterministic tests, type checking and production build passed.
 - **P1-1:** Episodic memories carry emotional valence and decay; each year, up to three distinct high-impact memories consolidate into a bounded long-term bank. Recall affects Utility AI duel caution and is included in structured LLM context. The Inspector shows both banks, while the map highlights the selected cultivator's core memories. Verified with 11 deterministic tests and a production build. Added the npm lockfile for repeatable installs.
 
 ## [0.1.0] - Phase 0 Foundation

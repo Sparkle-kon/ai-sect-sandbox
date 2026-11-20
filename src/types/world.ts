@@ -41,6 +41,20 @@ export interface MemoryEntry {
   category: 'cultivation' | 'combat' | 'social' | 'heavenly' | 'whisper';
 }
 
+export type ReflectionKind = 'belief' | 'obsession' | 'heart_demon';
+export type ReflectionTheme = 'cultivation' | 'conflict' | 'community' | 'heavenly';
+
+export interface CultivatorReflection {
+  id: string;
+  tick: number;
+  kind: ReflectionKind;
+  theme: ReflectionTheme;
+  intensity: number; // 1–10
+  statement: string;
+  sourceMemoryIds: string[];
+  source: 'utility' | 'llm';
+}
+
 export interface RelationshipEdge {
   fromId: string;
   toId: string;
@@ -95,6 +109,7 @@ export interface Cultivator {
   memories: MemoryEntry[];
   coreMemories: MemoryEntry[];
   memorySequence: number; // Monotonic across evictions
+  reflections: CultivatorReflection[];
   alive: boolean;
 }
 

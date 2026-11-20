@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Play, Pause, FastForward, RotateCcw, Sparkles } from 'lucide-react';
 import { createInitialWorld } from './data/initialWorld';
 import {
@@ -7,6 +7,7 @@ import {
   GodInterventionCommand,
 } from './engine/worldEngine';
 import { queryCultivatorLLMDecision } from './engine/llmBrain';
+import { enrichAnnualReflections } from './engine/reflectionEngine';
 import { LLMConfig, LLMDecisionPayload, WorldState } from './types/world';
 import { WorldMapCanvas } from './components/WorldMapCanvas';
 import { RelationshipGraph } from './components/RelationshipGraph';
@@ -21,6 +22,7 @@ export const App: React.FC = () => {
   >('npc-1');
   const [isRunning, setIsRunning] = useState(false);
   const [isStepping, setIsStepping] = useState(false);
+  const stepInFlight = useRef(false);
   const [tickIntervalMs, setTickIntervalMs] = useState(1800);
   const [llmConfig, setLlmConfig] = useState<LLMConfig>({
     enabled: false,
@@ -30,10 +32,10 @@ export const App: React.FC = () => {
   });
 
   const handleStepTick = useCallback(async () => {
-    if (isStepping) return;
+    if (stepInFlight.current) return;
+    stepInFlight.current = true;
     setIsStepping(true);
     try {
-      let decisions: Record<string, LLMDecisionPayload> | undefined;
       if (llmConfig.enabled && llmConfig.apiKey.trim()) {
         const alive = world.cultivators.filter((c) => c.alive);
         const results = await Promise.all(
@@ -42,13 +44,18 @@ export const App: React.FC = () => {
             return [c.id, dec] as const;
           })
         );
-        decisions = Object.fromEntries(results);
+        const decisions: Record<string, LLMDecisionPayload> = Object.fromEntries(results);
+        const next = await enrichAnnualReflections(advanceWorldTick(world, decisions), llmConfig);
+        // A reset or divine intervention during the request invalidates its snapshot.
+        setWorld((prev) => prev === world ? next : prev);
+      } else {
+        setWorld((prev) => advanceWorldTick(prev));
       }
-      setWorld((prev) => advanceWorldTick(prev, decisions));
     } finally {
+      stepInFlight.current = false;
       setIsStepping(false);
     }
-  }, [isStepping, llmConfig, world]);
+  }, [llmConfig, world]);
 
   useEffect(() => {
     if (!isRunning) return;

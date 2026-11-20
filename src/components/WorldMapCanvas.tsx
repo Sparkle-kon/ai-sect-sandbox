@@ -23,6 +23,14 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       )
     : 0;
 
+  const reflectionCounts = selected?.reflections.reduce(
+    (counts, entry) => {
+      counts[entry.kind] += 1;
+      return counts;
+    },
+    { belief: 0, obsession: 0, heart_demon: 0 }
+  );
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -255,6 +263,9 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
             <span>情景记忆 {selected.memories.length} 条</span>
             <span className="text-violet-300">核心记忆 {selected.coreMemories.length} 条{selected.alive && selected.coreMemories.length > 0 ? " · 紫弧标记" : ""}</span>
             <span>最强记忆 {strongestMemory.toFixed(1)}/10</span>
+            <span className={reflectionCounts?.heart_demon ? 'text-rose-300' : 'text-slate-400'}>
+              {selected.alive ? '道心' : '道心留影'}：信念 {reflectionCounts?.belief} · 执念 {reflectionCounts?.obsession} · 心魔 {reflectionCounts?.heart_demon}
+            </span>
           </>
         ) : (
           <span>选择一位修士查看其当前记忆状态。</span>
