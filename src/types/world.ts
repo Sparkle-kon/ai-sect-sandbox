@@ -27,6 +27,9 @@ export type ActionType =
   | 'DUEL'
   | 'SCHEMING'
   | 'PURSUE_SCHEME'
+  | 'TRADE'
+  | 'DUAL_CULTIVATE'
+  | 'SECT_DIPLOMACY'
   | 'REST';
 
 export type RelationType = '师徒' | '同门' | '道侣' | '血仇' | '挚友' | '竞争';
@@ -151,6 +154,18 @@ export interface Cultivator {
   alive: boolean;
 }
 
+export interface DialogueTurn {
+  speakerId: string;
+  speakerName: string;
+  text: string;
+}
+
+export interface DialogueExchange {
+  kind: 'combat' | 'trade' | 'dual_cultivation' | 'sect_diplomacy';
+  source: 'utility' | 'llm';
+  turns: DialogueTurn[];
+}
+
 export interface WorldEvent {
   id: string;
   tick: number;
@@ -161,6 +176,7 @@ export interface WorldEvent {
   category: 'breakthrough' | 'combat' | 'intrigue' | 'heavenly' | 'death' | 'diplomacy';
   actorIds: string[];
   witnessScope?: 'participants';
+  dialogue?: DialogueExchange;
   locationId?: string;
 }
 

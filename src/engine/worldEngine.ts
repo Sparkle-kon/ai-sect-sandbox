@@ -15,6 +15,8 @@ import { maintainMemories, recordMemory } from './memoryEngine';
 import { synthesizeReflections } from './reflectionEngine';
 import { fabricateRumor, spreadRumors, witnessEvent } from './rumorEngine';
 import { expireScheme, pursueScheme } from './schemeEngine';
+import { scriptedDialogue } from './dialogueEngine';
+import { resolveEncounter } from './encounterEngine';
 
 export type GodInterventionType =
   | 'SPAWN_TREASURE'
@@ -89,6 +91,12 @@ export function applyCultivatorBrainDecision(
         return result;
       }, (target, delta) => adjustRelationship(world, cultivator.id, target.id, delta, '竞争'), rng);
     }
+    case 'TRADE':
+    case 'DUAL_CULTIVATE':
+    case 'SECT_DIPLOMACY':
+      return resolveEncounter(decision.chosenAction, world, cultivator, decision,
+        (target, amount) => adjustRelationship(world, cultivator.id, target.id, amount,
+          cultivator.sectId === target.sectId ? '同门' : '竞争'));
     case 'CULTIVATE': {
       const gain = Math.round((8 + rng() * 10) * qiFactor);
       cultivator.qiProgress = clamp(cultivator.qiProgress + gain, 0, 100);
@@ -358,6 +366,7 @@ export function applyCultivatorBrainDecision(
           description: `【${location?.name ?? '秘境'}】剑气纵横，${cultivator.name}与${defender.name}爆发生死决战！最终${winner.name}技高一筹，将${loser.name}当场斩杀并夺其法宝储物袋！`,
           category: 'death',
           actorIds: [cultivator.id, defender.id],
+          dialogue: scriptedDialogue('combat', cultivator, defender, `${winner.name}胜出，${loser.name}当场陨落。`, decision.spokenLine),
           locationId: cultivator.locationId,
         };
       }
@@ -385,6 +394,7 @@ export function applyCultivatorBrainDecision(
         description: `${cultivator.name}于【${location?.name ?? '秘境'}】向${defender.name}悍然出手！一番激斗后，${winner.name}占据上风，${loser.name}受创（-${dmgToLoser} HP）化作血光遁走。`,
         category: 'combat',
         actorIds: [cultivator.id, defender.id],
+        dialogue: scriptedDialogue('combat', cultivator, defender, `${winner.name}占得上风，${loser.name}负伤离去。`, decision.spokenLine),
         locationId: cultivator.locationId,
       };
     }

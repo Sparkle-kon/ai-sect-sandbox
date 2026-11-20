@@ -1,6 +1,7 @@
 import React from 'react';
 import { ScrollText } from 'lucide-react';
 import { WorldEvent } from '../types/world';
+import { DialogueTranscript } from './DialogueTranscript';
 
 interface ChronicleFeedProps {
   events: WorldEvent[];
@@ -77,6 +78,7 @@ export const ChronicleFeed: React.FC<ChronicleFeedProps> = ({ events }) => {
               <p className="text-xs text-slate-300 leading-relaxed">
                 {evt.description}
               </p>
+              {evt.dialogue && <DialogueTranscript dialogue={evt.dialogue} />}
             </div>
           );
         })}

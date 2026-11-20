@@ -8,6 +8,7 @@ import {
 } from './engine/worldEngine';
 import { queryCultivatorLLMDecision } from './engine/llmBrain';
 import { enrichAnnualReflections } from './engine/reflectionEngine';
+import { enrichTickDialogues } from './engine/dialogueEngine';
 import { LLMConfig, LLMDecisionPayload, WorldState } from './types/world';
 import { WorldMapCanvas } from './components/WorldMapCanvas';
 import { RelationshipGraph } from './components/RelationshipGraph';
@@ -45,7 +46,11 @@ export const App: React.FC = () => {
           })
         );
         const decisions: Record<string, LLMDecisionPayload> = Object.fromEntries(results);
-        const next = await enrichAnnualReflections(advanceWorldTick(world, decisions), llmConfig);
+        const tick = advanceWorldTick(world, decisions);
+        const [reflected, dramatized] = await Promise.all([
+          enrichAnnualReflections(tick, llmConfig), enrichTickDialogues(tick, llmConfig),
+        ]);
+        const next = { ...reflected, events: dramatized.events };
         // A reset or divine intervention during the request invalidates its snapshot.
         setWorld((prev) => prev === world ? next : prev);
       } else {

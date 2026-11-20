@@ -1,7 +1,8 @@
 import React, { useEffect, useRef } from 'react';
-import { Cultivator, LocationNode, WorldState } from '../types/world';
+import { Cultivator, LocationNode, WorldEvent, WorldState } from '../types/world';
 import { memoryStrength } from '../engine/memoryEngine';
 import { countCompletedSchemeSteps, SCHEME_STATUS } from './SchemePanel';
+import { DIALOGUE_KIND_LABELS } from './DialogueTranscript';
 
 interface WorldMapCanvasProps {
   world: WorldState;
@@ -36,6 +37,12 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const relayedRumorCount = selected?.rumors.filter(
     (entry) => entry.provenance === 'conversation' || entry.provenance === 'flying_sword'
   ).length;
+
+  const latestDialogueEvent = selected && world.events.reduce<WorldEvent | undefined>((latest, event) => {
+    if (!event.dialogue?.turns.length || !event.actorIds.includes(selected.id)) return latest;
+    return !latest || event.tick > latest.tick ? event : latest;
+  }, undefined);
+  const latestDialogue = latestDialogueEvent?.dialogue;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -276,6 +283,11 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
             {selectedScheme && (
               <span className={SCHEME_STATUS[selectedScheme.status].color}>
                 长线计划：{SCHEME_STATUS[selectedScheme.status].label} · {countCompletedSchemeSteps(selectedScheme)}/{selectedScheme.steps.length} 步
+              </span>
+            )}
+            {latestDialogueEvent && latestDialogue && (
+              <span className="text-cyan-300">
+                最近对话：{DIALOGUE_KIND_LABELS[latestDialogue.kind]} · 仙历 {latestDialogueEvent.year}年{latestDialogueEvent.month}月 · {latestDialogue.turns.length} 句
               </span>
             )}
           </>
