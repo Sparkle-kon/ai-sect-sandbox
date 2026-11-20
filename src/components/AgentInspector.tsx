@@ -10,6 +10,7 @@ import { TechniquePanel } from './TechniquePanel';
 import { AlchemyPanel } from './AlchemyPanel';
 import { ArtifactPanel } from './ArtifactPanel';
 import { TribulationPanel } from './TribulationPanel';
+import { SectHierarchyPanel } from './SectHierarchyPanel';
 
 interface AgentInspectorProps {
   world: WorldState;
@@ -174,6 +175,7 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
         <ArtifactPanel cultivator={cultivator} cultivators={world.cultivators} />
       </section>
 
+      <SectHierarchyPanel cultivator={cultivator} sect={sect} cultivators={world.cultivators} />
       <TribulationPanel cultivator={cultivator} />
       <TechniquePanel cultivator={cultivator} sect={sect} location={location} cultivators={world.cultivators} />
       <AlchemyPanel cultivator={cultivator} location={location} />

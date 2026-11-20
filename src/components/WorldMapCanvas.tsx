@@ -23,6 +23,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const selected = world.cultivators.find((c) => c.id === selectedCultivatorId);
   const selectedScheme = selected?.activeScheme;
+  const selectedSect = selected && world.sects.find((sect) => sect.id === selected.sectId);
   const selectedArtifact = selected?.alive ? equippedArtifact(selected) : undefined;
   const selectedLocation = selected && world.locations.find((loc) => loc.id === selected.locationId);
   const selectedTrial = selected?.tribulation;
@@ -319,6 +320,9 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         {selected ? (
           <>
             <span className="text-slate-200">{selected.name}{!selected.alive ? '（已陨落，不在地图上显示）' : ''}</span>
+            {selectedSect && (
+              <span className="text-amber-200">宗门位阶：{selectedSect.name} · {selected.sectRank}{selected.alive ? '' : ' · 留档'}</span>
+            )}
             <span className="inline-flex items-center gap-1">灵根 <SpiritRootBadge root={selected.spiritRoot} /></span>
             {selectedLocation && (
               <span className="inline-flex items-center gap-1">

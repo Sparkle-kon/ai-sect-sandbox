@@ -22,6 +22,7 @@ import { authorTechnique, dropInheritance, gainMastery, masteryMultiplier, study
 import { maintainAlchemy, resolveAlchemy } from './alchemyEngine';
 import { lootStorageRing, resolveArtifactAction, wearArtifact } from './artifactEngine';
 import { interfereTribulation, isTribulationActive, recommendedTribulationStance, resolveTribulation, tribulationTarget, triggerTribulation } from './tribulationEngine';
+import { maintainSectPolitics, resolveLeadershipAction, rewardContribution } from './sectPoliticsEngine';
 
 export type GodInterventionType =
   | 'SPAWN_TREASURE'
@@ -103,6 +104,9 @@ export function applyCultivatorBrainDecision(
   const qiFactor = (location?.spiritQi ?? 50) / 50;
 
   switch (decision.chosenAction) {
+    case 'CHALLENGE_LEADERSHIP':
+    case 'PLOT_COUP':
+      return resolveLeadershipAction(world, cultivator, decision, rng);
     case 'FACE_TRIBULATION':
       return null; // No active trial remains to face.
     case 'AMBUSH_TRIBULATION':
@@ -447,6 +451,19 @@ export function applyCultivatorBrainDecision(
  * Advances the entire world by 1 tick (1 month in virtual cultivation calendar).
  * Accepts optional precomputed LLM decisions keyed by cultivator ID.
  */
+function creditSectService(world: WorldState, actor: Cultivator, event: WorldEvent | null): void {
+  if (!actor.alive || !world.sects.some((sect) => sect.id === actor.sectId)) return;
+  const ownSect = world.sects.find((sect) => sect.id === actor.sectId);
+  let points = 0;
+  if (event?.id.endsWith('-author-technique')) points = 25;
+  else if (event?.dialogue?.kind === 'sect_diplomacy') points = 12;
+  else if (event?.id.endsWith('-scheme-outcome') && actor.activeScheme?.kind === 'infiltration' && actor.activeScheme.status === 'completed') points = 16;
+  else if (event?.id.endsWith('-social') && world.cultivators.some((other) =>
+    other.id !== actor.id && event.actorIds.includes(other.id) && other.sectId === actor.sectId)) points = 4;
+  else if (actor.locationId === ownSect?.headquartersId && actor.currentAction === 'CULTIVATE') points = 2;
+  rewardContribution(actor, world, points);
+}
+
 export function advanceWorldTick(
   prevState: WorldState,
   precomputedDecisions?: Record<string, LLMDecisionPayload>,
@@ -497,6 +514,7 @@ export function advanceWorldTick(
       computeHeuristicDecision(cultivator, nextState, rng);
 
     const evt = applyCultivatorBrainDecision(nextState, cultivator, decision, rng);
+    creditSectService(nextState, cultivator, evt);
     if (evt) {
       newEvents.push(evt);
       witnessEvent(nextState, evt);
@@ -505,12 +523,19 @@ export function advanceWorldTick(
 
   for (const cultivator of nextState.cultivators) {
     expireScheme(cultivator, nextState.tick);
-    if (!cultivator.alive) continue;
+    if (!cultivator.alive) {
+      closeInterruptedTrial(cultivator, nextState.tick);
+      continue;
+    }
     const yearly = nextState.month === 1;
     maintainMemories(cultivator, nextState.tick, yearly);
     if (yearly) cultivator.reflections = synthesizeReflections(cultivator, nextState.tick);
   }
 
+  for (const event of maintainSectPolitics(nextState)) {
+    newEvents.push(event);
+    witnessEvent(nextState, event);
+  }
   spreadRumors(nextState);
   nextState.events = [...newEvents, ...nextState.events].slice(0, 120);
   return nextState;

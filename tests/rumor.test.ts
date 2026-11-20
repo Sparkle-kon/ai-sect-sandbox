@@ -97,7 +97,7 @@ describe('rumor knowledge network', () => {
     const privateEvent = next.events.find((e) => e.id.endsWith('-scheme'));
     expect(privateEvent?.witnessScope).toBe('participants');
     expect(next.cultivators[1].rumors.some((r) => r.id.includes('forged'))).toBe(true);
-    expect(next.cultivators[2].rumors).toEqual([]);
+    expect(next.cultivators[2].rumors.filter((r) => r.id.includes('forged') || r.id.endsWith('-scheme'))).toEqual([]);
     expect(listener.rumors).toEqual([]);
     expect(advanceWorldTick(world, choices, () => 0.5)).toEqual(next);
   });

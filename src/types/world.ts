@@ -65,6 +65,8 @@ export type ActionType =
   | 'AWAKEN_ARTIFACT'
   | 'FACE_TRIBULATION'
   | 'AMBUSH_TRIBULATION'
+  | 'CHALLENGE_LEADERSHIP'
+  | 'PLOT_COUP'
   | 'TRADE'
   | 'DUAL_CULTIVATE'
   | 'SECT_DIPLOMACY'
@@ -121,6 +123,16 @@ export interface LocationNode {
   description: string;
 }
 
+export type SectRank = '外门弟子' | '内门弟子' | '真传弟子' | '长老' | '太上长老' | '掌门';
+
+export interface SectSuccession {
+  tick: number;
+  method: 'election' | 'challenge' | 'coup';
+  previousLeaderId?: string;
+  leaderId: string;
+  supporterIds: string[];
+}
+
 export interface Sect {
   id: string;
   name: string;
@@ -131,6 +143,8 @@ export interface Sect {
   spiritStones: number;
   headquartersId: string;
   pavilion: Technique[];
+  leaderId?: string;
+  succession?: SectSuccession;
 }
 
 export interface Rumor {
@@ -189,6 +203,8 @@ export interface Cultivator {
   name: string;
   title: string;
   sectId: string;
+  sectRank: SectRank;
+  contribution: number;
   realm: CultivationRealm;
   realmStage: number; // 1-9
   qiProgress: number; // 0-100
