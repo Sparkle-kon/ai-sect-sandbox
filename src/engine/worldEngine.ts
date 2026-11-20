@@ -13,6 +13,7 @@ import {
 import { computeHeuristicDecision } from './llmBrain';
 import { maintainMemories, recordMemory } from './memoryEngine';
 import { synthesizeReflections } from './reflectionEngine';
+import { fabricateRumor, spreadRumors, witnessEvent } from './rumorEngine';
 
 export type GodInterventionType =
   | 'SPAWN_TREASURE'
@@ -210,16 +211,10 @@ export function applyCultivatorBrainDecision(
     }
 
     case 'SOCIALIZE': {
-      const target =
-        world.cultivators.find(
-          (c) => c.alive && c.id === decision.targetCultivatorId
-        ) ??
-        world.cultivators.find(
-          (c) =>
-            c.alive &&
-            c.id !== cultivator.id &&
-            c.locationId === cultivator.locationId
-        );
+      const target = world.cultivators.find((c) =>
+        c.alive && c.id !== cultivator.id && c.locationId === cultivator.locationId &&
+        (decision.targetCultivatorId === undefined || c.id === decision.targetCultivatorId)
+      );
       if (!target) return null;
 
       adjustRelationship(
@@ -253,13 +248,15 @@ export function applyCultivatorBrainDecision(
     }
 
     case 'SCHEMING': {
-      const target =
-        world.cultivators.find(
-          (c) => c.alive && c.id === decision.targetCultivatorId
-        ) ??
-        world.cultivators.find((c) => c.alive && c.id !== cultivator.id);
+      const target = world.cultivators.find((c) =>
+        c.alive && c.id !== cultivator.id && c.locationId === cultivator.locationId &&
+        (decision.targetCultivatorId === undefined || c.id === decision.targetCultivatorId)
+      );
       if (!target) return null;
 
+      if (decision.rumorIntent) {
+        fabricateRumor(world, cultivator, target, decision.rumorIntent);
+      }
       const stolenStones = Math.min(target.spiritStones, Math.round(50 + rng() * 110));
       target.spiritStones -= stolenStones;
       cultivator.spiritStones += stolenStones;
@@ -295,22 +292,17 @@ export function applyCultivatorBrainDecision(
         title: `暗流涌动：${cultivator.name}设局算计${target.name}`,
         description: `${cultivator.name}借天机迷阵暗算${target.name}，夺走 ${stolenStones} 枚灵石并动摇其道心。`,
         category: 'intrigue',
+        witnessScope: 'participants',
         actorIds: [cultivator.id, target.id],
         locationId: cultivator.locationId,
       };
     }
 
     case 'DUEL': {
-      const defender =
-        world.cultivators.find(
-          (c) => c.alive && c.id === decision.targetCultivatorId
-        ) ??
-        world.cultivators.find(
-          (c) =>
-            c.alive &&
-            c.id !== cultivator.id &&
-            c.locationId === cultivator.locationId
-        );
+      const defender = world.cultivators.find((c) =>
+        c.alive && c.id !== cultivator.id && c.locationId === cultivator.locationId &&
+        (decision.targetCultivatorId === undefined || c.id === decision.targetCultivatorId)
+      );
       if (!defender) return null;
 
       const attackerScore = cultivator.combatPower * (0.85 + rng() * 0.3);
@@ -418,7 +410,7 @@ export function advanceWorldTick(
       if (cultivator.age >= cultivator.lifespan) {
         cultivator.alive = false;
         cultivator.hp = 0;
-        newEvents.push({
+        const death: WorldEvent = {
           id: `evt-${nextState.tick}-${cultivator.id}-oldage`,
           tick: nextState.tick,
           year: nextState.year,
@@ -428,7 +420,9 @@ export function advanceWorldTick(
           category: 'death',
           actorIds: [cultivator.id],
           locationId: cultivator.locationId,
-        });
+        };
+        newEvents.push(death);
+        witnessEvent(nextState, death);
         continue;
       }
     }
@@ -440,6 +434,7 @@ export function advanceWorldTick(
     const evt = applyCultivatorBrainDecision(nextState, cultivator, decision, rng);
     if (evt) {
       newEvents.push(evt);
+      witnessEvent(nextState, evt);
     }
   }
 
@@ -450,6 +445,7 @@ export function advanceWorldTick(
     if (yearly) cultivator.reflections = synthesizeReflections(cultivator, nextState.tick);
   }
 
+  spreadRumors(nextState);
   nextState.events = [...newEvents, ...nextState.events].slice(0, 120);
   return nextState;
 }
@@ -489,7 +485,7 @@ export function executeGodIntervention(
       }
 
       nextState.events.unshift({
-        id: `evt-god-treasure-${nextState.tick}-${Date.now()}`,
+        id: `evt-god-treasure-${nextState.tick}-${++nextState.interventionSequence}`,
         tick: nextState.tick,
         year: nextState.year,
         month: nextState.month,
@@ -520,7 +516,7 @@ export function executeGodIntervention(
       );
 
       nextState.events.unshift({
-        id: `evt-god-strike-${nextState.tick}-${Date.now()}`,
+        id: `evt-god-strike-${nextState.tick}-${++nextState.interventionSequence}`,
         tick: nextState.tick,
         year: nextState.year,
         month: nextState.month,
@@ -544,7 +540,7 @@ export function executeGodIntervention(
         }
       }
       nextState.events.unshift({
-        id: `evt-god-demon-${nextState.tick}-${Date.now()}`,
+        id: `evt-god-demon-${nextState.tick}-${++nextState.interventionSequence}`,
         tick: nextState.tick,
         year: nextState.year,
         month: nextState.month,
@@ -575,13 +571,14 @@ export function executeGodIntervention(
       );
 
       nextState.events.unshift({
-        id: `evt-god-whisper-${nextState.tick}-${Date.now()}`,
+        id: `evt-god-whisper-${nextState.tick}-${++nextState.interventionSequence}`,
         tick: nextState.tick,
         year: nextState.year,
         month: nextState.month,
         title: `天道传音：神念降临${target.name}识海`,
         description: `冥冥之中一道不可抗拒的意志传入${target.name}脑海：“${whisper}”，彻底改写了其秘密目标！`,
         category: 'intrigue',
+        witnessScope: 'participants',
         actorIds: [target.id],
         locationId: target.locationId,
       });
@@ -589,5 +586,7 @@ export function executeGodIntervention(
     }
   }
 
+  const head = nextState.events[0];
+  if (head && head.id !== prevState.events[0]?.id) witnessEvent(nextState, head);
   return nextState;
 }

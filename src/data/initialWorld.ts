@@ -40,6 +40,7 @@ export const REALM_LIFESPAN: Record<CultivationRealm, number> = {
 export function createInitialWorld(): WorldState {
   return {
     tick: 1,
+    interventionSequence: 0,
     year: 1001,
     month: 1,
     sects: [
@@ -189,6 +190,7 @@ export function createInitialWorld(): WorldState {
         coreMemories: [],
         memorySequence: 0,
         reflections: [],
+        rumors: [],
         alive: true,
       },
       {
@@ -226,6 +228,7 @@ export function createInitialWorld(): WorldState {
         coreMemories: [],
         memorySequence: 0,
         reflections: [],
+        rumors: [],
         alive: true,
       },
       {
@@ -263,6 +266,7 @@ export function createInitialWorld(): WorldState {
         coreMemories: [],
         memorySequence: 0,
         reflections: [],
+        rumors: [],
         alive: true,
       },
       {
@@ -300,6 +304,7 @@ export function createInitialWorld(): WorldState {
         coreMemories: [],
         memorySequence: 0,
         reflections: [],
+        rumors: [],
         alive: true,
       },
       {
@@ -337,6 +342,7 @@ export function createInitialWorld(): WorldState {
         coreMemories: [],
         memorySequence: 0,
         reflections: [],
+        rumors: [],
         alive: true,
       },
       {
@@ -374,6 +380,7 @@ export function createInitialWorld(): WorldState {
         coreMemories: [],
         memorySequence: 0,
         reflections: [],
+        rumors: [],
         alive: true,
       },
       {
@@ -411,6 +418,7 @@ export function createInitialWorld(): WorldState {
         coreMemories: [],
         memorySequence: 0,
         reflections: [],
+        rumors: [],
         alive: true,
       },
       {
@@ -448,6 +456,7 @@ export function createInitialWorld(): WorldState {
         coreMemories: [],
         memorySequence: 0,
         reflections: [],
+        rumors: [],
         alive: true,
       },
     ],

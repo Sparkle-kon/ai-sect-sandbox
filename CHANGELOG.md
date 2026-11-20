@@ -1,6 +1,7 @@
 # CHANGELOG.md — Automated Evolution Log
 
 ## [Unreleased]
+- **P1-3:** Local witnesses, conversations and sect flying swords carry bounded, decaying rumor ledgers. Deceitful cultivators can plant or exaggerate leads without giving recipients ground truth; both brains see only personal intelligence, and encounters enforce co-location. The Inspector shows provenance and perceived credibility. All 27 deterministic tests, type checking and production build passed.
 - **P1-2:** Annual reflection builds bounded beliefs, obsessions and heart demons from recent memories, with expiring influence and traceable evidence. Utility AI uses those findings; optional validated JSON narration keeps mechanics in the simulation. The Inspector and map show active reflections. All 18 deterministic tests, type checking and production build passed.
 - **P1-1:** Episodic memories carry emotional valence and decay; each year, up to three distinct high-impact memories consolidate into a bounded long-term bank. Recall affects Utility AI duel caution and is included in structured LLM context. The Inspector shows both banks, while the map highlights the selected cultivator's core memories. Verified with 11 deterministic tests and a production build. Added the npm lockfile for repeatable installs.
 

@@ -85,6 +85,19 @@ export interface Sect {
   headquartersId: string;
 }
 
+export interface Rumor {
+  id: string;
+  subject: string;
+  locationId?: string;
+  originTick: number;
+  learnedTick: number;
+  provenance: 'witness' | 'conversation' | 'flying_sword' | 'fabricated';
+  confidence: number; // 0–100, perceived credibility, not objective truth
+  hops: number;
+  sourceCultivatorId?: string;
+  lead?: boolean;
+}
+
 export interface Cultivator {
   id: string;
   name: string;
@@ -110,6 +123,7 @@ export interface Cultivator {
   coreMemories: MemoryEntry[];
   memorySequence: number; // Monotonic across evictions
   reflections: CultivatorReflection[];
+  rumors: Rumor[];
   alive: boolean;
 }
 
@@ -122,6 +136,7 @@ export interface WorldEvent {
   description: string;
   category: 'breakthrough' | 'combat' | 'intrigue' | 'heavenly' | 'death' | 'diplomacy';
   actorIds: string[];
+  witnessScope?: 'participants';
   locationId?: string;
 }
 
@@ -138,10 +153,12 @@ export interface LLMDecisionPayload {
   targetLocationId?: string;
   targetCultivatorId?: string;
   spokenLine?: string;
+  rumorIntent?: 'FABRICATE' | 'EXAGGERATE';
 }
 
 export interface WorldState {
   tick: number;
+  interventionSequence: number;
   year: number;
   month: number;
   sects: Sect[];

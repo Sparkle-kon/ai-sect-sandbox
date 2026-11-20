@@ -31,6 +31,10 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     { belief: 0, obsession: 0, heart_demon: 0 }
   );
 
+  const relayedRumorCount = selected?.rumors.filter(
+    (entry) => entry.provenance === 'conversation' || entry.provenance === 'flying_sword'
+  ).length;
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -254,7 +258,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         height={560}
         onClick={handleCanvasClick}
         className="w-full h-auto cursor-pointer block"
-        aria-label="修仙世界地图。选择修士可查看下方记忆摘要；也可通过识海面板的修士按钮切换。"
+        aria-label="修仙世界地图。选择修士可查看下方记忆与见闻摘要；也可通过识海面板的修士按钮切换。"
       />
       <div className="px-4 py-2 border-t border-slate-800/80 bg-slate-900/60 text-[11px] text-slate-400 flex flex-wrap gap-x-4 gap-y-1" aria-label="选中修士记忆摘要">
         {selected ? (
@@ -266,6 +270,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
             <span className={reflectionCounts?.heart_demon ? 'text-rose-300' : 'text-slate-400'}>
               {selected.alive ? '道心' : '道心留影'}：信念 {reflectionCounts?.belief} · 执念 {reflectionCounts?.obsession} · 心魔 {reflectionCounts?.heart_demon}
             </span>
+            <span className="text-indigo-300">见闻与流言 {selected.rumors.length} 条 · 转述 {relayedRumorCount} 条</span>
           </>
         ) : (
           <span>选择一位修士查看其当前记忆状态。</span>

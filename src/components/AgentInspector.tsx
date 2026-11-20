@@ -3,6 +3,7 @@ import { Brain, Shield, Coins, Compass, Heart, Sparkles } from 'lucide-react';
 import { Cultivator, WorldState } from '../types/world';
 import { MemoryPanel } from './MemoryPanel';
 import { ReflectionPanel } from './ReflectionPanel';
+import { RumorPanel } from './RumorPanel';
 
 interface AgentInspectorProps {
   world: WorldState;
@@ -160,6 +161,7 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
       </div>
 
       <ReflectionPanel cultivator={cultivator} />
+      <RumorPanel cultivator={cultivator} locations={world.locations} cultivators={world.cultivators} />
 
       {/* Both banks are the engine's current state, not a separate UI cache. */}
       <div className="space-y-3 pt-2 border-t border-slate-800">
