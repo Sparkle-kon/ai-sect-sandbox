@@ -14,6 +14,7 @@ import { SectHierarchyPanel } from './SectHierarchyPanel';
 import { SectEconomyPanel } from './SectEconomyPanel';
 import { SectDiplomacyPanel } from './SectDiplomacyPanel';
 import { WorldOccasionsPanel } from './WorldOccasionsPanel';
+import { BOUNTY_STATUS, relevantBounty } from './BountyBoard';
 
 interface AgentInspectorProps {
   world: WorldState;
@@ -36,6 +37,7 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
 
   const sect = world.sects.find((s) => s.id === cultivator.sectId);
   const location = world.locations.find((l) => l.id === cultivator.locationId);
+  const bounty = relevantBounty(world.bounties, cultivator.id);
 
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3.5">
@@ -178,6 +180,11 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
         <ArtifactPanel cultivator={cultivator} cultivators={world.cultivators} />
       </section>
 
+      <p aria-label="业力与悬赏摘要" className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-400">
+        <span>业力 {cultivator.karma}</span>
+        <span>恶行记录 {cultivator.transgressions}</span>
+        {bounty && <span className={bounty.status === 'open' ? 'text-rose-300' : 'text-slate-400'}>悬赏：{BOUNTY_STATUS[bounty.status]}</span>}
+      </p>
       <SectHierarchyPanel cultivator={cultivator} sect={sect} cultivators={world.cultivators} />
       <SectEconomyPanel cultivator={cultivator} sect={sect} world={world} />
       <SectDiplomacyPanel sect={sect} world={world} />

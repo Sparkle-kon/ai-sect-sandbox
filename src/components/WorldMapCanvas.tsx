@@ -10,6 +10,7 @@ import { isActiveTrial, TRIAL_STAGE } from './TribulationPanel';
 import { isGuardOnDuty } from './SectEconomyPanel';
 import { isActiveCampaign, SIEGE_LABELS } from './SectDiplomacyPanel';
 import { isOpenOccasion, OCCASION_KIND, OCCASION_STATUS } from './WorldOccasionsPanel';
+import { BOUNTY_STATUS, relevantBounty } from './BountyBoard';
 
 interface WorldMapCanvasProps {
   world: WorldState;
@@ -30,6 +31,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const selectedArtifact = selected?.alive ? equippedArtifact(selected) : undefined;
   const selectedLocation = selected && world.locations.find((loc) => loc.id === selected.locationId);
   const selectedTrial = selected?.tribulation;
+  const selectedBounty = selected && relevantBounty(world.bounties, selected.id);
   const activeSieges = world.sieges.filter(isActiveCampaign);
   const occasionsByLocation = new Map<string, WorldState['occasions']>();
   for (const occasion of world.occasions.filter(isOpenOccasion)) {
@@ -402,6 +404,11 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
             )}
             {selectedSiege && (
               <span className="text-rose-300">参与战役：{SIEGE_LABELS[selectedSiege.status]} · {siegeLocation?.name ?? '地点未详'}</span>
+            )}
+            {selectedBounty && (
+              <span className={selectedBounty.status === 'open' ? 'text-rose-300' : 'text-slate-400'}>
+                悬赏：{BOUNTY_STATUS[selectedBounty.status]}
+              </span>
             )}
             <span>情景记忆 {selected.memories.length} 条</span>
             <span className="text-violet-300">核心记忆 {selected.coreMemories.length} 条{selected.alive && selected.coreMemories.length > 0 ? " · 紫弧标记" : ""}</span>

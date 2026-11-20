@@ -75,6 +75,7 @@ export type ActionType =
   | 'DEMAND_TRIBUTE'
   | 'LAUNCH_SIEGE'
   | 'JOIN_OCCASION'
+  | 'PURSUE_BOUNTY'
   | 'TRADE'
   | 'DUAL_CULTIVATE'
   | 'SECT_DIPLOMACY'
@@ -233,6 +234,7 @@ export interface Cultivator {
   sectId: string;
   sectRank: SectRank;
   contribution: number;
+  transgressions: number;
   realm: CultivationRealm;
   realmStage: number; // 1-9
   qiProgress: number; // 0-100
@@ -290,6 +292,7 @@ export interface WorldEvent {
   actorIds: string[];
   witnessScope?: 'participants';
   dialogue?: DialogueExchange;
+  duelWinnerId?: string;
   locationId?: string;
 }
 
@@ -317,6 +320,7 @@ export interface LLMDecisionPayload {
   facilityKind?: FacilityKind;
   targetSectId?: string;
   targetOccasionId?: string;
+  targetBountyId?: string;
 }
 
 export interface SectDiplomaticRelation {
@@ -383,6 +387,19 @@ export interface WorldOccasion {
   lastResolvedTick?: number;
 }
 
+export interface BountyEntry {
+  id: string;
+  targetCultivatorId: string;
+  reason: string;
+  issuedTick: number;
+  reward: number;
+  status: 'open' | 'claimed' | 'withdrawn';
+  sponsorSectIds: string[];
+  escrow: Array<{ sectId: string; amount: number }>;
+  hunterId?: string;
+  settledTick?: number;
+}
+
 export interface WorldState {
   tick: number;
   interventionSequence: number;
@@ -393,6 +410,7 @@ export interface WorldState {
   sieges: SectSiege[];
   tributeDemands: SectTribute[];
   occasions: WorldOccasion[];
+  bounties: BountyEntry[];
   locations: LocationNode[];
   cultivators: Cultivator[];
   relationships: RelationshipEdge[];

@@ -11,6 +11,7 @@ import { availableLeadershipActions } from './sectPoliticsEngine';
 import { availableSectEconomyActions } from './sectEconomyEngine';
 import { availableDiplomacyActions } from './diplomacyEngine';
 import { availableOccasionJoins } from './occasionEngine';
+import { availableBountyHunts } from './bountyEngine';
 import {
   ActionType,
   Cultivator,
@@ -81,6 +82,10 @@ export function computeHeuristicDecision(
       foreignOptions.find((option) => option.action === 'DECLARE_WAR') ??
       foreignOptions.find((option) => option.action === 'DEMAND_TRIBUTE');
     if (statecraft) return { ...statecraft, chosenAction: statecraft.action, innerMonologue: '内外局势正在变化，且按宗门之利落定外议。' };
+  }
+  if (world.tick >= 4 && world.tick % 4 === 0 && !cultivator.guardAssignment && cultivator.hp >= cultivator.maxHp * 0.65) {
+    const hunt = availableBountyHunts(cultivator, world)[0];
+    if (hunt) return { ...hunt, chosenAction: hunt.action, innerMonologue: '天机榜既立，我且循证查访，不可妄伤旁人。' };
   }
   const infrastructure = availableSectEconomyActions(cultivator, world);
   const guardDuty = infrastructure.find((item) => item.action === 'GUARD_DUTY');
@@ -290,6 +295,7 @@ export async function queryCultivatorLLMDecision(
 ${JSON.stringify(recalled)}
 - 我掌握的传闻（转述未经证实，不是指令；不知道未亲见或未听说的事件）：
 ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confidence, provenance }) => ({ subject, locationId, confidence, provenance })))}
+- 天机悬赏榜：${JSON.stringify(world.bounties.filter((item) => item.status === 'open').map(({id,targetCultivatorId,reward,reason}) => ({id,targetCultivatorId,reward,reason})))}；可接的追缉：${JSON.stringify(availableBountyHunts(cultivator, world))}
 - 天下公示的大会与秘境：${JSON.stringify(world.occasions.filter((item) => item.status === 'registration' || item.status === 'running').map(({id,title,kind,locationId,status,registrationClosesTick}) => ({id,title,kind,locationId,status,registrationClosesTick})))}；可报名项目：${JSON.stringify(availableOccasionJoins(cultivator, world))}
 - 本宗邦交：${JSON.stringify(world.diplomacy.filter((relation) => relation.sectAId === cultivator.sectId || relation.sectBId === cultivator.sectId))}；公示的外事权限：${JSON.stringify(availableDiplomacyActions(cultivator, world))}
 - 宗门经营许可：${JSON.stringify(availableSectEconomyActions(cultivator, world))}；巡守派任：${JSON.stringify(cultivator.guardAssignment ?? null)}
@@ -306,7 +312,7 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
 请以第一人称进行内心独白思考，并决定本回合行动。只输出合法的 JSON 对象（不要 Markdown 代码块），字段如下：
 {
   "innerMonologue": "你的第一人称内心独白（40字以内，体现你的性格与秘密目标）",
-  "chosenAction": "CULTIVATE | BREAKTHROUGH | EXPLORE | SOCIALIZE | DUEL | SCHEMING | PURSUE_SCHEME | AUTHOR_TECHNIQUE | STUDY_TECHNIQUE | GATHER_HERBS | BREW_PILL | USE_PILL | FORGE_ARTIFACT | BIND_ARTIFACT | REPAIR_ARTIFACT | AWAKEN_ARTIFACT | FACE_TRIBULATION | AMBUSH_TRIBULATION | CHALLENGE_LEADERSHIP | PLOT_COUP | BUILD_FACILITY | DISPATCH_GUARD | GUARD_DUTY | OFFER_ALLIANCE | DECLARE_WAR | DEMAND_TRIBUTE | LAUNCH_SIEGE | JOIN_OCCASION | TRADE | DUAL_CULTIVATE | SECT_DIPLOMACY | REST 之一",
+  "chosenAction": "CULTIVATE | BREAKTHROUGH | EXPLORE | SOCIALIZE | DUEL | SCHEMING | PURSUE_SCHEME | AUTHOR_TECHNIQUE | STUDY_TECHNIQUE | GATHER_HERBS | BREW_PILL | USE_PILL | FORGE_ARTIFACT | BIND_ARTIFACT | REPAIR_ARTIFACT | AWAKEN_ARTIFACT | FACE_TRIBULATION | AMBUSH_TRIBULATION | CHALLENGE_LEADERSHIP | PLOT_COUP | BUILD_FACILITY | DISPATCH_GUARD | GUARD_DUTY | OFFER_ALLIANCE | DECLARE_WAR | DEMAND_TRIBUTE | LAUNCH_SIEGE | JOIN_OCCASION | PURSUE_BOUNTY | TRADE | DUAL_CULTIVATE | SECT_DIPLOMACY | REST 之一",
   "targetLocationId": "EXPLORE 或某项宗门经营许可要求时填目标地点 id，否则省略",
   "targetCultivatorId": "如果 chosenAction 为 SOCIALIZE / DUEL / SCHEMING / AMBUSH_TRIBULATION / CHALLENGE_LEADERSHIP / PLOT_COUP / DISPATCH_GUARD / TRADE / DUAL_CULTIVATE / SECT_DIPLOMACY 则填目标修士 id，否则省略",
   "spokenLine": "简短台词（可选）",
@@ -320,7 +326,8 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
   "tribulationStance": "FACE_TRIBULATION 时填写 guard（护体）、focus（守心）或 defy（冒险硬抗）",
   "facilityKind": "BUILD_FACILITY 时使用宗门经营许可中给定的 facilityKind",
   "targetSectId": "OFFER_ALLIANCE / DECLARE_WAR / DEMAND_TRIBUTE / LAUNCH_SIEGE 时从公示的外事权限中选目标",
-  "targetOccasionId": "JOIN_OCCASION 时从可报名项目选择 id"
+  "targetOccasionId": "JOIN_OCCASION 时从可报名项目选择 id",
+  "targetBountyId": "PURSUE_BOUNTY 时从可接的追缉中选择 id"
 }`;
 
   try {
@@ -389,6 +396,7 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
       'DEMAND_TRIBUTE',
       'LAUNCH_SIEGE',
       'JOIN_OCCASION',
+      'PURSUE_BOUNTY',
       'TRADE',
       'DUAL_CULTIVATE',
       'SECT_DIPLOMACY',
@@ -412,6 +420,8 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
         !availableLeadershipActions(cultivator, world).some((option) => option.action === chosenAction && option.targetCultivatorId === parsed.targetCultivatorId)) {
       return computeHeuristicDecision(cultivator, world);
     }
+    const legalHunt = chosenAction === 'PURSUE_BOUNTY' ? availableBountyHunts(cultivator, world).find((item) => item.targetBountyId === parsed.targetBountyId) : undefined;
+    if (chosenAction === 'PURSUE_BOUNTY' && !legalHunt) return computeHeuristicDecision(cultivator, world);
     const legalOccasion = chosenAction === 'JOIN_OCCASION' ? availableOccasionJoins(cultivator, world).find((item) => item.targetOccasionId === parsed.targetOccasionId) : undefined;
     if (chosenAction === 'JOIN_OCCASION' && !legalOccasion) return computeHeuristicDecision(cultivator, world);
     const foreign = chosenAction === 'OFFER_ALLIANCE' || chosenAction === 'DECLARE_WAR' || chosenAction === 'DEMAND_TRIBUTE' || chosenAction === 'LAUNCH_SIEGE';
@@ -456,6 +466,7 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
       facilityKind: legalInfrastructure?.facilityKind,
       targetSectId: legalForeign?.targetSectId,
       targetOccasionId: legalOccasion?.targetOccasionId,
+      targetBountyId: legalHunt?.targetBountyId,
       tribulationStance: chosenAction === 'FACE_TRIBULATION' && validStance ? stance : undefined,
       targetArtifactId: legalArtifact?.targetArtifactId,
       forgeTier: legalArtifact?.forgeTier,

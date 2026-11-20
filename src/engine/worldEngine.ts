@@ -26,6 +26,7 @@ import { maintainSectPolitics, resolveLeadershipAction, rewardContribution } fro
 import { maintainSectEconomy, mitigateSectArray, resolveSectEconomyAction, sectQiBonus } from './sectEconomyEngine';
 import { activeSiegeForActor, advanceDiplomacy, resolveDiplomacyAction } from './diplomacyEngine';
 import { activeOccasionForActor, advanceOccasions, joinOccasion } from './occasionEngine';
+import { advanceBounties, pursueBounty, recordTransgression } from './bountyEngine';
 
 export type GodInterventionType =
   | 'SPAWN_TREASURE'
@@ -90,7 +91,8 @@ export function applyCultivatorBrainDecision(
   world: WorldState,
   cultivator: Cultivator,
   decision: LLMDecisionPayload,
-  rng: () => number = Math.random
+  rng: () => number = Math.random,
+  authorizedBountyTargetId?: string,
 ): WorldEvent | null {
   if (!cultivator.alive) return null;
   if (isTribulationActive(cultivator)) {
@@ -107,6 +109,15 @@ export function applyCultivatorBrainDecision(
   const qiFactor = (location?.spiritQi ?? 50) / 50;
 
   switch (decision.chosenAction) {
+    case 'PURSUE_BOUNTY': {
+      return pursueBounty(world, cultivator, decision, (target) => {
+        const result = applyCultivatorBrainDecision(world, cultivator, {
+          chosenAction: 'DUEL', innerMonologue: decision.innerMonologue, targetCultivatorId: target.id,
+        }, rng, target.id);
+        cultivator.currentAction = 'PURSUE_BOUNTY';
+        return result?.duelWinnerId ? { event: result, winnerId: result.duelWinnerId } : result;
+      });
+    }
     case 'JOIN_OCCASION':
       return joinOccasion(world, cultivator, decision);
     case 'OFFER_ALLIANCE':
@@ -119,8 +130,11 @@ export function applyCultivatorBrainDecision(
     case 'GUARD_DUTY':
       return resolveSectEconomyAction(world, cultivator, decision);
     case 'CHALLENGE_LEADERSHIP':
-    case 'PLOT_COUP':
-      return resolveLeadershipAction(world, cultivator, decision, rng);
+    case 'PLOT_COUP': {
+      const politicalEvent = resolveLeadershipAction(world, cultivator, decision, rng);
+      if (politicalEvent && decision.chosenAction === 'PLOT_COUP') recordTransgression(cultivator, 'betrayal');
+      return politicalEvent;
+    }
     case 'FACE_TRIBULATION':
       return null; // No active trial remains to face.
     case 'AMBUSH_TRIBULATION':
@@ -408,6 +422,7 @@ export function applyCultivatorBrainDecision(
 
       if (loser.hp <= 0) {
         loser.alive = false;
+        if (loser.id !== authorizedBountyTargetId) recordTransgression(winner, 'killing');
         closeInterruptedTrial(loser, world.tick);
         dropInheritance(loser, world);
         const loot = lootStorageRing(winner, loser);
@@ -428,6 +443,7 @@ export function applyCultivatorBrainDecision(
           description: `【${location?.name ?? '秘境'}】剑气纵横，${cultivator.name}与${defender.name}爆发生死决战！最终${winner.name}技高一筹，将${loser.name}当场斩杀并收缴其储物戒：${lootedStones} 灵石及 ${loot.artifacts} 件法宝。`,
           category: 'death',
           actorIds: [cultivator.id, defender.id],
+          duelWinnerId: winner.id,
           dialogue: scriptedDialogue('combat', cultivator, defender, `${winner.name}胜出，${loser.name}当场陨落。`, decision.spokenLine),
           locationId: cultivator.locationId,
         };
@@ -456,6 +472,7 @@ export function applyCultivatorBrainDecision(
         description: `${cultivator.name}于【${location?.name ?? '秘境'}】向${defender.name}悍然出手！一番激斗后，${winner.name}占据上风，${loser.name}受创（-${sufferedByLoser} HP）化作血光遁走。`,
         category: 'combat',
         actorIds: [cultivator.id, defender.id],
+        duelWinnerId: winner.id,
         dialogue: scriptedDialogue('combat', cultivator, defender, `${winner.name}占得上风，${loser.name}负伤离去。`, decision.spokenLine),
         locationId: cultivator.locationId,
       };
@@ -561,7 +578,7 @@ export function advanceWorldTick(
     if (yearly) cultivator.reflections = synthesizeReflections(cultivator, nextState.tick);
   }
 
-  for (const event of [...advanceDiplomacy(nextState, rng), ...advanceOccasions(nextState, rng), ...maintainSectPolitics(nextState)]) {
+  for (const event of [...advanceDiplomacy(nextState, rng), ...advanceOccasions(nextState, rng), ...maintainSectPolitics(nextState), ...advanceBounties(nextState)]) {
     newEvents.push(event);
     witnessEvent(nextState, event);
   }

@@ -17,6 +17,7 @@ import { RelationshipGraph } from './components/RelationshipGraph';
 import { GodConsole } from './components/GodConsole';
 import { AgentInspector } from './components/AgentInspector';
 import { ChronicleFeed } from './components/ChronicleFeed';
+import { BountyBoard } from './components/BountyBoard';
 
 export const App: React.FC = () => {
   const [world, setWorld] = useState<WorldState>(() => createInitialWorld());
@@ -170,6 +171,7 @@ export const App: React.FC = () => {
             selectedCultivatorId={selectedCultivatorId}
             onSelectCultivator={setSelectedCultivatorId}
           />
+          <BountyBoard world={world} />
           <GodConsole
             world={world}
             selectedCultivatorId={selectedCultivatorId}
