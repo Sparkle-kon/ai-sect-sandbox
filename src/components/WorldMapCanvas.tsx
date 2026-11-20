@@ -6,6 +6,7 @@ import { DIALOGUE_KIND_LABELS } from './DialogueTranscript';
 import { SPIRIT_ROOT_COLORS, SpiritRootBadge } from './SpiritRootBadge';
 import { countHerbs } from './AlchemyPanel';
 import { durabilityOf, equippedArtifact, maxDurabilityOf } from '../engine/artifactEngine';
+import { isActiveTrial, TRIAL_STAGE } from './TribulationPanel';
 
 interface WorldMapCanvasProps {
   world: WorldState;
@@ -24,6 +25,14 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const selectedScheme = selected?.activeScheme;
   const selectedArtifact = selected?.alive ? equippedArtifact(selected) : undefined;
   const selectedLocation = selected && world.locations.find((loc) => loc.id === selected.locationId);
+  const selectedTrial = selected?.tribulation;
+  const trialsByLocation = new Map<string, number>();
+  for (const actor of world.cultivators) {
+    if (actor.alive && isActiveTrial(actor.tribulation)) {
+      trialsByLocation.set(actor.locationId, (trialsByLocation.get(actor.locationId) ?? 0) + 1);
+    }
+  }
+  const selectedSiteTrials = selectedLocation ? trialsByLocation.get(selectedLocation.id) ?? 0 : 0;
   const strongestMemory = selected
     ? [...selected.memories, ...selected.coreMemories].reduce(
         (strongest, entry) => Math.max(strongest, memoryStrength(entry, world.tick)),
@@ -187,6 +196,18 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         const color = sect?.color ?? '#38bdf8';
         const isSelected = cultivator.id === selectedCultivatorId;
 
+        // Static bolt only, so it stays legible without flashing or motion.
+        if (cultivator.tribulation?.stage === 'lightning') {
+          ctx.strokeStyle = '#7dd3fc';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(cx + 27, cy - 23);
+          ctx.lineTo(cx + 21, cy - 13);
+          ctx.lineTo(cx + 29, cy - 13);
+          ctx.lineTo(cx + 22, cy - 3);
+          ctx.stroke();
+        }
+
         if (isSelected) {
           ctx.strokeStyle = '#facc15';
           ctx.lineWidth = 3;
@@ -292,7 +313,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         height={560}
         onClick={handleCanvasClick}
         className="w-full h-auto cursor-pointer block"
-        aria-label="修仙世界地图。选择修士可查看下方识海状态摘要；也可通过识海面板的修士按钮切换。地点灵脉、遗卷与丹道资源见下方列表。"
+        aria-label="修仙世界地图。选择修士可查看下方识海状态摘要；也可通过识海面板的修士按钮切换。雷劫用静态闪电标注；各地渡劫状态可在下方列表查看。"
       />
       <div className="px-4 py-2 border-t border-slate-800/80 bg-slate-900/60 text-[11px] text-slate-400 flex flex-wrap gap-x-4 gap-y-1" aria-label="选中修士记忆摘要">
         {selected ? (
@@ -306,6 +327,9 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
             )}
             {selected.alive && selectedLocation && (
               <>
+                {selectedSiteTrials > 0 && (
+                  <span className="text-sky-300">此地渡劫中 {selectedSiteTrials} 人</span>
+                )}
                 <span className="text-amber-300">此地遗卷 {selectedLocation.inheritanceScrolls.length} 卷</span>
                 <span className="text-emerald-300">
                   此地丹道：{selectedLocation.furnaceGrade > 0 ? `${selectedLocation.furnaceGrade} 阶丹炉` : '无丹炉'} · 灵草 {countHerbs(selectedLocation.herbs)} 株
@@ -318,6 +342,13 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
               </span>
             ) : selected.alive && selected.artifacts.length > 0 && (
               <span className="text-slate-400">未装备法宝</span>
+            )}
+            {selectedTrial && (
+              <span className={TRIAL_STAGE[selectedTrial.stage].color}>
+                渡劫：{selectedTrial.targetRealm} · {TRIAL_STAGE[selectedTrial.stage].label}
+                {selected.alive && selectedTrial.stage === 'lightning' ? ` · 第 ${selectedTrial.nextWave}/${selectedTrial.totalWaves} 道` : ''}
+                {!selected.alive ? ' · 留档' : ''}
+              </span>
             )}
             <span>情景记忆 {selected.memories.length} 条</span>
             <span className="text-violet-300">核心记忆 {selected.coreMemories.length} 条{selected.alive && selected.coreMemories.length > 0 ? " · 紫弧标记" : ""}</span>
@@ -346,12 +377,14 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-2">
           {world.locations.map((location) => {
             const herbCount = countHerbs(location.herbs);
+            const trialCount = trialsByLocation.get(location.id) ?? 0;
             return (
               <li key={location.id} className="inline-flex items-center gap-1.5">
                 <span>{location.name} · 灵脉</span>
                 <SpiritRootBadge root={location.spiritRoot} />
                 <span className="text-slate-400">· 灵气 {location.spiritQi}</span>
                 {location.furnaceGrade > 0 && <span className="text-emerald-300">· {location.furnaceGrade} 阶丹炉</span>}
+                {trialCount > 0 && <span className="text-sky-300">· 渡劫中 {trialCount} 人</span>}
                 {herbCount > 0 && <span className="text-emerald-300">· 灵草 {herbCount} 株</span>}
                 {location.inheritanceScrolls.length > 0 && (
                   <span className="text-amber-300">· 遗卷 {location.inheritanceScrolls.length} 卷</span>

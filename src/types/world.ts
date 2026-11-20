@@ -63,6 +63,8 @@ export type ActionType =
   | 'BIND_ARTIFACT'
   | 'REPAIR_ARTIFACT'
   | 'AWAKEN_ARTIFACT'
+  | 'FACE_TRIBULATION'
+  | 'AMBUSH_TRIBULATION'
   | 'TRADE'
   | 'DUAL_CULTIVATE'
   | 'SECT_DIPLOMACY'
@@ -166,6 +168,22 @@ export interface CultivatorScheme {
   outcome?: string;
 }
 
+export type TribulationStance = 'guard' | 'focus' | 'defy';
+
+export interface TribulationTrial {
+  id: string;
+  targetRealm: CultivationRealm;
+  startedTick: number;
+  stage: 'lightning' | 'heart_demon' | 'passed' | 'failed';
+  nextWave: number;
+  totalWaves: number;
+  pressure: number; // 0–100
+  interruptions: number;
+  resolvedTick?: number;
+  lastOutcome?: string;
+  lastActedTick?: number;
+}
+
 export interface Cultivator {
   id: string;
   name: string;
@@ -200,6 +218,7 @@ export interface Cultivator {
   reflections: CultivatorReflection[];
   rumors: Rumor[];
   activeScheme?: CultivatorScheme;
+  tribulation?: TribulationTrial;
   alive: boolean;
 }
 
@@ -249,6 +268,7 @@ export interface LLMDecisionPayload {
   targetPillId?: PillId;
   targetArtifactId?: string;
   forgeTier?: ArtifactTier;
+  tribulationStance?: TribulationStance;
 }
 
 export interface WorldState {

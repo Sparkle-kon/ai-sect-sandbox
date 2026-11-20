@@ -21,6 +21,7 @@ import { cultivationMultiplier, strikeMultiplier } from './elementalEngine';
 import { authorTechnique, dropInheritance, gainMastery, masteryMultiplier, studyTechnique } from './techniqueEngine';
 import { maintainAlchemy, resolveAlchemy } from './alchemyEngine';
 import { lootStorageRing, resolveArtifactAction, wearArtifact } from './artifactEngine';
+import { interfereTribulation, isTribulationActive, recommendedTribulationStance, resolveTribulation, tribulationTarget, triggerTribulation } from './tribulationEngine';
 
 export type GodInterventionType =
   | 'SPAWN_TREASURE'
@@ -73,12 +74,28 @@ export function adjustRelationship(
   }
 }
 
+function closeInterruptedTrial(actor: Cultivator, tick: number): void {
+  if (actor.tribulation && isTribulationActive(actor)) {
+    actor.tribulation.stage = 'failed';
+    actor.tribulation.resolvedTick = tick;
+    actor.tribulation.lastOutcome = '应劫者已先行陨落，本次天劫中断。';
+  }
+}
+
 export function applyCultivatorBrainDecision(
   world: WorldState,
   cultivator: Cultivator,
   decision: LLMDecisionPayload,
   rng: () => number = Math.random
 ): WorldEvent | null {
+  if (!cultivator.alive) return null;
+  if (isTribulationActive(cultivator)) {
+    const forced = decision.chosenAction !== 'FACE_TRIBULATION';
+    const stance = !forced && decision.tribulationStance ? decision.tribulationStance : recommendedTribulationStance(cultivator);
+    cultivator.currentAction = 'FACE_TRIBULATION';
+    cultivator.innerMonologue = forced ? '天劫未止，无暇旁顾，先守住雷心。' : decision.innerMonologue;
+    return resolveTribulation(world, cultivator, stance, rng);
+  }
   cultivator.innerMonologue = decision.innerMonologue;
   cultivator.currentAction = decision.chosenAction;
 
@@ -86,6 +103,10 @@ export function applyCultivatorBrainDecision(
   const qiFactor = (location?.spiritQi ?? 50) / 50;
 
   switch (decision.chosenAction) {
+    case 'FACE_TRIBULATION':
+      return null; // No active trial remains to face.
+    case 'AMBUSH_TRIBULATION':
+      return interfereTribulation(world, cultivator, decision.targetCultivatorId, rng);
     case 'FORGE_ARTIFACT':
     case 'BIND_ARTIFACT':
     case 'REPAIR_ARTIFACT':
@@ -177,6 +198,8 @@ export function applyCultivatorBrainDecision(
     }
 
     case 'BREAKTHROUGH': {
+      if (tribulationTarget(cultivator)) return triggerTribulation(world, cultivator);
+      if (cultivator.realmStage >= 9 && cultivator.realm === REALM_ORDER.at(-1)) return null;
       const successChance =
         0.55 + (cultivator.karma / 500) + (cultivator.qiProgress >= 95 ? 0.2 : 0);
       if (rng() <= successChance) {
@@ -365,6 +388,7 @@ export function applyCultivatorBrainDecision(
 
       if (loser.hp <= 0) {
         loser.alive = false;
+        closeInterruptedTrial(loser, world.tick);
         dropInheritance(loser, world);
         const loot = lootStorageRing(winner, loser);
         const lootedStones = loot.stones;
@@ -449,6 +473,7 @@ export function advanceWorldTick(
       if (cultivator.age >= cultivator.lifespan) {
         cultivator.alive = false;
         cultivator.hp = 0;
+        closeInterruptedTrial(cultivator, nextState.tick);
         dropInheritance(cultivator, nextState);
         const death: WorldEvent = {
           id: `evt-${nextState.tick}-${cultivator.id}-oldage`,
