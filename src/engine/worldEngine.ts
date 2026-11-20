@@ -18,6 +18,7 @@ import { expireScheme, pursueScheme } from './schemeEngine';
 import { scriptedDialogue } from './dialogueEngine';
 import { resolveEncounter } from './encounterEngine';
 import { cultivationMultiplier, strikeMultiplier } from './elementalEngine';
+import { authorTechnique, dropInheritance, gainMastery, masteryMultiplier, studyTechnique } from './techniqueEngine';
 
 export type GodInterventionType =
   | 'SPAWN_TREASURE'
@@ -83,6 +84,10 @@ export function applyCultivatorBrainDecision(
   const qiFactor = (location?.spiritQi ?? 50) / 50;
 
   switch (decision.chosenAction) {
+    case 'AUTHOR_TECHNIQUE':
+      return authorTechnique(cultivator, world);
+    case 'STUDY_TECHNIQUE':
+      return studyTechnique(cultivator, world, decision.targetTechniqueId);
     case 'PURSUE_SCHEME': {
       return pursueScheme(cultivator, world, decision.proposedScheme, (target) => {
         const result = applyCultivatorBrainDecision(world, cultivator, {
@@ -99,8 +104,9 @@ export function applyCultivatorBrainDecision(
         (target, amount) => adjustRelationship(world, cultivator.id, target.id, amount,
           cultivator.sectId === target.sectId ? '同门' : '竞争'));
     case 'CULTIVATE': {
-      const gain = Math.round((8 + rng() * 10) * qiFactor * cultivationMultiplier(cultivator, location));
+      const gain = Math.round((8 + rng() * 10) * qiFactor * cultivationMultiplier(cultivator, location) * masteryMultiplier(cultivator));
       cultivator.qiProgress = clamp(cultivator.qiProgress + gain, 0, 100);
+      gainMastery(cultivator, 3);
       cultivator.hp = clamp(
         cultivator.hp + Math.round(cultivator.maxHp * 0.08),
         1,
@@ -324,8 +330,8 @@ export function applyCultivatorBrainDecision(
       );
       if (!defender) return null;
 
-      const attackerScore = cultivator.combatPower * (0.85 + rng() * 0.3) * strikeMultiplier(cultivator, defender);
-      const defenderScore = defender.combatPower * (0.85 + rng() * 0.3) * strikeMultiplier(defender, cultivator);
+      const attackerScore = cultivator.combatPower * (0.85 + rng() * 0.3) * strikeMultiplier(cultivator, defender) * masteryMultiplier(cultivator);
+      const defenderScore = defender.combatPower * (0.85 + rng() * 0.3) * strikeMultiplier(defender, cultivator) * masteryMultiplier(defender);
       const winner = attackerScore >= defenderScore ? cultivator : defender;
       const loser = winner.id === cultivator.id ? defender : cultivator;
 
@@ -345,6 +351,7 @@ export function applyCultivatorBrainDecision(
 
       if (loser.hp <= 0) {
         loser.alive = false;
+        dropInheritance(loser, world);
         const lootedStones = loser.spiritStones;
         winner.spiritStones += lootedStones;
         loser.spiritStones = 0;
@@ -432,6 +439,7 @@ export function advanceWorldTick(
       if (cultivator.age >= cultivator.lifespan) {
         cultivator.alive = false;
         cultivator.hp = 0;
+        dropInheritance(cultivator, nextState);
         const death: WorldEvent = {
           id: `evt-${nextState.tick}-${cultivator.id}-oldage`,
           tick: nextState.tick,

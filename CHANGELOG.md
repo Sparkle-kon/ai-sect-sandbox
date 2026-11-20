@@ -1,6 +1,7 @@
 # CHANGELOG.md — Automated Evolution Log
 
 ## [Unreleased]
+- **P2-2:** Practice grows technique mastery; qualified cultivators author original scriptures inspired by their history and deposit copies in sect pavilions. Fallen authors leave recoverable scrolls, with local access enforced in both brains. The Inspector and map show mastery, provenance and inheritance. All 58 deterministic tests, type checking and production build passed.
 - **P2-1:** Cultivators, veins, techniques and artifacts now have typed elemental affinities. Generation, opposition and resonance change cultivation and duel damage, with optimal-site clues for both brains and readable map/Inspector badges. All 51 deterministic tests, type checking and production build passed.
 - **P1-5:** Combat, artifact trade, cooperative cultivation and diplomatic meetings now produce playable consequences and three-turn transcripts. Optional LLM narration preserves speakers and canonical results; the Chronicle exposes expandable dialogue and the map shows the selected cultivator’s latest exchange. All 44 deterministic tests, type checking and production build passed.
 - **P1-4:** Validated, persistent multi-month plans now cover sect infiltration, pill acquisition, vengeance and artifact theft. Steps advance through real travel, spending, combat or transfers, and track interruptions, failure and expiry. Both brains pursue the same state machine; the Inspector and map show progress. All 36 deterministic tests, type checking and production build passed.

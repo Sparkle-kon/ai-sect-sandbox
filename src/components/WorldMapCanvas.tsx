@@ -136,12 +136,19 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       const marker = `〈${loc.spiritRoot}〉`;
       const placeWidth = ctx.measureText(loc.name).width;
       const markerWidth = ctx.measureText(marker).width;
-      const labelStart = loc.x - (placeWidth + markerWidth) / 2;
+      const scrollCount = loc.inheritanceScrolls.length;
+      const scrollMarker = scrollCount > 0 ? ` 遗卷×${scrollCount}` : '';
+      const scrollWidth = ctx.measureText(scrollMarker).width;
+      const labelStart = loc.x - (placeWidth + markerWidth + scrollWidth) / 2;
       ctx.textAlign = 'left';
       ctx.fillStyle = '#e2e8f0';
       ctx.fillText(loc.name, labelStart, loc.y - 26);
       ctx.fillStyle = SPIRIT_ROOT_COLORS[loc.spiritRoot];
       ctx.fillText(marker, labelStart + placeWidth, loc.y - 26);
+      if (scrollMarker) {
+        ctx.fillStyle = '#fcd34d';
+        ctx.fillText(scrollMarker, labelStart + placeWidth + markerWidth, loc.y - 26);
+      }
 
       ctx.textAlign = 'center';
       ctx.fillStyle = '#94a3b8';
@@ -276,7 +283,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         height={560}
         onClick={handleCanvasClick}
         className="w-full h-auto cursor-pointer block"
-        aria-label="修仙世界地图。选择修士可查看下方识海状态摘要；也可通过识海面板的修士按钮切换。地点灵脉属性见下方列表。"
+        aria-label="修仙世界地图。选择修士可查看下方识海状态摘要；也可通过识海面板的修士按钮切换。地点灵脉属性与遗卷数量见下方列表。"
       />
       <div className="px-4 py-2 border-t border-slate-800/80 bg-slate-900/60 text-[11px] text-slate-400 flex flex-wrap gap-x-4 gap-y-1" aria-label="选中修士记忆摘要">
         {selected ? (
@@ -287,6 +294,9 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
               <span className="inline-flex items-center gap-1">
                 {selectedLocation.name} · 灵脉 <SpiritRootBadge root={selectedLocation.spiritRoot} />
               </span>
+            )}
+            {selected.alive && selectedLocation && (
+              <span className="text-amber-300">此地遗卷 {selectedLocation.inheritanceScrolls.length} 卷</span>
             )}
             <span>情景记忆 {selected.memories.length} 条</span>
             <span className="text-violet-300">核心记忆 {selected.coreMemories.length} 条{selected.alive && selected.coreMemories.length > 0 ? " · 紫弧标记" : ""}</span>
@@ -318,6 +328,9 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
               <span>{location.name} · 灵脉</span>
               <SpiritRootBadge root={location.spiritRoot} />
               <span className="text-slate-400">· 灵气 {location.spiritQi}</span>
+              {location.inheritanceScrolls.length > 0 && (
+                <span className="text-amber-300">· 遗卷 {location.inheritanceScrolls.length} 卷</span>
+              )}
             </li>
           ))}
         </ul>

@@ -1,6 +1,9 @@
 export type SpiritRoot = '金' | '木' | '水' | '火' | '土' | '雷' | '暗' | '天灵根';
 
 export interface Technique {
+  id?: string;
+  authorId?: string;
+  createdTick?: number;
   name: string;
   spiritRoot: SpiritRoot;
 }
@@ -39,6 +42,8 @@ export type ActionType =
   | 'DUEL'
   | 'SCHEMING'
   | 'PURSUE_SCHEME'
+  | 'AUTHOR_TECHNIQUE'
+  | 'STUDY_TECHNIQUE'
   | 'TRADE'
   | 'DUAL_CULTIVATE'
   | 'SECT_DIPLOMACY'
@@ -88,6 +93,7 @@ export interface LocationNode {
   spiritRoot: SpiritRoot;
   spiritQi: number; // 10 to 100
   ownerSectId?: string;
+  inheritanceScrolls: Technique[];
   description: string;
 }
 
@@ -100,6 +106,7 @@ export interface Sect {
   reputation: number;
   spiritStones: number;
   headquartersId: string;
+  pavilion: Technique[];
 }
 
 export interface Rumor {
@@ -159,6 +166,8 @@ export interface Cultivator {
   secretGoal: string;
   spiritRoot: SpiritRoot;
   technique: Technique;
+  techniqueMastery: number;
+  authoredTechnique?: Technique;
   artifacts: Artifact[];
   memories: MemoryEntry[];
   coreMemories: MemoryEntry[];
@@ -210,6 +219,7 @@ export interface LLMDecisionPayload {
   spokenLine?: string;
   rumorIntent?: 'FABRICATE' | 'EXAGGERATE';
   proposedScheme?: SchemeKind;
+  targetTechniqueId?: string;
 }
 
 export interface WorldState {

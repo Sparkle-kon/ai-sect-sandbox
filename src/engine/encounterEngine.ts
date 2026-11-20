@@ -1,6 +1,7 @@
 import type { Cultivator, LLMDecisionPayload, WorldEvent, WorldState } from '../types/world';
 import { scriptedDialogue } from './dialogueEngine';
 import { recordMemory } from './memoryEngine';
+import { gainMastery } from './techniqueEngine';
 
 type EncounterAction = 'TRADE' | 'DUAL_CULTIVATE' | 'SECT_DIPLOMACY';
 export const ARTIFACT_TRADE_PRICE = 120;
@@ -62,6 +63,8 @@ export function resolveEncounter(
     case 'DUAL_CULTIVATE':
       actor.qiProgress = Math.min(100, actor.qiProgress + 12);
       target.qiProgress = Math.min(100, target.qiProgress + 12);
+      gainMastery(actor, 2);
+      gainMastery(target, 2);
       adjust(target, 4);
       kind = 'dual_cultivation';
       title = `合修周天：${actor.name}与${target.name}`;

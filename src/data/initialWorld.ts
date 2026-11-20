@@ -53,6 +53,7 @@ export function createInitialWorld(): WorldState {
         reputation: 85,
         spiritStones: 5000,
         headquartersId: 'loc-taixu',
+        pavilion: [],
       },
       {
         id: 'sect-bloodmoon',
@@ -63,6 +64,7 @@ export function createInitialWorld(): WorldState {
         reputation: -70,
         spiritStones: 4600,
         headquartersId: 'loc-blood',
+        pavilion: [],
       },
       {
         id: 'sect-danxia',
@@ -73,6 +75,7 @@ export function createInitialWorld(): WorldState {
         reputation: 50,
         spiritStones: 8200,
         headquartersId: 'loc-danxia',
+        pavilion: [],
       },
       {
         id: 'sect-tianji',
@@ -83,6 +86,7 @@ export function createInitialWorld(): WorldState {
         reputation: 60,
         spiritStones: 6400,
         headquartersId: 'loc-tianji',
+        pavilion: [],
       },
     ],
     locations: [
@@ -94,6 +98,7 @@ export function createInitialWorld(): WorldState {
         type: 'sect_hq',
         spiritRoot: '金',
         spiritQi: 85,
+        inheritanceScrolls: [],
         ownerSectId: 'sect-qingyun',
         description: '万剑归宗之地，云海翻腾，浩然剑气直冲霄汉。',
       },
@@ -105,6 +110,7 @@ export function createInitialWorld(): WorldState {
         type: 'abyss',
         spiritRoot: '暗',
         spiritQi: 80,
+        inheritanceScrolls: [],
         ownerSectId: 'sect-bloodmoon',
         description: '终年血雾弥漫，阴煞之气浓郁，白骨累累。',
       },
@@ -116,6 +122,7 @@ export function createInitialWorld(): WorldState {
         type: 'sect_hq',
         spiritRoot: '木',
         spiritQi: 78,
+        inheritanceScrolls: [],
         ownerSectId: 'sect-danxia',
         description: '奇花异草遍地，丹香四溢的世外桃源。',
       },
@@ -127,6 +134,7 @@ export function createInitialWorld(): WorldState {
         type: 'sect_hq',
         spiritRoot: '天灵根',
         spiritQi: 82,
+        inheritanceScrolls: [],
         ownerSectId: 'sect-tianji',
         description: '悬空浮岛，星辰之力汇聚，可窥探天机因果。',
       },
@@ -138,6 +146,7 @@ export function createInitialWorld(): WorldState {
         type: 'secret_realm',
         spiritRoot: '雷',
         spiritQi: 98,
+        inheritanceScrolls: [],
         description: '沙盒中央的上古战场遗迹，机缘与杀机并存。',
       },
       {
@@ -148,6 +157,7 @@ export function createInitialWorld(): WorldState {
         type: 'market',
         spiritRoot: '土',
         spiritQi: 45,
+        inheritanceScrolls: [],
         description: '正魔两道默认的交易之所，暗流涌动。',
       },
       {
@@ -158,6 +168,7 @@ export function createInitialWorld(): WorldState {
         type: 'spirit_vein',
         spiritRoot: '水',
         spiritQi: 90,
+        inheritanceScrolls: [],
         description: '孕育极品冰系灵石的野生灵脉，常有修士争夺。',
       },
     ],
@@ -184,6 +195,7 @@ export function createInitialWorld(): WorldState {
         secretGoal: '剿灭血月魔宗，夺回太虚古剑残片',
         spiritRoot: '金',
         technique: { name: '太虚御剑经', spiritRoot: '金' },
+        techniqueMastery: 25,
         artifacts: [{ name: '太虚青莲剑', spiritRoot: '金' }, { name: '九霄护心镜', spiritRoot: '雷' }],
         memories: [
           {
@@ -224,6 +236,7 @@ export function createInitialWorld(): WorldState {
         secretGoal: '百年内凝结元婴，成为天下第一剑修',
         spiritRoot: '水',
         technique: { name: '寒潮剑诀', spiritRoot: '水' },
+        techniqueMastery: 25,
         artifacts: [{ name: '霜华飞剑', spiritRoot: '水' }],
         memories: [
           {
@@ -264,6 +277,7 @@ export function createInitialWorld(): WorldState {
         secretGoal: '献祭十名金丹修士，炼成万魂血幡',
         spiritRoot: '暗',
         technique: { name: '血月观想法', spiritRoot: '暗' },
+        techniqueMastery: 25,
         artifacts: [{ name: '万魂血幡', spiritRoot: '暗' }, { name: '白骨魔珠', spiritRoot: '土' }],
         memories: [
           {
@@ -304,6 +318,7 @@ export function createInitialWorld(): WorldState {
         secretGoal: '暗中积蓄力量，趁厉苍天渡劫时反噬夺位',
         spiritRoot: '火',
         technique: { name: '浮屠燃心诀', spiritRoot: '火' },
+        techniqueMastery: 25,
         artifacts: [{ name: '天魔合欢铃', spiritRoot: '火' }, { name: '隐匿血衣', spiritRoot: '暗' }],
         memories: [
           {
@@ -344,6 +359,7 @@ export function createInitialWorld(): WorldState {
         secretGoal: '炼出传说中的九转渡劫金丹，长生久视',
         spiritRoot: '木',
         technique: { name: '百草回春经', spiritRoot: '木' },
+        techniqueMastery: 25,
         artifacts: [{ name: '乾坤八卦炉', spiritRoot: '火' }, { name: '百草木灵鼎', spiritRoot: '木' }],
         memories: [
           {
@@ -384,6 +400,7 @@ export function createInitialWorld(): WorldState {
         secretGoal: '低调攒齐底牌，苟到渡劫飞升',
         spiritRoot: '土',
         technique: { name: '厚土遁形诀', spiritRoot: '土' },
+        techniqueMastery: 25,
         artifacts: [{ name: '青竹蜂云剑', spiritRoot: '木' }, { name: '神行遁甲符', spiritRoot: '土' }],
         memories: [
           {
@@ -424,6 +441,7 @@ export function createInitialWorld(): WorldState {
         secretGoal: '推演天机榜，掌控四大宗门的气运走向',
         spiritRoot: '雷',
         technique: { name: '天枢引雷法', spiritRoot: '雷' },
+        techniqueMastery: 25,
         artifacts: [{ name: '河图洛书盘', spiritRoot: '水' }, { name: '星辰罗盘', spiritRoot: '雷' }],
         memories: [
           {
@@ -464,6 +482,7 @@ export function createInitialWorld(): WorldState {
         secretGoal: '护佑挚友苏清寒渡过金丹破婴之劫',
         spiritRoot: '天灵根',
         technique: { name: '九霄回响诀', spiritRoot: '天灵根' },
+        techniqueMastery: 25,
         artifacts: [{ name: '九霄环佩琴', spiritRoot: '天灵根' }],
         memories: [
           {
