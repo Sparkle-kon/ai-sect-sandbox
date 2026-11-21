@@ -12,6 +12,7 @@ export default defineConfig({
           'react-runtime': ['react', 'react-dom', 'react-dom/client', 'react/jsx-runtime'],
           'interface-icons': ['lucide-react'],
           'resource-journal': ['./src/engine/resourceFlowEngine.ts'],
+          'scripture-circulation': ['./src/engine/pavilionLoanEngine.ts','./src/engine/scriptureEngine.ts','./src/engine/techniqueEngine.ts'],
           'village-supply-rules': ['./src/engine/villageGranaryEngine.ts', './src/engine/villageSupplyAccounting.ts',
             './src/engine/villageSupplyEngine.ts'],
           'agreement-rules': ['./src/engine/oathEngine.ts', './src/engine/oathArbitrationEngine.ts'],

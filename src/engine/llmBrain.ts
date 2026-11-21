@@ -38,6 +38,7 @@ import { activeCeasefireBetween, availableCeasefireActions } from './ceasefireEn
 import { activeEscortForActor, availableEscortActions } from './escortEngine';
 import { availableCompetitionActions, competitionActorOptedOut } from './competitionEngine';
 import { availableScriptureActions, scriptureEditionModifiers } from './scriptureEngine';
+import { availablePavilionLoanActions } from './pavilionLoanEngine';
 import { availableRelicActions } from './relicEngine';
 import { availableRecollectionActions, visibleRecollection } from './reincarnationEngine';
 import { activeRelocationForActor, availableRelocationActions } from './relocationEngine';
@@ -288,6 +289,19 @@ export function computeHeuristicDecision(
     const leave = !canTrain ? lessons.find(({ cohortMove }) => cohortMove === 'leave') : undefined;
     if (leave) return { ...leave, chosenAction: leave.action, innerMonologue: '伤势不宜练习，先按约自愿退出。' };
   }
+  const hasLoanPavilion = world.sects.some(({ headquartersId, facilities }) =>
+    headquartersId === cultivator.locationId && facilities.scripture_pavilion > 0);
+  const openPersonalLoan = world.pavilionLoans.loans.some(({ borrowerId, returned }) => borrowerId === cultivator.id && !returned);
+  const localReference = hasLoanPavilion && (world.pavilionLoans.copies.some(({ siteId }) => siteId === cultivator.locationId) ||
+    world.scriptures.editions.some(({ kind, evidence }) => kind === 'corrected' && evidence?.locationId === cultivator.locationId));
+  const pavilionLoans = openPersonalLoan || localReference ? availablePavilionLoanActions(cultivator, world) : [];
+  const reading = pavilionLoans.find(({ pavilionLoanMove }) => pavilionLoanMove === 'read');
+  if (reading) return { chosenAction: 'PAVILION_LOAN', pavilionLoanMove: 'read', targetPavilionLoanId: reading.targetPavilionLoanId,
+    innerMonologue: '只读实借的校订本，所得以真实研读凭据为准。' };
+  const returnBook = pavilionLoans.find(({ pavilionLoanMove }) => pavilionLoanMove === 'return');
+  if (returnBook) return { chosenAction: 'PAVILION_LOAN', pavilionLoanMove: 'return', targetPavilionLoanId: returnBook.targetPavilionLoanId,
+    innerMonologue: '已到原藏经阁，当面将同一册还给当值人。' };
+
   const observe = surveyOptions.find(({ observatoryMove }) => observatoryMove === 'relay') ??
     (mayFundWeather ? surveyOptions.find(({ observatoryMove }) => observatoryMove === 'fund') : undefined);
   if (observe) return { ...observe, chosenAction: 'FIELD_OBSERVATORY', innerMonologue: '只记录到场实测；推测另记，转给同伴的仍是当时旧读数。' };
@@ -668,6 +682,25 @@ export function computeHeuristicDecision(
   if (beastChoice && (cultivator.personality === '逍遥' || cultivator.personality === '刚正' || world.tick % 4 === 2)) {
     return { ...beastChoice, chosenAction: 'TAME_BEAST', innerMonologue: '且以灵草示意，不强迫它相从。' };
   }
+  if (pavilionLoans.length && cultivator.hp >= cultivator.maxHp * .75 && !cultivator.guardAssignment) {
+    const stage = (world.tick + cultivator.id.charCodeAt(cultivator.id.length - 1)) % 6;
+    const shelving = pavilionLoans.filter(({ pavilionLoanMove }) => pavilionLoanMove === 'shelve');
+    if (shelving.length === 1) return {
+      chosenAction: 'PAVILION_LOAN', pavilionLoanMove: 'shelve', targetScriptureEditionId: shelving[0].targetScriptureEditionId,
+      innerMonologue: '把已有真本校订册入架，不另抄一册。',
+    };
+    const checkout = pavilionLoans.filter((option) => option.pavilionLoanMove === 'checkout' &&
+      !world.pavilionLoans.loans.some(({ borrowerId, editionId }) =>
+        borrowerId === cultivator.id && editionId === option.targetScriptureEditionId));
+    if (checkout.length === 1) return {
+      chosenAction: 'PAVILION_LOAN', pavilionLoanMove: 'checkout', targetScriptureEditionId: checkout[0].targetScriptureEditionId,
+      innerMonologue: '请实在值守的人当面出借，并记住须归原阁。',
+    };
+    if ((stage === 0 || stage === 3) && pavilionLoans.some(({ pavilionLoanMove }) => pavilionLoanMove === 'staff')) return {
+      chosenAction: 'PAVILION_LOAN', pavilionLoanMove: 'staff', innerMonologue: '亲自在此值阁，借还不以本人名义替读者签。',
+    };
+  }
+
   if (mayAuthorTechnique(cultivator)) {
     return { chosenAction: 'AUTHOR_TECHNIQUE', innerMonologue: '历练已有所得，是时候将所悟写成自己的法诀。' };
   }
@@ -1142,6 +1175,9 @@ export async function requestCultivatorLLMDecision(
   const escortOptions = availableEscortActions(cultivator, world);
   const competitionOptions = availableCompetitionActions(cultivator, world);
   const scriptureOptions = availableScriptureActions(cultivator, world);
+  const pavilionLoanOptions = availablePavilionLoanActions(cultivator, world, requestTick)
+    .map(({ pavilionLoanMove, targetScriptureEditionId, targetPavilionLoanId }) =>
+      ({ pavilionLoanMove, targetScriptureEditionId, targetPavilionLoanId }));
   const currentEdition = scriptureEditionModifiers(cultivator);
   const relicOptions = availableRelicActions(cultivator, world, requestTick);
   const recollectionOptions = availableRecollectionActions(cultivator, world);
@@ -1212,6 +1248,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 商队护送只能选择已列的合法委托、接镖或可复核报险，货款不当作镖资：${JSON.stringify(escortOptions)}
 - 公开赛季只计列出的结果，不许以私下谋划计分。已保存的退出偏好：${competitionActorOptedOut(world, cultivator.id) ? '继续保留，只有自己明确改变心意才在未来赛季重报' : '无'}；本回合可选：${JSON.stringify(competitionOptions)}
 - 功法版本对当前行气和实战的独立倍率（1 为无额外效果）：${JSON.stringify(currentEdition)}；当地可行的校勘与版本选项：${JSON.stringify(scriptureOptions)}
+- 藏经借阅仅复制本地合法许可：staff 无编号；shelve、checkout 只填校订本 targetScriptureEditionId；read、return 只填本人借阅的 targetPavilionLoanId。不可填他人身份、私札、日期、奖励或传送；借、读、还都是独立实做：${JSON.stringify(pavilionLoanOptions)}
 - 古器可用行动（仅限当前位置可见碎片或实有两部件和已核验炉火）：${JSON.stringify(relicOptions)}
 - 自身残响仅为未证实的主观感受，不提供事件、前人或地点事实：${JSON.stringify(ownEcho ? { theme: ownEcho.theme, confidence: ownEcho.confidence, status: ownEcho.status } : null)}；可选的审视方式：${JSON.stringify(recollectionOptions)}
 - 迁宗议约可用选项（只能按列出的地点或动议选择）：${JSON.stringify(relocationOptions)}
@@ -1338,6 +1375,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'RECOLLECT',
             'RELIC',
             'SCRIPTURE',
+            'PAVILION_LOAN',
             'RANK_SEASON',
             'ESCORT',
             'CEASEFIRE',
@@ -1574,6 +1612,15 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
           if (chosenAction === 'RANK_SEASON' && (!legalCompetition ||
               parsed.targetCultivatorId !== undefined || parsed.targetLocationId !== undefined)) return undefined;
 
+          const legalPavilionLoan = chosenAction === 'PAVILION_LOAN' ? pavilionLoanOptions.find((item) =>
+            item.pavilionLoanMove === parsed.pavilionLoanMove && item.targetScriptureEditionId === parsed.targetScriptureEditionId &&
+            item.targetPavilionLoanId === parsed.targetPavilionLoanId) : undefined;
+          if (chosenAction === 'PAVILION_LOAN' && (!legalPavilionLoan || Object.keys(parsed).some((field) =>
+            !['chosenAction', 'innerMonologue', 'pavilionLoanMove',
+              ...(legalPavilionLoan.pavilionLoanMove === 'shelve' || legalPavilionLoan.pavilionLoanMove === 'checkout'
+                ? ['targetScriptureEditionId'] : legalPavilionLoan.pavilionLoanMove === 'read' || legalPavilionLoan.pavilionLoanMove === 'return'
+                ? ['targetPavilionLoanId'] : [])].includes(field)))) return undefined;
+
           const legalScripture = chosenAction === 'SCRIPTURE' ? scriptureOptions.find((item) =>
             item.editionMove === parsed.editionMove && item.targetScriptureOriginalId === parsed.targetScriptureOriginalId &&
             item.targetScriptureEditionId === parsed.targetScriptureEditionId) : undefined;
@@ -1802,7 +1849,9 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             seasonMove: legalCompetition?.seasonMove,
             editionMove: legalScripture?.editionMove,
             targetScriptureOriginalId: legalScripture?.targetScriptureOriginalId,
-            targetScriptureEditionId: legalScripture?.targetScriptureEditionId,
+            targetScriptureEditionId: legalPavilionLoan?.targetScriptureEditionId ?? legalScripture?.targetScriptureEditionId,
+            pavilionLoanMove: legalPavilionLoan?.pavilionLoanMove,
+            targetPavilionLoanId: legalPavilionLoan?.targetPavilionLoanId,
             relicMove: legalRelic?.relicMove,
             targetRelicFragmentId: legalRelic?.targetRelicFragmentId,
             targetRelicSetId: legalRelic?.targetRelicSetId,

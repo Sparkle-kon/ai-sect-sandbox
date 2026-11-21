@@ -230,7 +230,7 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
       {profile && <SpiritBeastPanel world={world} cultivator={cultivator} location={location} beasts={world.spiritBeasts ?? []} />}
       {cultivation && <>
       <TribulationPanel cultivator={cultivator} />
-      <TechniquePanel cultivator={cultivator} sect={sect} location={location} cultivators={world.cultivators} />
+      <TechniquePanel world={world} cultivator={cultivator} sect={sect} location={location} cultivators={world.cultivators} />
       {scriptureCatalog?.original && <React.Suspense fallback={<p role="status" className="text-xs text-slate-400">载入经义校勘…</p>}>
         <ScriptureEditionPanel world={world} actor={cultivator} catalog={scriptureCatalog} />
       </React.Suspense>}

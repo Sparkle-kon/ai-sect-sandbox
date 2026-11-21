@@ -1,7 +1,9 @@
-import type { Cultivator, LocationNode, Sect, Technique } from '../types/world';
+import type { Cultivator, LocationNode, Sect, Technique, WorldState } from '../types/world';
 import { SpiritRootBadge } from './SpiritRootBadge';
+import { ScriptureLendingPanel } from './ScriptureLendingPanel';
 
 interface TechniquePanelProps {
+  world?: WorldState;
   cultivator: Cultivator;
   sect: Sect | undefined;
   location: LocationNode | undefined;
@@ -43,7 +45,7 @@ function TechniqueList({
   );
 }
 
-export function TechniquePanel({ cultivator, sect, location, cultivators }: TechniquePanelProps) {
+export function TechniquePanel({ world, cultivator, sect, location, cultivators }: TechniquePanelProps) {
   const names = new Map(cultivators.map(({ id, name }) => [id, name]));
   const presentLocation = cultivator.alive ? location : undefined;
   return (
@@ -59,6 +61,7 @@ export function TechniquePanel({ cultivator, sect, location, cultivators }: Tech
       ) : (
         <p className="text-[11px] text-slate-400">此修士未加入宗门，无本宗藏经阁。</p>
       )}
+      {world && <ScriptureLendingPanel world={world} cultivator={cultivator} />}
       {presentLocation ? (
         <TechniqueList label={`${presentLocation.name}遗卷`} books={presentLocation.inheritanceScrolls} empty="此地暂无传承遗卷。" names={names} />
       ) : (

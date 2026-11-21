@@ -104,7 +104,11 @@ export function availableScriptureActions(actor: Cultivator, world: WorldState):
   const canCorrect = actor.techniqueMastery >= SCRIPTURE_CORRECTION_MASTERY && actor.spiritStones >= SCRIPTURE_CORRECTION_COST &&
     Boolean(accessibleCanonicalCopy(world, actor, original));
   for (const edition of editions) {
-    if (actor.activeEdition?.editionId !== edition.id) {
+    // A loan reserves the single circulated physical copy, not an author's own knowledge or already active reading.
+    const actualCustody = world.pavilionLoans.copies.some((row) => row.editionId === edition.id) ?
+      world.pavilionLoans.loans.find((row) => row.editionId === edition.id && !row.returned) : undefined;
+    const mayReadLocalCopy = !actualCustody || edition.authorId === actor.id || actualCustody.borrowerId === actor.id;
+    if (mayReadLocalCopy && actor.activeEdition?.editionId !== edition.id) {
       result.push({ action: 'SCRIPTURE', editionMove: 'adopt', targetScriptureEditionId: edition.id });
     }
     if (canCorrect && edition.kind === 'misread' &&

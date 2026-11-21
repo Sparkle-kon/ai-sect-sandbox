@@ -42,6 +42,7 @@ import { availableFurnaceSlotSummary } from '../engine/furnaceReservationEngine'
 import { visibleVillageSupplyCheckpoints } from '../engine/villageSupplyEngine';
 import { drawVillageSupplyCheckpoints } from './villageSupplyMapDraw';
 import { visiblePublicRouteWarnings } from '../engine/routeWarningEngine';
+import { projectLocalPavilionDesk } from '../engine/pavilionLoanEngine';
 import { drawRouteWarningMarks,paintedRouteWarningGeometry } from './routeWarningMapDraw';
 import { getCurrentBoundaryCoverage } from '../engine/boundaryReliefEngine';
 import { currentVisibleTileIds, terrainTileAt } from '../engine/terrainEngine';
@@ -162,6 +163,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     (row.hostId === selected.id || row.workerId === selected.id)) : undefined;
   const furnaceShift = useMemo(() => selected
     ? availableFurnaceSlotSummary(world, selected, selected.locationId) : undefined, [world, selected]);
+  const localPavilionDesk=useMemo(()=>projectLocalPavilionDesk(world,selected),[world,selected]);
   const ownCurrentFurnaceRecovery = useMemo(() => furnaceShift && selected && world.artifactSalvages.receipts.some((receipt) =>
     receipt.ownerId === selected.id && receipt.siteId === selected.locationId && receipt.tick === world.tick) ?
     selected.locationId : undefined, [world.tick,world.artifactSalvages,furnaceShift,selected]);
@@ -562,7 +564,10 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         const guardCount = guardsByLocation.get(loc.id) ?? 0;
         const guardMarker = guardCount > 0 ? ` 卫${guardCount}` : '';
         const guardWidth = ctx.measureText(guardMarker).width;
-        const labelStart = loc.x - (placeWidth + markerWidth + scrollWidth + furnaceWidth + guardWidth) / 2;
+        const pavilionMarker = localPavilionDesk?.siteId===loc.id && isCurrentLocation(loc.id) &&
+          (localPavilionDesk.staffed || localPavilionDesk.heldCopies>0 || localPavilionDesk.availableCopies>0) ? ' 经' : '';
+        const pavilionWidth=ctx.measureText(pavilionMarker).width;
+        const labelStart = loc.x - (placeWidth + markerWidth + scrollWidth + furnaceWidth + guardWidth + pavilionWidth) / 2;
         ctx.textAlign = 'left';
         ctx.fillStyle = '#e2e8f0';
         ctx.fillText(loc.name, labelStart, loc.y - 26);
@@ -580,6 +585,10 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         if (guardMarker) {
           ctx.fillStyle = '#a5b4fc';
           ctx.fillText(guardMarker, labelStart + placeWidth + markerWidth + scrollWidth + furnaceWidth, loc.y - 26);
+        }
+        if(pavilionMarker) {
+          ctx.fillStyle='#fde68a';
+          ctx.fillText(pavilionMarker,labelStart+placeWidth+markerWidth+scrollWidth+furnaceWidth+guardWidth,loc.y-26);
         }
         if (occasionsByLocation.has(loc.id)) {
           ctx.font = 'bold 11px sans-serif';
@@ -786,7 +795,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener('change', stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, observedSalvageSites, localGranary, furnaceShift, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, observedSalvageSites, localGranary, furnaceShift, localPavilionDesk, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1274,6 +1283,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                 {fog && (visibleActorsAtSite.get(location.id) ?? 0) > 0 &&
                   <span className="text-slate-300">· 可见修士 {visibleActorsAtSite.get(location.id)} 位（山河索引可查）</span>}
                 {location.furnaceGrade > 0 && <span className="text-emerald-300">· {location.furnaceGrade} 阶丹炉</span>}
+                {location.id===localPavilionDesk?.siteId && isCurrentLocation(location.id) &&
+                  <span className="text-amber-200">· 藏经阁{localPavilionDesk.staffed?'本轮有值守':'本轮未见值守'}，在架 {localPavilionDesk.availableCopies} 册、持有未归 {localPavilionDesk.heldCopies} 册</span>}
                 {location.id === locallyObservedWorkshopClosure?.originId &&
                   <span className="text-amber-200">· 此处旧工坊曾撤并，旧委托未转址</span>}
                 {location.id === ownPracticeSite && isCurrentLocation(location.id) &&

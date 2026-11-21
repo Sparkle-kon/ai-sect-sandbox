@@ -15,6 +15,7 @@ import { advanceApprenticeCohorts, recordCohortPractice, resolveApprenticeCohort
 import { advanceHouseholdNames, resolveHouseholdNameAction } from './householdNameEngine';
 import { resolveVillageGranaryAction } from './villageGranaryEngine';
 import { advanceVillageSupply, resolveVillageSupplyAction } from './villageSupplyEngine';
+import { resolvePavilionLoanAction } from './pavilionLoanEngine';
 import { advanceRouteWarnings,availableRouteWarningActions,resolveRouteWarningAction } from './routeWarningEngine';
 import { resolveCaravanRestitutionAction } from './caravanRestitutionEngine';
 import { boundaryReliefCheckpoint } from './boundaryReliefCheckpoint';
@@ -290,6 +291,8 @@ export function applyCultivatorBrainDecision(
       return resolveApprenticeCohortAction(world, cultivator, decision);
     case 'HOUSEHOLD_NAME':
       return resolveHouseholdNameAction(world, cultivator, decision);
+    case 'PAVILION_LOAN':
+      return resolvePavilionLoanAction(world, cultivator, decision);
     case 'ROUTE_WARNING':
       return resolveRouteWarningAction(world, cultivator, decision);
     case 'VILLAGE_SUPPLY':

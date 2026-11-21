@@ -148,6 +148,7 @@ export type ActionType =
   | 'VILLAGE_GRANARY'
   | 'VILLAGE_SUPPLY'
   | 'ROUTE_WARNING'
+  | 'PAVILION_LOAN'
   | 'FORGE_ARTIFACT'
   | 'BIND_ARTIFACT'
   | 'REPAIR_ARTIFACT'
@@ -548,6 +549,8 @@ export interface LLMDecisionPayload {
   granaryMove?: VillageGranaryMove;
   villageSupplyMove?: VillageSupplyMove;
   routeWarningMove?: RouteWarningMove;
+  pavilionLoanMove?: PavilionLoanMove;
+  targetPavilionLoanId?: string;
   targetRouteObservationId?: string;
   targetRouteWarningId?: string;
   targetVillageSupplyId?: string;
@@ -723,6 +726,44 @@ export interface RouteWarningNotice {
   observation:RouteWarningObservation;
   corroboration?:{tick:number;observation:RouteWarningObservation};
 }
+export type PavilionLoanMove = 'staff'|'shelve'|'checkout'|'read'|'return';
+export interface PavilionCopy {
+  editionId:string;
+  originalId:string;
+  sectId:string;
+  siteId:string;
+  shelvedTick:number;
+  shelvedById:string;
+  shelvingShiftId:string;
+}
+export interface PavilionStaffShift {
+  id:string;
+  actorId:string;
+  sectId:string;
+  siteId:string;
+  signedTick:number;
+  startsTick:number;
+  endsTick:number;
+  lastServedTick?:number;
+}
+export interface PavilionLoan {
+  id:string;
+  editionId:string;
+  borrowerId:string;
+  checkoutTick:number;
+  dueTick:number;
+  checkoutShiftId:string;
+  read?:{tick:number;siteId:string;masteryBefore:number;masteryAfter:number;credited:boolean};
+  returned?:{tick:number;shiftId:string};
+}
+export interface PavilionLoansState {
+  copies:PavilionCopy[];
+  shifts:PavilionStaffShift[];
+  loans:PavilionLoan[];
+  nextLoanId:number;
+  nextShiftId:number;
+}
+
 export interface RouteWarningsState {
   nextId:number;
   nextObservationId:number;
@@ -2675,6 +2716,7 @@ export interface WorldState {
   villageGranaries: VillageGranariesState;
   villageSupply: VillageSupplyState;
   routeWarnings: RouteWarningsState;
+  pavilionLoans: PavilionLoansState;
   resourceFlow: ResourceFlowState;
   roads: RoadState;
   sharedCommons: SharedCommonsState;
