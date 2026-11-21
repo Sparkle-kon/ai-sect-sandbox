@@ -31,7 +31,7 @@ import { CHRONICLE_ERRATA_MAX_RETELLINGS, CHRONICLE_ERRATA_WINDOW, createChronic
 import { CAUSAL_CHRONICLE_MAX_NODES, CAUSAL_CHRONICLE_MAX_PREDECESSORS, causalChronicleOutcomeCompatible,
   causalPredecessorCompatible, createCausalChronicleState } from './chronicleCausalityEngine';
 import { terrainTileAt } from './terrainEngine';
-import { createPilgrimageState, PILGRIMAGE_ACTIVE_TICKS, PILGRIMAGE_LEG_COST, PILGRIMAGE_OFFER_TICKS, PILGRIMAGE_RELIEF_HP, PILGRIMAGE_TILE_STRIDE } from './pilgrimageEngine';
+import { createPilgrimageState, PILGRIMAGE_ACTIVE_TICKS, PILGRIMAGE_CAMP_RECOVERY_HP, PILGRIMAGE_LEG_COST, PILGRIMAGE_OFFER_TICKS, PILGRIMAGE_RELIEF_HP, PILGRIMAGE_TILE_STRIDE } from './pilgrimageEngine';
 import { createSectCreditState, SECT_CREDIT_COLLECTION_TICKS, SECT_CREDIT_OFFER_TICKS,
   SECT_CREDIT_PAYMENT_MAX, SECT_CREDIT_PRINCIPAL, SECT_CREDIT_TERM_TICKS } from './sectCreditEngine';
 import { createSanctuaryState, SANCTUARY_BLOCK_HP, SANCTUARY_CHARTER_TICKS, SANCTUARY_FOUND_COST,
@@ -363,7 +363,7 @@ const shape = structure({
     tick,year:tick,month,totalEntries:num(0,Number.MAX_SAFE_INTEGER,true),
     totals:arr(9,structure({good:flowGood,transfer:flowMeasure,production:flowMeasure,consumption:flowMeasure,loss:flowMeasure})),
     entries:arr(RESOURCE_FLOW_DETAIL_LIMIT,structure({
-      id:flowSerial,tick,mechanism:one('alchemy','market','sect_economy','oath','commons','relocation','terrain','workshop','road','observatory'),
+      id:flowSerial,tick,mechanism:one('alchemy','market','sect_economy','oath','commons','relocation','terrain','workshop','road','observatory','pilgrimage'),
       refId:id,reason:strings(40,1),good:flowGood,amount:flowMeasure,visibility:flowScope,
       kind:one('transfer','production','consumption','loss'),from:optional(flowAccount),to:optional(flowAccount)
     }))
@@ -453,7 +453,11 @@ const shape = structure({
     reason:optional(one('declined','offer_expiry','journey_expiry','withdrawn','lost_site','member_missing')),
     legIndex:num(0,2,true),path:arr(6402,structure({x:num(0,1000),y:num(0,600)})),
     pathIndex:num(0,6401,true),lastMovedTick:otick,spentByEach:num(0,2 * PILGRIMAGE_LEG_COST,true),
-    aid:arr(4,structure({tick,giverId:id,receiverId:id,locationId:id,hpRestored:num(Number.MIN_VALUE,PILGRIMAGE_RELIEF_HP)}))
+    aid:arr(4,structure({tick,giverId:id,receiverId:id,locationId:id,hpRestored:num(Number.MIN_VALUE,PILGRIMAGE_RELIEF_HP)})),
+    camps:optional(arr(2,structure({legIndex:one(0,1),pathIndex:num(1,6400,true),tileId:id,
+      point:structure({x:num(0,1000),y:num(0,600)}),openedTick:tick,payerId:id,
+      status:one('pitched','resumed','dismantled','expired','interrupted'),closedTick:otick,
+      recovery:optional(arr(2,structure({actorId:id,hp:num(Number.MIN_VALUE,PILGRIMAGE_CAMP_RECOVERY_HP)})))}))),
   }))}),
   credit:structure({nextId:num(1,100_000_000,true),
     loans:arr(SAVE_COLLECTION_LIMIT,structure({id,lenderSectId:id,borrowerSectId:id,lenderSignerId:id,borrowerSignerId:id,
@@ -1625,6 +1629,32 @@ function verifyWorld(value: unknown): WorldState {
         given.tick >= (row.expiresTick ?? 0) || given.tick > (row.settledTick ?? w.tick) ||
         Boolean(nextArrival && given.tick > nextArrival.tick);
     })) fail('pilgrimages.journeys.aid_references');
+    const camps = row.camps ?? [];
+    unique(camps, ({ legIndex }) => String(legIndex), 'pilgrimages.journeys.camp_leg_once');
+    for (const camp of camps) {
+      const reached = row.stopsVisited[camp.legIndex];
+      const following = row.stopsVisited[camp.legIndex + 1];
+      const at = terrainTileAt(w, camp.point.x, camp.point.y);
+      const closed = camp.closedTick;
+      const ready = camp.openedTick + 1;
+      const activePoint = row.path[camp.pathIndex];
+      const recovery = camp.recovery ?? [];
+      unique(recovery, ({ actorId }) => actorId, 'pilgrimages.journeys.camp_recovered_once');
+      if (!started || !reached || at?.id !== camp.tileId || camp.payerId !== row.organizerId ||
+          launched <= camp.legIndex || camp.openedTick <= reached.tick || camp.openedTick > w.tick ||
+          ready >= (row.expiresTick ?? 0) || (following && (closed === undefined || following.tick < closed)) ||
+          (camp.status === 'pitched' && (!active || closed !== undefined || w.tick > ready || row.legIndex !== camp.legIndex ||
+            row.pathIndex !== camp.pathIndex || activePoint?.x !== camp.point.x || activePoint?.y !== camp.point.y ||
+            (row.lastMovedTick ?? Infinity) >= camp.openedTick)) ||
+          (camp.status !== 'pitched' && (closed === undefined || closed < camp.openedTick || closed > (row.settledTick ?? w.tick))) ||
+          ((camp.status === 'resumed' || camp.status === 'dismantled') && closed !== ready) ||
+          (camp.status === 'expired' && (closed ?? 0) <= ready) ||
+          (camp.status === 'resumed' && (row.lastMovedTick ?? 0) < ready) ||
+          (camp.status !== 'resumed' && camp.recovery !== undefined) ||
+          recovery.some(({ actorId }) => actorId !== row.organizerId && actorId !== row.companionId)) {
+        fail('pilgrimages.journeys.camp_source');
+      }
+    }
   }
   unique(w.credit.loans, ({ id }) => id, 'credit.loans.id');
   unique(w.credit.loans.filter(({ status }) => status === 'offered' || status === 'active'),

@@ -105,6 +105,11 @@ export function computeHeuristicDecision(
   if (pilgrim || pendingVow) {
     const moves = availablePilgrimageActions(cultivator, world, false);
     const worried = cultivator.hp < cultivator.maxHp * .35 || (pendingVow && cultivator.hp < cultivator.maxHp * .65);
+    const resume = moves.find(({ pilgrimageMove }) => pilgrimageMove === 'resume');
+    const nextCheckpoint = resume ?? moves.find(({ pilgrimageMove }) => pilgrimageMove === 'camp');
+    if (nextCheckpoint) return { ...nextCheckpoint, chosenAction: 'PILGRIMAGE', innerMonologue: resume ?
+      '按已核实的关口原路接续，不另造站点，也不重付本段费用。' : '同伴受伤或实际行程已耽搁，以实有补给暂宿。' };
+    // A companion does not spontaneously dismantle before the organizer can resume in ordinary actor order.
     const move = moves.find(({ pilgrimageMove }) => pilgrimageMove === 'relieve' ||
       (worried ? pilgrimageMove === 'withdraw' || pilgrimageMove === 'decline' : pilgrimageMove === 'accept')) ??
       ((!worried && (cultivator.personality === '刚正' || cultivator.personality === '逍遥'))
@@ -777,7 +782,7 @@ export async function requestCultivatorLLMDecision(
 
   const activeVow = activePilgrimageForActor(world, cultivator);
   const onPilgrimagePath = activeVow && Boolean(pilgrimageCheckpoint(world, cultivator));
-  const pilgrimageOptions = availablePilgrimageActions(cultivator, world);
+  const pilgrimageOptions = availablePilgrimageActions(cultivator, world, true, requestTick);
   if (onPilgrimagePath && !pilgrimageOptions.length) return undefined;
 
   const location = world.locations.find((l) => l.id === cultivator.locationId);
@@ -843,7 +848,8 @@ export async function requestCultivatorLLMDecision(
   const ownEcho = visibleRecollection(world, cultivator.id);
   const prompt = activeVow ? `你是修仙沙盒中自愿参加巡礼的修士。只能使用本人的可执行行动，不许传送、额外援药或虚构站点。
 当前已实到 ${activeVow.stopsVisited.length - 1} 个巡礼站点；${onPilgrimagePath ? '仍在道路途中，不在旧站。' : '当前在已到达的实站，可调息。'}
-只允许复制以下巡礼选项：${JSON.stringify(pilgrimageOptions)}
+只允许复制执行回合的以下巡礼选项：${JSON.stringify(pilgrimageOptions)}
+宿营、接续与撤营只抄本人合法动作和巡礼编号，不填写坐标、营地名称、临时目的地或费用。
 返回 JSON {"chosenAction":"PILGRIMAGE","pilgrimageMove":"照抄选项","targetPilgrimageId":"照抄","innerMonologue":"简短"}；${onPilgrimagePath ? '途中只选所列巡礼行动。' : '若留站调息可选 REST，不填写目标。'}` : `你是修仙沙盒世界中的修士【${cultivator.name}】（称号：${cultivator.title}）。
 【自身状态】
 - 境界：${cultivator.realm}${cultivator.realmStage}层（灵气进度：${cultivator.qiProgress}%）
@@ -1135,6 +1141,9 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             item.targetRoadId === parsed.targetRoadId &&
             item.targetCultivatorId === parsed.targetCultivatorId) : undefined;
           if (chosenAction === 'PILGRIMAGE' && (!legalPilgrimage || parsed.targetSectId !== undefined)) return undefined;
+          if ((legalPilgrimage?.pilgrimageMove === 'camp' || legalPilgrimage?.pilgrimageMove === 'resume' ||
+              legalPilgrimage?.pilgrimageMove === 'dismantle') && Object.keys(parsed).some((field) =>
+            !['chosenAction', 'innerMonologue', 'spokenLine', 'pilgrimageMove', 'targetPilgrimageId'].includes(field))) return undefined;
 
           const legalCredit = chosenAction === 'SECT_CREDIT' ? creditOptions.find((item) =>
             item.creditMove === parsed.creditMove && item.targetSectId === parsed.targetSectId &&

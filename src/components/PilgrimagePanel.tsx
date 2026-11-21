@@ -1,5 +1,5 @@
 import { PILGRIMAGE_LEG_COST, PILGRIMAGE_RELIEF_HP, visiblePilgrimages } from '../engine/pilgrimageEngine';
-import type { Cultivator, PilgrimageJourney, WorldState } from '../types/world';
+import type { Cultivator, PilgrimageCamp, PilgrimageJourney, WorldState } from '../types/world';
 import { visibleRoadCrossings } from '../engine/roadEngine';
 
 const STATUS: Record<PilgrimageJourney['status'], string> = {
@@ -62,6 +62,7 @@ export function PilgrimagePanel({ world, cultivator }: { world: WorldState; cult
                     {arrivalTick !== undefined ? <p>实际到站 Tick #{arrivalTick}。</p> : <p>尚无实际到站记录。</p>}
                   </div>;
                 })}
+                <PilgrimageCampReceipts camps={journey.camps} tick={world.tick} viewerId={selected.id} />
                 <ol aria-label="按顺序查看起点和两处检查站" className="space-y-1">
                   {journey.stopIds.map((id, index) => {
                     const tick = visited.get(id);
@@ -86,4 +87,36 @@ export function PilgrimagePanel({ world, cultivator }: { world: WorldState; cult
       </div>
     </section>
   );
+}
+
+const CAMP_STATUS: Record<PilgrimageCamp['status'], string> = {
+  pitched: '已搭营', resumed: '已核验接续并撤营', dismantled: '已撤营，未记接续',
+  expired: '营地已过期，未记接续', interrupted: '行程中断，未记接续',
+};
+
+function PilgrimageCampReceipts({ camps, tick, viewerId }: { camps?: PilgrimageCamp[]; tick: number; viewerId: string }) {
+  const receipts = camps?.filter(({ openedTick }) => openedTick <= tick) ?? [];
+  if (!receipts.length) return null;
+  return <details className="min-w-0 rounded border border-teal-400/20 bg-slate-950/60">
+    <summary className="min-h-11 cursor-pointer break-words px-2 py-2 text-xs font-semibold text-teal-100">途中夜宿营地凭证</summary>
+    <div className="space-y-1.5 px-2 pb-2">
+      <p>只是旅途中的临时歇脚点，不新增目的地，也不取得地权。须在原检查点核验后才可接续。</p>
+      <ol aria-label="本人可查的巡礼夜宿实录" className="space-y-1.5">
+        {receipts.map((camp) => {
+          const closed = camp.closedTick !== undefined && camp.closedTick <= tick;
+          const elapsedThrough = closed ? camp.closedTick! : tick;
+          const heldNight = elapsedThrough > camp.openedTick;
+          const status = closed ? camp.status : 'pitched';
+          const recovered = status === 'resumed' ? camp.recovery?.filter(({ hp }) => hp > 0) : undefined;
+          return <li key={`${camp.legIndex}:${camp.openedTick}`} className="min-w-0 rounded border border-slate-800 p-2">
+            <p className="font-medium text-teal-100">第 {camp.legIndex + 1} 段途中 · {CAMP_STATUS[status]}</p>
+            <p>搭营 Tick #{camp.openedTick} · {camp.payerId === viewerId ? '本人' : '同行者'}已实用 1 株玄土根。</p>
+            <p>{heldNight ? '已过一夜。' : '尚未过夜。'}
+              {closed && ` 结案 Tick #${camp.closedTick}。`}</p>
+            {recovered?.map(({ actorId, hp }) => <p key={actorId}>{actorId === viewerId ? '本人' : '同行者'}实际恢复 {hp} 点气血。</p>)}
+          </li>;
+        })}
+      </ol>
+    </div>
+  </details>;
 }

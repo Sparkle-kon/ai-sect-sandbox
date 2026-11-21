@@ -1,14 +1,17 @@
 import { ROAD_FARE, availableRoadPilgrimageRoutes, beginRoadPilgrimageCrossing, roadCrossingForLeg } from './roadEngine';
-import type { Cultivator, LocationNode, LLMDecisionPayload, MapPoint, PilgrimageEndReason, PilgrimageJourney, PilgrimageMove,
+import type { Cultivator, LocationNode, LLMDecisionPayload, MapPoint, PilgrimageCamp, PilgrimageEndReason, PilgrimageJourney, PilgrimageMove,
   PilgrimageState, WorldEvent, WorldState } from '../types/world';
 import { findMapPath } from './mapMotionEngine';
 import { currentVisibleTileIds, knownMapLocations, noteTerrainVisit, terrainTileAt } from './terrainEngine';
+import { flowActor, recordResourceFlow } from './resourceFlowEngine';
 
 export const PILGRIMAGE_LEG_COST = 8;
 export const PILGRIMAGE_RELIEF_HP = 16;
 export const PILGRIMAGE_OFFER_TICKS = 3;
 export const PILGRIMAGE_ACTIVE_TICKS = 16;
 export const PILGRIMAGE_TILE_STRIDE = 5;
+export const PILGRIMAGE_CAMP_HERB = 'earth_root';
+export const PILGRIMAGE_CAMP_RECOVERY_HP = 12;
 const RETAIN_TERMINAL = 64;
 const COOLDOWN = 3;
 const MAX_OPTIONS = 3;
@@ -35,11 +38,15 @@ const getActor = (world: WorldState, id: string) => world.cultivators.find((acto
 const getSite = (world: WorldState, id: string) => world.locations.find((site) => site.id === id && site.type !== 'secret_realm');
 const two = (journey: PilgrimageJourney) => [journey.organizerId, journey.companionId];
 const member = (journey: PilgrimageJourney, actorId: string) => journey.organizerId === actorId || journey.companionId === actorId;
-const liveJourney = (world: WorldState, journey: PilgrimageJourney) => journey.status === 'active' &&
-  (journey.startedTick ?? Infinity) <= world.tick && (journey.expiresTick ?? 0) > world.tick;
-const liveProposal = (world: WorldState, journey: PilgrimageJourney) =>
-  journey.status === 'proposed' && journey.proposedTick <= world.tick && journey.offerExpiresTick > world.tick;
+const liveJourney = (world: WorldState, journey: PilgrimageJourney, tick = world.tick) => journey.status === 'active' &&
+  (journey.startedTick ?? Infinity) <= tick && (journey.expiresTick ?? 0) > tick;
+const liveProposal = (world: WorldState, journey: PilgrimageJourney, tick = world.tick) =>
+  journey.status === 'proposed' && journey.proposedTick <= tick && journey.offerExpiresTick > tick;
 const pointOf = ({ x, y }: MapPoint): MapPoint => ({ x, y });
+const samePoint = (a: MapPoint | undefined, b: MapPoint | undefined) => !!a && !!b && a.x === b.x && a.y === b.y;
+const pitchedCamp = (journey: PilgrimageJourney) => journey.camps?.find(({ status }) => status === 'pitched');
+const campActedAt = (journey: PilgrimageJourney, tick: number) =>
+  journey.camps?.some(camp => camp.openedTick === tick || camp.closedTick === tick) ?? false;
 
 export function activePilgrimageForActor(world: WorldState, actor: Cultivator): PilgrimageJourney | undefined {
   return world.pilgrimages.journeys.find((journey) => liveJourney(world, journey) && member(journey, actor.id));
@@ -48,7 +55,7 @@ export function activePilgrimageForActor(world: WorldState, actor: Cultivator): 
 /** Locks both participants for the same monthly action, even where it completed the last leg. */
 export function pilgrimageActedThisTick(world: WorldState, actor: Cultivator): boolean {
   return world.pilgrimages.journeys.some((journey) => member(journey, actor.id) &&
-    (journey.lastMovedTick === world.tick || journey.startedTick === world.tick));
+    (journey.lastMovedTick === world.tick || journey.startedTick === world.tick || campActedAt(journey,world.tick)));
 }
 
 export function pilgrimageCheckpoint(world: WorldState, actor: Cultivator): MapPoint | undefined {
@@ -65,7 +72,10 @@ export function visiblePilgrimages(world: WorldState, selected?: Cultivator): Pi
   if (!own.length) return [];
   const known = new Set(knownMapLocations(world, actor).map(({ id }) => id));
   return own.map(({ path: _path, ...journey }) => ({
-      journey, checkpoint: journey.status === 'active' ? pilgrimageCheckpoint(world, actor) : undefined,
+      journey: { ...journey, ...(journey.camps ? { camps:journey.camps.map(camp => ({
+        ...camp,point:pointOf(camp.point),...(camp.recovery ? {recovery:camp.recovery.map(row => ({...row}))} : {}),
+      })) } : {}) },
+      checkpoint: journey.status === 'active' ? pilgrimageCheckpoint(world, actor) : undefined,
       knownStopIds: journey.stopIds.filter((id) => known.has(id) || journey.stopsVisited.some((stop) => stop.locationId === id)),
     }));
 }
@@ -85,6 +95,66 @@ function occupants(world: WorldState, journey: PilgrimageJourney) {
   if (!alive(leader) || !alive(companion) || leader.locationId !== last || companion.locationId !== last ||
     unavailable(world, leader) || unavailable(world, companion)) return undefined;
   return { leader, companion };
+}
+
+function actualCampOccupants(world: WorldState, journey: PilgrimageJourney) {
+  const present = occupants(world,journey);
+  if (!present || world.couriers.dispatches.some(row => member(journey,row.courierId ?? '') &&
+    (row.status === 'in_transit' || row.status === 'returning'))) return undefined;
+  return present;
+}
+
+function actualCampAnchor(world: WorldState, journey: PilgrimageJourney) {
+  const index = journey.pathIndex;
+  if (!Number.isSafeInteger(index) || index <= 0 || index >= journey.path.length - 1 ||
+    journey.spentByEach !== (journey.legIndex + 1) * PILGRIMAGE_LEG_COST || journey.lastMovedTick === undefined ||
+    journey.lastMovedTick > world.tick) return undefined;
+  const from = getSite(world,journey.stopIds[journey.legIndex]);
+  const to = getSite(world,journey.stopIds[journey.legIndex+1]);
+  if (!samePoint(from,journey.path[0]) || !samePoint(to,journey.path.at(-1))) return undefined;
+  const point = journey.path[index];
+  const tile = point && Number.isFinite(point.x) && Number.isFinite(point.y) ? terrainTileAt(world,point.x,point.y) : undefined;
+  return tile ? { point,tileId:tile.id } : undefined;
+}
+
+function stillAtCamp(world: WorldState, journey: PilgrimageJourney, camp: PilgrimageCamp) {
+  const pin = actualCampAnchor(world,journey);
+  return pin && camp.legIndex === journey.legIndex && camp.pathIndex === journey.pathIndex &&
+    samePoint(camp.point,pin.point) && camp.tileId === pin.tileId && actualCampOccupants(world,journey) ? pin : undefined;
+}
+
+/** A live, presently verified temporary checkpoint only, not a route, land title or destination. */
+export function pilgrimageCampCheckpoint(world: WorldState, journey: PilgrimageJourney): MapPoint | undefined {
+  const camp = pitchedCamp(journey);
+  if (!camp || !liveJourney(world,journey) || camp.openedTick > world.tick || world.tick > camp.openedTick + 1 ||
+    !world.pilgrimages.journeys.includes(journey)) return undefined;
+  const anchor = stillAtCamp(world,journey,camp);
+  return anchor ? pointOf(anchor.point) : undefined;
+}
+
+function campEligible(world: WorldState, journey: PilgrimageJourney, tick: number) {
+  const people = actualCampOccupants(world,journey);
+  const pin = actualCampAnchor(world,journey);
+  const provision = people?.leader.herbs[PILGRIMAGE_CAMP_HERB];
+  if (!people || !pin || journey.camps?.some(camp => camp.legIndex === journey.legIndex) ||
+    tick + 1 >= (journey.expiresTick ?? 0) || provision === undefined || !Number.isFinite(provision) || provision < 1 ||
+    world.mapHazards.some(hazard => hazard.tileId === pin.tileId && hazard.createdTick <= tick &&
+      tick < hazard.expiresTick && hazard.intensity >= 2)) return undefined;
+  const injured = [people.leader,people.companion].some(actor => actor.hp <= actor.maxHp * .7);
+  const missedStride = tick >= (journey.lastMovedTick ?? Infinity) + 2;
+  return injured || missedStride ? { ...pin,people } : undefined;
+}
+
+function nextPilgrimageStride(world: WorldState, journey: PilgrimageJourney) {
+  const stride = roadCrossingForLeg(world,journey)?.stride ?? PILGRIMAGE_TILE_STRIDE;
+  return Math.min(journey.path.length - 1,journey.pathIndex + stride);
+}
+
+function campCanResume(world: WorldState, journey: PilgrimageJourney, camp: PilgrimageCamp, tick: number) {
+  if (tick !== camp.openedTick + 1 || !stillAtCamp(world,journey,camp)) return false;
+  const next = nextPilgrimageStride(world,journey);
+  return next > journey.pathIndex && journey.path.slice(journey.pathIndex+1,next+1).every(point =>
+    Number.isFinite(point.x) && Number.isFinite(point.y) && !!terrainTileAt(world,point.x,point.y));
 }
 
 /** A public causeway is surveyed from its endpoints alone. It does not read hidden terrain, hazards or landmarks. */
@@ -134,14 +204,17 @@ function canDepart(world: WorldState, journey: PilgrimageJourney, leader: Cultiv
 }
 
 /** Optional proposal enumeration override for schedulers; pending and active options are always evaluated. */
-export function availablePilgrimageActions(actor: Cultivator, world: WorldState, includeProposals = true): PilgrimageOption[] {
-  if (!world.cultivators.includes(actor) || !alive(actor) || unavailable(world, actor)) return [];
+export function availablePilgrimageActions(actor: Cultivator, world: WorldState, includeProposals = true,
+  executionTick = world.tick): PilgrimageOption[] {
+  if ((executionTick !== world.tick && executionTick !== world.tick + 1) ||
+    !world.cultivators.includes(actor) || !alive(actor) || unavailable(world, actor)) return [];
   const state = world.pilgrimages;
   const locked = (candidateId: string) => state.journeys.some((journey) => member(journey, candidateId) &&
-    (liveJourney(world, journey) || liveProposal(world, journey) ||
-      (journey.settledTick !== undefined && world.tick - journey.settledTick < COOLDOWN)));
+    (liveJourney(world, journey, executionTick) || liveProposal(world, journey, executionTick) ||
+      (journey.settledTick !== undefined && executionTick - journey.settledTick < COOLDOWN)));
   const options: PilgrimageOption[] = [];
-  const existing = state.journeys.find((journey) => member(journey, actor.id) && (liveJourney(world, journey) || liveProposal(world, journey)));
+  const existing = state.journeys.find((journey) => member(journey, actor.id) &&
+    (liveJourney(world, journey, executionTick) || liveProposal(world, journey, executionTick)));
   if (existing) {
     const add = (pilgrimageMove: PilgrimageMove) => options.push({ action: 'PILGRIMAGE', pilgrimageMove, targetPilgrimageId: existing.id });
     const both = occupants(world, existing);
@@ -154,10 +227,22 @@ export function availablePilgrimageActions(actor: Cultivator, world: WorldState,
       }
       return options;
     }
-    if (!both || world.tick <= (existing.startedTick ?? world.tick) || existing.lastMovedTick === world.tick ||
+    if (!both || executionTick <= (existing.startedTick ?? executionTick) || existing.lastMovedTick === executionTick ||
+      campActedAt(existing,executionTick) ||
       !existing.stopIds.every((id) => getSite(world, id))) return options;
+    const camp = pitchedCamp(existing);
+    if (camp) {
+      if (executionTick === camp.openedTick + 1 && stillAtCamp(world,existing,camp)) {
+        if (actor.id === existing.organizerId && campCanResume(world,existing,camp,executionTick)) add('resume');
+        add('dismantle');
+      }
+      return options; // A pitched camp locks ordinary advance; even a missed camp needs authoritative cleanup first.
+    }
     if (actor.id === existing.organizerId) {
-      if (existing.path.length > 1) add('advance');
+      if (existing.path.length > 1) {
+        if (campEligible(world,existing,executionTick)) add('camp');
+        add('advance');
+      }
       else {
         const normal = canDepart(world, existing, both.leader, both.companion);
         if (normal.length > 1) {
@@ -215,11 +300,19 @@ const reasonText: Record<PilgrimageEndReason, string> = {
 };
 
 function settle(world: WorldState, journey: PilgrimageJourney, status: PilgrimageJourney['status'], reason?: PilgrimageEndReason): void {
+  const camp = pitchedCamp(journey);
+  if (camp) closeCamp(camp, world.tick, reason === 'journey_expiry' ? 'expired' : 'interrupted');
   journey.status = status;
   journey.reason = reason;
   journey.settledTick = world.tick;
   journey.path = [];
   journey.pathIndex = 0;
+}
+
+function closeCamp(camp: PilgrimageCamp, tick: number, status: Exclude<PilgrimageCamp['status'],'pitched'>) {
+  if (camp.status !== 'pitched') return;
+  camp.status = status;
+  camp.closedTick = tick;
 }
 
 export function resolvePilgrimageAction(world: WorldState, actor: Cultivator, decision: LLMDecisionPayload): WorldEvent | null {
@@ -259,6 +352,38 @@ export function resolvePilgrimageAction(world: WorldState, actor: Cultivator, de
     journey.aid.push({ tick: world.tick, giverId: actor.id, receiverId: receiver.id, locationId: actor.locationId, hpRestored });
     return event(world, journey, `relief-${journey.aid.length}`, '同行者互助', `使用一株真实青玉叶，恢复${hpRestored}点气血。`, actor.locationId);
   }
+  if (option.pilgrimageMove === 'camp') {
+    const actual = campEligible(world,journey,world.tick);
+    if (!actual) return null;
+    actor.herbs[PILGRIMAGE_CAMP_HERB] -= 1;
+    (journey.camps ??= []).push({
+      legIndex:journey.legIndex,pathIndex:journey.pathIndex,tileId:actual.tileId,point:pointOf(actual.point),
+      openedTick:world.tick,payerId:actor.id,status:'pitched',
+    });
+    recordResourceFlow(world,{
+      kind:'consumption',from:flowActor(actor.id),amount:1,good:PILGRIMAGE_CAMP_HERB,
+      mechanism:'pilgrimage',reason:'pilgrimage_camp_provision',refId:journey.id,visibility:{kind:'participants',actorIds:[actor.id]},
+    });
+    return event(world,journey,'camp','在实到关口扎营','实耗一份玄土根，只在已到关口停留。尚未迈过下一程，也未添站点。');
+  }
+  let resumed = false;
+  if (option.pilgrimageMove === 'dismantle' || option.pilgrimageMove === 'resume') {
+    const camp = pitchedCamp(journey);
+    if (!camp || !stillAtCamp(world,journey,camp) || world.tick !== camp.openedTick + 1) return null;
+    if (option.pilgrimageMove === 'dismantle') {
+      closeCamp(camp,world.tick,'dismantled');
+      return event(world,journey,'dismantled','原地撤营','只拆除临时营地；未移动、未回复气血，也不退已用补给。');
+    }
+    if (!campCanResume(world,journey,camp,world.tick)) return null;
+    const recovery = [];
+    for (const person of [members.leader,members.companion]) {
+      const hp = Math.min(PILGRIMAGE_CAMP_RECOVERY_HP,Math.max(0,person.maxHp-person.hp));
+      if (hp > 0) { person.hp += hp; recovery.push({actorId:person.id,hp}); }
+    }
+    closeCamp(camp,world.tick,'resumed');
+    camp.recovery = recovery;
+    resumed = true;
+  }
   if (!journey.path.length) {
     const normal = canDepart(world, journey, members.leader, members.companion);
     // No extra debit until both base fares and the exact currently eligible route are verified.
@@ -271,8 +396,7 @@ export function resolvePilgrimageAction(world: WorldState, actor: Cultivator, de
     members.companion.spiritStones -= PILGRIMAGE_LEG_COST;
     journey.spentByEach += PILGRIMAGE_LEG_COST;
   }
-  const stride = roadCrossingForLeg(world, journey)?.stride ?? PILGRIMAGE_TILE_STRIDE;
-  const next = Math.min(journey.path.length - 1, journey.pathIndex + stride);
+  const next = nextPilgrimageStride(world,journey);
   const visitedTiles = journey.path.slice(journey.pathIndex + 1, next + 1).flatMap((point) => {
     const tile = terrainTileAt(world, point.x, point.y);
     return tile ? [tile.id] : [];
@@ -280,7 +404,9 @@ export function resolvePilgrimageAction(world: WorldState, actor: Cultivator, de
   for (const person of [members.leader, members.companion]) person.exploredTileIds = [...new Set([...person.exploredTileIds, ...visitedTiles])];
   journey.pathIndex = next;
   journey.lastMovedTick = world.tick;
-  if (next < journey.path.length - 1) return event(world, journey, 'stride', '沿已勘路线结伴前行', '实际行过本回合路段，尚未抵达下一站。');
+  if (next < journey.path.length - 1) return resumed
+    ? event(world,journey,'resumed','由原关口收营续行','已核对实到关口并沿原路行过本回合路段，尚未抵达下一站。')
+    : event(world, journey, 'stride', '沿已勘路线结伴前行', '实际行过本回合路段，尚未抵达下一站。');
   journey.legIndex++;
   const arrived = journey.stopIds[journey.legIndex];
   for (const person of [members.leader, members.companion]) {
@@ -307,6 +433,17 @@ export function advancePilgrimages(world: WorldState): WorldEvent[] {
       !proposed && journey.expiresTick !== undefined && world.tick >= journey.expiresTick ? 'journey_expiry' :
       !journey.stopIds.every((id) => getSite(world, id)) ? 'lost_site' :
       !(proposed ? two(journey).every((id) => alive(getActor(world, id))) : occupants(world, journey)) ? 'member_missing' : undefined;
+    const camp = pitchedCamp(journey);
+    if (camp) {
+      const valid = !reason && stillAtCamp(world,journey,camp);
+      const missed = world.tick >= camp.openedTick + 2;
+      if (!valid || missed) {
+        const expired = reason === 'journey_expiry' || !!valid && missed;
+        closeCamp(camp,world.tick,expired ? 'expired' : 'interrupted');
+        events.push(event(world,journey,expired ? 'camp-expiry' : 'camp-interruption',expired ? '野营逾期撤除' : '野营中断',
+          '没有发生续行或回复气血，已用补给不退，也不记作到站。'));
+      }
+    }
     if (!reason) continue;
     const interruptedEnRoute = journey.path.length > 0;
     settle(world, journey, reason === 'offer_expiry' || reason === 'journey_expiry' ? 'expired' : 'interrupted', reason);

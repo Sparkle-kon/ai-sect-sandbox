@@ -1622,7 +1622,7 @@ export interface SectCreditState {
   nextId: number;
 }
 
-export type PilgrimageMove = 'propose' | 'accept' | 'decline' | 'advance' | 'relieve' | 'withdraw';
+export type PilgrimageMove = 'propose' | 'accept' | 'decline' | 'advance' | 'relieve' | 'withdraw' | 'camp' | 'resume' | 'dismantle';
 export type PilgrimageEndReason = 'declined' | 'offer_expiry' | 'journey_expiry' | 'withdrawn' | 'lost_site' | 'member_missing';
 export interface PilgrimageAid {
   tick: number;
@@ -1630,6 +1630,17 @@ export interface PilgrimageAid {
   receiverId: string;
   locationId: string;
   hpRestored: number;
+}
+export interface PilgrimageCamp {
+  legIndex: number;
+  pathIndex: number;
+  tileId: string;
+  point: MapPoint;
+  openedTick: number;
+  payerId: string;
+  status: 'pitched' | 'resumed' | 'dismantled' | 'expired' | 'interrupted';
+  closedTick?: number;
+  recovery?: Array<{ actorId: string; hp: number }>;
 }
 export interface PilgrimageJourney {
   id: string;
@@ -1650,6 +1661,7 @@ export interface PilgrimageJourney {
   lastMovedTick?: number;
   spentByEach: number;
   aid: PilgrimageAid[];
+  camps?: PilgrimageCamp[];
 }
 export interface PilgrimageState {
   journeys: PilgrimageJourney[];
@@ -2049,7 +2061,7 @@ export interface SharedCommonsPact {
 export interface SharedCommonsState { pacts: SharedCommonsPact[]; nextId: number }
 
 export type ResourceFlowGood = 'stone' | MarketGood;
-export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation' | 'terrain' | 'workshop' | 'road' | 'observatory';
+export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation' | 'terrain' | 'workshop' | 'road' | 'observatory' | 'pilgrimage';
 export type ResourceFlowAccount =
   | { kind: 'actor' | 'site' | 'sect' | 'order' | 'shipment' | 'relocation' | 'workshop'; id: string }
   | { kind: 'oath'; id: string; pocket: 'payment' | 'collateral' };

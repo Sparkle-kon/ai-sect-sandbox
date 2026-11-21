@@ -22,7 +22,6 @@ import { SandboxWorkspace, WorkspaceSections } from './components/SandboxWorkspa
 import type { WorkspaceId } from './components/SandboxWorkspace';
 import { annotationWriteIsCurrent } from './components/annotationUi';
 import type { NotebookStamp, NoteCommand, NoteStatus } from './components/annotationUi';
-import { WorldMapCanvas } from './components/WorldMapCanvas';
 import { llmScheduler } from './engine/llmScheduler';
 import { settleChronicleOnline } from './engine/chronicleRuntime';
 import { availableCouncilPlans } from './engine/councilEngine';
@@ -47,6 +46,7 @@ import { modelDecisionCandidates, runModelDecisionTurn } from './engine/modelDec
 import type { FairModelCoverage } from './engine/modelDecisionTurn';
 
 const AgentInspector = React.lazy(async () => ({ default: (await import('./components/AgentInspector')).AgentInspector }));
+const WorldMapCanvas = React.lazy(async () => ({ default: (await import('./components/WorldMapCanvas')).WorldMapCanvas }));
 const AttestationPanel = React.lazy(async () => ({ default: (await import('./components/AttestationPanel')).AttestationPanel }));
 const OathContractsPanel = React.lazy(async () => ({ default: (await import('./components/OathContractsPanel')).OathContractsPanel }));
 const MentorshipPanel = React.lazy(async () => ({ default: (await import('./components/MentorshipPanel')).MentorshipPanel }));
@@ -681,9 +681,11 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
           {!focusTarget && <p role="status" className="break-words text-xs text-amber-200">{CHRONICLE_FOCUS_UNAVAILABLE}</p>}
         </div>} views={{
         map: <div className="grid min-w-0 items-start gap-2.5 lg:grid-cols-[minmax(0,1fr)_17rem] lg:gap-4">
-          <div className="min-w-0"><WorldMapCanvas compact scopeKey={viewScopeKey} world={visibleWorld} selectedCultivatorId={activeActorId}
+          <div className="min-w-0"><React.Suspense fallback={<div role="status" className="grid min-h-64 place-items-center rounded-xl border border-slate-800 text-sm text-slate-300">载入舆图…</div>}>
+            <WorldMapCanvas compact scopeKey={viewScopeKey} world={visibleWorld} selectedCultivatorId={activeActorId}
             chronicleFocus={trail?.request.kind === 'site' && focusTarget ? trail : undefined} onChronicleFocusUnavailable={reportMapFocusFailure}
-            onSelectCultivator={setSelectedCultivatorId} onBrushStroke={preview ? undefined : handleBrushStroke} /></div>
+            onSelectCultivator={setSelectedCultivatorId} onBrushStroke={preview ? undefined : handleBrushStroke} />
+          </React.Suspense></div>
           <aside className={`${panel} min-w-0`} aria-label="当前修士">
             <div className="flex flex-wrap items-center justify-between gap-1.5">
               <div className="min-w-0 break-words">

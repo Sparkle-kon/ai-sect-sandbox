@@ -33,7 +33,7 @@ import { BRUSH_LABELS, drawHazards, getVisibleHazards } from './mapBrushView';
 import { BEAST_COLORS, visibleBeastsByLocation } from './spiritBeastView';
 import { activeAvatar } from '../engine/avatarEngine';
 import { localQiWeather } from '../engine/weatherEngine';
-import { visiblePilgrimageMapCheckpoint } from './pilgrimageMapView';
+import { visiblePilgrimageCampMarks, visiblePilgrimageMapCheckpoint } from './pilgrimageMapView';
 import { visibleSanctuaryMapMarks } from './sanctuaryView';
 import { resolveChronicleFocus } from '../engine/chronicleFocusEngine';
 import { availableFurnaceSlotSummary } from '../engine/furnaceReservationEngine';
@@ -166,6 +166,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const annotationPins = useMemo(() => annotationView?.mapAnnotationPins(world, mapView, selectedCultivatorId) ?? [], [annotationView, world, mapView, selectedCultivatorId]);
   const convoys = useMemo(() => visibleMapConvoys(world, mapView), [world, mapView]);
   const pilgrimageMark = useMemo(() => visiblePilgrimageMapCheckpoint(world, mapView, selected), [world, mapView, selected]);
+  const campMarks = useMemo(() => visiblePilgrimageCampMarks(world, selected), [world, selected]);
   const escortedCaravan = useMemo(() => visibleMapEscort(world, mapView, selected), [world, mapView, selected]);
   const hazards = useMemo(() => getVisibleHazards(world, mapView), [world, mapView]);
   const beastsByLocation = useMemo(() => visibleBeastsByLocation(world, mapView), [world, mapView]);
@@ -315,6 +316,20 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         ctx.font = 'bold 12px sans-serif';
         ctx.textAlign = 'center';
         ctx.fillText('巡', x, y - 20);
+        ctx.restore();
+      }
+      for (const { point: { x, y }, parties } of campMarks) {
+        ctx.save();
+        ctx.fillStyle = '#422318';
+        ctx.strokeStyle = '#fdba74';
+        ctx.lineWidth = 1.5;
+        const width = parties > 1 ? 32 : 18;
+        ctx.fillRect(x - width / 2, y - 51, width, 16);
+        ctx.strokeRect(x - width / 2, y - 51, width, 16);
+        ctx.fillStyle = '#ffedd5';
+        ctx.font = 'bold 11px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(parties > 1 ? `宿×${parties}` : '宿', x, y - 39, width - 2);
         ctx.restore();
       }
 
@@ -635,7 +650,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener('change', stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, hazards, convoys, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, hazards, convoys, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1030,7 +1045,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           </li>)}
         </ul>
       </details>}
-      {pilgrimageMark && <p className="sr-only">所选修士正沿巡礼路段行进：第 {pilgrimageMark.row} 行，第 {pilgrimageMark.col} 列。</p>}
+      {pilgrimageMark && <p className="sr-only">所选修士的巡礼关口：第 {pilgrimageMark.row} 行，第 {pilgrimageMark.col} 列。</p>}
+      {campMarks.length > 0 && <p className="sr-only">已观测夜宿营地 {campMarks.length} 处，共 {campMarks.reduce((count, camp) => count + camp.parties, 0)} 队，不是新地点。</p>}
       {escortedCaravan && <div className="border-t border-slate-800/80 px-3 text-xs text-sky-200">
         <button type="button" className="min-h-11 text-left" onClick={() => commandCamera(focusMapPoint(cameraRef.current, escortedCaravan.marker))}>
           定位所选护镖车队 · 第 {escortedCaravan.row} 行，第 {escortedCaravan.col} 列

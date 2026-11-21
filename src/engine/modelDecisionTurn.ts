@@ -52,7 +52,7 @@ export function modelDecisionCandidates(world: WorldState): Cultivator[] {
     (world.month < 12 || actor.age + 1 < actor.lifespan) &&
     !activeCourierForActor(world, actor) && !activeEscortForActor(world, actor) && !activeRelocationForActor(world, actor) &&
     !activeSiegeForActor(world, actor) && !activeOccasionForActor(world, actor) &&
-    (!pilgrimageCheckpoint(world, actor) || availablePilgrimageActions(actor, world).length > 0));
+    (!pilgrimageCheckpoint(world, actor) || availablePilgrimageActions(actor, world, false, nextTick).length > 0));
 }
 
 /** The whole batch expires together; late callbacks cannot write orders, fairness or world state. */
