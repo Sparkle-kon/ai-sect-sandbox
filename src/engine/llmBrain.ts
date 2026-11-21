@@ -15,6 +15,7 @@ import { availableRoadActions } from './roadEngine';
 import { availableProbationActions, probationReliefTargets } from './probationEngine';
 import { availableRelicExhibitActions } from './relicExhibitEngine';
 import { availableWorkshopActions, availableWorkshopCapacityActions } from './workshopEngine';
+import { availableToolLoanActions } from './toolLoanEngine';
 import { availableSparringActions, sparringLocksActor, SPARRING_QI_COST } from './sparringEngine';
 import { availableExpeditionRescueActions, EXPEDITION_RESCUE_DISTRESS_HP } from './expeditionRescueEngine';
 import { availableFurnaceReservationActions, heldFurnaceReservation } from './furnaceReservationEngine';
@@ -123,6 +124,26 @@ function utilityRouteWarning(actor: Cultivator, world: WorldState): LLMDecisionP
     innerMonologue: proof.routeWarningMove === 'corroborate'
       ? '各以一次确实走过的见闻核实，旧险未必仍在。'
       : '只写这趟路上确证的一段，后来者还须自行观察。' };
+}
+
+function preferredWorkshopWork(options: ReturnType<typeof availableWorkshopActions>, orderId?: string) {
+  const duties = options.filter(({ workshopMove, targetWorkshopId }) =>
+    workshopMove === 'work' && (orderId === undefined || orderId === targetWorkshopId));
+  const assisted = duties.filter(({ targetToolLoanId }) => targetToolLoanId !== undefined);
+  return assisted.length === 1 ? assisted[0] : duties.find(({ targetToolLoanId }) => targetToolLoanId === undefined);
+}
+
+function chooseLinkedToolConsent(actor: Cultivator, world: WorldState, work: ReturnType<typeof preferredWorkshopWork>): LLMDecisionPayload | undefined {
+  if (!work?.targetWorkshopId || work.targetToolLoanId !== undefined || !world.toolLoans.loans.length ||
+      actor.hp < actor.maxHp * .75 || actor.guardAssignment) return undefined;
+  const order = world.workshops.orders.find(({ id }) => id === work.targetWorkshopId);
+  if (!order || order.work.length % 2 !== 1) return undefined; // Never defer an unrelated job or its blank stage.
+  const candidates = availableToolLoanActions(actor, world).filter((option) =>
+    option.toolLoanMove === 'accept' && world.toolLoans.loans.some((loan) =>
+      loan.id === option.targetToolLoanId && loan.workshopId === order.id));
+  if (candidates.length !== 1 || !preferredWorkshopWork(availableWorkshopActions(actor, world, false, world.tick + 1), order.id)) return undefined;
+  return { chosenAction: 'TOOL_LOAN', toolLoanMove: 'accept', targetToolLoanId: candidates[0].targetToolLoanId,
+    innerMonologue: '这件委制尚有下一轮的工位许可，我愿先应允这份同单借具。' };
 }
 
 export function computeHeuristicDecision(
@@ -417,8 +438,9 @@ export function computeHeuristicDecision(
     if (held) {
       const existingCommission = held.workshopOrderId;
       if (existingCommission) {
-        const work = availableWorkshopActions(cultivator, world, false).find(({ workshopMove, targetWorkshopId }) =>
-          workshopMove === 'work' && targetWorkshopId === existingCommission);
+        const work = preferredWorkshopWork(availableWorkshopActions(cultivator, world, false), existingCommission);
+        const consent = chooseLinkedToolConsent(cultivator, world, work);
+        if (consent) return consent;
         if (work) return { ...work, chosenAction: work.action, innerMonologue: '持已分配的炉位完成这份委制工序。' };
       } else {
         const work = availableAlchemy(cultivator, world).find(({ action }) => action === 'BREW_PILL') ??
@@ -449,7 +471,9 @@ export function computeHeuristicDecision(
   if (mayCommission || hasCapacityCommitment ||
       workshopState.some((order) => (order.status === 'offered' || order.status === 'active') && order.makerId === cultivator.id)) {
     const orders = availableWorkshopActions(cultivator, world, mayCommission);
-    const dueWork = orders.find(({ workshopMove }) => workshopMove === 'work');
+    const dueWork = preferredWorkshopWork(orders);
+    const consent = chooseLinkedToolConsent(cultivator, world, dueWork);
+    if (consent) return consent;
     if (!dueWork && hasCapacityCommitment && cultivator.hp >= cultivator.maxHp * .65) {
       const changes = availableWorkshopCapacityActions(cultivator, world);
       const consent = changes.filter(({ workshopCapacityMove }) => workshopCapacityMove === 'accept');
@@ -471,6 +495,28 @@ export function computeHeuristicDecision(
         '各自应允，按工序实耗和实测质量交付，未用料退回。' };
     }
   }
+  const mayLendTool = world.tick >= 18 &&
+    (world.tick + cultivator.id.charCodeAt(cultivator.id.length - 1)) % 7 === 3 &&
+    workshopState.some(({ status, patronId, siteId }) =>
+      status === 'active' && patronId === cultivator.id && siteId === cultivator.locationId);
+  const hasToolLoanDuty = world.toolLoans.loans.some(({ status, lenderId, borrowerId }) =>
+    (status === 'offered' && borrowerId === cultivator.id) || (status === 'awaiting_recovery' && lenderId === cultivator.id));
+  if ((mayLendTool || hasToolLoanDuty) && !cultivator.guardAssignment && cultivator.hp >= cultivator.maxHp * .75) {
+    const tools = availableToolLoanActions(cultivator, world);
+    const reclaim = tools.filter(({ toolLoanMove }) => toolLoanMove === 'reclaim');
+    const accept = tools.filter(({ toolLoanMove }) => toolLoanMove === 'accept');
+    const due = reclaim.length === 1 ? reclaim[0] : reclaim.length === 0 && accept.length === 1 ? accept[0] : undefined;
+    if (due) return { chosenAction: 'TOOL_LOAN', toolLoanMove: due.toolLoanMove, targetToolLoanId: due.targetToolLoanId,
+      innerMonologue: due.toolLoanMove === 'reclaim' ? '当面按原器与已核磨损领回，不另取一件。'
+        : '我愿照这一份委制的真实借具约定办理，不带走别件。' };
+    if (mayLendTool && !reclaim.length && !accept.length) {
+      const offers = tools.filter(({ toolLoanMove }) => toolLoanMove === 'offer');
+      if (offers.length === 1) return { chosenAction: 'TOOL_LOAN', toolLoanMove: 'offer',
+        targetArtifactId: offers[0].targetArtifactId, targetWorkshopId: offers[0].targetWorkshopId,
+        innerMonologue: '依这份实托委制提议借出原器，须工匠本人愿意。' };
+    }
+  }
+
   const mayOpenCommons = world.tick >= 30 && world.tick % 12 === 8;
   if (mayOpenCommons || world.sharedCommons.pacts.some((pact) => pact.status === 'offered' &&
       pact.parties.some(({ signerId, signedTick }) => signerId === cultivator.id && signedTick === undefined))) {
@@ -1255,6 +1301,9 @@ export async function requestCultivatorLLMDecision(
   const probationOptions = availableProbationActions(cultivator, world);
   const exhibitOptions = availableRelicExhibitActions(cultivator, world);
   const workshopOptions = availableWorkshopActions(cultivator, world, true, requestTick);
+  const toolLoanOptions = availableToolLoanActions(cultivator, world, requestTick);
+  const toolLoanPromptOptions = toolLoanOptions.map(({ toolLoanMove, targetArtifactId, targetWorkshopId, targetToolLoanId }) =>
+    ({ toolLoanMove, targetArtifactId, targetWorkshopId, targetToolLoanId }));
   const capacityOptions = availableWorkshopCapacityActions(cultivator, world, requestTick)
     .map(({ workshopCapacityMove, targetWorkshopId }) => ({ workshopCapacityMove, targetWorkshopId }));
   const mayAcceptCharteredWorkshop = workshopOptions.some(({ workshopMove, targetWorkshopId }) => workshopMove === 'accept' &&
@@ -1341,6 +1390,8 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 驿路选项要求实地维修和真实资源；巡礼只有实际列出的付费路才可选，普通路线不另收路费：${JSON.stringify(roadOptions)}
 - 赎责见习必须复制已列动作；赈济另走真实 DELIVER_RELIEF，复籍不抹去原处分：${JSON.stringify(probationOptions)}
 - 古器陈列只能由真实双方当面应允；复制许可参数，不改写原件持有史：${JSON.stringify(exhibitOptions)}
+- 共器借用只复制本人合法许可：offer 同填 targetArtifactId 与 targetWorkshopId；accept、decline、withdraw、release、reclaim 只填 targetToolLoanId。不填写持有人、质量、磨损、次数或材料与费款：${JSON.stringify(toolLoanPromptOptions)}
+- 只有已列的受助 WORKSHOP work 才照抄它的 targetToolLoanId；普通 work 必须省略。不能假定无效借具照常运作。
 - 工坊委制只复制现有许可；须双方同意，按实际加工与质量交付：${JSON.stringify(workshopOptions)}${mayAcceptCharteredWorkshop ?
     '\n- 本人可接受的一份章程内委制：如这座旧工坊实际因迁宗撤并，实余资财退原委托人，已付或已耗不重算；新址不自动接约。这不是另一个行动。' : ''}
 - 工坊容量调整只抄自己可用的 offer 或 accept 和 targetWorkshopId。停炉后已起工的仍记原账，未起工余项只由原委托人本人另行同意释放；不得填写款料、期限、数量、人物、炉况或假称已交付：${JSON.stringify(capacityOptions)}
@@ -1522,6 +1573,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'SHARED_COMMONS',
             'TERRAIN_RECOVERY',
             'WORKSHOP',
+            'TOOL_LOAN',
             'WORKSHOP_CAPACITY',
             'FURNACE_RESERVATION',
             'FURNACE_SAFETY',
@@ -1637,6 +1689,21 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             item.targetObservatoryTick === parsed.targetObservatoryTick && item.targetShortShiftId === parsed.targetShortShiftId) : undefined;
           if (chosenAction === 'SHORT_SHIFT' && (!legalShortShift || Object.keys(parsed).some((field) =>
             !['chosenAction', 'innerMonologue', 'spokenLine', 'shortShiftMove', 'targetCultivatorId', 'targetObservatoryTick', 'targetShortShiftId'].includes(field)))) return undefined;
+          const legalToolLoan = chosenAction === 'TOOL_LOAN' ? toolLoanOptions.find((item) =>
+            item.toolLoanMove === parsed.toolLoanMove && item.targetArtifactId === parsed.targetArtifactId &&
+            item.targetWorkshopId === parsed.targetWorkshopId && item.targetToolLoanId === parsed.targetToolLoanId) : undefined;
+          if (chosenAction === 'TOOL_LOAN' && (!legalToolLoan || Object.keys(parsed).some((field) =>
+            !['chosenAction', 'innerMonologue', 'toolLoanMove', ...(legalToolLoan.toolLoanMove === 'offer'
+              ? ['targetArtifactId', 'targetWorkshopId'] : ['targetToolLoanId'])].includes(field)))) return undefined;
+          if (legalToolLoan) {
+            const innerMonologue = (typeof parsed.innerMonologue === 'string' && parsed.innerMonologue.trim().slice(0, 160)) ||
+              cultivator.innerMonologue || '按在场实物与本人同意行事。';
+            return legalToolLoan.toolLoanMove === 'offer'
+              ? { chosenAction: 'TOOL_LOAN', toolLoanMove: 'offer', targetArtifactId: legalToolLoan.targetArtifactId,
+                targetWorkshopId: legalToolLoan.targetWorkshopId, innerMonologue }
+              : { chosenAction: 'TOOL_LOAN', toolLoanMove: legalToolLoan.toolLoanMove,
+                targetToolLoanId: legalToolLoan.targetToolLoanId, innerMonologue };
+          }
           const legalWorkshopCapacity = chosenAction === 'WORKSHOP_CAPACITY' ? capacityOptions.find((item) =>
             item.workshopCapacityMove === parsed.workshopCapacityMove && item.targetWorkshopId === parsed.targetWorkshopId) : undefined;
           if (chosenAction === 'WORKSHOP_CAPACITY' && (!legalWorkshopCapacity || Object.keys(parsed).some((field) =>
@@ -1644,11 +1711,12 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
 
           const legalWorkshop = chosenAction === 'WORKSHOP' ? workshopOptions.find((item) =>
             item.workshopMove === parsed.workshopMove && item.targetWorkshopId === parsed.targetWorkshopId &&
+            item.targetToolLoanId === parsed.targetToolLoanId &&
             item.targetCultivatorId === parsed.targetCultivatorId && item.workshopTier === parsed.workshopTier &&
             item.workshopQuantity === parsed.workshopQuantity && item.workshopQualityFloor === parsed.workshopQualityFloor) : undefined;
           if (chosenAction === 'WORKSHOP' && (!legalWorkshop || Object.entries(parsed).some(([field, value]) =>
             !['chosenAction', 'innerMonologue', 'spokenLine', 'workshopMove', 'targetWorkshopId', 'targetCultivatorId',
-              'workshopTier', 'workshopQuantity', 'workshopQualityFloor'].includes(field) && !(field === 'action' && value === 'WORKSHOP')))) return undefined;
+              'workshopTier', 'workshopQuantity', 'workshopQualityFloor', 'targetToolLoanId'].includes(field) && !(field === 'action' && value === 'WORKSHOP')))) return undefined;
           const legalRecovery = chosenAction === 'TERRAIN_RECOVERY' ?
             recoveryOptions.find((item) => item.targetTerrainTileId === parsed.targetTerrainTileId) : undefined;
           if (chosenAction === 'TERRAIN_RECOVERY' && (!legalRecovery || parsed.targetCultivatorId !== undefined ||
@@ -1975,6 +2043,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             exhibitMove: legalExhibit?.exhibitMove,
             targetRelicExhibitId: legalExhibit?.targetRelicExhibitId,
             workshopMove: legalWorkshop?.workshopMove,
+            targetToolLoanId: legalWorkshop?.targetToolLoanId,
             workshopCapacityMove: legalWorkshopCapacity?.workshopCapacityMove,
             sparringMove: legalSparring?.sparringMove,
             targetSparringId: legalSparring?.targetSparringId,

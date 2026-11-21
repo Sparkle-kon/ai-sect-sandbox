@@ -35,6 +35,8 @@ import { validateSectStipendHistory } from './storageSectStipendValidation';
 import { createSeedCultureState } from './seedCultureEngine';
 import { SEED_GROW_TICKS, SEED_LOT_UNITS, SEED_SAMPLE_UNITS } from './seedCultureTerms';
 import { validateSeedCultureHistory } from './storageSeedCultureValidation';
+import { createToolLoansState } from './toolLoanEngine';
+import { validateToolLoanHistory } from './storageToolLoanValidation';
 import { effectiveWorkshopDeadline, effectiveWorkshopQuantity } from './workshopCapacityTerms';
 import { validateWorkshopCapacityClauses } from './storageWorkshopCapacityValidation';
 import { validateRouteWarningHistory } from './storageRouteWarningValidation';
@@ -145,7 +147,7 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT SALVAGE_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP FURNACE_RESERVATION FURNACE_SAFETY SPARRING EXPEDITION_RESCUE SHORT_SHIFT BOUNDARY_RELIEF APPRENTICE_COHORT HOUSEHOLD_NAME CARAVAN_RESTITUTION VILLAGE_GRANARY VILLAGE_SUPPLY ROUTE_WARNING PAVILION_LOAN WORKSHOP_CAPACITY CIVIC_MEMORIAL VILLAGE_FAIR SECT_STIPEND SEED_CULTURE RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY SEASON_REVIEW REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT SALVAGE_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP FURNACE_RESERVATION FURNACE_SAFETY SPARRING EXPEDITION_RESCUE SHORT_SHIFT BOUNDARY_RELIEF APPRENTICE_COHORT HOUSEHOLD_NAME CARAVAN_RESTITUTION VILLAGE_GRANARY VILLAGE_SUPPLY ROUTE_WARNING PAVILION_LOAN WORKSHOP_CAPACITY CIVIC_MEMORIAL VILLAGE_FAIR SECT_STIPEND SEED_CULTURE TOOL_LOAN RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY SEASON_REVIEW REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const flowGood = one('stone','jade_seed','jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
@@ -405,7 +407,8 @@ const shape = structure({
     escrowStones:count,escrowHerbs:count,refundedStones:count,refundedHerbs:count,
     work:arr(WORKSHOP_MAX_WORK_RECEIPTS,structure({tick,makerId:id,piece:one(1,2),stage:one('blank','finish'),
       stonesUsed:count,herbsUsed:count,quality:optional(one('failed','standard','fine')),
-      qualityScore:optional(num(0,100,true)),artifactId:oid,feePaid:optional(count)}))
+      qualityScore:optional(num(0,100,true)),artifactId:oid,feePaid:optional(count),
+      toolUse:optional(structure({loanId:id,baseScore:num(0,100,true),scoreBonus:one(2)}))}))
   }))}),
   artifactSalvages:structure({receipts:arr(SAVE_COLLECTION_LIMIT,structure({
     artifactId:id,artifactName:id,ownerId:id,siteId:id,tick,tier:one('法器','灵器'),durability:wealth,maxDurability:wealth,
@@ -491,6 +494,16 @@ const shape = structure({
     donatedRoots:num(0,Number.MAX_SAFE_INTEGER,true),donatedStones:num(0,Number.MAX_SAFE_INTEGER,true),
     spentRoots:num(0,Number.MAX_SAFE_INTEGER,true),spentStones:num(0,Number.MAX_SAFE_INTEGER,true),
     lastDrawTick:otick,receipts:arr(VILLAGE_GRANARY_RECEIPT_LIMIT,granaryReceipt),
+  }))}),
+  toolLoans:structure({nextId:num(1,Number.MAX_SAFE_INTEGER,true),loans:arr(SAVE_COLLECTION_LIMIT,structure({
+    id,artifactId:id,artifactName:id,lenderId:id,borrowerId:id,siteId:id,workshopId:id,origin:workshopArtifactOrigin,
+    initialDurability:wealth,maxDurability:wealth,offeredTick:tick,expiresTick:tick,
+    status:one('offered','active','awaiting_recovery','returned','probate','declined','withdrawn','expired'),
+    acceptedTick:otick,useUntilTick:otick,custody:optional(artifact),
+    wear:optional(structure({tick,workshopId:id,piece:one(1,2),stage:one('finish'),durabilityBefore:wealth,
+      durabilityAfter:wealth,scoreBonus:one(2)})),
+    release:optional(structure({tick,reason:one('borrower_released','term_expired','borrower_died','workshop_closed')})),
+    closedTick:otick,
   }))}),
   seedCulture:structure({nextLotId:num(1,Number.MAX_SAFE_INTEGER,true),nextPlotId:num(1,Number.MAX_SAFE_INTEGER,true),
     lots:arr(SAVE_COLLECTION_LIMIT,structure({id,ownerId:id,siteId:id,createdTick:tick,remaining:num(0,SEED_LOT_UNITS,true),
@@ -833,6 +846,7 @@ function verifyWorld(value: unknown): WorldState {
       ...(!Object.hasOwn(value, 'villageFairs') ? { villageFairs: createVillageFairsState() } : {}),
       ...(!Object.hasOwn(value, 'sectStipends') ? { sectStipends: createSectStipendsState() } : {}),
       ...(!Object.hasOwn(value, 'seedCulture') ? { seedCulture: createSeedCultureState() } : {}),
+      ...(!Object.hasOwn(value, 'toolLoans') ? { toolLoans: createToolLoansState() } : {}),
       ...(!Object.hasOwn(value, 'caravanRestitution') ? { caravanRestitution: createCaravanRestitutionState() } : {}),
       ...(!Object.hasOwn(value, 'terrainSuccession') ? { terrainSuccession: createTerrainSuccessionState() } : {}),
       ...(!Object.hasOwn(value, 'resourceFlow') ? { resourceFlow: createResourceFlowState() } : {}),
@@ -1230,7 +1244,7 @@ function verifyWorld(value: unknown): WorldState {
       usedStones += receipt.stonesUsed;
       usedHerbs += receipt.herbsUsed;
       if (blank) {
-        if (receipt.quality !== undefined || receipt.qualityScore !== undefined || receipt.artifactId !== undefined ||
+        if (receipt.toolUse !== undefined || receipt.quality !== undefined || receipt.qualityScore !== undefined || receipt.artifactId !== undefined ||
             receipt.feePaid !== undefined) fail('workshops.work.blank');
       } else {
         const score = receipt.qualityScore;
@@ -2383,8 +2397,10 @@ function verifyWorld(value: unknown): WorldState {
         ((entry.closeReason === 'recalled' || entry.closeReason === 'host_closed') && accepted === undefined)) fail('relicExhibits.entries.references');
   }
   const exhibitItems = displays.flatMap(({ custody }) => custody ? [custody] : []);
+  const heldTools = w.toolLoans.loans.flatMap(({ custody })=>custody?[custody]:[]);
   const canonicalArtifacts = [...w.cultivators.flatMap((person) => person.artifacts),
-    ...w.estates.entries.flatMap((estate) => estate.holdings.artifacts), ...exhibitItems];
+    ...w.estates.entries.flatMap((estate) => estate.holdings.artifacts), ...exhibitItems, ...heldTools];
+  validateToolLoanHistory(w,canonicalArtifacts,actor,fail);
   validateArtifactSalvageHistory(w, canonicalArtifacts, actor, fail);
   const displayIds = new Set(displays.map(({ artifactId }) => artifactId));
   unique(canonicalArtifacts.filter((item) => item.id && displayIds.has(item.id)), (item) => item.id!, 'relicExhibits.custody.unique');

@@ -46,6 +46,7 @@ import { projectLocalPavilionDesk } from '../engine/pavilionLoanEngine';
 import { projectLocalCivicMemorialCount } from '../engine/civicMemorialEngine';
 import { projectLocalVillageFair } from '../engine/villageFairEngine';
 import { projectLocalSectStipendStatus } from '../engine/sectStipendEngine';
+import { projectLocalToolLoanStatus } from '../engine/toolLoanEngine';
 import { projectLocalSeedCulture } from '../engine/seedCultureEngine';
 import { drawRouteWarningMarks,paintedRouteWarningGeometry } from './routeWarningMapDraw';
 import { getCurrentBoundaryCoverage } from '../engine/boundaryReliefEngine';
@@ -171,6 +172,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     order.status==='active' && order.capacityAmendment && order.siteId===selected.locationId &&
     (order.patronId===selected.id || order.makerId===selected.id)) : undefined,[world,selected,furnaceShift]);
   const localPavilionDesk=useMemo(()=>projectLocalPavilionDesk(world,selected),[world,selected]);
+  const localToolLoans=useMemo(()=>world.toolLoans.loans.length ? projectLocalToolLoanStatus(world,selected) : undefined,[world,selected]);
   const localSeedCulture=useMemo(()=>world.seedCulture.plots.length ? projectLocalSeedCulture(world,selected) : undefined,[world,selected]);
   const localStipend=useMemo(()=>world.sectStipends.stipends.length ? projectLocalSectStipendStatus(world,selected) : undefined,[world,selected]);
   const localVillageFair=useMemo(()=>world.villageFairs.fairs.length ? projectLocalVillageFair(world,selected) : undefined,[world,selected]);
@@ -581,12 +583,14 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         const fairMarker=localVillageFair?.siteId===loc.id&&isCurrentLocation(loc.id)?' 集':'';
         const stipendMarker=localStipend?.siteId===loc.id&&isCurrentLocation(loc.id)?' 俸':'';
         const seedMarker=localSeedCulture?.siteId===loc.id&&isCurrentLocation(loc.id)?(localSeedCulture.ready>0?' 收':' 苗'):'';
+        const toolMarker=localToolLoans?.siteId===loc.id&&isCurrentLocation(loc.id)?(localToolLoans.awaiting>0?' 待领':' 共器'):'';
+        const toolWidth=ctx.measureText(toolMarker).width;
         const seedWidth=ctx.measureText(seedMarker).width;
         const stipendWidth=ctx.measureText(stipendMarker).width;
         const fairWidth=ctx.measureText(fairMarker).width;
         const memorialWidth=ctx.measureText(memorialMarker).width;
         const pavilionWidth=ctx.measureText(pavilionMarker).width;
-        const labelStart = loc.x - (placeWidth + markerWidth + scrollWidth + furnaceWidth + guardWidth + pavilionWidth + memorialWidth + fairWidth + stipendWidth + seedWidth) / 2;
+        const labelStart = loc.x - (placeWidth + markerWidth + scrollWidth + furnaceWidth + guardWidth + pavilionWidth + memorialWidth + fairWidth + stipendWidth + seedWidth + toolWidth) / 2;
         ctx.textAlign = 'left';
         ctx.fillStyle = '#e2e8f0';
         ctx.fillText(loc.name, labelStart, loc.y - 26);
@@ -624,6 +628,10 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         if(seedMarker){
           ctx.fillStyle='#bbf7d0';
           ctx.fillText(seedMarker,labelStart+placeWidth+markerWidth+scrollWidth+furnaceWidth+guardWidth+pavilionWidth+memorialWidth+fairWidth+stipendWidth,loc.y-26);
+        }
+        if(toolMarker){
+          ctx.fillStyle='#c4b5fd';
+          ctx.fillText(toolMarker,labelStart+placeWidth+markerWidth+scrollWidth+furnaceWidth+guardWidth+pavilionWidth+memorialWidth+fairWidth+stipendWidth+seedWidth,loc.y-26);
         }
         if (occasionsByLocation.has(loc.id)) {
           ctx.font = 'bold 11px sans-serif';
@@ -830,7 +838,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener('change', stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, observedSalvageSites, localGranary, furnaceShift, localPavilionDesk, localMemorial, localVillageFair, localStipend, localSeedCulture, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, observedSalvageSites, localGranary, furnaceShift, localPavilionDesk, localMemorial, localVillageFair, localStipend, localSeedCulture, localToolLoans, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1322,6 +1330,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                   <span className="text-amber-200">· 本人委制只留首件，第二件已解除；首件在第 {ownWorkshopCapacity.capacityAmendment?.workUntilTick} 轮前收尾</span>}
                 {location.id===localPavilionDesk?.siteId && isCurrentLocation(location.id) &&
                   <span className="text-amber-200">· 藏经阁{localPavilionDesk.staffed?'本轮有值守':'本轮未见值守'}，在架 {localPavilionDesk.availableCopies} 册、持有未归 {localPavilionDesk.heldCopies} 册</span>}
+                {location.id===localToolLoans?.siteId && isCurrentLocation(location.id) &&
+                  <span className="text-violet-200">· 本人相关共器：封存中 {localToolLoans.active} 件，待实地领取 {localToolLoans.awaiting} 件</span>}
                 {location.id===localSeedCulture?.siteId && isCurrentLocation(location.id) &&
                   <span className="text-emerald-200">· 现场苗圃：生长期 {localSeedCulture.growing} 处，实熟待收 {localSeedCulture.ready} 处</span>}
                 {location.id===localStipend?.siteId && isCurrentLocation(location.id) &&

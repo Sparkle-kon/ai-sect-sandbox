@@ -1,6 +1,8 @@
 import { visibleWorkshopOrders, workshopTerms } from '../engine/workshopEngine';
 import { WORKSHOP_CAPACITY_RECOVERY_TICKS } from '../engine/workshopCapacityTerms';
 import { knownMapLocations } from '../engine/terrainEngine';
+import { projectToolLoans } from '../engine/toolLoanEngine';
+import { ToolLoanReceipts } from './ToolLoanReceipts';
 import type { Cultivator, WorldState } from '../types/world';
 
 type Order = ReturnType<typeof visibleWorkshopOrders>[number];
@@ -72,7 +74,8 @@ export function WorkshopPanel({ world, cultivator }: { world: WorldState; cultiv
   const orders = visibleWorkshopOrders(world, actor).filter(({ patronId, makerId, offeredTick }) =>
     (patronId === actor.id || makerId === actor.id) && offeredTick <= world.tick)
     .sort((a, b) => (b.settledTick ?? b.offeredTick) - (a.settledTick ?? a.offeredTick));
-  if (!orders.length) return null;
+  const toolLoans = projectToolLoans(world, actor);
+  if (!orders.length && !toolLoans.length) return null;
   const people = new Map(world.cultivators.map(({ id, name }) => [id, name]));
   const known = new Map(knownMapLocations(world, actor).map(({ id, name }) => [id, name]));
 
@@ -80,8 +83,9 @@ export function WorkshopPanel({ world, cultivator }: { world: WorldState; cultiv
     <details className="min-w-0 rounded border border-indigo-400/20 bg-slate-950/60">
       <summary className="min-h-11 cursor-pointer break-words px-3 py-2.5 text-xs font-semibold text-indigo-200">工坊委制与品质交割</summary>
       <div className="space-y-2 px-3 pb-3 text-xs leading-relaxed text-slate-300">
-        <p>此处只查本人参与的订单。订单完成不表示每件都达标；实际验收入库、未达标及未用材料退款分别记录。</p>
-        <ol aria-label="本角色可查的工坊委制" className="max-h-[27rem] space-y-2 overflow-y-auto">
+        <ToolLoanReceipts receipts={toolLoans} />
+        {orders.length > 0 && <p>此处只查本人参与的订单。订单完成不表示每件都达标；实际验收入库、未达标及未用材料退款分别记录。</p>}
+        {orders.length > 0 && <ol aria-label="本角色可查的工坊委制" className="max-h-[27rem] space-y-2 overflow-y-auto">
           {orders.map((order) => {
             const patron = order.patronId === actor.id;
             const accepted = order.acceptedTick !== undefined && order.acceptedTick <= world.tick;
@@ -129,7 +133,7 @@ export function WorkshopPanel({ world, cultivator }: { world: WorldState; cultiv
               </li>
             );
           })}
-        </ol>
+        </ol>}
       </div>
     </details>
   );

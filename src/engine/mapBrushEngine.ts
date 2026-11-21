@@ -15,6 +15,7 @@ import { activeEscortForActor } from './escortEngine';
 import { reconcileRelicCustody } from './relicEngine';
 import { recordNewDeathsForReincarnation } from './reincarnationRuntime';
 import { activeRelocationForActor } from './relocationEngine';
+import { advanceToolLoans } from './toolLoanEngine';
 import { advanceEstates } from './estateEngine';
 import { archiveChronicleEvents } from './novelGenerator';
 import type { Cultivator, GodBrushKind, LocationNode, MapHazard, MapPoint, MapTile, WorldEvent, WorldState } from '../types/world';
@@ -130,7 +131,7 @@ export function applyMapBrush(prev: WorldState, kind: GodBrushKind, points: MapP
       actorIds: hits.map(({ cultivatorId }) => cultivatorId), locationId, ...(hits.length ? { damage: hits } : {}),
     });
   }
-  brushEvents.push(...advanceSanctuaries(world), ...advanceResearch(world), ...advancePilgrimages(world), ...reconcileCourierDeaths(world), ...advanceHouseholds(world), ...advanceWorkshops(world), ...advanceRelicExhibits(world), ...advanceProbation(world), ...advanceEstates(world));
+  brushEvents.push(...advanceSanctuaries(world), ...advanceResearch(world), ...advancePilgrimages(world), ...reconcileCourierDeaths(world), ...advanceHouseholds(world), ...advanceWorkshops(world), ...advanceRelicExhibits(world), ...advanceProbation(world), ...advanceToolLoans(world), ...advanceEstates(world));
   reconcileRelicCustody(world);
   recordNewDeathsForReincarnation(prev, world, brushEvents);
   archiveChronicleEvents(world, brushEvents);

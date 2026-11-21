@@ -56,6 +56,8 @@ export function proveWorkshopArtifactOrigin(world:WorldState,item:Pick<Artifact,
 
 function uniqueOwned(world:WorldState,actor:Cultivator,item:Artifact) {
   return !world.artifactSalvages.receipts.some(row=>row.artifactId===item.id) &&
+    !world.toolLoans.loans.some(row=>(row.status==='offered' && world.tick<row.expiresTick &&
+      row.artifactId===item.id)||row.custody?.id===item.id) &&
     !world.cultivators.some(row=>row.artifacts.some(other=>other.id===item.id && (row!==actor || other!==item))) &&
     actor.artifacts.filter(other=>other.id===item.id).length===1 &&
     !world.estates.entries.some(row=>row.holdings.artifacts.some(other=>other.id===item.id)) &&

@@ -1,6 +1,6 @@
 import type {
   CultivationRealm, Cultivator, LLMDecisionPayload, LocationNode, WorkshopCloseReason, WorkshopCapacityMove, WorkshopMove, WorkshopOrder,
-  WorkshopInstitutionClosure, WorkshopOutputGrade, WorkshopQualityFloor, WorkshopState, WorkshopTier, WorkshopWorkReceipt, WorldEvent, WorldState,
+  WorkshopInstitutionClosure, WorkshopOutputGrade, WorkshopQualityFloor, WorkshopState, WorkshopTier, WorkshopWorkReceipt, ToolLoan, WorldEvent, WorldState,
 } from '../types/world';
 import { ARTIFACT_RULES } from './artifactEngine';
 import { canUseFurnace, claimFurnaceUse } from './furnaceReservationEngine';
@@ -12,6 +12,7 @@ import { activeRelocationForActor } from './relocationEngine';
 import { flowActor, flowWorkshop, recordResourceFlow } from './resourceFlowEngine';
 import { courierCheckpoint } from './sealedCourierEngine';
 import { isTribulationActive } from './tribulationEngine';
+import { applyWorkshopToolUse,availableWorkshopToolUses,TOOL_LOAN_QUALITY_BONUS,workshopToolLoanForFinish } from './toolLoanEngine';
 
 export const WORKSHOP_OFFER_TICKS = 3;
 export const WORKSHOP_ACTIVE_TICKS = 7;
@@ -30,6 +31,7 @@ export interface WorkshopOption {
   action: 'WORKSHOP';
   workshopMove: WorkshopMove;
   targetWorkshopId?: string;
+  targetToolLoanId?:string;
   targetCultivatorId?: string;
   workshopTier?: WorkshopTier;
   workshopQuantity?: 1 | 2;
@@ -92,7 +94,8 @@ function hasFunds(patron: Cultivator, tier: WorkshopTier, quantity: 1 | 2) {
 
 function hasCanonicalArtifact(world: WorldState, id: string) {
   return world.cultivators.some(actor => actor.artifacts.some(item => item.id === id)) ||
-    world.estates.entries.some(estate => estate.holdings.artifacts.some(item => item.id === id));
+    world.estates.entries.some(estate => estate.holdings.artifacts.some(item => item.id === id)) ||
+    world.toolLoans.loans.some(loan=>loan.custody?.id===id);
 }
 
 const artifactIdFor = (order: WorkshopOrder, piece: number) => `workshop-artifact-${order.id}-${piece}`;
@@ -129,7 +132,12 @@ export function availableWorkshopActions(actor: Cultivator, world: WorldState, i
       if (order.escrowHerbs < 1 || order.escrowStones < (finish ? terms.finishFuel + terms.feePerPiece : terms.blankFuel)) continue;
       if (finish && (patron.artifacts.length >= WORKSHOP_CAPACITY ||
           hasCanonicalArtifact(world, artifactIdFor(order, Math.floor(order.work.length / 2) + 1)))) continue;
-      if (canUseFurnace(world, actor, order.siteId, 'workshop', order.id, executionTick)) result.push(choice('work', order.id));
+      if (canUseFurnace(world, actor, order.siteId, 'workshop', order.id, executionTick)) {
+        const option=choice('work',order.id);
+        result.push(option);
+        if(finish)for(const targetToolLoanId of availableWorkshopToolUses(world,actor,order,executionTick))
+          result.push({...option,targetToolLoanId});
+      }
     }
   }
   if (!includeOffers) return result;
@@ -205,7 +213,7 @@ function gradeWork(maker: Cultivator, site: LocationNode, order: WorkshopOrder, 
   return { qualityScore, quality };
 }
 
-function work(world: WorldState, order: WorkshopOrder, maker: Cultivator, rng: () => number): WorldEvent {
+function work(world: WorldState, order: WorkshopOrder, maker: Cultivator, rng: () => number,tool?:ToolLoan): WorldEvent {
   const site = at(world, order.siteId)!;
   const patron = person(world, order.patronId)!;
   const terms = workshopTerms(order.tier, order.quantity);
@@ -221,8 +229,11 @@ function work(world: WorldState, order: WorkshopOrder, maker: Cultivator, rng: (
   const row: WorkshopWorkReceipt = { tick: world.tick, makerId: maker.id, piece, stage, stonesUsed, herbsUsed: 1 };
   order.work.push(row);
   if (stage === 'blank') return event(world, order, `blank-${piece}`, '工坊铸坯', `第${piece}件投入${stonesUsed}灵石和1份玄土根，尚未交付。`);
-  const { quality, qualityScore } = gradeWork(maker, site, order, rng);
-  Object.assign(row, { quality, qualityScore });
+  const base=gradeWork(maker,site,order,rng);
+  const qualityScore=tool?Math.min(100,base.qualityScore+TOOL_LOAN_QUALITY_BONUS):base.qualityScore;
+  const quality=tool?workshopGradeForScore(qualityScore):base.quality;
+  Object.assign(row,{quality,qualityScore});
+  if(tool)applyWorkshopToolUse(world,tool,row,base.qualityScore);
   if (quality === 'fine' || quality === 'standard' && order.qualityFloor === 'standard') {
     const artifactId = artifactIdFor(order, piece);
     const baseDurability = ARTIFACT_RULES[order.tier].durability;
@@ -251,7 +262,8 @@ export function resolveWorkshopAction(world: WorldState, actor: Cultivator, payl
   const valid = availableWorkshopActions(actor, world, payload.workshopMove === 'offer').find(option =>
     option.workshopMove === payload.workshopMove && option.targetWorkshopId === payload.targetWorkshopId &&
     option.targetCultivatorId === payload.targetCultivatorId && option.workshopTier === payload.workshopTier &&
-    option.workshopQuantity === payload.workshopQuantity && option.workshopQualityFloor === payload.workshopQualityFloor);
+    option.workshopQuantity === payload.workshopQuantity && option.workshopQualityFloor === payload.workshopQualityFloor &&
+    option.targetToolLoanId===payload.targetToolLoanId);
   if (!valid) return null;
   if (valid.workshopMove === 'offer') {
     const institution=institutionAtOffer(world,actor.locationId,valid.targetCultivatorId!);
@@ -283,7 +295,9 @@ export function resolveWorkshopAction(world: WorldState, actor: Cultivator, payl
     return event(world, order, 'accept', '工坊委制生效', `实托${order.escrowStones}灵石、${order.escrowHerbs}份玄土根；需工匠逐回合加工。`);
   }
   if (valid.workshopMove === 'work') {
-    return claimFurnaceUse(world, actor, order.siteId, 'workshop', order.id) ? work(world, order, actor, rng) : null;
+    const loan=valid.targetToolLoanId?workshopToolLoanForFinish(world,actor,order,valid.targetToolLoanId):undefined;
+    if(valid.targetToolLoanId&&!loan)return null;
+    return claimFurnaceUse(world,actor,order.siteId,'workshop',order.id)?work(world,order,actor,rng,loan):null;
   }
   if (valid.workshopMove === 'decline') {
     settle(world, order, 'declined');
@@ -449,11 +463,12 @@ export function advanceWorkshops(world: WorldState): WorldEvent[] {
         `已核实并退回实余${order.refundedStones}灵石、${order.refundedHerbs}份玄土根；已付工钱及已耗投入不重复结算。`));
     }
   }
-  const terminal = world.workshops.orders.filter(order => order.settledTick !== undefined && !order.capacityAmendment)
+  const toolProofOrders = new Set(world.toolLoans.loans.flatMap(({workshopId,origin})=>[workshopId,origin.orderId]));
+  const terminal = world.workshops.orders.filter(order => order.settledTick !== undefined && !order.capacityAmendment && !toolProofOrders.has(order.id))
     .sort((a, b) => (b.settledTick! - a.settledTick!) || Number(b.id.slice(11)) - Number(a.id.slice(11)))
     .slice(0, WORKSHOP_TERMINAL_LIMIT);
   const retain = new Set(terminal.map(({ id }) => id));
-  world.workshops.orders = world.workshops.orders.filter(order => order.settledTick === undefined || !!order.capacityAmendment || retain.has(order.id));
+  world.workshops.orders = world.workshops.orders.filter(order => order.settledTick === undefined || !!order.capacityAmendment || toolProofOrders.has(order.id) || retain.has(order.id));
   return events;
 }
 

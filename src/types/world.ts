@@ -154,6 +154,7 @@ export type ActionType =
   | 'VILLAGE_FAIR'
   | 'SECT_STIPEND'
   | 'SEED_CULTURE'
+  | 'TOOL_LOAN'
   | 'FORGE_ARTIFACT'
   | 'BIND_ARTIFACT'
   | 'REPAIR_ARTIFACT'
@@ -560,6 +561,8 @@ export interface LLMDecisionPayload {
   villageFairMove?: VillageFairMove;
   stipendMove?:SectStipendMove;
   seedMove?:SeedCultureMove;
+  toolLoanMove?:ToolLoanMove;
+  targetToolLoanId?:string;
   targetSeedLotId?:string;
   targetSeedPlotId?:string;
   targetStipendId?:string;
@@ -2400,7 +2403,40 @@ export type WorkshopStatus = 'offered' | 'active' | 'completed' | 'cancelled' | 
 export type WorkshopCloseReason = 'patron_cancelled' | 'maker_cancelled' | 'offer_expired' |
   'work_expired' | 'patron_unavailable' | 'maker_unavailable' | 'site_unavailable' | 'institution_closed';
 
+export type ToolLoanMove='offer'|'accept'|'decline'|'withdraw'|'release'|'reclaim';
+export interface ToolLoanUse {
+  tick:number;
+  workshopId:string;
+  piece:1|2;
+  stage:'finish';
+  durabilityBefore:number;
+  durabilityAfter:number;
+  scoreBonus:2;
+}
+export interface ToolLoan {
+  id:string;
+  artifactId:string;
+  artifactName:string;
+  lenderId:string;
+  borrowerId:string;
+  siteId:string;
+  workshopId:string;
+  origin:WorkshopArtifactOrigin;
+  initialDurability:number;
+  maxDurability:number;
+  offeredTick:number;
+  expiresTick:number;
+  status:'offered'|'active'|'awaiting_recovery'|'returned'|'probate'|'declined'|'withdrawn'|'expired';
+  acceptedTick?:number;
+  useUntilTick?:number;
+  custody?:Artifact;
+  wear?:ToolLoanUse;
+  release?:{tick:number;reason:'borrower_released'|'term_expired'|'borrower_died'|'workshop_closed'};
+  closedTick?:number;
+}
+export interface ToolLoansState {loans:ToolLoan[];nextId:number}
 export interface WorkshopWorkReceipt {
+  toolUse?:{loanId:string;baseScore:number;scoreBonus:2};
   tick: number;
   makerId: string;
   piece: 1 | 2;
@@ -2890,6 +2926,7 @@ export interface WorldState {
   villageFairs: VillageFairsState;
   sectStipends: SectStipendsState;
   seedCulture: SeedCultureState;
+  toolLoans: ToolLoansState;
   resourceFlow: ResourceFlowState;
   roads: RoadState;
   sharedCommons: SharedCommonsState;
