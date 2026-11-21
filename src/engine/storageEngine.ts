@@ -1,3 +1,4 @@
+import { OATH_TERMS } from './oathEngine';
 import type { WorldState } from '../types/world';
 
 export const WORLD_SAVE_MAX_BYTES = 8 * 1024 * 1024;
@@ -56,7 +57,7 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const pills = structure({foundation:count,golden:count,barrier:count,heart_poison:count});
 const technique = structure({id:oid,authorId:oid,createdTick:otick,name:id,spiritRoot:spirit});
@@ -125,6 +126,13 @@ const shape = structure({
     status:one('passed','rejected','stale'),outcome:text})),
   chronicleArchive:structure({anchors:arr(384,anchor),chapters:arr(24,structure({id,chapterNumber:tick,startTick:tick,endTick:tick,title:text,
     anchors:arr(18,anchor),biographies:arr(8,structure({actorId:id,name:id,realm,sectName:otext,anchorIds:ids})),body:strings(25_000),source}))}),
+  oaths:structure({nextId:tick,contracts:arr(300,structure({id,requesterId:id,providerId:id,locationId:id,
+    term:one('foundation_pill','jade_herb'),quantity:num(1,100,true),payment:wealth,collateral:wealth,
+    offeredTick:tick,offerExpiresTick:tick,deadlineTick:otick,appealUntilTick:otick,
+    status:one('offered','active','declined','fulfilled','breached','excused','expired'),
+    escrow:structure({payment:wealth,collateral:wealth}),
+    evidence:arr(60,structure({tick,actorId:id,kind:one('tender','delivery'),locationId:id,quantity:count,requesterPresent:bool})),
+    appeal:optional(structure({tick,appellantId:id,status:one('upheld','rejected'),reason:text})),settledTick:otick,outcome:otext}))}),
   mentorship:structure({
     offers:arr(240,structure({id,mentorId:id,studentId:id,technique,createdTick:tick,expiresTick:tick,
       status:one('pending','accepted','declined','expired'),resolvedTick:otick,outcome:otext})),
@@ -142,8 +150,11 @@ function unique<T>(items: T[], key: (item: T) => string, path: string): Set<stri
   return keys;
 }
 function verifyWorld(value: unknown): WorldState {
-  const candidate = value !== null && typeof value === 'object' && !Array.isArray(value) && !Object.hasOwn(value, 'mentorship')
-    ? { ...value, mentorship: { offers: [], lineage: [], budgets: [] } } : value;
+  const candidate = value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? { ...value,
+      ...(!Object.hasOwn(value, 'mentorship') ? { mentorship: { offers: [], lineage: [], budgets: [] } } : {}),
+      ...(!Object.hasOwn(value, 'oaths') ? { oaths: { contracts: [], nextId: 1 } } : {}),
+    } : value;
   shape(candidate, 'world');
   const w = candidate as WorldState;
   if (!w.cultivators.length || !w.locations.length) fail('world.minimum_entities');
@@ -183,6 +194,20 @@ function verifyWorld(value: unknown): WorldState {
   if ((w.playerAvatar.possessedId && !actor.has(w.playerAvatar.possessedId)) ||
       (w.playerAvatar.pendingOrder && w.playerAvatar.pendingOrder.actorId !== w.playerAvatar.possessedId) ||
       w.playerAvatar.transcript.some((entry) => !actor.has(entry.targetCultivatorId) || (entry.actorId && !actor.has(entry.actorId)))) fail('playerAvatar.references');
+  unique(w.oaths.contracts, ({ id }) => id, 'oaths.contracts.id');
+  for (const oath of w.oaths.contracts) {
+    const terms = OATH_TERMS[oath.term];
+    const pendingEscrow = oath.settledTick === undefined && (oath.status === 'active' || oath.status === 'breached');
+    const next = Number(oath.id.split('-').at(-1));
+    if (!/^oath-[1-9]\d*$/.test(oath.id) || !Number.isSafeInteger(next) || next >= w.oaths.nextId ||
+        !actor.has(oath.requesterId) || !actor.has(oath.providerId) || oath.requesterId === oath.providerId ||
+        oath.payment !== terms.payment || oath.collateral !== terms.collateral || oath.quantity !== terms.quantity ||
+        oath.escrow.payment !== (pendingEscrow ? terms.payment : 0) || oath.escrow.collateral !== (pendingEscrow ? terms.collateral : 0) ||
+        ((oath.status === 'offered' || pendingEscrow) && !locations.has(oath.locationId)) ||
+        (oath.appeal && oath.appeal.appellantId !== oath.providerId) ||
+        oath.evidence.some((row) => row.actorId !== oath.providerId || row.locationId !== oath.locationId ||
+          row.quantity !== oath.quantity || row.tick > w.tick)) fail('oaths.references');
+  }
   unique(w.mentorship.offers, ({ id }) => id, 'mentorship.offers.id');
   for (const record of [...w.mentorship.offers, ...w.mentorship.lineage]) {
     if (!actor.has(record.mentorId) || !actor.has(record.studentId) || record.mentorId === record.studentId) fail('mentorship.references');

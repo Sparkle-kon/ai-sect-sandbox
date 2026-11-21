@@ -1,3 +1,4 @@
+import { createOathState } from '../engine/oathEngine';
 import { createMentorshipState } from '../engine/mentorshipEngine';
 import { createWorldRandom, DEFAULT_WORLD_SEED } from '../engine/worldRandom';
 import { createPlayerAvatarState } from '../engine/avatarEngine';
@@ -211,6 +212,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED): WorldState {
   const world: WorldState = {
     random,
     mentorship: createMentorshipState(),
+    oaths: createOathState(),
     tick: 1,
     interventionSequence: 0,
     year: 1001,

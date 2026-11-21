@@ -1,3 +1,4 @@
+import { advanceOaths, resolveOathAction } from './oathEngine';
 import { maintainMentorship, mentorshipTechniqueMultiplier, resolveMentorshipAction } from './mentorshipEngine';
 import { worldRandom } from './worldRandom';
 import { consumeAvatarOrder, maintainPlayerAvatar } from './avatarEngine';
@@ -160,6 +161,12 @@ export function applyCultivatorBrainDecision(
     case 'BREW_PILL':
     case 'USE_PILL':
       return resolveAlchemy(world, cultivator, decision, rng);
+    case 'OFFER_OATH':
+    case 'ACCEPT_OATH':
+    case 'DECLINE_OATH':
+    case 'FULFILL_OATH':
+    case 'APPEAL_OATH':
+      return resolveOathAction(world, cultivator, decision);
     case 'TEACH':
     case 'ACCEPT_TUITION':
     case 'DECLINE_TUITION':
@@ -620,7 +627,7 @@ export function advanceWorldTick(
     if (yearly) cultivator.reflections = synthesizeReflections(cultivator, nextState.tick);
   }
 
-  for (const event of [...advanceDiplomacy(nextState, rng), ...advanceOccasions(nextState, rng), ...maintainSectPolitics(nextState), ...advanceBounties(nextState)]) {
+  for (const event of [...advanceDiplomacy(nextState, rng), ...advanceOccasions(nextState, rng), ...advanceOaths(nextState), ...maintainSectPolitics(nextState), ...advanceBounties(nextState)]) {
     newEvents.push(event);
     witnessEvent(nextState, event);
   }

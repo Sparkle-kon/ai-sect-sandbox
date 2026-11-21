@@ -33,6 +33,7 @@ import { isWorldSeed } from './engine/worldRandom';
 import { TimelinePanel } from './components/TimelinePanel';
 import { AnalyticsModal } from './components/AnalyticsModal';
 import { MentorshipPanel } from './components/MentorshipPanel';
+import { OathContractsPanel } from './components/OathContractsPanel';
 import { createTimeline, forkTimeline, readTimelineHead, readTimelineSnapshot, recordTimelineWorld, selectTimelineBranch } from './engine/timelineEngine';
 import type { WorldTimeline } from './engine/timelineEngine';
 import { activeAvatar, possessAvatar, queueAvatarOrder } from './engine/avatarEngine';
@@ -411,6 +412,7 @@ export const App: React.FC = () => {
             onSelectCultivator={setSelectedCultivatorId}
           />
           <MentorshipPanel world={visibleWorld} cultivator={selectedCultivator} />
+          <OathContractsPanel world={visibleWorld} cultivator={selectedCultivator} />
           {!preview && <WorldStoragePanel world={world} busy={isStepping} onRestore={replaceWorld} onNewWorld={newWorldFromSeed} />}
           <RelationshipGraph
             world={visibleWorld}

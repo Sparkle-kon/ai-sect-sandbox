@@ -59,6 +59,11 @@ export type ActionType =
   | 'TEACH'
   | 'ACCEPT_TUITION'
   | 'DECLINE_TUITION'
+  | 'OFFER_OATH'
+  | 'ACCEPT_OATH'
+  | 'DECLINE_OATH'
+  | 'FULFILL_OATH'
+  | 'APPEAL_OATH'
   | 'GATHER_HERBS'
   | 'BREW_PILL'
   | 'USE_PILL'
@@ -318,6 +323,8 @@ export interface LLMDecisionPayload {
   rumorIntent?: 'FABRICATE' | 'EXAGGERATE';
   proposedScheme?: SchemeKind;
   targetTuitionId?: string;
+  targetOathId?: string;
+  oathTerm?: OathTerm;
   targetTechniqueId?: string;
   targetHerbId?: HerbId;
   targetPillId?: PillId;
@@ -616,7 +623,39 @@ export interface MentorshipState {
   lastMaintainedTick?: number;
 }
 
+export type OathTerm = 'foundation_pill' | 'jade_herb';
+export interface OathEvidence {
+  tick: number;
+  actorId: string;
+  kind: 'tender' | 'delivery';
+  locationId: string;
+  quantity: number;
+  requesterPresent: boolean;
+}
+export interface OathContract {
+  id: string;
+  requesterId: string;
+  providerId: string;
+  locationId: string;
+  term: OathTerm;
+  quantity: number;
+  payment: number;
+  collateral: number;
+  offeredTick: number;
+  offerExpiresTick: number;
+  deadlineTick?: number;
+  appealUntilTick?: number;
+  status: 'offered' | 'active' | 'declined' | 'fulfilled' | 'breached' | 'excused' | 'expired';
+  escrow: { payment: number; collateral: number };
+  evidence: OathEvidence[];
+  appeal?: { tick: number; appellantId: string; status: 'upheld' | 'rejected'; reason: string };
+  settledTick?: number;
+  outcome?: string;
+}
+export interface OathState { contracts: OathContract[]; nextId: number }
+
 export interface WorldState {
+  oaths: OathState;
   mentorship: MentorshipState;
   random: WorldRandomState;
   playerAvatar: PlayerAvatarState;
