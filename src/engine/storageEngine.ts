@@ -1,3 +1,4 @@
+import { createTerritorialLeaseState, LEASE_DEPOSIT, LEASE_OFFER_TICKS, LEASE_QUOTA, LEASE_TERM_TICKS, LEASE_UNIT_RENT, territorialLeaseAvailability } from './territorialLeaseEngine';
 import { createFormationNetworkState, FORMATION_BUFFER_CAP, FORMATION_DISPATCH_QI, FORMATION_DRAW_CAP,
   FORMATION_MAX_THROUGHPUT, FORMATION_OFFER_TICKS, FORMATION_OVERLOAD_QI, FORMATION_RECEIPT_LIMIT,
   FORMATION_REPAIR_COST, FORMATION_SETUP_COST, formationLinkAvailability } from './formationNetworkEngine';
@@ -88,7 +89,7 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY FORMATION_NETWORK REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY FORMATION_NETWORK TERRITORIAL_LEASE REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const marketQty = num(1,12,true), marketPrice = num(1,500,true);
@@ -203,6 +204,15 @@ const shape = structure({
       attestations:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,tick,verdict:one('supports','contradicts')})),
       appeal:optional(structure({tick,actorId:id,verdict:one('upheld','rejected'),reason:text})),settledTick:otick,
       reputationSectId:oid,reputationPenalty:percentage,reputationRestored:percentage,reason:otext}))}),
+  territorialLeases:structure({nextId:num(1,100_000_000,true),leases:arr(SAVE_COLLECTION_LIMIT,structure({
+    id,ownerSectId:id,lesseeSectId:id,siteId:id,ownerSignerId:id,lesseeSignerId:id,openedTick:tick,offerExpiresTick:tick,
+    status:one('offered','active','closed','declined','expired'),startsTick:otick,endsTick:otick,settledTick:otick,
+    endReason:optional(one('expiry','title_change','surrender')),escrow:num(0,LEASE_DEPOSIT,true),rentPaid:num(0,LEASE_DEPOSIT,true),
+    refunded:num(0,LEASE_DEPOSIT,true),usedUnits:num(0,LEASE_QUOTA,true),receipts:arr(LEASE_QUOTA + LEASE_DEPOSIT,structure({
+      tick,kind:one('harvest','refund'),amount:num(1,LEASE_DEPOSIT,true),actorId:oid,
+      herbId:optional(one('jade_leaf','earth_root','star_bloom','shadow_moss')),units:optional(num(1,2,true))
+    }))
+  }))}),
   formations:structure({nextId:num(1,100_000_000,true),links:arr(SAVE_COLLECTION_LIMIT,structure({
     id,sectAId:id,sectBId:id,siteAId:id,siteBId:id,proposerId:id,recipientLeaderId:id,proposerSectId:id,
     openedTick:tick,offerExpiresTick:tick,steps:num(1,160,true),status:one('offered','active','broken','ended','declined','expired'),
@@ -370,6 +380,7 @@ function verifyWorld(value: unknown): WorldState {
     ? { ...value,
       ...(!Object.hasOwn(value, 'mentorship') ? { mentorship: { offers: [], lineage: [], budgets: [] } } : {}),
       ...(!Object.hasOwn(value, 'decisionTrace') ? { decisionTrace: { records: [] } } : {}),
+      ...(!Object.hasOwn(value, 'territorialLeases') ? { territorialLeases: createTerritorialLeaseState() } : {}),
       ...(!Object.hasOwn(value, 'formations') ? { formations: createFormationNetworkState() } : {}),
       ...(!Object.hasOwn(value, 'infirmaries') ? { infirmaries: createInfirmaryState() } : {}),
       ...(!Object.hasOwn(value, 'habitats') ? { habitats: createHabitatState() } : {}),
@@ -409,6 +420,53 @@ function verifyWorld(value: unknown): WorldState {
   const sector = unique(w.sects, (item) => item.id, 'sects.id');
   const locations = unique(w.locations, (item) => item.id, 'locations.id');
   const map = unique(w.terrain.tiles, (item) => item.id, 'terrain.tiles.id');
+  unique(w.territorialLeases.leases, ({ id }) => id, 'territorialLeases.leases.id');
+  unique(w.territorialLeases.leases.filter(({ status }) => status === 'active'), ({ siteId }) => siteId,
+    'territorialLeases.leases.active_site');
+  for (const lease of w.territorialLeases.leases) {
+    const serial = Number(lease.id.match(/^territorial-lease-([1-9][0-9]*)$/)?.[1]);
+    const funded = lease.status === 'active' || lease.status === 'closed';
+    const live = lease.status === 'active' || lease.status === 'offered';
+    const receiptTimes = new Set<string>();
+    if (!Number.isSafeInteger(serial) || serial >= w.territorialLeases.nextId ||
+        lease.ownerSectId === lease.lesseeSectId || !sector.has(lease.ownerSectId) || !sector.has(lease.lesseeSectId) ||
+        !actor.has(lease.ownerSignerId) || !actor.has(lease.lesseeSignerId) || lease.ownerSignerId === lease.lesseeSignerId ||
+        lease.openedTick > w.tick || lease.offerExpiresTick !== lease.openedTick + LEASE_OFFER_TICKS ||
+        (funded !== (lease.startsTick !== undefined)) || (funded !== (lease.endsTick !== undefined)) ||
+        (lease.startsTick !== undefined && (lease.startsTick < lease.openedTick || lease.startsTick >= lease.offerExpiresTick ||
+          lease.startsTick > w.tick || lease.endsTick !== lease.startsTick + LEASE_TERM_TICKS)) ||
+        (live !== (lease.settledTick === undefined)) ||
+        (lease.settledTick !== undefined && (lease.settledTick < (lease.startsTick ?? lease.openedTick) || lease.settledTick > w.tick)) ||
+        (lease.status === 'active' && (!locations.has(lease.siteId) || lease.endsTick! <= w.tick || territorialLeaseAvailability(w, lease) === 'title_change')) ||
+        (lease.status === 'offered' && lease.offerExpiresTick <= w.tick) ||
+        (lease.status === 'declined' && lease.settledTick! >= lease.offerExpiresTick) ||
+        (lease.status === 'expired' && lease.settledTick! < lease.offerExpiresTick) ||
+        ((lease.status === 'closed') !== (lease.endReason !== undefined)) ||
+        (lease.endReason === 'expiry' && lease.settledTick! < lease.endsTick!) ||
+        (lease.endReason === 'surrender' && lease.settledTick! >= lease.endsTick!)) fail('territorialLeases.leases.references');
+    if (lease.escrow + lease.rentPaid + lease.refunded !== (funded ? LEASE_DEPOSIT : 0) ||
+        lease.usedUnits * LEASE_UNIT_RENT !== lease.rentPaid || (lease.status !== 'closed' && lease.refunded !== 0) ||
+        (!funded && (lease.receipts.length || lease.usedUnits))) fail('territorialLeases.leases.balance');
+    let summedUsed = 0, summedRent = 0, summedRefund = 0, lastTick = -1;
+    for (const receipt of lease.receipts) {
+      const key = JSON.stringify([receipt.tick, receipt.kind, receipt.actorId]);
+      if (!funded || receipt.tick < (lease.startsTick ?? Infinity) || receipt.tick > w.tick || receipt.tick < lastTick || receiptTimes.has(key)) {
+        fail('territorialLeases.leases.receipts.references');
+      }
+      receiptTimes.add(key); lastTick = receipt.tick;
+      if (receipt.kind === 'harvest') {
+        if (!receipt.actorId || !actor.has(receipt.actorId) || !receipt.herbId || !receipt.units ||
+            receipt.amount !== receipt.units * LEASE_UNIT_RENT || receipt.tick >= lease.endsTick! ||
+            receipt.tick > (lease.settledTick ?? w.tick)) fail('territorialLeases.leases.receipts.harvest');
+        summedUsed += receipt.units ?? 0; summedRent += receipt.amount;
+      } else {
+        if (receipt.actorId !== undefined || receipt.herbId !== undefined || receipt.units !== undefined ||
+            lease.status !== 'closed' || receipt.tick < lease.settledTick!) fail('territorialLeases.leases.receipts.refund');
+        summedRefund += receipt.amount;
+      }
+    }
+    if (summedUsed !== lease.usedUnits || summedRent !== lease.rentPaid || summedRefund !== lease.refunded) fail('territorialLeases.leases.receipts.totals');
+  }
   unique(w.formations.links, ({ id }) => id, 'formations.links.id');
   unique(w.formations.links.filter(({ status }) => status === 'offered' || status === 'active' || status === 'broken'),
     ({ sectAId, sectBId }) => JSON.stringify([sectAId, sectBId]), 'formations.links.active_pair');

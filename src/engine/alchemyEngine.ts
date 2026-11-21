@@ -1,3 +1,4 @@
+import { authorizedHerbHarvestLimit, settleLeasedHerbHarvest } from './territorialLeaseEngine';
 import { weatherHerbRegrowth } from './weatherEngine';
 import type { Cultivator, HerbId, LLMDecisionPayload, PillId, WorldEvent, WorldState } from '../types/world';
 import { recordMemory } from './memoryEngine';
@@ -57,9 +58,10 @@ export function availableAlchemy(actor: Cultivator, world: WorldState): AlchemyO
   const place = world.locations.find((node) => node.id === actor.locationId);
   if (!actor.alive || actor.hp <= 0 || !place) return [];
   const result: AlchemyOption[] = [];
-  const guarding = guardingHerbBeast(world, actor);
+  const harvestLimit = authorizedHerbHarvestLimit(world, actor, place);
+  const guarding = harvestLimit > 0 ? guardingHerbBeast(world, actor) : undefined;
   for (const herb of HERBS) {
-    if ((!guarding || actor.combatPower >= guarding.power * 1.25) && place.herbs[herb] >= 1 && actor.herbs[herb] < 99) result.push({ action: 'GATHER_HERBS', targetHerbId: herb });
+    if (harvestLimit > 0 && (!guarding || actor.combatPower >= guarding.power * 1.25) && place.herbs[herb] >= 1 && actor.herbs[herb] < 99) result.push({ action: 'GATHER_HERBS', targetHerbId: herb });
   }
   for (const pill of PILLS) {
     const recipe = ALCHEMY_RECIPES[pill];
@@ -97,7 +99,8 @@ export function resolveAlchemy(world: WorldState, actor: Cultivator, decision: L
   const place = world.locations.find((node) => node.id === actor.locationId)!;
   if (option.action === 'GATHER_HERBS' && option.targetHerbId) {
     const herb = option.targetHerbId;
-    const amount = Math.min(2, Math.floor(place.herbs[herb]), 99 - actor.herbs[herb]);
+    const amount = Math.min(2, Math.floor(place.herbs[herb]), 99 - actor.herbs[herb], authorizedHerbHarvestLimit(world, actor, place));
+    if (amount <= 0 || !settleLeasedHerbHarvest(world, actor, place, herb, amount)) return null;
     place.herbs[herb] -= amount;
     actor.herbs[herb] += amount;
     return event(world, actor, `${actor.name}采集灵草`, `${actor.name}在${place.name}采得${amount}株${HERB_LABELS[herb]}，灵草存量随之减少。`);

@@ -1,3 +1,4 @@
+import { createTerritorialLeaseState } from '../engine/territorialLeaseEngine';
 import { createFormationNetworkState } from '../engine/formationNetworkEngine';
 import { createInfirmaryState } from '../engine/infirmaryEngine';
 import { createHabitatState } from '../engine/habitatEngine';
@@ -260,6 +261,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     habitats: createHabitatState(),
     infirmaries: createInfirmaryState(),
     formations: createFormationNetworkState(),
+    territorialLeases: createTerritorialLeaseState(),
     witnesses: createWitnessState(),
     estates: createEstateState(),
     decisionTrace: createDecisionTraceState(),

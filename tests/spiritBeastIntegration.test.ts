@@ -52,6 +52,7 @@ describe('beasts in the shared world and cognitive options', () => {
     actor.locationId = site.id;
     actor.combatPower = 1;
     site.herbs.jade_leaf = 4;
+    site.ownerSectId = actor.sectId; // Keep the title valid so only the hostile den changes gathering eligibility.
     expect(availableAlchemy(actor, world)).not.toContainEqual({
       action: 'GATHER_HERBS', targetHerbId: 'jade_leaf',
     });

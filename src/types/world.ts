@@ -93,6 +93,7 @@ export type ActionType =
   | 'HABITAT'
   | 'INFIRMARY'
   | 'FORMATION_NETWORK'
+  | 'TERRITORIAL_LEASE'
   | 'GATHER_HERBS'
   | 'BREW_PILL'
   | 'USE_PILL'
@@ -388,6 +389,8 @@ export interface LLMDecisionPayload {
   targetHazardId?: string;
   ceasefireMove?: CeasefireMove;
   targetCeasefireId?: string;
+  leaseMove?: TerritorialLeaseMove;
+  targetTerritorialLeaseId?: string;
   formationMove?: FormationMove;
   targetFormationLinkId?: string;
   infirmaryMove?: InfirmaryMove;
@@ -1560,7 +1563,40 @@ export interface FormationLink {
 }
 export interface FormationNetworkState { links: FormationLink[]; nextId: number }
 
+export type TerritorialLeaseMove = 'offer' | 'accept' | 'decline' | 'surrender';
+export type TerritorialLeaseEndReason = 'expiry' | 'title_change' | 'surrender';
+export interface TerritorialLeaseReceipt {
+  tick: number;
+  kind: 'harvest' | 'refund';
+  amount: number;
+  actorId?: string;
+  herbId?: HerbId;
+  units?: number;
+}
+export interface TerritorialLease {
+  id: string;
+  ownerSectId: string;
+  lesseeSectId: string;
+  siteId: string;
+  ownerSignerId: string;
+  lesseeSignerId: string;
+  openedTick: number;
+  offerExpiresTick: number;
+  status: 'offered' | 'active' | 'closed' | 'declined' | 'expired';
+  startsTick?: number;
+  endsTick?: number;
+  settledTick?: number;
+  endReason?: TerritorialLeaseEndReason;
+  escrow: number;
+  rentPaid: number;
+  refunded: number;
+  usedUnits: number;
+  receipts: TerritorialLeaseReceipt[];
+}
+export interface TerritorialLeaseState { leases: TerritorialLease[]; nextId: number }
+
 export interface WorldState {
+  territorialLeases: TerritorialLeaseState;
   formations: FormationNetworkState;
   infirmaries: InfirmaryState;
   habitats: HabitatState;

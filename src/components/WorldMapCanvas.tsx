@@ -1,3 +1,4 @@
+import { visibleLeaseMapSites } from './leaseMapView';
 import { drawFormationMapLinks, visibleFormationMapLinks } from './formationMapView';
 import { visibleInfirmaries } from '../engine/infirmaryEngine';
 import { visibleHabitats } from '../engine/habitatEngine';
@@ -98,6 +99,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const weatherAtVisibleSites = useMemo(() => new Map(seenLocations
     .filter(({ id }) => isCurrentLocation(id))
     .map((site) => [site.id, localQiWeather(world, site)])), [world, seenLocations, isCurrentLocation]);
+  const localLeaseSites = useMemo(() => visibleLeaseMapSites(world, mapView, selected), [world, mapView, selected]);
   const formationLines = useMemo(() => visibleFormationMapLinks(world, mapView, selected), [world, mapView, selected]);
   const localClinic = useMemo(() => {
     const clinic = visibleInfirmaries(world, selected);
@@ -314,6 +316,13 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           ctx.setLineDash([]);
         }
 
+        if (localLeaseSites.has(loc.id)) {
+          ctx.save();
+          ctx.fillStyle = '#fcd34d';
+          ctx.fillRect(loc.x + 17, loc.y + 12, 7, 5);
+          ctx.restore();
+        }
+
         // Keep the element beside the location name so it doesn't add a competing row.
         ctx.font = 'bold 13px sans-serif';
         const marker = `〈${loc.spiritRoot}〉`;
@@ -517,7 +526,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener('change', stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, hazards, convoys, escortedCaravan, formationLines, pilgrimageMark, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, hazards, convoys, escortedCaravan, formationLines, localLeaseSites, pilgrimageMark, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -910,6 +919,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
             const localWeather = weatherAtVisibleSites.get(location.id);
             const localBeasts = beastsByLocation.get(location.id) ?? [];
             const habitatView = localHabitat.get(location.id);
+            const leaseMark = localLeaseSites.get(location.id);
             const sanctuary = sanctuaryMarks.get(location.id);
             return (
               <li key={location.id} className="inline-flex items-center gap-1.5">
@@ -935,6 +945,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                 {(localErrata.get(location.id) ?? 0) > 0 && <span className="text-amber-200">· 公开史料有待勘误 {localErrata.get(location.id)} 条</span>}
                 {habitatView && <span className="text-emerald-200">· 复育栖地 {habitatView.wildOccupancy ?? 0}/{habitatView.capacity} 野兽</span>}
                 {localClinic?.siteId === location.id && <span className="text-rose-200">· 静养床 {localClinic.capacity.available}/{localClinic.capacity.beds} 可用</span>}
+                {leaseMark && <span className="text-amber-200">· {leaseMark.role === 'owner' ? '本宗授权' : '本宗采集许可'} · 余 {leaseMark.remaining} 株</span>}
                 {localCouncil && <span className="text-violet-300">· 本月议决：{localCouncil.title}</span>}
                 {besiegedLocationIds.has(location.id) && <span className="text-rose-300">· 围攻中</span>}
                 {localOccasions.map((occasion) => (
