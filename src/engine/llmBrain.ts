@@ -707,10 +707,7 @@ export function computeHeuristicDecision(
   };
 }
 
-/**
- * Queries an OpenAI-compatible Chat Completions endpoint for an NPC's next cognitive decision.
- * Falls back gracefully to heuristic Utility AI if offline or on error.
- */
+/** Compatibility for callers explicitly delegating the old, snapshot-local Utility fallback. */
 export async function queryCultivatorLLMDecision(
   cultivator: Cultivator,
   world: WorldState,
@@ -725,13 +722,31 @@ export async function queryCultivatorLLMDecision(
     return due ? { ...due, chosenAction: 'FIELD_OBSERVATORY', innerMonologue: '如期到场，实测再与旧预测相比。' }
       : computeHeuristicDecision(cultivator, world, actorFallbackRandom(world, cultivator.id, requestTick));
   };
-  if (!config.enabled || !config.apiKey.trim() || activeRelocationForActor(world, cultivator) || activeEscortForActor(world, cultivator) ||
-      activeCourierForActor(world, cultivator)) return fallback();
+  const answer = await requestCultivatorLLMDecision(cultivator, world, config, requestTick);
+  if (!answer) return fallback();
+  onSource?.('llm');
+  return answer;
+}
+
+export function llmDecisionEndpoint(config: Pick<LLMConfig, 'apiBaseUrl'>): string {
+  return `${config.apiBaseUrl.replace(/\/+$/, '')}/chat/completions`;
+}
+
+/** A provider-only lane. Missing/invalid/unsent results never synthesize a Utility decision here. */
+export async function requestCultivatorLLMDecision(
+  cultivator: Cultivator,
+  world: WorldState,
+  config: LLMConfig,
+  requestTick: number,
+  options: { signal?: AbortSignal; onStart?: () => void } = {},
+): Promise<LLMDecisionPayload | undefined> {
+  if (options.signal?.aborted || !config.enabled || !config.apiKey.trim() || activeRelocationForActor(world, cultivator) ||
+      activeEscortForActor(world, cultivator) || activeCourierForActor(world, cultivator)) return undefined;
 
   const activeVow = activePilgrimageForActor(world, cultivator);
   const onPilgrimagePath = activeVow && Boolean(pilgrimageCheckpoint(world, cultivator));
   const pilgrimageOptions = availablePilgrimageActions(cultivator, world);
-  if (onPilgrimagePath && !pilgrimageOptions.length) return fallback();
+  if (onPilgrimagePath && !pilgrimageOptions.length) return undefined;
 
   const location = world.locations.find((l) => l.id === cultivator.locationId);
   const coLocated = world.cultivators.filter(
@@ -866,11 +881,15 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
 
 ${COGNITIVE_RESPONSE_GUIDE}`;
 
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  options.signal?.addEventListener('abort', abort, { once: true });
+  if (options.signal?.aborted) abort();
+  const deadline = setTimeout(abort, 8000);
   try {
-    const endpoint = `${config.apiBaseUrl.replace(/\/+$/, '')}/chat/completions`;
-    const result = await llmScheduler.requestJson<LLMDecisionPayload>('decision', endpoint, {
+    const result = await llmScheduler.requestJson<LLMDecisionPayload>('decision', llmDecisionEndpoint(config), {
       method: 'POST',
-      signal: AbortSignal.timeout(8000),
+      signal: controller.signal,
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${config.apiKey.trim()}`,
@@ -889,7 +908,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
         max_tokens: 450,
         response_format: { type: 'json_object' },
       }),
-    }, { tick: requestTick, model: config.model || 'gpt-4o-mini', decode: (value) => {
+    }, { tick: requestTick, model: config.model || 'gpt-4o-mini', onStart: options.onStart, decode: (value) => {
           const data = value as { choices?: Array<{ message?: { content?: string } }> };
           const rawText = data.choices?.[0]?.message?.content?.trim() ?? '';
           const cleaned = rawText
@@ -1357,10 +1376,11 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
               ? parsed.rumorIntent : undefined,
           };
     } });
-    if (result.status !== 'ok') return fallback();
-    onSource?.('llm');
-    return result.data;
+    return result.status === 'ok' && !controller.signal.aborted ? result.data : undefined;
   } catch {
-    return fallback();
+    return undefined;
+  } finally {
+    clearTimeout(deadline);
+    options.signal?.removeEventListener('abort', abort);
   }
 }

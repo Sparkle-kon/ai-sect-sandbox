@@ -12,14 +12,12 @@ import {
   executeGodIntervention,
   GodInterventionCommand,
 } from './engine/worldEngine';
-import { queryCultivatorLLMDecision } from './engine/llmBrain';
+import { llmDecisionEndpoint, requestCultivatorLLMDecision } from './engine/llmBrain';
 import { enrichAnnualReflections } from './engine/reflectionEngine';
 import { enrichTickDialogues } from './engine/dialogueEngine';
-import { activeSiegeForActor } from './engine/diplomacyEngine';
-import { activeOccasionForActor } from './engine/occasionEngine';
 import { visiblePilgrimages } from './engine/pilgrimageEngine';
 import { applyMapBrush } from './engine/mapBrushEngine';
-import { GodBrushKind, LLMConfig, LLMDecisionPayload, MapPoint, WorldEvent, WorldState } from './types/world';
+import { GodBrushKind, LLMConfig, MapPoint, WorldEvent, WorldState } from './types/world';
 import { SandboxWorkspace, WorkspaceSections } from './components/SandboxWorkspace';
 import type { WorkspaceId } from './components/SandboxWorkspace';
 import { annotationWriteIsCurrent } from './components/annotationUi';
@@ -36,13 +34,17 @@ import { createDecisionReplayTape, replayOneTurn } from './engine/decisionTraceE
 import type { DecisionReplayTape, DecisionReplayResult } from './engine/decisionTraceEngine';
 import { createTimeline, forkTimeline, readTimelineHead, readTimelineSnapshot, recordTimelineWorld, selectTimelineBranch, forkTimelineCheckpoint, TIMELINE_MAX_BRANCHES } from './engine/timelineEngine';
 import type { WorldTimeline } from './engine/timelineEngine';
-import { activeAvatar, possessAvatar, queueAvatarOrder } from './engine/avatarEngine';
+import { possessAvatar, queueAvatarOrder } from './engine/avatarEngine';
 import { resolveAvatarSnapshot } from './engine/avatarRuntime';
 import { CHRONICLE_FOCUS_UNAVAILABLE, createChronicleFocusResolver } from './engine/chronicleFocusEngine';
 import type { ChronicleFocusRequest } from './engine/chronicleFocusEngine';
 import type { ChronicleCategoryFilter, ChronicleFeedPosition, ChronicleFeedReturn } from './components/ChronicleFeed';
 import { FocusedSectSummary } from './components/FocusedSectSummary';
 import { visibleCausalChronicle } from './engine/chronicleCausalityEngine';
+import { commitFairModelTurn, createFairModelTurnState, longestModelWait } from './engine/fairModelTurnEngine';
+import type { FairModelTurnState } from './engine/fairModelTurnEngine';
+import { modelDecisionCandidates, runModelDecisionTurn } from './engine/modelDecisionTurn';
+import type { FairModelCoverage } from './engine/modelDecisionTurn';
 
 const AgentInspector = React.lazy(async () => ({ default: (await import('./components/AgentInspector')).AgentInspector }));
 const AttestationPanel = React.lazy(async () => ({ default: (await import('./components/AttestationPanel')).AttestationPanel }));
@@ -119,8 +121,14 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
   const saveContextVersion = useRef(0);
   const fastForwardSerial = useRef(0);
   const fastForwardRun = useRef<ActiveFastForward>();
+  const modelStepAbort = useRef<AbortController>();
+  const fairTurns = useRef(new Map<string, { state: FairModelTurnState; coverage: FairModelCoverage }>());
   const [fastForwardView, setFastForwardView] = useState<FastForwardViewState>({ phase: 'idle' });
-  useEffect(() => () => { fastForwardRun.current?.worker?.terminate(); fastForwardRun.current = undefined; }, []);
+  useEffect(() => () => {
+    fastForwardRun.current?.worker?.terminate();
+    fastForwardRun.current = undefined;
+    modelStepAbort.current?.abort();
+  }, []);
   const [saveTimelineId, setSaveTimelineId] = useState(saveTimelineIdentity);
   const authority = useRef(world);
   const [timeline, setTimeline] = useState(() => createTimeline(world));
@@ -147,6 +155,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
     const current = authority.current;
     const next = change(current);
     if (next !== current) {
+      modelStepAbort.current?.abort();
       authority.current = next;
       if (record) updateTimeline(recordTimelineWorld(history.current, next));
       setWorld(next);
@@ -171,35 +180,43 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
     apiKey: '',
     model: 'gpt-4o-mini',
   });
+  const changeLlmConfig = (config: LLMConfig) => {
+    modelStepAbort.current?.abort();
+    setLlmConfig(config);
+  };
 
   const handleStepTick = useCallback(async () => {
     if (stepInFlight.current || browsing.current || fastForwardRun.current) return;
     stepInFlight.current = true;
     setIsStepping(true);
+    let modelAbort: AbortController | undefined;
     try {
       const starting = authority.current;
       const branchId = history.current.activeBranchId;
       if (llmConfig.enabled && llmConfig.apiKey.trim()) {
-        llmScheduler.beginTick(starting.tick + 1);
-        const activeHost = activeAvatar(starting);
-        const orderedActorId = activeHost && starting.playerAvatar.pendingOrder?.actorId === activeHost.id ? activeHost.id : undefined;
-        const alive = starting.cultivators.filter((c) => c.alive && c.id !== orderedActorId && !activeSiegeForActor(starting, c) && !activeOccasionForActor(starting, c));
-        const modelActors = new Set<string>();
-        const results = await Promise.all(
-          alive.map(async (c) => {
-            const dec = await queryCultivatorLLMDecision(c, starting, llmConfig, (source) => {
-              if (source === 'llm') modelActors.add(c.id);
-              else llmScheduler.markDecision('local_fallback');
-            }, starting.tick + 1);
-            return [c.id, dec] as const;
-          })
-        );
+        const controller = new AbortController();
+        modelAbort = controller;
+        modelStepAbort.current = controller;
+        const context = saveContextVersion.current;
+        const current = () => !controller.signal.aborted && authority.current === starting && !browsing.current &&
+          history.current.activeBranchId === branchId && saveContextVersion.current === context;
+        const requestedTick = starting.tick + 1;
+        const endpoint = llmDecisionEndpoint(llmConfig);
+        llmScheduler.beginTick(requestedTick);
+        const fairness = fairTurns.current.get(branchId)?.state ?? createFairModelTurnState();
+        const admission = () => llmScheduler.decisionAdmission(requestedTick, endpoint);
+        const turn = await runModelDecisionTurn({
+          state: fairness, eligible: modelDecisionCandidates(starting), signal: controller.signal,
+          admission: admission(), currentAdmission: admission,
+          request: (actor, signal, onStart) => requestCultivatorLLMDecision(actor, starting, llmConfig, requestedTick, { signal, onStart }),
+        });
+        const modelActors = new Set(turn.orders.keys());
         llmScheduler.markDecision('validated', modelActors.size);
-        if (authority.current !== starting) {
+        if (turn.stale || !current()) {
           llmScheduler.markDecision('stale', modelActors.size);
           return;
         }
-        const decisions: Record<string, LLMDecisionPayload> = Object.fromEntries(results);
+        const decisions = Object.fromEntries(turn.orders);
         const applied = new Set<string>();
         const tape = createDecisionReplayTape(starting, 'deferred');
         let canonicalWatchBatch: readonly WorldEvent[] = [];
@@ -209,23 +226,37 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
         const [reflected, dramatized] = await Promise.all([
           enrichAnnualReflections(tick, llmConfig), enrichTickDialogues(tick, llmConfig),
         ]);
-        if (authority.current !== starting) {
+        if (!current()) {
           llmScheduler.markDecision('stale', modelActors.size);
           return;
         }
         const withCouncil = await settleAnnualCouncilOnline({ ...reflected, events: dramatized.events }, llmConfig);
-        if (authority.current !== starting) {
+        if (!current()) {
           llmScheduler.markDecision('stale', modelActors.size);
           return;
         }
         const next = await settleChronicleOnline(withCouncil, llmConfig);
-        if (next.watchlists.watches.length && authority.current === starting) {
+        if (!current()) {
+          llmScheduler.markDecision('stale', modelActors.size);
+          return;
+        }
+        if (next.watchlists.watches.length) {
           const beforeCouncil = new Set(dramatized.events.map(({ id }) => id));
           const endingCouncil = withCouncil.events.filter(({ id, tick: at }) => at === next.tick && !beforeCouncil.has(id));
           captureWatchDigests(next, [...canonicalWatchBatch, ...endingCouncil]);
         }
-        if (updateWorld((current) => commitCouncilSnapshot(current, starting, next)) === next) {
+        modelStepAbort.current = undefined;
+        if (updateWorld((live) => commitCouncilSnapshot(live, starting, next)) === next) {
           retainReplay(branchId, tape, next);
+          const livingActorIds = next.cultivators.filter(({ alive, hp }) => alive && hp > 0).map(({ id }) => id);
+          const state = commitFairModelTurn(fairness, { ...turn, livingActorIds });
+          const utility = turn.eligibleActorIds.length - modelActors.size;
+          fairTurns.current.set(branchId, { state, coverage: {
+            tick: next.tick, eligible: turn.eligibleActorIds.length, planned: turn.plannedActorIds.length,
+            started: turn.startedActorIds.length, validated: modelActors.size, applied: applied.size,
+            utility, longestWait: longestModelWait(state, turn.eligibleActorIds), ...(turn.limit ? { limit: turn.limit } : {}),
+          } });
+          llmScheduler.markDecision('local_fallback', utility);
           llmScheduler.markDecision('applied', applied.size);
           llmScheduler.markDecision('simulation_rejected', modelActors.size - applied.size);
         } else {
@@ -237,6 +268,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
         retainReplay(branchId, tape, next);
       }
     } finally {
+      if (modelStepAbort.current === modelAbort) modelStepAbort.current = undefined;
       stepInFlight.current = false;
       setIsStepping(false);
     }
@@ -336,6 +368,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
 
   const activateTimeline = (next: WorldTimeline, incoming: WorldState) => {
     if (fastForwardRun.current) stopFastForward('原分支已改变，暂存快进已丢弃。');
+    modelStepAbort.current?.abort();
     saveContextVersion.current += 1;
     setIsRunning(false);
     clearPreview();
@@ -381,6 +414,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
   const replaceWorld = (next: WorldState, expected: WorldState, expectedContextVersion?: number): boolean => {
     if (!canUseSaveContext(expected, expectedContextVersion)) return false;
     replayTapes.current.clear();
+    fairTurns.current.clear();
     setSaveTimelineId(saveTimelineIdentity());
     setViewEpoch((previous) => previous + 1);
     activateTimeline(createTimeline(next), next);
@@ -396,6 +430,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
     const active = authority.current;
     const next = createInitialWorld(active.random.seed, active.worldgen?.profileId ?? 'classic');
     replayTapes.current.clear();
+    fairTurns.current.clear();
     // Emergency reset invalidates an in-flight model tick, which cannot commit afterward.
     setSaveTimelineId(saveTimelineIdentity());
     setViewEpoch((previous) => previous + 1);
@@ -750,9 +785,10 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
           ...(preview ? [] : [
             { id: 'god', label: '天道干预与模型设置', content: <div className="space-y-2.5">
               <React.Suspense fallback={<p role="status">载入模型状态…</p>}><LlmTelemetryPanel scheduler={llmScheduler}
+                coverage={preview ? undefined : fairTurns.current.get(timeline.activeBranchId)?.coverage}
                 configured={llmConfig.enabled} hasCredential={Boolean(llmConfig.apiKey.trim())} model={llmConfig.model || 'gpt-4o-mini'} /></React.Suspense>
               <React.Suspense fallback={<p role="status">载入天道控制台…</p>}><GodConsole world={world} selectedCultivatorId={activeActorId} llmConfig={llmConfig}
-                onUpdateLLMConfig={setLlmConfig} onIntervene={handleGodIntervene} /></React.Suspense>
+                onUpdateLLMConfig={changeLlmConfig} onIntervene={handleGodIntervene} /></React.Suspense>
             </div> },
             { id: 'scenario', label: '剧本编辑与复演', content: <React.Suspense fallback={<p role="status">载入剧本编辑器…</p>}>
               <ScenarioPanel world={world} busy={isStepping} onApply={replaceWorld} />

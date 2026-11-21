@@ -154,13 +154,14 @@ export const GodConsole: React.FC<GodConsoleProps> = ({
       </div>
 
       {/* Whisper into selected NPC's mind */}
-      <div className="flex items-center gap-2">
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] items-center gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
         <input
           type="text"
           value={whisperText}
           onChange={(e) => setWhisperText(e.target.value)}
+          aria-label="天道传音内容"
           placeholder={`向【${selectedCultivator?.name ?? '修士'}】识海灌输天道传音/执念...`}
-          className="flex-1 px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none focus:border-amber-500"
+          className="min-h-11 min-w-0 w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none focus:border-amber-500"
         />
         <button
           type="button"
@@ -171,10 +172,10 @@ export const GodConsole: React.FC<GodConsoleProps> = ({
               whisperText,
             })
           }
-          className="px-3 py-1.5 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 text-xs font-medium flex items-center gap-1.5 whitespace-nowrap"
+          className="flex min-h-11 min-w-0 max-w-full items-center justify-center gap-1.5 rounded-lg border border-purple-500/40 bg-purple-500/20 px-3 py-1.5 text-xs font-medium text-purple-300 hover:bg-purple-500/30 sm:max-w-60"
         >
-          <MessageSquarePlus className="w-3.5 h-3.5" />
-          神念传音【{selectedCultivator?.name}】
+          <MessageSquarePlus aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+          <span className="min-w-0 break-all">神念传音【{selectedCultivator?.name}】</span>
         </button>
       </div>
     </div>

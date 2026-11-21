@@ -1,4 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
+import type { FairModelCoverage } from '../engine/modelDecisionTurn';
 import type { LLMSchedulerSnapshot } from '../engine/llmScheduler';
 
 type Prices = LLMSchedulerSnapshot['settings']['prices'];
@@ -25,7 +26,7 @@ const REQUEST_TYPES = {
 
 const OUTCOMES = {
   ok: '已收到有效 JSON', budget: '预算拦截', queue_full: '队列已满', http_error: 'HTTP 失败',
-  invalid_json: '响应无效', network_error: '网络失败', aborted: '已取消',
+  invalid_json: '响应无效', network_error: '网络失败', aborted: '已取消', backoff: '服务冷却拦截',
 } as const;
 
 const usd = (value: number) => value.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 6 });
@@ -53,17 +54,19 @@ interface LlmTelemetryViewProps {
   hasCredential: boolean;
   model: string;
   worldTick?: number;
+  coverage?: FairModelCoverage;
   onConcurrencyChange: (value: number) => void;
   onPricesChange: (prices: Prices) => void;
   onExpanded?: (open: boolean) => void;
 }
 
-export function LlmTelemetryView({ snapshot, configured, hasCredential, model, worldTick, onConcurrencyChange, onPricesChange, onExpanded }: LlmTelemetryViewProps) {
+export function LlmTelemetryView({ snapshot, configured, hasCredential, model, worldTick, coverage, onConcurrencyChange, onPricesChange, onExpanded }: LlmTelemetryViewProps) {
   const [priceError, setPriceError] = useState(false);
   const { usage, pricing, settings, decisions } = snapshot;
   const rate = Object.hasOwn(settings.prices, model) ? settings.prices[model] : undefined;
   const canPrice = model.trim().length > 0 && model.length <= 120;
   const pricesKnown = pricing.pricedCalls > 0;
+  const outcomeCounts: Partial<Record<keyof typeof OUTCOMES, number>> = snapshot.outcomes;
 
   return (
     <details
@@ -76,7 +79,7 @@ export function LlmTelemetryView({ snapshot, configured, hasCredential, model, w
       <div className="mt-2 space-y-3 border-t border-slate-800 pt-2">
         <p className="text-xs leading-relaxed text-slate-400">
           当前配置：{configured ? (hasCredential ? '模型模式已启用，已填凭证（未据此确认连通）' : '缺少访问凭证，使用规则脑') : '模型模式关闭'}。
-          以下是本会话累计，并非单一 Tick 的结果；收到响应不等于模型决策已写入世界。
+          调用与费用是本会话累计，并非单一 Tick 的结果；收到响应不等于模型决策已写入世界。
           {worldTick !== undefined && <> 当前世界：Tick #{worldTick}。</>}
         </p>
         <dl aria-label="调用与决策" className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
@@ -91,6 +94,7 @@ export function LlmTelemetryView({ snapshot, configured, hasCredential, model, w
           <Counter label="规则回退" value={decisions.local_fallback} tone="text-amber-200" />
           <Counter label="已弃用结果" value={decisions.stale} />
         </dl>
+        {coverage && <FairCoverageReceipt coverage={coverage} />}
         <section aria-label="Token 与成本" className="space-y-1">
           <h3 className="text-xs font-semibold text-slate-200">Token 与成本</h3>
           <p className="text-xs leading-relaxed text-slate-300">
@@ -129,7 +133,7 @@ export function LlmTelemetryView({ snapshot, configured, hasCredential, model, w
           <p className="mt-2 border-t border-slate-800 pt-2 text-xs text-slate-400">结果包含开始前的拦截与取消。</p>
           <dl className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-300">
             {Object.entries(OUTCOMES).map(([key, label]) => (
-              <div key={key} className="flex gap-1"><dt>{label}</dt><dd className="tabular-nums">{snapshot.outcomes[key as keyof typeof OUTCOMES]}</dd></div>
+              <div key={key} className="flex gap-1"><dt>{label}</dt><dd className="tabular-nums">{outcomeCounts[key as keyof typeof OUTCOMES] ?? 0}</dd></div>
             ))}
           </dl>
         </details>
@@ -197,4 +201,28 @@ export function LlmTelemetryPanel({ scheduler, ...state }: Omit<LlmTelemetryView
       onPricesChange={(prices) => scheduler.configure({ prices })}
     />
   );
+}
+
+const COVERAGE_LIMIT: Record<NonNullable<FairModelCoverage['limit']>, string> = {
+  budget: '调用预算', queue: '队列容量', backoff: '服务冷却', deadline: '本回合期限',
+};
+
+function FairCoverageReceipt({ coverage }: { coverage: FairModelCoverage }) {
+  return <details className="min-w-0 rounded border border-sky-400/25 bg-slate-950/60 px-2 py-1.5">
+    <summary className="min-h-11 cursor-pointer break-words py-2 text-xs font-semibold text-sky-100">本分支最近已提交的模型轮值回合</summary>
+    <div className="space-y-1.5 pb-1">
+      <p className="text-xs text-slate-300">Tick #{coverage.tick} · 仅此分支已提交的实际回合，不是本会话累计。</p>
+      <dl aria-label="已提交回合的轮值覆盖" className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+        <Counter label="符合模型轮值条件" value={coverage.eligible} />
+        <Counter label="计划安排模型" value={coverage.planned} />
+        <Counter label="实际发起模型" value={coverage.started} />
+        <Counter label="模型结果已校验" value={coverage.validated} />
+        <Counter label="模型决策已写入" value={coverage.applied} tone="text-emerald-200" />
+        <Counter label="交由规则脑" value={coverage.utility} tone="text-amber-200" />
+        <Counter label="候选最长等待" value={`${coverage.longestWait} 回合`} />
+      </dl>
+      {coverage.limit !== undefined && <p className="text-xs text-amber-200">本轮限制：{COVERAGE_LIMIT[coverage.limit]}。</p>}
+      <p className="text-xs leading-relaxed text-slate-400">符合条件但未取得通过校验的模型指令者交由规则脑，不因模型缺席而跳过；模型指令通过校验，也不代表它已写入。预算、队列、服务冷却或回合期限有限时，不保证何时取得模型调用。</p>
+    </div>
+  </details>;
 }

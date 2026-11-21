@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { App } from '../src/App';
 import { ACTOR_PAGE_SIZE, ActorRoster, getActorRosterPage } from '../src/components/ActorRoster';
 import { SandboxWorkspace, WorkspaceSections } from '../src/components/SandboxWorkspace';
+import { GodConsole } from '../src/components/GodConsole';
 import { createInitialWorld } from '../src/data/initialWorld';
 
 describe('mobile-first sandbox workspaces', () => {
@@ -72,5 +73,17 @@ describe('mobile-first sandbox workspaces', () => {
     expect(html).not.toContain('不显示失效目标');
     expect(html).toContain('保留地图');
     expect(html.match(/role="tab"/g)).toHaveLength(5);
+  });
+
+  it('lets the model-enabled whisper controls shrink and wrap even for a long actor name', () => {
+    const world = createInitialWorld();
+    const picked = world.cultivators[0];
+    picked.name = '长名修士'.repeat(20);
+    const html = renderToStaticMarkup(<GodConsole world={world} selectedCultivatorId={picked.id}
+      llmConfig={{ enabled: true, apiBaseUrl: '', apiKey: '', model: '' }}
+      onUpdateLLMConfig={() => undefined} onIntervene={() => undefined} />);
+    expect(html).toMatch(/aria-label="天道传音内容"[^>]*min-h-11 min-w-0 w-full/);
+    expect(html).toContain('min-w-0 break-all">神念传音【');
+    expect(html).toContain(picked.name);
   });
 });
