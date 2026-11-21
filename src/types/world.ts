@@ -853,7 +853,33 @@ export interface EstateState {
   entries: EstateRecord[];
 }
 
+export type PublicTraceAction = 'REST' | 'CULTIVATE' | 'BREAKTHROUGH' | 'SOCIALIZE' | 'EXPLORE' | 'FACE_TRIBULATION';
+export type TraceReasonCode = 'recover' | 'cultivate' | 'ready' | 'social' | 'travel' | 'tribulation';
+export interface DecisionTraceCandidate {
+  id: string;
+  action: PublicTraceAction;
+  score: number;
+  reason: TraceReasonCode;
+  targetLocationId?: string;
+  targetCultivatorId?: string;
+  tribulationStance?: TribulationStance;
+}
+export interface DecisionTraceRecord {
+  id: string;
+  actorId: string;
+  tick: number;
+  source: 'utility' | 'model' | 'avatar';
+  applied: boolean;
+  chosenAction: PublicTraceAction | 'redacted';
+  chosenCandidateId?: string;
+  candidates: DecisionTraceCandidate[];
+}
+export interface DecisionTraceState {
+  records: DecisionTraceRecord[];
+}
+
 export interface WorldState {
+  decisionTrace: DecisionTraceState;
   estates: EstateState;
   witnesses: WitnessState;
   settlements: SettlementState;

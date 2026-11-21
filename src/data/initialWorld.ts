@@ -1,3 +1,4 @@
+import { createDecisionTraceState } from '../engine/decisionTraceEngine';
 import { createEstateState } from '../engine/estateEngine';
 import { createWitnessState } from '../engine/witnessEngine';
 import { createSettlementState } from '../engine/settlementEngine';
@@ -226,6 +227,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED): WorldState {
     settlements: createSettlementState(locations, seed),
     witnesses: createWitnessState(),
     estates: createEstateState(),
+    decisionTrace: createDecisionTraceState(),
     tick: 1,
     interventionSequence: 0,
     year: 1001,

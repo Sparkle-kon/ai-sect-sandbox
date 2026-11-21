@@ -27,7 +27,6 @@ import { settleChronicleOnline } from './engine/chronicleRuntime';
 import { availableCouncilPlans } from './engine/councilEngine';
 import { commitCouncilSnapshot, settleAnnualCouncilOnline, settleCouncilSnapshot } from './engine/councilRuntime';
 import type { AvatarInteractionRequest, CouncilPlan } from './types/world';
-import { PossessionPanel } from './components/PossessionPanel';
 import { isWorldSeed } from './engine/worldRandom';
 import { TimelinePanel } from './components/TimelinePanel';
 import { MentorshipPanel } from './components/MentorshipPanel';
@@ -36,12 +35,16 @@ import { WeatherAtlasPanel } from './components/WeatherAtlasPanel';
 import { MarketCaravansPanel } from './components/MarketCaravansPanel';
 import { MortalVillagesPanel } from './components/MortalVillagesPanel';
 import { AttestationPanel } from './components/AttestationPanel';
-import { EstateMemorialPanel } from './components/EstateMemorialPanel';
+import { createDecisionReplayTape, replayOneTurn } from './engine/decisionTraceEngine';
+import type { DecisionReplayTape, DecisionReplayResult } from './engine/decisionTraceEngine';
 import { createTimeline, forkTimeline, readTimelineHead, readTimelineSnapshot, recordTimelineWorld, selectTimelineBranch } from './engine/timelineEngine';
 import type { WorldTimeline } from './engine/timelineEngine';
 import { activeAvatar, possessAvatar, queueAvatarOrder } from './engine/avatarEngine';
 import { resolveAvatarSnapshot } from './engine/avatarRuntime';
 
+const DecisionTracePanel = React.lazy(async () => ({ default: (await import('./components/DecisionTracePanel')).DecisionTracePanel }));
+const PossessionPanel = React.lazy(async () => ({ default: (await import('./components/PossessionPanel')).PossessionPanel }));
+const EstateMemorialPanel = React.lazy(async () => ({ default: (await import('./components/EstateMemorialPanel')).EstateMemorialPanel }));
 const WorldStoragePanel = React.lazy(async () => ({ default: (await import('./components/WorldStoragePanel')).WorldStoragePanel }));
 const AnalyticsModal = React.lazy(async () => ({ default: (await import('./components/AnalyticsModal')).AnalyticsModal }));
 
@@ -50,6 +53,17 @@ export const App: React.FC = () => {
   const authority = useRef(world);
   const [timeline, setTimeline] = useState(() => createTimeline(world));
   const history = useRef(timeline);
+  const replayTapes = useRef(new Map<string, Map<number, { tape: DecisionReplayTape; committed: WorldState }>>());
+  const retainReplay = useCallback((branchId: string, tape: DecisionReplayTape, committed: WorldState) => {
+    const byTick = replayTapes.current.get(branchId) ?? new Map<number, { tape: DecisionReplayTape; committed: WorldState }>();
+    byTick.set(committed.tick, { tape, committed });
+    while (byTick.size > 12) {
+      const oldest = byTick.keys().next().value;
+      if (oldest === undefined) break;
+      byTick.delete(oldest);
+    }
+    replayTapes.current.set(branchId, byTick);
+  }, []);
   const [preview, setPreview] = useState<{ tick: number; world: WorldState }>();
   const browsing = useRef(false);
   const [timelineNotice, setTimelineNotice] = useState<string>();
@@ -76,6 +90,9 @@ export const App: React.FC = () => {
   const [councilOpen, setCouncilOpen] = useState(false);
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
   const [storageOpen, setStorageOpen] = useState(false);
+  const [possessionOpen, setPossessionOpen] = useState(false);
+  const [estateOpen, setEstateOpen] = useState(false);
+  const [traceOpen, setTraceOpen] = useState(false);
   const [avatarNotice, setAvatarNotice] = useState<string>();
   const [lastManualCouncilId, setLastManualCouncilId] = useState<string>();
   const [tickIntervalMs, setTickIntervalMs] = useState(1800);
@@ -92,6 +109,7 @@ export const App: React.FC = () => {
     setIsStepping(true);
     try {
       const starting = authority.current;
+      const branchId = history.current.activeBranchId;
       if (llmConfig.enabled && llmConfig.apiKey.trim()) {
         llmScheduler.beginTick(starting.tick + 1);
         const activeHost = activeAvatar(starting);
@@ -114,9 +132,10 @@ export const App: React.FC = () => {
         }
         const decisions: Record<string, LLMDecisionPayload> = Object.fromEntries(results);
         const applied = new Set<string>();
+        const tape = createDecisionReplayTape(starting, 'deferred');
         const tick = advanceWorldTick(starting, decisions, undefined, 'deferred', (id, effective) => {
           if (effective && modelActors.has(id)) applied.add(id);
-        });
+        }, { tape, modelActors });
         const [reflected, dramatized] = await Promise.all([
           enrichAnnualReflections(tick, llmConfig), enrichTickDialogues(tick, llmConfig),
         ]);
@@ -131,19 +150,22 @@ export const App: React.FC = () => {
         }
         const next = await settleChronicleOnline(withCouncil, llmConfig);
         if (updateWorld((current) => commitCouncilSnapshot(current, starting, next)) === next) {
+          retainReplay(branchId, tape, next);
           llmScheduler.markDecision('applied', applied.size);
           llmScheduler.markDecision('simulation_rejected', modelActors.size - applied.size);
         } else {
           llmScheduler.markDecision('stale', modelActors.size);
         }
       } else {
-        updateWorld((prev) => advanceWorldTick(prev));
+        const tape = createDecisionReplayTape(starting, 'utility');
+        const next = updateWorld((prev) => advanceWorldTick(prev, undefined, undefined, 'utility', undefined, { tape }));
+        retainReplay(branchId, tape, next);
       }
     } finally {
       stepInFlight.current = false;
       setIsStepping(false);
     }
-  }, [llmConfig, updateWorld]);
+  }, [llmConfig, updateWorld, retainReplay]);
 
   useEffect(() => {
     if (!isRunning) return;
@@ -237,6 +259,7 @@ export const App: React.FC = () => {
 
   const replaceWorld = (next: WorldState, expected: WorldState): boolean => {
     if (stepInFlight.current || browsing.current || authority.current !== expected) return false;
+    replayTapes.current.clear();
     activateTimeline(createTimeline(next), next);
     return true;
   };
@@ -247,6 +270,7 @@ export const App: React.FC = () => {
   const handleReset = () => {
     if (browsing.current) return;
     const next = createInitialWorld(authority.current.random.seed);
+    replayTapes.current.clear();
     // Emergency reset invalidates an in-flight model tick, which cannot commit afterward.
     activateTimeline(createTimeline(next), next);
   };
@@ -290,6 +314,13 @@ export const App: React.FC = () => {
   };
 
   const visibleWorld = preview?.world ?? world;
+  const compareDecision = (traceId: string, candidateId: string): DecisionReplayResult => {
+    const trace = visibleWorld.decisionTrace.records.find(({ id }) => id === traceId);
+    const saved = trace && replayTapes.current.get(history.current.activeBranchId)?.get(trace.tick);
+    if (!saved) return { ok: false, reason: '原始决策快照不在本分支最近 12 轮的复演缓存中。' };
+    return replayOneTurn(saved.tape, saved.committed, traceId, candidateId,
+      (base, orders, mode, onActor, replayDraws) => advanceWorldTick(base, orders, undefined, mode, undefined, { captureTrace: false, onActor, replayDraws }));
+  };
   const visibleHistory = timeline.branches.find(({ id }) => id === timeline.activeBranchId)?.snapshots;
   const selectedCultivator =
     visibleWorld.cultivators.find((c) => c.id === selectedCultivatorId) ??
@@ -407,9 +438,15 @@ export const App: React.FC = () => {
           />}
           <ChronicleFeed events={visibleWorld.events} />
           <ChronicleLibraryPanel world={visibleWorld} />
-          {!preview && <PossessionPanel world={world} selectedCultivatorId={selectedCultivatorId} busy={isStepping}
-            modelReady={llmConfig.enabled && Boolean(llmConfig.apiKey.trim())} notice={avatarNotice}
-            onPossess={handlePossess} onOrder={handleAvatarOrder} onSpeak={(request) => void handleAvatarSpeak(request)} />}
+          {!preview && <section>
+            <button type="button" aria-expanded={possessionOpen} onClick={() => setPossessionOpen((value) => !value)}
+              className="w-full rounded-md bg-slate-800 px-3 py-2 text-left text-sm text-slate-100">化身临世与古戒</button>
+            {possessionOpen && <React.Suspense fallback={<p role="status">载入化身面板…</p>}>
+              <PossessionPanel world={world} selectedCultivatorId={selectedCultivatorId} busy={isStepping}
+                modelReady={llmConfig.enabled && Boolean(llmConfig.apiKey.trim())} notice={avatarNotice}
+                onPossess={handlePossess} onOrder={handleAvatarOrder} onSpeak={(request) => void handleAvatarSpeak(request)} />
+            </React.Suspense>}
+          </section>}
         </div>
 
         {/* Right 5 Cols: Agent Inspector + Relationship Graph */}
@@ -424,7 +461,20 @@ export const App: React.FC = () => {
           <MentorshipPanel world={visibleWorld} cultivator={selectedCultivator} />
           <OathContractsPanel world={visibleWorld} cultivator={selectedCultivator} />
           <AttestationPanel world={visibleWorld} cultivator={selectedCultivator} />
-          <EstateMemorialPanel world={visibleWorld} cultivator={selectedCultivator} />
+          <section>
+            <button type="button" aria-expanded={estateOpen} onClick={() => setEstateOpen((value) => !value)}
+              className="w-full rounded-md bg-slate-800 px-3 py-2 text-left text-sm text-slate-100">归葬与遗产</button>
+            {estateOpen && <React.Suspense fallback={<p role="status">载入遗产账簿…</p>}>
+              <EstateMemorialPanel world={visibleWorld} cultivator={selectedCultivator} />
+            </React.Suspense>}
+          </section>
+          <section>
+            <button type="button" aria-expanded={traceOpen} onClick={() => setTraceOpen((value) => !value)}
+              className="w-full rounded-md bg-slate-800 px-3 py-2 text-left text-sm text-slate-100">天机溯因</button>
+            {traceOpen && <React.Suspense fallback={<p role="status">载入决策纪要…</p>}>
+              <DecisionTracePanel world={visibleWorld} cultivator={selectedCultivator} busy={isStepping} historical={!!preview} onReplay={compareDecision} />
+            </React.Suspense>}
+          </section>
           {!preview && <section className="rounded-xl border border-slate-800 bg-slate-900/80 p-3">
             <button type="button" aria-expanded={storageOpen} onClick={() => setStorageOpen((open) => !open)}
               className="w-full rounded-md bg-slate-800 px-3 py-2 text-left text-sm text-slate-100">存档与世界种子</button>

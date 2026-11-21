@@ -131,6 +131,11 @@ const shape = structure({
     status:one('passed','rejected','stale'),outcome:text})),
   chronicleArchive:structure({anchors:arr(384,anchor),chapters:arr(24,structure({id,chapterNumber:tick,startTick:tick,endTick:tick,title:text,
     anchors:arr(18,anchor),biographies:arr(8,structure({actorId:id,name:id,realm,sectName:otext,anchorIds:ids})),body:strings(25_000),source}))}),
+  decisionTrace:structure({records:arr(100,structure({id,actorId:id,tick,source:one('model','utility','avatar'),applied:bool,
+    chosenAction:one('REST','CULTIVATE','BREAKTHROUGH','SOCIALIZE','EXPLORE','FACE_TRIBULATION','redacted'),chosenCandidateId:oid,
+    candidates:arr(48,structure({id,action:one('REST','CULTIVATE','BREAKTHROUGH','SOCIALIZE','EXPLORE','FACE_TRIBULATION'),
+      score:num(-1000,1000),reason:one('recover','cultivate','ready','social','travel','tribulation'),
+      targetLocationId:oid,targetCultivatorId:oid,tribulationStance:optional(one('guard','focus','defy'))}))}))}),
   estates:structure({entries:arr(500,structure({id,deceasedId:id,locationId:id,openedTick:tick,closesTick:tick,
     namedHeirId:oid,sponsorSectId:oid,status:one('open','settled','unclaimed'),
     holdings:structure({stones:wealth,herbs,pills,artifacts:arr(700,artifact)}),
@@ -186,6 +191,7 @@ function verifyWorld(value: unknown): WorldState {
   const candidate = value !== null && typeof value === 'object' && !Array.isArray(value)
     ? { ...value,
       ...(!Object.hasOwn(value, 'mentorship') ? { mentorship: { offers: [], lineage: [], budgets: [] } } : {}),
+      ...(!Object.hasOwn(value, 'decisionTrace') ? { decisionTrace: { records: [] } } : {}),
       ...(!Object.hasOwn(value, 'estates') ? { estates: { entries: [] } } : {}),
       ...(!Object.hasOwn(value, 'witnesses') ? { witnesses: { facts: [], claims: [], nextId: 1 } } : {}),
       ...(!Object.hasOwn(value, 'settlements') ? { settlements: { villages: [], records: [] } } : {}),
@@ -235,6 +241,13 @@ function verifyWorld(value: unknown): WorldState {
   if ((w.playerAvatar.possessedId && !actor.has(w.playerAvatar.possessedId)) ||
       (w.playerAvatar.pendingOrder && w.playerAvatar.pendingOrder.actorId !== w.playerAvatar.possessedId) ||
       w.playerAvatar.transcript.some((entry) => !actor.has(entry.targetCultivatorId) || (entry.actorId && !actor.has(entry.actorId)))) fail('playerAvatar.references');
+  unique(w.decisionTrace.records, ({id}) => id, 'decisionTrace.id');
+  for (const row of w.decisionTrace.records) {
+    unique(row.candidates, ({id}) => id, 'decisionTrace.candidateId');
+    if (!actor.has(row.actorId) || row.tick > w.tick ||
+        (row.chosenCandidateId && !row.candidates.some(({id,action}) => id === row.chosenCandidateId && action === row.chosenAction)) ||
+        row.candidates.some((candidate) => candidate.targetCultivatorId && !actor.has(candidate.targetCultivatorId))) fail('decisionTrace.references');
+  }
   unique(w.estates.entries, ({id}) => id, 'estates.id');
   unique(w.estates.entries, ({deceasedId}) => deceasedId, 'estates.deceasedId');
   const knownArtefacts = new Set(w.cultivators.flatMap((person) => person.artifacts.flatMap(({id}) => id ? [id] : [])));

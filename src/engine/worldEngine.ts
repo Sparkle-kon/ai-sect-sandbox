@@ -1,3 +1,6 @@
+import { legalTraceCandidates, recordDecisionTrace, rememberReplayDecision } from './decisionTraceEngine';
+import type { DecisionReplayTape } from './decisionTraceEngine';
+import type { DecisionTraceCandidate } from '../types/world';
 import { advanceEstates, resolveEstateAction } from './estateEngine';
 import { advanceWitnesses, resolveWitnessAction } from './witnessEngine';
 import { advanceSettlements, resolveSettlementAction } from './settlementEngine';
@@ -563,7 +566,14 @@ export function advanceWorldTick(
   precomputedDecisions?: Record<string, LLMDecisionPayload>,
   injectedRandom: (() => number) | undefined = undefined,
   councilMode: 'utility' | 'deferred' = 'utility',
-  recordDecisionEffect?: (actorId: string, applied: boolean) => void
+  recordDecisionEffect?: (actorId: string, applied: boolean) => void,
+  traceOptions?: {
+    tape?: DecisionReplayTape;
+    modelActors?: ReadonlySet<string>;
+    captureTrace?: boolean;
+    replayDraws?: Readonly<Record<string, number>>;
+    onActor?: (actorId: string, candidates: DecisionTraceCandidate[], applied: boolean) => void;
+  }
 ): WorldState {
   const nextState: WorldState = structuredClone(prevState);
   const rng = injectedRandom ?? worldRandom(nextState);
@@ -623,19 +633,27 @@ export function advanceWorldTick(
       continue;
     }
 
-    const decision =
-      (avatarOrder?.actorId === cultivator.id ? avatarOrder.decision : undefined) ??
-      precomputedDecisions?.[cultivator.id] ??
-      computeHeuristicDecision(cultivator, nextState, rng);
+    const provided = (avatarOrder?.actorId === cultivator.id ? avatarOrder.decision : undefined) ??
+      precomputedDecisions?.[cultivator.id];
+    let decisionDraws = 0;
+    if (provided && traceOptions?.replayDraws) {
+      const replayedDraws = traceOptions.replayDraws[cultivator.id] ?? 0;
+      for (let draw = 0; draw < Math.min(64, replayedDraws); draw++) rng();
+    }
+    const decision = provided ?? computeHeuristicDecision(cultivator, nextState, () => { decisionDraws++; return rng(); });
 
+    const captureTrace = traceOptions?.captureTrace !== false;
+    const candidates = captureTrace || traceOptions?.onActor ? legalTraceCandidates(nextState, cultivator) : [];
+    if (traceOptions?.tape) rememberReplayDecision(traceOptions.tape, cultivator.id, decision, decisionDraws);
     const previousLocation = cultivator.locationId;
     const evt = applyCultivatorBrainDecision(nextState, cultivator, decision, rng);
-    if (recordDecisionEffect && precomputedDecisions?.[cultivator.id]) {
-      const validEffect = decision.chosenAction === cultivator.currentAction && (evt !== null ||
-        decision.chosenAction === 'REST' || decision.chosenAction === 'CULTIVATE' ||
-        (decision.chosenAction === 'EXPLORE' && previousLocation !== cultivator.locationId));
-      recordDecisionEffect(cultivator.id, validEffect);
-    }
+    const validEffect = decision.chosenAction === cultivator.currentAction && (evt !== null ||
+      decision.chosenAction === 'REST' || decision.chosenAction === 'CULTIVATE' ||
+      (decision.chosenAction === 'EXPLORE' && previousLocation !== cultivator.locationId));
+    if (recordDecisionEffect && precomputedDecisions?.[cultivator.id]) recordDecisionEffect(cultivator.id, validEffect);
+    traceOptions?.onActor?.(cultivator.id, candidates, validEffect);
+    if (captureTrace) recordDecisionTrace(nextState, cultivator.id, candidates, decision,
+      avatarOrder?.actorId === cultivator.id ? 'avatar' : traceOptions?.modelActors?.has(cultivator.id) ? 'model' : 'utility', validEffect);
     creditSectService(nextState, cultivator, evt);
     if (evt) {
       newEvents.push(evt);
