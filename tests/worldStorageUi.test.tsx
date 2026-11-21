@@ -1,9 +1,10 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { importWorldFile, parseWorldSeed, sameSaveSlotRevision, WorldStoragePanel } from '../src/components/WorldStoragePanel';
+import { importWorldFile, parseWorldSeed, sameSaveSlotRevision, stageWorldCreation, WorldStoragePanel } from '../src/components/WorldStoragePanel';
 import { createInitialWorld } from '../src/data/initialWorld';
 import { encodeWorldSave, WORLD_SAVE_MAX_BYTES } from '../src/engine/storageEngine';
 import type { SaveSlotSummary } from '../src/engine/storageEngine';
+import { WORLDGEN_PROFILES } from '../src/engine/worldgenProfiles';
 
 describe('world storage UI boundary', () => {
   it('renders local slots, explicit import/export and seed controls without touching browser storage', () => {
@@ -25,6 +26,11 @@ describe('world storage UI boundary', () => {
     expect(markup).toContain('私密游戏对话');
     expect(markup).toContain('不会导出应用中的模型服务凭证或配置');
     expect(markup).toContain('按种子创建世界');
+    expect(markup).toContain('世界生成谱系');
+    expect(markup).toContain('value="classic" selected=""');
+    expect(markup).toContain('value="spirit-bloom"');
+    expect(markup).toContain('value="fractured-frontier"');
+    expect(markup).toContain(`创世记录 · ${WORLDGEN_PROFILES.classic.label}`);
     expect(markup).not.toContain('确认执行');
   });
 
@@ -40,6 +46,38 @@ describe('world storage UI boundary', () => {
     expect(sameSaveSlotRevision(reviewed, { ...reviewed, label: '后来改名' })).toBe(false);
     expect(sameSaveSlotRevision(reviewed, { ...reviewed, savedAt: 1001 })).toBe(false);
     expect(sameSaveSlotRevision(reviewed, undefined)).toBe(false);
+    const newSlot = { ...reviewed, profileId: 'spirit-bloom' } as const;
+    expect(sameSaveSlotRevision(newSlot, { ...newSlot })).toBe(true);
+    expect(sameSaveSlotRevision(newSlot, reviewed)).toBe(false);
+    expect(sameSaveSlotRevision(newSlot, { ...newSlot, profileId: 'classic' })).toBe(false);
+  });
+
+  it('stages the exact seed, profile, and reviewed world, rejecting unrecognized profiles', () => {
+    const world = createInitialWorld(1);
+    const draft = stageWorldCreation('4294967295', 'fractured-frontier', world);
+    expect(draft).toMatchObject({ kind: 'new', seed: 0xffffffff, profileId: 'fractured-frontier' });
+    expect(draft?.expected).toBe(world);
+    expect(stageWorldCreation('7', 'constructor', world)).toBeUndefined();
+    expect(stageWorldCreation('-2', 'classic', world)).toBeUndefined();
+  });
+
+  it('distinguishes recorded birth evidence from a changed live map and never invents a legacy certificate', () => {
+    const world = createInitialWorld(85, 'spirit-bloom');
+    const original = world.worldgen!;
+    const preview = () => renderToStaticMarkup(<WorldStoragePanel world={world} busy={false}
+      onRestore={() => false} onNewWorld={() => false} />);
+    world.tick = 17;
+    world.locations[0].spiritQi = 0;
+    expect(preview()).toContain('当前世界：种子 85 · Tick #17');
+    expect(preview()).toContain(`出生种子 85 · Tick #${original.birthTick} · 生成器 v${original.algorithm}`);
+    expect(preview()).toContain(`记录 ${original.resources.length} 位初始修士`);
+    expect(preview()).toContain('后来的灵脉改动、灾害、迁徙和资源消耗不在这份检核中');
+    expect(preview()).toContain('value="spirit-bloom" selected=""');
+    delete world.worldgen;
+    expect(preview()).toContain('旧档未记录谱系');
+    expect(preview()).toContain('不能用现在的地形或资源倒推出初生通达性');
+    expect(preview()).not.toContain('出生种子');
+    expect(preview()).toContain('value="classic" selected=""');
   });
 
   it('rejects an oversized file before reading and stages only a decoded snapshot', async () => {

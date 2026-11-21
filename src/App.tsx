@@ -29,9 +29,9 @@ import { llmScheduler } from './engine/llmScheduler';
 import { settleChronicleOnline } from './engine/chronicleRuntime';
 import { availableCouncilPlans } from './engine/councilEngine';
 import { commitCouncilSnapshot, settleAnnualCouncilOnline, settleCouncilSnapshot } from './engine/councilRuntime';
-import type { AvatarInteractionRequest, CouncilPlan } from './types/world';
+import type { AvatarInteractionRequest, CouncilPlan, WorldgenProfileId } from './types/world';
 import { isWorldSeed } from './engine/worldRandom';
-import { TimelinePanel } from './components/TimelinePanel';
+import { isWorldgenProfileId } from './engine/worldgenProfiles';
 import { createDecisionReplayTape, replayOneTurn } from './engine/decisionTraceEngine';
 import type { DecisionReplayTape, DecisionReplayResult } from './engine/decisionTraceEngine';
 import { createTimeline, forkTimeline, readTimelineHead, readTimelineSnapshot, recordTimelineWorld, selectTimelineBranch } from './engine/timelineEngine';
@@ -42,6 +42,7 @@ import { resolveAvatarSnapshot } from './engine/avatarRuntime';
 const AttestationPanel = React.lazy(async () => ({ default: (await import('./components/AttestationPanel')).AttestationPanel }));
 const OathContractsPanel = React.lazy(async () => ({ default: (await import('./components/OathContractsPanel')).OathContractsPanel }));
 const MentorshipPanel = React.lazy(async () => ({ default: (await import('./components/MentorshipPanel')).MentorshipPanel }));
+const TimelinePanel = React.lazy(async () => ({ default: (await import('./components/TimelinePanel')).TimelinePanel }));
 const SectDoctrinePanel = React.lazy(async () => ({ default: (await import('./components/SectDoctrinePanel')).SectDoctrinePanel }));
 const ChronicleLibraryPanel = React.lazy(async () => ({ default: (await import('./components/ChronicleLibraryPanel')).ChronicleLibraryPanel }));
 const WeatherAtlasPanel = React.lazy(async () => ({ default: (await import('./components/WeatherAtlasPanel')).WeatherAtlasPanel }));
@@ -270,12 +271,13 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
     return true;
   };
 
-  const newWorldFromSeed = (seed: number, expected: WorldState): boolean =>
-    isWorldSeed(seed) && replaceWorld(createInitialWorld(seed), expected);
+  const newWorldFromSeed = (seed: number, profileId: WorldgenProfileId, expected: WorldState): boolean =>
+    isWorldSeed(seed) && isWorldgenProfileId(profileId) && replaceWorld(createInitialWorld(seed, profileId), expected);
 
   const handleReset = () => {
     if (browsing.current) return;
-    const next = createInitialWorld(authority.current.random.seed);
+    const active = authority.current;
+    const next = createInitialWorld(active.random.seed, active.worldgen?.profileId ?? 'classic');
     replayTapes.current.clear();
     // Emergency reset invalidates an in-flight model tick, which cannot commit afterward.
     activateTimeline(createTimeline(next), next);
@@ -415,8 +417,10 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
         chronicle: <WorkspaceSections label="纪事与历史" initialOpen={opened('chronicle', 'feed')} sections={[
           { id: 'feed', label: '当世纪事', content: <ChronicleFeed events={visibleWorld.events} /> },
           { id: 'library', label: '藏书阁与史书', content: <React.Suspense fallback={<p role="status">载入藏书阁…</p>}><ChronicleLibraryPanel world={visibleWorld} /></React.Suspense> },
-          { id: 'timeline', label: '原始时间线与分支', content: <TimelinePanel timeline={timeline} previewTick={preview?.tick ?? null} busy={isStepping}
-            onPreview={handleTimelinePreview} onSelectBranch={handleTimelineSelectBranch} onFork={handleTimelineFork} notice={timelineNotice} /> },
+          { id: 'timeline', label: '原始时间线与分支', content: <React.Suspense fallback={<p role="status">载入时间线…</p>}>
+            <TimelinePanel timeline={timeline} previewTick={preview?.tick ?? null} busy={isStepping}
+              onPreview={handleTimelinePreview} onSelectBranch={handleTimelineSelectBranch} onFork={handleTimelineFork} notice={timelineNotice} />
+          </React.Suspense> },
           { id: 'witness', label: '证词与名誉复核', content: <React.Suspense fallback={<p role="status">载入证词记录…</p>}><AttestationPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense> },
           { id: 'estate', label: '归葬与遗产', content: <React.Suspense fallback={<p role="status">载入遗产账簿…</p>}>
             <EstateMemorialPanel world={visibleWorld} cultivator={selectedCultivator} />

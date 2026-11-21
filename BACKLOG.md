@@ -86,7 +86,7 @@
 
 ## Phase 8: Deep Time, Relic Economies & Scenario Tools (长纪元、古器经济与沙盒共创)
 
-- [ ] **[P8-1] Living Worldgen Profiles (世界生成谱系)**: Select seeded climate, faction distributions and scarcity profiles; certify that every world has reachable starting resources and distinguish world-generation choices from later interventions.
+- [x] **[P8-1] Living Worldgen Profiles (世界生成谱系)**: Select seeded climate, faction distributions and scarcity profiles; certify that every world has reachable starting resources and distinguish world-generation choices from later interventions.
 - [ ] **[P8-2] Displacement & Sect Resettlement (山门迁移与流亡重建)**: Let damaged sects relocate using supplies, a real route and relocation votes; move treasury, pavilions and garrisons exactly once and preserve abandoned-site history.
 - [ ] **[P8-3] Reincarnation & Uncertain Recollection (轮回与残响)**: Add rare rebirth from a recorded death with explicit probability, uncertain narrative fragments and no duplicated possessions, office or ground-truth knowledge.
 - [ ] **[P8-4] Relic Fragments & Set Resonance (碎片重铸与套装共鸣)**: Define provenance for each fragment, recover missing components through multiple play paths, assemble them at a valid site and show actual nonstacking set effects.
@@ -111,3 +111,18 @@
 - [ ] **[P9-8] Interlinked Formations & Qi Dispatch (阵网连通与灵气调拨)**: Make array links relay bounded qi through actual owned facilities, account for losses and overloads, and draw active/broken links on the map with nonexplosive conservation tests.
 - [ ] **[P9-9] Territorial Leases & Resource Access (地契租赁与采集许可)**: Allow reversible, time-limited site rights without transferring sovereignty, validate lessee use and payments, and restore access correctly at expiry or after an ownership transition.
 - [ ] **[P9-10] Era Objectives & Scenario Audit Cards (纪元目标与完成凭证)**: Compose challenge objectives from independently testable conditions and a frozen scenario seed. Publish precise completion or failure evidence for each objective without mutating other branches or awarding achievements twice.
+
+---
+
+## Phase 10: Readable Long Worlds and Local Institutions (长局可读性与地方制度)
+
+- [ ] **[P10-1] Households and Generational Registers (家户谱系与代际坊籍)**: Track kinship and voluntary guardianship separately from sect rank. Use actual birth cohorts, migration and deaths to carry household membership forward without doubling village or recruit counts.
+- [ ] **[P10-2] Village Works and Carrying Capacity (村镇工役与承载增长)**: Let residents contribute bounded labor and sect sponsors spend real materials on wells, fields or shelters. Show completed capacity changes and maintain valid birth/abandonment paths after disasters.
+- [ ] **[P10-3] Large-Roster Map Aggregation (大规模名册与地图聚合)**: Cluster visible markers by screen scale while preserving every reachable individual through the searchable index. Benchmark crowded maps, test touch drill-down, and prevent counts from exposing fog-hidden occupants.
+- [ ] **[P10-4] Quiet Player Watchlists (静默关注与推演摘要)**: Let players opt in to in-game actor, site and sect watches. Coalesce repeat events into a small per-tick digest, preserve the uncluttered default, and keep watch data and unread state tied to the right branch.
+- [ ] **[P10-5] Sealed Couriers and Lost Dispatches (密函递送与消息失联)**: Route actual public or private dispatches through legal couriers with delivery dates and custody. Resolve loss or return once and distinguish received facts, unresolved reports and unauthorized recipients.
+- [ ] **[P10-6] Deep-History Archives with Active References (远纪档案与活跃引用)**: Separate archival records from active simulation without dropping living people or pending contractual references. Verify branch isolation, save budget behavior and identical results when moving old records to cold history.
+- [ ] **[P10-7] Voluntary Retirement and Return to Service (告老退居与自愿复出)**: Release actual guard, stewardship and council duties while preserving personal assets and rank history. Reassign service once, record voluntary return and test seamless operation when key officers retire together.
+- [ ] **[P10-8] Shared Commons and Joint Quotas (灵地公域与共管配额)**: Let several sects fund a common site through explicit agreements, allocate real harvest and maintenance by signed shares, and settle unpaid commitments without duplicating stock or forcing territorial transfer.
+- [ ] **[P10-9] Resource Flow Reconciliation (物资流向与月度对账)**: Show accountable transfers between people, sites, caravans, clan chests and escrow without counting the same goods in multiple ledgers. Distinguish production, consumption and losses in deterministic monthly receipts.
+- [ ] **[P10-10] Long-Term Terrain Recovery and Succession (地脉修复与长期演替)**: Track irreversible and recoverable ecological changes after prolonged stress. Follow bounded recovery work and terrain state transitions; prove routes remain connected or show a valid alternate route in the map index.

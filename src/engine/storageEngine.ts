@@ -1,7 +1,8 @@
+import { isWorldgenProfileId } from './worldgenProfiles';
 import { createDoctrineState } from './doctrineEngine';
 import { createSettlementState } from './settlementEngine';
 import { OATH_TERMS } from './oathEngine';
-import type { WorldState } from '../types/world';
+import type { WorldgenProfileId, WorldState } from '../types/world';
 
 export const WORLD_SAVE_MAX_BYTES = 8 * 1024 * 1024;
 export const WORLD_SAVE_MAX_SLOTS = 12;
@@ -154,6 +155,8 @@ const shape = structure({
       attestations:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,tick,verdict:one('supports','contradicts')})),
       appeal:optional(structure({tick,actorId:id,verdict:one('upheld','rejected'),reason:text})),settledTick:otick,
       reputationSectId:oid,reputationPenalty:percentage,reputationRestored:percentage,reason:otext}))}),
+  worldgen:optional(structure({algorithm:one(1),profileId:one('classic','spirit-bloom','fractured-frontier'),
+    seed:unsigned32,birthTick:one(1),resources:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,locationId:id,pathSteps:num(0,6402,true)}))})),
   doctrines:structure({nextId:num(1,100_000_000,true),
     schools:arr(SAVE_COLLECTION_LIMIT,structure({id,parentSectId:id,theme:doctrineTheme,founderId:id,stewardId:oid,
       foundedTick:tick,status:one('attached','autonomous','reconciled'),memberIds:ids,treasury:doctrineAmount,
@@ -230,6 +233,13 @@ function verifyWorld(value: unknown): WorldState {
   const sector = unique(w.sects, (item) => item.id, 'sects.id');
   const locations = unique(w.locations, (item) => item.id, 'locations.id');
   const map = unique(w.terrain.tiles, (item) => item.id, 'terrain.tiles.id');
+  if (w.worldgen) {
+    const birthActors = unique(w.worldgen.resources, (item) => item.actorId, 'worldgen.resources.actorId');
+    if (w.worldgen.seed !== w.random.seed || w.worldgen.birthTick > w.tick ||
+        birthActors.size === 0 || w.worldgen.resources.some(({ actorId, locationId }) => !actor.has(actorId) || !locations.has(locationId))) {
+      fail('worldgen.references');
+    }
+  }
   if (w.terrain.tiles.length !== w.terrain.columns * w.terrain.rows) fail('terrain.tiles.length');
   if (w.terrain.tiles.some((tile, index) => tile.col !== index % w.terrain.columns ||
       tile.row !== Math.floor(index / w.terrain.columns) || (tile.ownerSectId && !sector.has(tile.ownerSectId)))) fail('terrain.tiles.grid');
@@ -464,7 +474,7 @@ export function decodeWorldSave(text: string): WorldState {
   return verifyWorld(envelope.world);
 }
 
-export interface SaveSlotSummary { id: string; label: string; savedAt: number; tick: number; year: number; month: number; seed: number }
+export interface SaveSlotSummary { id: string; label: string; savedAt: number; tick: number; year: number; month: number; seed: number; profileId?: WorldgenProfileId }
 interface SaveSlot { summary: SaveSlotSummary; content: string }
 export interface SaveBackend {
   list(): Promise<SaveSlotSummary[]>;
@@ -491,8 +501,9 @@ const checkSummary = (summary: SaveSlotSummary) => {
   if (!summary || !correctId(summary.id) || typeof summary.label !== 'string' || !summary.label || summary.label.length > 60 ||
       !Number.isSafeInteger(summary.savedAt) || summary.savedAt < 0 || !Number.isSafeInteger(summary.tick) || summary.tick < 0 ||
       !Number.isSafeInteger(summary.year) || summary.year < 0 || !Number.isSafeInteger(summary.month) || summary.month < 1 ||
-      summary.month > 12 || !Number.isSafeInteger(summary.seed) || summary.seed < 0 || summary.seed > 0xffffffff) throw storageError();
-  return { id: summary.id, label: summary.label, savedAt: summary.savedAt, tick: summary.tick, year: summary.year, month: summary.month, seed: summary.seed };
+      summary.month > 12 || !Number.isSafeInteger(summary.seed) || summary.seed < 0 || summary.seed > 0xffffffff ||
+      (summary.profileId !== undefined && !isWorldgenProfileId(summary.profileId))) throw storageError();
+  return { id: summary.id, label: summary.label, savedAt: summary.savedAt, tick: summary.tick, year: summary.year, month: summary.month, seed: summary.seed, ...(summary.profileId ? { profileId: summary.profileId } : {}) };
 };
 
 function localBackend(storage: Storage): SaveBackend {
@@ -606,7 +617,8 @@ export function createSaveStore(backend?: SaveBackend, now: () => number = Date.
       const summary = checkSummary(slot.summary);
       if (summary.id !== id) throw storageError();
       const world = decodeWorldSave(slot.content);
-      if (summary.tick !== world.tick || summary.year !== world.year || summary.month !== world.month || summary.seed !== world.random.seed) throw storageError();
+      if (summary.tick !== world.tick || summary.year !== world.year || summary.month !== world.month || summary.seed !== world.random.seed ||
+          (summary.profileId !== undefined && summary.profileId !== world.worldgen?.profileId)) throw storageError();
       return world;
     }),
     save: (id: string, label: string, world: WorldState) => {
@@ -618,7 +630,7 @@ export function createSaveStore(backend?: SaveBackend, now: () => number = Date.
         const name = typeof label === 'string' ? label.trim() : '';
         if (!name || name.length > 60) throw new WorldSaveError('invalid_slot', '存档名称须为 1 至 60 个字符。');
         content = encodeWorldSave(world);
-        summary = checkSummary({ id, label: name, savedAt: now(), tick: world.tick, year: world.year, month: world.month, seed: world.random.seed });
+        summary = checkSummary({ id, label: name, savedAt: now(), tick: world.tick, year: world.year, month: world.month, seed: world.random.seed, profileId: world.worldgen?.profileId });
       } catch (error) { return Promise.reject<SaveSlotSummary>(error); }
       return operations(async (store) => {
         const previous = (await store.list()).map(checkSummary);

@@ -1,22 +1,23 @@
 import { useEffect, useRef, useState } from 'react';
-import type { WorldState } from '../types/world';
+import type { WorldgenProfileId, WorldState } from '../types/world';
 import {
   decodeWorldSave, encodeWorldSave, WORLD_SAVE_MAX_BYTES, WORLD_SAVE_MAX_SLOTS, worldSaveStore,
 } from '../engine/storageEngine';
 import type { SaveSlotSummary } from '../engine/storageEngine';
+import { isWorldgenProfileId, WORLDGEN_PROFILES } from '../engine/worldgenProfiles';
 
 type Storage = Pick<typeof worldSaveStore, 'list' | 'load' | 'save' | 'delete'>;
 type Confirmation =
   | { kind: 'overwrite'; slot: SaveSlotSummary; label: string }
   | { kind: 'delete' | 'restore'; slot: SaveSlotSummary }
   | { kind: 'import'; world: WorldState }
-  | { kind: 'new'; seed: number };
+  | { kind: 'new'; seed: number; profileId: WorldgenProfileId; expected: WorldState };
 
 export interface WorldStoragePanelProps {
   world: WorldState;
   busy: boolean;
   onRestore: (incoming: WorldState, expected: WorldState) => boolean;
-  onNewWorld: (seed: number, expected: WorldState) => boolean;
+  onNewWorld: (seed: number, profileId: WorldgenProfileId, expected: WorldState) => boolean;
   store?: Storage;
 }
 
@@ -24,12 +25,19 @@ const defaultSlots = Array.from({ length: WORLD_SAVE_MAX_SLOTS }, (_, index) => 
 const field = 'min-w-0 rounded border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-100 disabled:opacity-40';
 const button = 'rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-100 disabled:opacity-40';
 const confirmButton = 'rounded border border-amber-400/60 bg-amber-700/50 px-2 py-1.5 text-xs font-medium text-amber-50 disabled:opacity-40';
+const profileIds = Object.keys(WORLDGEN_PROFILES) as WorldgenProfileId[];
+const profileName = (id: WorldgenProfileId | undefined) => id ? WORLDGEN_PROFILES[id].label : '谱系未记录';
 const fileLimitMb = WORLD_SAVE_MAX_BYTES / (1024 * 1024);
 
 export function parseWorldSeed(value: string): number | undefined {
   const trimmed = value.trim();
   const seed = Number(trimmed);
   return /^\d+$/.test(trimmed) && Number.isSafeInteger(seed) && seed >= 0 && seed <= 0xffffffff ? seed : undefined;
+}
+
+export function stageWorldCreation(seedText: string, profileId: unknown, expected: WorldState): Extract<Confirmation, { kind: 'new' }> | undefined {
+  const seed = parseWorldSeed(seedText);
+  return seed !== undefined && isWorldgenProfileId(profileId) ? { kind: 'new', seed, profileId, expected } : undefined;
 }
 
 export async function importWorldFile(file: Pick<File, 'size' | 'text'>): Promise<WorldState> {
@@ -41,16 +49,16 @@ export async function importWorldFile(file: Pick<File, 'size' | 'text'>): Promis
 export function sameSaveSlotRevision(reviewed: SaveSlotSummary | undefined, current: SaveSlotSummary | undefined): boolean {
   if (!reviewed || !current) return reviewed === current;
   return reviewed.id === current.id && reviewed.savedAt === current.savedAt &&
-    reviewed.tick === current.tick && reviewed.seed === current.seed && reviewed.label === current.label;
+    reviewed.tick === current.tick && reviewed.seed === current.seed && reviewed.label === current.label && reviewed.profileId === current.profileId;
 }
 
 function describeConfirmation(action: Confirmation): string {
   switch (action.kind) {
     case 'overwrite': return `以当前世界覆盖「${action.slot.label}」的 Tick #${action.slot.tick} 存档？旧版本将被替换。`;
     case 'delete': return `删除「${action.slot.label}」的 Tick #${action.slot.tick} 存档？仅删除本机此槽，不影响当前世界。`;
-    case 'restore': return `读入「${action.slot.label}」的 Tick #${action.slot.tick} 存档？未保存的当前进度将被替换。`;
-    case 'import': return `载入已校验文件中的种子 ${action.world.random.seed}、Tick #${action.world.tick}？未保存的当前进度将被替换。`;
-    case 'new': return `用种子 ${action.seed} 建立新世界？未保存的当前进度将被替换，存档槽保留。`;
+    case 'restore': return `读入「${action.slot.label}」的 ${profileName(action.slot.profileId)} · Tick #${action.slot.tick} 存档？未保存的当前进度将被替换。`;
+    case 'import': return `载入已校验文件中的种子 ${action.world.random.seed}、${profileName(action.world.worldgen?.profileId)}、Tick #${action.world.tick}？未保存的当前进度将被替换。`;
+    case 'new': return `用种子 ${action.seed}、${profileName(action.profileId)}谱系建立新世界？未保存的当前进度将被替换，存档槽保留。`;
   }
 }
 
@@ -60,6 +68,7 @@ export function WorldStoragePanel({ world, busy, onRestore, onNewWorld, store = 
   const [slotId, setSlotId] = useState(defaultSlots[0].id);
   const [label, setLabel] = useState('');
   const [seedText, setSeedText] = useState<string>();
+  const [profileDraft, setProfileDraft] = useState<WorldgenProfileId>();
   const [confirmation, setConfirmation] = useState<Confirmation>();
   const [status, setStatus] = useState('');
   const [working, setWorking] = useState(false);
@@ -67,7 +76,12 @@ export function WorldStoragePanel({ world, busy, onRestore, onNewWorld, store = 
   const oldDownload = useRef<string>();
   const chosen = slots.find(({ id }) => id === slotId);
   const choices = [...defaultSlots, ...slots.filter((slot) => !defaultSlots.some(({ id }) => id === slot.id))];
-  const seed = parseWorldSeed(seedText ?? String(world.random.seed));
+  const seedInput = seedText ?? String(world.random.seed);
+  const seed = parseWorldSeed(seedInput);
+  const generation = world.worldgen;
+  const profileId = profileDraft ?? generation?.profileId ?? 'classic';
+  const profile = WORLDGEN_PROFILES[profileId];
+  const longestBirthPath = generation?.resources.reduce((limit, item) => Math.max(limit, item.pathSteps), 0) ?? 0;
   const blocked = busy || working || confirmation !== undefined;
 
   useEffect(() => {
@@ -119,13 +133,14 @@ export function WorldStoragePanel({ world, busy, onRestore, onNewWorld, store = 
     setConfirmation(undefined);
     void work(async () => {
       if (action.kind === 'new' || action.kind === 'import') {
-        const accepted = action.kind === 'new' ? onNewWorld(action.seed, expected) : onRestore(action.world, expected);
+        const accepted = action.kind === 'new' ? onNewWorld(action.seed, action.profileId, action.expected) : onRestore(action.world, expected);
         if (!accepted) {
-          setConfirmation(action);
-          setStatus('世界已变化或正在推进，未覆盖。请核对后再确认。');
+          if (action.kind === 'import') setConfirmation(action);
+          setStatus(action.kind === 'new' ? '当前进度已变化，未覆盖；暂停推演后重新核对种子和谱系。' : '世界已变化或正在推进，未覆盖。请核对后再确认。');
         } else {
           setSeedText(undefined);
-          setStatus(action.kind === 'new' ? `已创建种子 ${action.seed} 的世界。` : '已从 JSON 文件载入世界。');
+          setProfileDraft(undefined);
+          setStatus(action.kind === 'new' ? `已创建种子 ${action.seed}、${profileName(action.profileId)}谱系的世界。` : '已从 JSON 文件载入世界。');
         }
         return;
       }
@@ -143,7 +158,7 @@ export function WorldStoragePanel({ world, busy, onRestore, onNewWorld, store = 
         const incoming = await store.load(action.slot.id);
         const afterRead = (await updateSlots()).find(({ id }) => id === action.slot.id);
         if (!sameSaveSlotRevision(action.slot, afterRead)) { setStatus('该槽在读取期间已变化，未载入。'); return; }
-        if (onRestore(incoming, expected)) { setSeedText(undefined); setStatus(`已载入「${action.slot.label}」。`); }
+        if (onRestore(incoming, expected)) { setSeedText(undefined); setProfileDraft(undefined); setStatus(`已载入「${action.slot.label}」。`); }
         else { setConfirmation(action); setStatus('世界已变化或正在推进，未覆盖。请核对后再确认。'); }
       }
     });
@@ -172,6 +187,20 @@ export function WorldStoragePanel({ world, busy, onRestore, onNewWorld, store = 
         <h3 className="text-sm font-semibold text-sky-100">存档与世界种子</h3>
         <p className="text-xs text-slate-400">当前世界：种子 {world.random.seed} · Tick #{world.tick} · 仙历 {world.year} 年 {world.month} 月</p>
       </header>
+      <details className="rounded border border-slate-800 bg-slate-950/50">
+        <summary className="min-h-11 cursor-pointer break-words px-2 py-3 text-xs font-semibold text-sky-100">
+          创世记录 · {generation ? profileName(generation.profileId) : '旧档未记录谱系'}
+        </summary>
+        <div className="space-y-1.5 border-t border-slate-800 px-2 py-2 text-xs text-slate-300">
+          {generation ? (
+            <>
+              <p>出生种子 {generation.seed} · Tick #{generation.birthTick} · 生成器 v{generation.algorithm}</p>
+              <p>起步资源通达检核：{generation.resources.length ? `记录 ${generation.resources.length} 位初始修士，最长 ${longestBirthPath} 步地格路径。` : '没有记录初始修士的通达路径。'}</p>
+              <p className="text-slate-400">只记录诞生时的种子、谱系和可达路径。后来的灵脉改动、灾害、迁徙和资源消耗不在这份检核中。</p>
+            </>
+          ) : <p>此世界没有创世检核记录，不能用现在的地形或资源倒推出初生通达性。</p>}
+        </div>
+      </details>
       <button type="button" className={button} disabled={blocked} onClick={() => void work(async () => {
         await updateSlots();
         setStatus('已刷新本机存档槽。');
@@ -193,7 +222,7 @@ export function WorldStoragePanel({ world, busy, onRestore, onNewWorld, store = 
           </label>
         </div>
         {chosen && <p className="break-words text-xs text-slate-400">
-          槽内：{chosen.label} · 种子 {chosen.seed} · 仙历 {chosen.year} 年 {chosen.month} 月 · Tick #{chosen.tick}
+          槽内：{chosen.label} · 种子 {chosen.seed} · {profileName(chosen.profileId)} · 仙历 {chosen.year} 年 {chosen.month} 月 · Tick #{chosen.tick}
         </p>}
         <div className="flex flex-wrap gap-1.5">
           <button type="button" className={button} onClick={saveCurrent}>{chosen ? '覆盖存档' : '保存到此槽'}</button>
@@ -222,15 +251,27 @@ export function WorldStoragePanel({ world, busy, onRestore, onNewWorld, store = 
       </fieldset>
       <fieldset disabled={blocked} className="min-w-0 space-y-2 rounded border border-slate-800 p-2">
         <legend className="px-1 text-xs font-semibold text-slate-200">建立新世界</legend>
-        <form className="flex flex-wrap items-end gap-2" onSubmit={(event) => {
+        <form className="grid min-w-0 gap-2" onSubmit={(event) => {
           event.preventDefault();
-          if (!blocked && seed !== undefined) setConfirmation({ kind: 'new', seed });
+          const staged = stageWorldCreation(seedInput, profileId, world);
+          if (!blocked && staged) setConfirmation(staged);
         }}>
           <label className="grid min-w-0 gap-1 text-xs text-slate-300">世界种子（0 至 4294967295）
-            <input type="text" inputMode="numeric" className={field} value={seedText ?? String(world.random.seed)}
+            <input type="text" inputMode="numeric" className={field} value={seedInput}
               onChange={(event) => setSeedText(event.currentTarget.value)} />
           </label>
-          <button type="submit" className={button} disabled={seed === undefined}>按种子创建世界</button>
+          <label className="grid min-w-0 gap-1 text-xs text-slate-300">世界生成谱系
+            <select className={`${field} min-h-11 w-full`} value={profileId} onChange={(event) => {
+              if (isWorldgenProfileId(event.currentTarget.value)) setProfileDraft(event.currentTarget.value);
+            }}>
+              {profileIds.map((id) => <option key={id} value={id}>{WORLDGEN_PROFILES[id].label}</option>)}
+            </select>
+          </label>
+          <div className="min-w-0 space-y-1 rounded border border-slate-800 bg-slate-950/50 p-2 text-xs text-slate-300">
+            <p className="break-words">{profile.description}</p>
+            <p className="break-words text-slate-400">气候：{profile.climateLabel} · 势力：{profile.factionLabel} · 资源：{profile.scarcityLabel}</p>
+          </div>
+          <button type="submit" className={`${button} min-h-11 justify-self-start`} disabled={seed === undefined}>按种子创建世界</button>
         </form>
       </fieldset>
       {confirmation && (

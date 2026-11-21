@@ -943,7 +943,16 @@ export interface DoctrineState {
   nextId: number;
 }
 
+export type WorldgenProfileId = 'classic' | 'spirit-bloom' | 'fractured-frontier';
+export interface WorldGeneration {
+  algorithm: 1;
+  profileId: WorldgenProfileId;
+  seed: number;
+  birthTick: number;
+  resources: Array<{ actorId: string; locationId: string; pathSteps: number }>;
+}
 export interface WorldState {
+  worldgen?: WorldGeneration;
   doctrines: DoctrineState;
   decisionTrace: DecisionTraceState;
   estates: EstateState;

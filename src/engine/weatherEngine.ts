@@ -1,3 +1,4 @@
+import { WORLDGEN_PROFILES, worldgenProfileOf } from './worldgenProfiles';
 import type { Cultivator, HerbId, LocationNode, SpiritBeast, TerrainBiome, WorldState } from '../types/world';
 import { currentVisibleTileIds, knownMapLocations, terrainTileAt } from './terrainEngine';
 
@@ -51,7 +52,10 @@ function qiWeatherAt(world: WorldState, x: number, y: number, tick: number, site
     territoryPhase(seed, siteOwner ?? biome.ownerSectId);
   const slower = Math.sin(2 * Math.PI * (MOD(tick, 37) / 37 + hash(seed, 53)) + space * 3);
   const tendency = season === '春' ? .13 : season === '夏' ? .07 : season === '秋' ? -.01 : -.14;
-  const pressure = .70 * Math.sin(phase) + .17 * slower + tendency;
+  const profileId = worldgenProfileOf(world);
+  const climate = WORLDGEN_PROFILES[profileId].weather;
+  const swing = .70 * Math.sin(phase) + .17 * slower;
+  const pressure = profileId === 'classic' ? swing + tendency : swing * climate.amplitude + tendency + climate.tendency;
   if (Math.abs(pressure) < .27) return { tick, season, kind: '平息', intensity: 0 };
   const kind: QiWeatherKind = pressure > 0 ? '灵潮' : season === '冬' ? '霜息' : '罡风';
   const intensity = Math.round(clamp((Math.abs(pressure) - .27) / .76 + BIOME_EXPOSURE[biome.biome], .05, 1) * 100) / 100;

@@ -1,3 +1,4 @@
+import { sameGeneratedWorld } from './worldIdentity';
 import { REALM_ORDER } from '../data/initialWorld';
 import type { CultivationRealm, Cultivator, WorldEvent, WorldState } from '../types/world';
 import type { TimelineSnapshot } from './timelineEngine';
@@ -67,7 +68,7 @@ function leaderRows(people: Cultivator[]): AnalyticsHallRow[] {
 export function buildWorldAnalytics(world: WorldState, history: readonly TimelineSnapshot[] = []): WorldAnalytics {
   const frames = new Map<number, WorldState>();
   for (const snapshot of history) {
-    if (snapshot.tick === snapshot.world.tick && snapshot.tick <= world.tick && snapshot.world.random.seed === world.random.seed) {
+    if (snapshot.tick === snapshot.world.tick && snapshot.tick <= world.tick && sameGeneratedWorld(snapshot.world, world)) {
       frames.set(snapshot.tick, snapshot.world);
     }
   }

@@ -1,3 +1,4 @@
+import { initializeWorldProfile } from '../engine/worldgenEngine';
 import { createDoctrineState } from '../engine/doctrineEngine';
 import { createDecisionTraceState } from '../engine/decisionTraceEngine';
 import { createEstateState } from '../engine/estateEngine';
@@ -12,7 +13,7 @@ import { archiveChronicleEvents, createChronicleArchive } from '../engine/novelG
 import { memoryDecayRate } from '../engine/memoryEngine';
 import { generateTerrain, noteTerrainVisit } from '../engine/terrainEngine';
 import { spawnInitialBeasts } from '../engine/spiritBeastEngine';
-import { CultivationRealm, Cultivator, HerbId, LocationNode, PillId, WorldState } from '../types/world';
+import { CultivationRealm, Cultivator, HerbId, LocationNode, PillId, WorldgenProfileId, WorldState } from '../types/world';
 
 export const REALM_ORDER: CultivationRealm[] = [
   '练气',
@@ -109,7 +110,7 @@ function initialElders(): Cultivator[] {
   }));
 }
 
-export function createInitialWorld(seed = DEFAULT_WORLD_SEED): WorldState {
+export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: WorldgenProfileId = 'classic'): WorldState {
   const random = createWorldRandom(seed);
   const locations: LocationNode[] = [
       {
@@ -762,6 +763,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED): WorldState {
       },
     ],
   };
+  initializeWorldProfile(world, profileId);
   for (const actor of world.cultivators) noteTerrainVisit(world, actor);
   archiveChronicleEvents(world, world.events);
   return world;

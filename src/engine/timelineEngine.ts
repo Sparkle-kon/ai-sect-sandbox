@@ -1,3 +1,4 @@
+import { sameGeneratedWorld } from './worldIdentity';
 import type { WorldState } from '../types/world';
 import { executeGodIntervention } from './worldEngine';
 import type { GodInterventionCommand } from './worldEngine';
@@ -49,7 +50,7 @@ export function recordTimelineWorld(timeline: WorldTimeline, world: WorldState, 
   if (expectedBranchId !== timeline.activeBranchId) return timeline;
   const branch = branchOf(timeline);
   const head = branch?.snapshots.at(-1);
-  if (!branch || !head || world === head.world || world.tick < head.tick || world.random.seed !== head.world.random.seed) return timeline;
+  if (!branch || !head || world === head.world || world.tick < head.tick || !sameGeneratedWorld(world, head.world)) return timeline;
   const existing = world.tick === head.tick ? branch.snapshots.slice(0, -1) : branch.snapshots;
   const snapshots = [...existing, saveSnapshot(world)].slice(-TIMELINE_MAX_TICKS);
   const updated = immutableBranch(branch, snapshots);

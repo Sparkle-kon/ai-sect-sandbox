@@ -1,3 +1,4 @@
+import { sameGeneratedWorld } from './worldIdentity';
 import type { CultivationRealm, Cultivator, DecisionTraceCandidate, DecisionTraceRecord, DecisionTraceState, LLMDecisionPayload, PublicTraceAction, WorldState } from '../types/world';
 import { knownMapLocations } from './terrainEngine';
 import { isTribulationActive, tribulationTarget } from './tribulationEngine';
@@ -152,7 +153,7 @@ function metrics(world: WorldState, actor: Cultivator): DecisionReplayMetrics {
 export function replayOneTurn(tape: DecisionReplayTape, baseline: WorldState, traceId: string,
   candidateIdToApply: string, advance: ReplayAdvance): DecisionReplayResult {
   const privateState = runtimeTapes.get(tape);
-  if (!privateState || baseline.tick !== tape.baseTick + 1 || baseline.random.seed !== privateState.base.random.seed) {
+  if (!privateState || baseline.tick !== tape.baseTick + 1 || !sameGeneratedWorld(baseline, privateState.base)) {
     return { ok: false, reason: '当前分支没有同回合的可复演快照。' };
   }
   const trace = baseline.decisionTrace.records.find((item) => item.id === traceId && item.tick === baseline.tick);
@@ -192,11 +193,11 @@ export function replayOneTurn(tape: DecisionReplayTape, baseline: WorldState, tr
     return { ok: false, reason: '该隔离回合未能完整复演。' };
   }
   const controlActor = control.cultivators.find(({ id }) => id === actor.id);
-  if (!originalObserved || !controlActor || control.tick !== baseline.tick || control.random.seed !== baseline.random.seed) {
+  if (!originalObserved || !controlActor || control.tick !== baseline.tick || !sameGeneratedWorld(control, baseline)) {
     return { ok: false, reason: '原始决定的离线复演与执行记录不一致。' };
   }
   const alternateActor = replay.cultivators.find(({ id }) => id === actor.id);
-  if (!accepted || replay.tick !== baseline.tick || replay.random.seed !== baseline.random.seed || !alternateActor) {
+  if (!accepted || replay.tick !== baseline.tick || !sameGeneratedWorld(replay, baseline) || !alternateActor) {
     return { ok: false, reason: '按实际执行顺序复核后，该行动不再适用。' };
   }
   return { ok: true, comparison: { tick: baseline.tick, actorId: actor.id, alternateCandidateId: alternate.id,
