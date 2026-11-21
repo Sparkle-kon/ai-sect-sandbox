@@ -25,7 +25,7 @@ export default defineConfig({
           'travel-checkpoints': ['./src/engine/expeditionRescueCheckpoint.ts', './src/engine/boundaryReliefCheckpoint.ts'],
           'journey-rules': ['./src/engine/terrainEngine.ts', './src/engine/mapMotionEngine.ts', './src/engine/roadEngine.ts',
             './src/engine/sealedCourierEngine.ts', './src/engine/pilgrimageEngine.ts', './src/engine/expeditionRescueEngine.ts',
-            './src/engine/boundaryReliefEngine.ts'],
+            './src/engine/boundaryReliefEngine.ts','./src/engine/routeWarningProof.ts','./src/engine/routeWarningEngine.ts'],
           'workspace-shell': ['./src/components/SandboxWorkspace.tsx', './src/components/workspacePreferences.ts'],
           'map-controls': ['./src/components/mapCamera.ts', './src/components/mapKeyboard.ts', './src/components/mapActorClusters.ts',
             './src/components/mapBrushView.ts', './src/components/mapTouchGesture.ts'],

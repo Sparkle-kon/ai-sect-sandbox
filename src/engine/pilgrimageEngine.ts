@@ -4,6 +4,7 @@ import type { Cultivator, LocationNode, LLMDecisionPayload, MapPoint, Pilgrimage
 import { findMapPath } from './mapMotionEngine';
 import { currentVisibleTileIds, knownMapLocations, noteTerrainVisit, terrainTileAt } from './terrainEngine';
 import { flowActor, recordResourceFlow } from './resourceFlowEngine';
+import { recordPilgrimageRouteObservations } from './routeWarningEngine';
 
 export const PILGRIMAGE_LEG_COST = 8;
 export const PILGRIMAGE_RELIEF_HP = 16;
@@ -396,6 +397,7 @@ export function resolvePilgrimageAction(world: WorldState, actor: Cultivator, de
     members.companion.spiritStones -= PILGRIMAGE_LEG_COST;
     journey.spentByEach += PILGRIMAGE_LEG_COST;
   }
+  const fromPathIndex = journey.pathIndex;
   const next = nextPilgrimageStride(world,journey);
   const visitedTiles = journey.path.slice(journey.pathIndex + 1, next + 1).flatMap((point) => {
     const tile = terrainTileAt(world, point.x, point.y);
@@ -404,6 +406,7 @@ export function resolvePilgrimageAction(world: WorldState, actor: Cultivator, de
   for (const person of [members.leader, members.companion]) person.exploredTileIds = [...new Set([...person.exploredTileIds, ...visitedTiles])];
   journey.pathIndex = next;
   journey.lastMovedTick = world.tick;
+  recordPilgrimageRouteObservations(world,journey,fromPathIndex);
   if (next < journey.path.length - 1) return resumed
     ? event(world,journey,'resumed','由原关口收营续行','已核对实到关口并沿原路行过本回合路段，尚未抵达下一站。')
     : event(world, journey, 'stride', '沿已勘路线结伴前行', '实际行过本回合路段，尚未抵达下一站。');

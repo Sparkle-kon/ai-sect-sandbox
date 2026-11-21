@@ -15,6 +15,7 @@ import { advanceApprenticeCohorts, recordCohortPractice, resolveApprenticeCohort
 import { advanceHouseholdNames, resolveHouseholdNameAction } from './householdNameEngine';
 import { resolveVillageGranaryAction } from './villageGranaryEngine';
 import { advanceVillageSupply, resolveVillageSupplyAction } from './villageSupplyEngine';
+import { advanceRouteWarnings,availableRouteWarningActions,resolveRouteWarningAction } from './routeWarningEngine';
 import { resolveCaravanRestitutionAction } from './caravanRestitutionEngine';
 import { boundaryReliefCheckpoint } from './boundaryReliefCheckpoint';
 import { expeditionRescueCheckpoint } from './expeditionRescueCheckpoint';
@@ -184,7 +185,11 @@ export function applyCultivatorBrainDecision(
     cultivator.innerMonologue = '信使正沿实路前进，本轮不能在旧站另作行动。';
     return null;
   }
-  if (decision.chosenAction !== 'PILGRIMAGE' && (pilgrimageActedThisTick(world, cultivator) ||
+  const mayIssueRouteWarning = decision.chosenAction === 'ROUTE_WARNING' &&
+    availableRouteWarningActions(cultivator,world).some((option)=>
+      option.routeWarningMove===decision.routeWarningMove && option.targetRouteObservationId===decision.targetRouteObservationId &&
+      option.targetRouteWarningId===decision.targetRouteWarningId);
+  if (!mayIssueRouteWarning && decision.chosenAction !== 'PILGRIMAGE' && (pilgrimageActedThisTick(world, cultivator) ||
       (activePilgrimageForActor(world, cultivator) && (decision.chosenAction !== 'REST' || pilgrimageCheckpoint(world, cultivator))))) {
     cultivator.currentAction = 'PILGRIMAGE';
     cultivator.innerMonologue = '要守同行之约，途中不能在旧站另作行动。';
@@ -285,6 +290,8 @@ export function applyCultivatorBrainDecision(
       return resolveApprenticeCohortAction(world, cultivator, decision);
     case 'HOUSEHOLD_NAME':
       return resolveHouseholdNameAction(world, cultivator, decision);
+    case 'ROUTE_WARNING':
+      return resolveRouteWarningAction(world, cultivator, decision);
     case 'VILLAGE_SUPPLY':
       return resolveVillageSupplyAction(world, cultivator, decision);
     case 'VILLAGE_GRANARY':
@@ -775,6 +782,7 @@ export function advanceWorldTick(
   }
 
   openResourceFlowMonth(nextState);
+  advanceRouteWarnings(nextState);
   maintainPlayerAvatar(nextState);
   maintainMentorship(nextState);
   const avatarOrder = consumeAvatarOrder(nextState);

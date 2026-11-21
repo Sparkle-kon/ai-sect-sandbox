@@ -147,6 +147,7 @@ export type ActionType =
   | 'CARAVAN_RESTITUTION'
   | 'VILLAGE_GRANARY'
   | 'VILLAGE_SUPPLY'
+  | 'ROUTE_WARNING'
   | 'FORGE_ARTIFACT'
   | 'BIND_ARTIFACT'
   | 'REPAIR_ARTIFACT'
@@ -546,6 +547,9 @@ export interface LLMDecisionPayload {
   restitutionMove?: CaravanRestitutionMove;
   granaryMove?: VillageGranaryMove;
   villageSupplyMove?: VillageSupplyMove;
+  routeWarningMove?: RouteWarningMove;
+  targetRouteObservationId?: string;
+  targetRouteWarningId?: string;
   targetVillageSupplyId?: string;
   targetRestitutionId?: string;
   targetWorkshopId?: string;
@@ -692,6 +696,38 @@ export interface MapHazard {
   createdTick: number;
   expiresTick: number;
   intensity: number;
+}
+
+export type RouteWarningMove = 'post'|'corroborate'|'retract';
+export type RouteWarningHazardProof = Pick<MapHazard,'id'|'kind'|'tileId'|'createdTick'|'expiresTick'|'intensity'>;
+export interface RouteWarningObservation {
+  id:string;
+  actorId:string;
+  journeyId:string;
+  partyIds:[string,string];
+  legIndex:number;
+  fromPathIndex:number;
+  toPathIndex:number;
+  fromTileId:string;
+  toTileId:string;
+  exitTileId?:string;
+  exitPathIndex?:number;
+  observedTick:number;
+  hazard:RouteWarningHazardProof;
+}
+export interface RouteWarningNotice {
+  id:string;
+  postedTick:number;
+  expiresTick:number;
+  retractedTick?:number;
+  observation:RouteWarningObservation;
+  corroboration?:{tick:number;observation:RouteWarningObservation};
+}
+export interface RouteWarningsState {
+  nextId:number;
+  nextObservationId:number;
+  observations:RouteWarningObservation[];
+  notices:RouteWarningNotice[];
 }
 
 export interface TerrainSuccessionCell {
@@ -2638,6 +2674,7 @@ export interface WorldState {
   caravanRestitution: CaravanRestitutionState;
   villageGranaries: VillageGranariesState;
   villageSupply: VillageSupplyState;
+  routeWarnings: RouteWarningsState;
   resourceFlow: ResourceFlowState;
   roads: RoadState;
   sharedCommons: SharedCommonsState;

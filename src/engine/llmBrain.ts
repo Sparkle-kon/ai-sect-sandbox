@@ -30,6 +30,7 @@ import { availableInfirmaryActions, infirmaryCapacity } from './infirmaryEngine'
 import { availableHabitatActions } from './habitatEngine';
 import { availableChronicleErrataActions, pickChronicleReading } from './chronicleErrataEngine';
 import { activePilgrimageForActor, availablePilgrimageActions, pilgrimageCheckpoint } from './pilgrimageEngine';
+import { availableRouteWarningActions } from './routeWarningEngine';
 import { availableSectCreditActions } from './sectCreditEngine';
 import { activeSanctuaryPass, availableSanctuaryActions, sanctuaryCanShield } from './sanctuaryEngine';
 import { availableResearchActions } from './researchEngine';
@@ -106,6 +107,19 @@ export function utilityExpeditionRescueDecision(actor: Cultivator, world: WorldS
  * Deterministic / Utility AI heuristic decision engine.
  * Used when LLM mode is disabled or as a reliable fallback.
  */
+function utilityRouteWarning(actor: Cultivator, world: WorldState): LLMDecisionPayload | undefined {
+  if (!world.routeWarnings.observations.length) return undefined;
+  const options = availableRouteWarningActions(actor, world);
+  const proof = options.find(({ routeWarningMove }) => routeWarningMove === 'corroborate') ??
+    options.find(({ routeWarningMove }) => routeWarningMove === 'post');
+  if (!proof) return undefined;
+  return { chosenAction: 'ROUTE_WARNING', routeWarningMove: proof.routeWarningMove,
+    targetRouteWarningId: proof.targetRouteWarningId, targetRouteObservationId: proof.targetRouteObservationId,
+    innerMonologue: proof.routeWarningMove === 'corroborate'
+      ? '各以一次确实走过的见闻核实，旧险未必仍在。'
+      : '只写这趟路上确证的一段，后来者还须自行观察。' };
+}
+
 export function computeHeuristicDecision(
   cultivator: Cultivator,
   world: WorldState,
@@ -158,8 +172,13 @@ export function computeHeuristicDecision(
     if (nextCheckpoint) return { ...nextCheckpoint, chosenAction: 'PILGRIMAGE', innerMonologue: resume ?
       '按已核实的关口原路接续，不另造站点，也不重付本段费用。' : '同伴受伤或实际行程已耽搁，以实有补给暂宿。' };
     // A companion does not spontaneously dismantle before the organizer can resume in ordinary actor order.
-    const move = moves.find(({ pilgrimageMove }) => pilgrimageMove === 'relieve' ||
-      (worried ? pilgrimageMove === 'withdraw' || pilgrimageMove === 'decline' : pilgrimageMove === 'accept')) ??
+    const settledMove = moves.find(({ pilgrimageMove }) => pilgrimageMove === 'relieve' ||
+      (worried ? pilgrimageMove === 'withdraw' || pilgrimageMove === 'decline' : pilgrimageMove === 'accept'));
+    if (!settledMove && !worried && pilgrim && !pilgrimageCheckpoint(world, cultivator)) {
+      const warning = utilityRouteWarning(cultivator, world);
+      if (warning) return warning;
+    }
+    const move = settledMove ??
       ((!worried && (cultivator.personality === '刚正' || cultivator.personality === '逍遥'))
         ? moves.find(({ pilgrimageMove, targetRoadId }) => pilgrimageMove === 'advance' && targetRoadId !== undefined) : undefined) ??
       moves.find(({ pilgrimageMove }) => pilgrimageMove === 'advance');
@@ -798,6 +817,11 @@ export function computeHeuristicDecision(
     if (move) return { ...move, chosenAction: 'SECT_CREDIT', innerMonologue: '按实有宗库借还，不得将另项托管当作余额。' };
   }
 
+  if (!cultivator.guardAssignment && cultivator.hp >= cultivator.maxHp * .75) {
+    const warning = utilityRouteWarning(cultivator, world);
+    if (warning) return warning;
+  }
+
   if (world.tick >= 30 && world.tick % 10 === 7 && !cultivator.guardAssignment &&
     (cultivator.personality === '逍遥' || cultivator.personality === '刚正')) {
     const vow = availablePilgrimageActions(cultivator, world).find(({ pilgrimageMove }) => pilgrimageMove === 'propose');
@@ -1029,6 +1053,10 @@ export async function requestCultivatorLLMDecision(
   const activeVow = activePilgrimageForActor(world, cultivator);
   const onPilgrimagePath = activeVow && Boolean(pilgrimageCheckpoint(world, cultivator));
   const pilgrimageOptions = availablePilgrimageActions(cultivator, world, true, requestTick);
+  const routeWarningOptions = (onPilgrimagePath ? [] : availableRouteWarningActions(cultivator, world, requestTick))
+    .map(({ routeWarningMove, targetRouteWarningId, targetRouteObservationId }) =>
+      ({ routeWarningMove, targetRouteWarningId, targetRouteObservationId }));
+  const routeWarningGuide = `驿路警示只在真实停站时复制已有许可：post 只填本人一次亲历的 targetRouteObservationId；corroborate 同填另一趟独立见闻和现有警示编号；retract 只填本人警示的 targetRouteWarningId。不能填路线、坐标、地名、灾害、期限或新事实；没有许可不得编造。选项：${JSON.stringify(routeWarningOptions)}`;
   if (onPilgrimagePath && !pilgrimageOptions.length) return undefined;
   const boundaryReliefOptions = availableBoundaryReliefActions(cultivator, world, requestTick);
   const boundaryReliefOnly = Boolean(boundaryReliefCheckpoint(world, cultivator));
@@ -1127,7 +1155,9 @@ export async function requestCultivatorLLMDecision(
 当前已实到 ${activeVow.stopsVisited.length - 1} 个巡礼站点；${onPilgrimagePath ? '仍在道路途中，不在旧站。' : '当前在已到达的实站，可调息。'}
 只允许复制执行回合的以下巡礼选项：${JSON.stringify(pilgrimageOptions)}
 宿营、接续与撤营只抄本人合法动作和巡礼编号，不填写坐标、营地名称、临时目的地或费用。
-返回 JSON {"chosenAction":"PILGRIMAGE","pilgrimageMove":"照抄选项","targetPilgrimageId":"照抄","innerMonologue":"简短"}；${onPilgrimagePath ? '途中只选所列巡礼行动。' : '若留站调息可选 REST，不填写目标。'}` : `你是修仙沙盒世界中的修士【${cultivator.name}】（称号：${cultivator.title}）。
+返回 JSON {"chosenAction":"PILGRIMAGE","pilgrimageMove":"照抄选项","targetPilgrimageId":"照抄","innerMonologue":"简短"}；${onPilgrimagePath ? '途中只选所列巡礼行动。' : '若留站调息可选 REST，不填写目标。'}
+${!onPilgrimagePath && routeWarningOptions.length ? `停站可另选 ROUTE_WARNING。
+${routeWarningGuide}` : ''}` : `你是修仙沙盒世界中的修士【${cultivator.name}】（称号：${cultivator.title}）。
 【自身状态】
 - 境界：${cultivator.realm}${cultivator.realmStage}层（灵气进度：${cultivator.qiProgress}%）
 - 气血：${cultivator.hp}/${cultivator.maxHp} | 战力：${cultivator.combatPower}
@@ -1174,6 +1204,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 栖息地复育与放归只用当地实际有资源的选择；记录复见必须亲眼核对同一野生灵兽：${JSON.stringify(habitatOptions)}
 - 纪事异闻只允在当地公示板提交列出的结构化说法或核证勘误，不许生成证据文字：${JSON.stringify(chronicleErrataOptions)}
 - 朝山巡礼只向在场同伴提议，两站必须是彼此知晓且可通行的地点。选择并原样复制当下巡礼选项：${JSON.stringify(pilgrimageOptions)}
+- ${routeWarningGuide}
 - 宗门信贷为规则固定的零息本金，仅能选实际库账有据的选项：${JSON.stringify(creditOptions)}
 - 避难敕令只在指定站点保护持票人的直接斗法，且护盾有限。可执行事务：${JSON.stringify(sanctuaryOptions)}
 - 共研只可使用本宗的实际议案、实有投入与已核实退出理由：${JSON.stringify(researchOptions)}
@@ -1314,6 +1345,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'SANCTUARY',
             'SECT_CREDIT',
             'PILGRIMAGE',
+            'ROUTE_WARNING',
             'CHRONICLE_ERRATA',
             'HABITAT',
             'INFIRMARY',
@@ -1349,7 +1381,8 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
 
           if (boundaryReliefOnly && chosenAction !== 'BOUNDARY_RELIEF') return undefined;
           if (rescueOnly && chosenAction !== 'EXPEDITION_RESCUE') return undefined;
-          if (activeVow && chosenAction !== 'PILGRIMAGE' && (chosenAction !== 'REST' || onPilgrimagePath)) return undefined;
+          if (activeVow && chosenAction !== 'PILGRIMAGE' &&
+              (onPilgrimagePath || (chosenAction !== 'REST' && chosenAction !== 'ROUTE_WARNING'))) return undefined;
           const legalRoad = chosenAction === 'ROAD' ? roadOptions.find((item) =>
             item.roadMove === parsed.roadMove && item.targetRoadId === parsed.targetRoadId &&
             item.targetLocationId === parsed.targetLocationId) : undefined;
@@ -1488,6 +1521,14 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             item.chronicleReliefReading === parsed.chronicleReliefReading && item.targetCultivatorId === parsed.targetCultivatorId) : undefined;
           if (chosenAction === 'CHRONICLE_ERRATA' && (!legalChronicleErrata || parsed.targetLocationId !== undefined ||
               parsed.targetSectId !== undefined)) return undefined;
+
+          const legalRouteWarning = chosenAction === 'ROUTE_WARNING' ? routeWarningOptions.find((item) =>
+            item.routeWarningMove === parsed.routeWarningMove && item.targetRouteWarningId === parsed.targetRouteWarningId &&
+            item.targetRouteObservationId === parsed.targetRouteObservationId) : undefined;
+          if (chosenAction === 'ROUTE_WARNING' && (!legalRouteWarning || Object.keys(parsed).some((field) =>
+            !['chosenAction', 'innerMonologue', 'routeWarningMove',
+              ...(legalRouteWarning.routeWarningMove !== 'retract' ? ['targetRouteObservationId'] : []),
+              ...(legalRouteWarning.routeWarningMove !== 'post' ? ['targetRouteWarningId'] : [])].includes(field)))) return undefined;
 
           const legalPilgrimage = chosenAction === 'PILGRIMAGE' ? pilgrimageOptions.find((item) =>
             item.pilgrimageMove === parsed.pilgrimageMove && item.targetPilgrimageId === parsed.targetPilgrimageId &&
@@ -1738,6 +1779,9 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             chronicleErrataMove: legalChronicleErrata?.chronicleErrataMove,
             targetChronicleSourceId: legalChronicleErrata?.targetChronicleSourceId,
             chronicleReliefReading: legalChronicleErrata?.chronicleReliefReading,
+            routeWarningMove: legalRouteWarning?.routeWarningMove,
+            targetRouteWarningId: legalRouteWarning?.targetRouteWarningId,
+            targetRouteObservationId: legalRouteWarning?.targetRouteObservationId,
             pilgrimageMove: legalPilgrimage?.pilgrimageMove,
             targetPilgrimageId: legalPilgrimage?.targetPilgrimageId,
             targetPilgrimageNextStopId: legalPilgrimage?.targetPilgrimageNextStopId,

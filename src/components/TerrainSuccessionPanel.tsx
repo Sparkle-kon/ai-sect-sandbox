@@ -8,6 +8,7 @@ import type { createTerrainMapView } from './terrainMapView';
 import { observedRouteTargets, proveObservedTerrainRoute } from './observedRouteProof';
 import type { ObservedRouteProof } from './observedRouteProof';
 import { RoadMaintenancePanel } from './RoadMaintenancePanel';
+import { RouteWarningPanel } from './RouteWarningPanel';
 
 type TerrainView = ReturnType<typeof createTerrainMapView>;
 type Cell = ReturnType<typeof visibleTerrainSuccession>[number];
@@ -76,6 +77,7 @@ export function TerrainSuccessionPanel({ world, view, selected }: { world: World
         <div className="space-y-1.5 border-t border-slate-800 pt-2">
           <h5 className="font-semibold text-emerald-100">实测可见路线</h5>
           <p className="text-slate-400">使用实际地形路线计算，不设新障碍。迷雾开启时只检查当前可见地格；绕行检核另外避开所选地格。</p>
+          <RouteWarningPanel world={world} viewer={selected} observed={view.current} />
           <div className="grid min-w-0 gap-1.5 sm:grid-cols-2">
             <label className="grid min-w-0 gap-1">可见起点
               <select className={control} value={selectedFrom} onChange={(event) => { setFrom(event.target.value); setInspect(undefined); }}>

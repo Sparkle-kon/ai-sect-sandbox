@@ -41,6 +41,8 @@ import { resolveChronicleFocus } from '../engine/chronicleFocusEngine';
 import { availableFurnaceSlotSummary } from '../engine/furnaceReservationEngine';
 import { visibleVillageSupplyCheckpoints } from '../engine/villageSupplyEngine';
 import { drawVillageSupplyCheckpoints } from './villageSupplyMapDraw';
+import { visiblePublicRouteWarnings } from '../engine/routeWarningEngine';
+import { drawRouteWarningMarks,paintedRouteWarningGeometry } from './routeWarningMapDraw';
 import { getCurrentBoundaryCoverage } from '../engine/boundaryReliefEngine';
 import { currentVisibleTileIds, terrainTileAt } from '../engine/terrainEngine';
 import { courierCheckpoint } from '../engine/sealedCourierEngine';
@@ -274,9 +276,12 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     updateCamera(focusMapPoint(cameraRef.current, { x: followedX, y: followedY }));
   }, [followsSelection, followedActorId, followedX, followedY]);
   const presentation = useMemo(() => buildMapPresentation(world, mapView, actorPositions), [world, mapView, actorPositions]);
+  const routeWarningMarks=useMemo(()=>world.routeWarnings.notices.length ? paintedRouteWarningGeometry(world,
+    visiblePublicRouteWarnings(world,mapView.current ??
+      (selected?.alive ? currentVisibleTileIds(world,selected) : new Set<string>()))) : [],[world,mapView.current,selected]);
   const semanticMarks = useMemo(() => explorerOpen ? paintedMapMarks(world,mapView,territorySemantics.markers,hazards,convoys,
-    escortedCaravan,presentation,villageSupplyCheckpoints) : [],
-  [explorerOpen,world,mapView,territorySemantics,hazards,convoys,escortedCaravan,presentation,villageSupplyCheckpoints]);
+    escortedCaravan,presentation,villageSupplyCheckpoints,routeWarningMarks) : [],
+  [explorerOpen,world,mapView,territorySemantics,hazards,convoys,escortedCaravan,presentation,villageSupplyCheckpoints,routeWarningMarks]);
   const paintedActors = useRef<{
     markers: ReturnType<typeof planActorMarkers>; positions: typeof actorPositions; camera: MapCamera; size: MarkerViewport; scope: string;
   }>();
@@ -396,6 +401,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       annotationView?.drawMapAnnotationPins(ctx, annotationPins, camera.zoom);
       drawMapConvoys(ctx, convoys, camera.zoom);
       drawVillageSupplyCheckpoints(ctx, villageSupplyCheckpoints, camera.zoom);
+      drawRouteWarningMarks(ctx,routeWarningMarks,camera.zoom);
       drawFormationMapLinks(ctx, formationLines, camera.zoom);
       if (escortedCaravan) drawMapConvoys(ctx, [escortedCaravan], camera.zoom, '#7dd3fc', 'escort');
       if (pilgrimageMark) {
@@ -780,7 +786,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener('change', stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, hazards, convoys, villageSupplyCheckpoints, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, observedSalvageSites, localGranary, furnaceShift, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, observedSalvageSites, localGranary, furnaceShift, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
