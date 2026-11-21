@@ -715,9 +715,9 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
   const toggleAutoplay = () => { if (!fastForwardRun.current) setIsRunning((current) => !current); };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col pt-[env(safe-area-inset-top)]">
       <header className="border-b border-slate-800 bg-slate-900/80">
-        <div className="mx-auto flex w-full max-w-[76rem] flex-wrap items-center justify-between gap-2 px-3 py-2 sm:px-4">
+        <div className="mx-auto flex w-full max-w-[76rem] flex-wrap items-center justify-between gap-2 py-2 pl-[max(.75rem,env(safe-area-inset-left))] pr-[max(.75rem,env(safe-area-inset-right))] sm:pl-[max(1rem,env(safe-area-inset-left))] sm:pr-[max(1rem,env(safe-area-inset-right))]">
           <div className="flex min-w-0 items-center gap-2">
             <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-amber-500/40 bg-amber-500/20">
               <Sparkles aria-hidden="true" className="h-5 w-5 text-amber-400" />

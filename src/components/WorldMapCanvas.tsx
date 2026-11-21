@@ -17,10 +17,12 @@ import { isActiveCampaign, SIEGE_LABELS } from './siegeLabels';
 import { isOpenOccasion, OCCASION_KIND, OCCASION_STATUS } from './occasionLabels';
 import { BOUNTY_STATUS, relevantBounty } from './bountyLabels';
 import { BIOME_PALETTE, createTerrainMapView, mapActorPositions } from './terrainMapView';
-import { drawTerrain, EXPLORED_TERRAIN_SHADE } from './terrainMapDraw';
+import { drawMapTerritoryGlyphs, drawTerrain, EXPLORED_TERRAIN_SHADE } from './terrainMapDraw';
 import { drawMapConvoys, mapTransitActorIds, visibleMapConvoys, visibleMapEscort } from './mapConvoyView';
 import { buildMapPresentation, MAP_EFFECT_LABELS, MOTION_MS } from './mapPresentationView';
 import { drawFlights, drawMapEffects } from './mapPresentationDraw';
+import { projectMapTerritories } from './mapTerritorySemantics';
+import { paintedMapMarks } from './mapPaintedSemantics';
 import { centerCamera, clientToMapViewport, closestViewportTarget, DEFAULT_CAMERA, MAP_HEIGHT, MAP_WIDTH, MAX_ZOOM, screenToMap, zoomCamera } from './mapCamera';
 import type { CameraPoint, MapCamera } from './mapCamera';
 import { CLUSTER_RADIUS_PX, mapActorPage, pickActorMarker, planActorMarkers, visibleMarkerMembers } from './mapActorClusters';
@@ -190,6 +192,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       .map(({ siteId }) => siteId));
   }, [world, selected]);
   const { seenLocations, isCurrentLocation } = mapView;
+  const territorySemantics = useMemo(() => projectMapTerritories(world,mapView.tileState), [world,mapView]);
   const locallyObservedWorkshopClosure = useMemo(() => {
     if (!selected?.alive || selected.hp <= 0 || !isCurrentLocation(selected.locationId) ||
       mapTransitActorIds(world).has(selected.id) || courierCheckpoint(world,selected) || pilgrimageCheckpoint(world,selected) ||
@@ -263,6 +266,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     updateCamera(focusMapPoint(cameraRef.current, { x: followedX, y: followedY }));
   }, [followsSelection, followedActorId, followedX, followedY]);
   const presentation = useMemo(() => buildMapPresentation(world, mapView, actorPositions), [world, mapView, actorPositions]);
+  const semanticMarks = useMemo(() => explorerOpen ? paintedMapMarks(world,mapView,territorySemantics.markers,hazards,convoys,
+    escortedCaravan,presentation) : [], [explorerOpen,world,mapView,territorySemantics,hazards,convoys,escortedCaravan,presentation]);
   const paintedActors = useRef<{
     markers: ReturnType<typeof planActorMarkers>; positions: typeof actorPositions; camera: MapCamera; size: MarkerViewport; scope: string;
   }>();
@@ -358,6 +363,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     }
     const motionStart = playback.current?.start ?? performance.now();
     const draw = (phase: number, elapsed: number, animate: boolean) => {
+      const logicalPerCssPixel = width / (markerSize.width || width) / camera.zoom;
       ctx.save();
       ctx.clearRect(0, 0, width, height);
       ctx.setTransform(camera.zoom, 0, 0, camera.zoom, camera.x, camera.y);
@@ -376,12 +382,12 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       ctx.fillRect(0, 0, width, height);
 
       // 2. Terrain, spirit qi overlay and sect boundaries.
-      drawTerrain(ctx, world, mapView.tileState, heat, phase);
+      drawTerrain(ctx, world, mapView.tileState, heat, phase, territorySemantics, logicalPerCssPixel);
       drawHazards(ctx, hazards);
       annotationView?.drawMapAnnotationPins(ctx, annotationPins, camera.zoom);
       drawMapConvoys(ctx, convoys, camera.zoom);
       drawFormationMapLinks(ctx, formationLines, camera.zoom);
-      if (escortedCaravan) drawMapConvoys(ctx, [escortedCaravan], camera.zoom, '#7dd3fc');
+      if (escortedCaravan) drawMapConvoys(ctx, [escortedCaravan], camera.zoom, '#7dd3fc', 'escort');
       if (pilgrimageMark) {
         const { x, y } = pilgrimageMark.point;
         ctx.save();
@@ -617,6 +623,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         ctx.fillText(`灵气 ${loc.spiritQi}`, loc.x, loc.y + 33);
       }
 
+      drawMapTerritoryGlyphs(ctx, territorySemantics.markers, logicalPerCssPixel);
+
       // 5. Draw only actors in the current field of view.
       const frameActors = drawFlights(ctx, actorPositions, presentation.routes, elapsed, animate);
       const markers = frameActors === actorPositions
@@ -762,7 +770,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener('change', stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, hazards, convoys, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, observedSalvageSites, localGranary, furnaceShift, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, hazards, convoys, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, observedSalvageSites, localGranary, furnaceShift, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1142,7 +1150,12 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         {explorerOpen && <React.Suspense fallback={<p className="px-3 pb-2 text-xs text-slate-300" role="status">载入山河索引…</p>}>
           <MapKeyboardExplorer world={world} view={mapView} actorPositions={actorPositions} presentation={presentation}
             selected={selectedPoint?.actor} follows={followsSelection} zoom={camera.zoom} onCamera={activateCamera}
-            onActor={(actor) => locateActor(actor.id)} onSite={focusSite}
+            onActor={(actor) => locateActor(actor.id)} onSite={focusSite} marks={semanticMarks}
+            onPoint={(point) => {
+              abandonGesture();
+              commandCamera(focusMapPoint(cameraRef.current,point));
+              setFocusMessage('已定位到当前可见的地图标记。');
+            }}
             onFollow={() => { abandonGesture(); setFollowsSelection((current) => !current); }}
             onFocusLost={() => { if (explorerSummary.current?.getClientRects().length) explorerSummary.current.focus({ preventScroll: true }); }} />
         </React.Suspense>}

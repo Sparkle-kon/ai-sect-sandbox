@@ -84,27 +84,37 @@ export function visibleMapEscort(world: WorldState, view: TerrainView, actor?: C
   return visibleCheckpointRoute(world, view, plan.path, plan.pathIndex);
 }
 
+export type MapConvoyKind = 'migration'|'escort';
+export const MAP_CONVOY_STYLES = {
+  migration:{label:'迁宗队伍',symbolLabel:'方形 · 长虚线',dash:[9,4],stroke:'#fcd34d',fill:'#fbbf24'},
+  escort:{label:'所选护送队伍',symbolLabel:'三角 · 点划线',dash:[8,3,2,3],stroke:'#7dd3fc',fill:'#7dd3fc'},
+} as const;
+
 /** Static convoy overlay; it neither animates nor advances simulation. */
-export function drawMapConvoys(ctx: CanvasRenderingContext2D, convoys: readonly VisibleCheckpoint[], zoom: number, color?: string): void {
-  if (!convoys.length) return;
+export function drawMapConvoys(ctx:CanvasRenderingContext2D,convoys:readonly VisibleCheckpoint[],zoom:number,
+  color?:string,kind:MapConvoyKind='migration'):void {
+  if(!convoys.length) return;
+  const style=MAP_CONVOY_STYLES[kind];
   ctx.save();
-  ctx.strokeStyle = color ?? '#fcd34d';
-  ctx.fillStyle = color ?? '#fbbf24';
-  ctx.lineWidth = 2 / zoom;
-  for (const { marker, route } of convoys) {
-    ctx.setLineDash([7 / zoom, 4 / zoom]);
+  for(const {marker,route} of convoys) {
+    ctx.setLineDash(style.dash.map(length=>length/zoom));
     ctx.beginPath();
-    for (const [index, point] of route.entries()) index ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y);
-    ctx.stroke();
+    for(const [index,point] of route.entries()) index ? ctx.lineTo(point.x,point.y) : ctx.moveTo(point.x,point.y);
+    ctx.strokeStyle='#020617';ctx.lineWidth=4/zoom;ctx.stroke();
+    ctx.strokeStyle=color??style.stroke;ctx.lineWidth=2/zoom;ctx.stroke();
     ctx.setLineDash([]);
-    const size = 11 / zoom;
+    const size=9/zoom;
     ctx.beginPath();
-    ctx.moveTo(marker.x, marker.y - size);
-    ctx.lineTo(marker.x + size, marker.y);
-    ctx.lineTo(marker.x, marker.y + size);
-    ctx.lineTo(marker.x - size, marker.y);
-    ctx.closePath();
-    ctx.fill();
+    if(kind==='escort') {
+      ctx.moveTo(marker.x,marker.y-size);
+      ctx.lineTo(marker.x+size,marker.y+size);
+      ctx.lineTo(marker.x-size,marker.y+size);
+      ctx.closePath();
+    } else {
+      ctx.rect(marker.x-size,marker.y-size,size*2,size*2);
+    }
+    ctx.fillStyle=color??style.fill;ctx.fill();
+    ctx.strokeStyle='#020617';ctx.lineWidth=2/zoom;ctx.stroke();
   }
   ctx.restore();
 }

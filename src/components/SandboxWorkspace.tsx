@@ -40,7 +40,7 @@ export function SandboxWorkspace({ active, onChange, views, panelLead, autoFocus
   };
   return (
     <>
-      <nav aria-label="沙盒工作区" className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-800 bg-slate-950/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:static lg:border-t-0 lg:border-b lg:pb-0">
+      <nav aria-label="沙盒工作区" className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-800 bg-slate-950/95 pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] backdrop-blur lg:static lg:border-t-0 lg:border-b lg:pb-0">
         <div role="tablist" aria-label="工作区" onKeyDown={key} className="mx-auto grid w-full max-w-6xl grid-cols-5 gap-1 px-2 py-1 sm:px-4 lg:w-fit lg:gap-3">
           {SANDBOX_VIEWS.map(({ id, label, Icon }, index) => (
             <button key={id} id={`${uid}-tab-${id}`} ref={(node) => { buttons.current[index] = node; }}
@@ -51,7 +51,7 @@ export function SandboxWorkspace({ active, onChange, views, panelLead, autoFocus
           ))}
         </div>
       </nav>
-      <main className="mx-auto w-full max-w-[76rem] flex-1 px-2.5 pt-2.5 pb-[calc(4.5rem+env(safe-area-inset-bottom))] sm:px-4 lg:pb-6">
+      <main className="mx-auto w-full max-w-[76rem] flex-1 pl-[max(.625rem,env(safe-area-inset-left))] pr-[max(.625rem,env(safe-area-inset-right))] pt-2.5 pb-[calc(4.5rem+env(safe-area-inset-bottom))] sm:pl-[max(1rem,env(safe-area-inset-left))] sm:pr-[max(1rem,env(safe-area-inset-right))] lg:pb-6">
         {SANDBOX_VIEWS.map(({ id }) => <section key={id} id={`${uid}-panel-${id}`} role="tabpanel" aria-labelledby={`${uid}-tab-${id}`}
           hidden={active !== id} className="min-w-0" data-workspace={id}>
           {active === id && panelLead}
