@@ -20,6 +20,8 @@ import { AgentInspector } from './components/AgentInspector';
 import { ChronicleFeed } from './components/ChronicleFeed';
 import { BountyBoard } from './components/BountyBoard';
 import { SectCouncilModal } from './components/SectCouncilModal';
+import { ChronicleLibraryPanel } from './components/ChronicleLibraryPanel';
+import { settleChronicleOnline } from './engine/chronicleRuntime';
 import { availableCouncilPlans } from './engine/councilEngine';
 import { commitCouncilSnapshot, settleAnnualCouncilOnline, settleCouncilSnapshot } from './engine/councilRuntime';
 import type { CouncilPlan } from './types/world';
@@ -60,7 +62,8 @@ export const App: React.FC = () => {
         const [reflected, dramatized] = await Promise.all([
           enrichAnnualReflections(tick, llmConfig), enrichTickDialogues(tick, llmConfig),
         ]);
-        const next = await settleAnnualCouncilOnline({ ...reflected, events: dramatized.events }, llmConfig);
+        const withCouncil = await settleAnnualCouncilOnline({ ...reflected, events: dramatized.events }, llmConfig);
+        const next = await settleChronicleOnline(withCouncil, llmConfig);
         // A reset or divine intervention during the request invalidates its snapshot.
         setWorld((prev) => commitCouncilSnapshot(prev, world, next));
       } else {
@@ -214,6 +217,7 @@ export const App: React.FC = () => {
             onIntervene={handleGodIntervene}
           />
           <ChronicleFeed events={world.events} />
+          <ChronicleLibraryPanel world={world} />
         </div>
 
         {/* Right 5 Cols: Agent Inspector + Relationship Graph */}

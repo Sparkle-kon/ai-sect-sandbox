@@ -512,7 +512,45 @@ export interface CouncilRecord extends CouncilPlan {
   outcome: string;
 }
 
+export interface ChronicleAnchor {
+  id: string;
+  tick: number;
+  year: number;
+  month: number;
+  title: string;
+  description: string;
+  dialogue?: DialogueExchange;
+  category: WorldEvent['category'];
+  actorIds: string[];
+  locationId?: string;
+}
+export interface ChronicleBiography {
+  actorId: string;
+  name: string;
+  realm: CultivationRealm;
+  sectName?: string;
+  anchorIds: string[];
+}
+export interface ChronicleChapterPlan {
+  id: string;
+  chapterNumber: number;
+  startTick: number;
+  endTick: number;
+  title: string;
+  anchors: ChronicleAnchor[];
+  biographies: ChronicleBiography[];
+}
+export interface ChronicleChapter extends ChronicleChapterPlan {
+  body: string;
+  source: 'utility' | 'llm';
+}
+export interface ChronicleArchive {
+  anchors: ChronicleAnchor[];
+  chapters: ChronicleChapter[];
+}
+
 export interface WorldState {
+  chronicleArchive: ChronicleArchive;
   councils: CouncilRecord[];
   tick: number;
   interventionSequence: number;

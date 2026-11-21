@@ -1,3 +1,5 @@
+import { archiveChronicleEvents } from './novelGenerator';
+import { settleChronicleOffline } from './chronicleRuntime';
 import { settleAnnualCouncilOffline } from './councilRuntime';
 import {
   REALM_BASE_POWER,
@@ -604,8 +606,12 @@ export function advanceWorldTick(
   }
   for (const actor of nextState.cultivators) if (actor.alive) noteTerrainVisit(nextState, actor);
   spreadRumors(nextState);
+  archiveChronicleEvents(nextState, newEvents);
   nextState.events = [...newEvents, ...nextState.events].slice(0, 120);
-  if (councilMode === 'utility') settleAnnualCouncilOffline(nextState);
+  if (councilMode === 'utility') {
+    settleAnnualCouncilOffline(nextState);
+    settleChronicleOffline(nextState);
+  }
   nextState.mapPresentation = deriveMapPresentation(prevState, nextState, newEvents);
   return nextState;
 }
@@ -751,6 +757,8 @@ export function executeGodIntervention(
   const head = nextState.events[0];
   if (head && head.id !== prevState.events[0]?.id) {
     witnessEvent(nextState, head);
+    archiveChronicleEvents(nextState, [head]);
+    nextState.events = nextState.events.slice(0, 120);
     nextState.mapPresentation = deriveMapPresentation(prevState, nextState, [head]);
   }
   return nextState;

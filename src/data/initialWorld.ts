@@ -1,3 +1,4 @@
+import { archiveChronicleEvents, createChronicleArchive } from '../engine/novelGenerator';
 import { memoryDecayRate } from '../engine/memoryEngine';
 import { generateTerrain, noteTerrainVisit } from '../engine/terrainEngine';
 import { spawnInitialBeasts } from '../engine/spiritBeastEngine';
@@ -283,6 +284,7 @@ export function createInitialWorld(seed = 2031): WorldState {
     occasions: [],
     bounties: [],
     councils: [],
+    chronicleArchive: createChronicleArchive(),
     locations,
     terrain: generateTerrain(locations, seed),
     mapPresentation: { tick: 1, trails: [], effects: [] },
@@ -735,5 +737,6 @@ export function createInitialWorld(seed = 2031): WorldState {
     ],
   };
   for (const actor of world.cultivators) noteTerrainVisit(world, actor);
+  archiveChronicleEvents(world, world.events);
   return world;
 }

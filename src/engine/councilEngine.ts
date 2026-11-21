@@ -1,3 +1,4 @@
+import { archiveChronicleEvents } from './novelGenerator';
 import type { CouncilBallot, CouncilBallotReplacement, CouncilPlan, CouncilProposal, CouncilRecord, CouncilVote, Cultivator, Sect, WorldEvent, WorldState } from '../types/world';
 import { activeSiegeForActor, availableDiplomacyActions, resolveDiplomacyAction, sectRelation } from './diplomacyEngine';
 import { recordMemory } from './memoryEngine';
@@ -169,6 +170,8 @@ export function resolveCouncil(world: WorldState, plan: CouncilPlan, replacement
     actorIds: [...current.voterIds], locationId: sect.headquartersId,
   };
   world.councils = [record, ...world.councils].slice(0, Math.max(96, world.sects.length));
-  world.events = [summary, ...(effect ? [effect] : []), ...world.events].slice(0, 120);
+  const events = [summary, ...(effect ? [effect] : [])];
+  archiveChronicleEvents(world, events);
+  world.events = [...events, ...world.events].slice(0, 120);
   return record;
 }
