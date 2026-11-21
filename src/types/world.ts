@@ -106,6 +106,7 @@ export type ActionType =
   | 'BREW_PILL'
   | 'USE_PILL'
   | 'VILLAGE_CENSUS'
+  | 'OATH_ARBITRATION'
   | 'PROBATION'
   | 'WORKSHOP'
   | 'FORGE_ARTIFACT'
@@ -372,6 +373,8 @@ export interface LLMDecisionPayload {
   proposedScheme?: SchemeKind;
   targetTuitionId?: string;
   targetOathId?: string;
+  arbitrationMove?: OathArbitrationMove;
+  targetTenderTick?: number;
   oathTerm?: OathTerm;
   marketGood?: MarketGood;
   marketQuantity?: number;
@@ -803,6 +806,43 @@ export interface OathContract {
   outcome?: string;
 }
 export interface OathState { contracts: OathContract[]; nextId: number }
+
+export type OathArbitrationMove = 'open' | 'join' | 'appoint' | 'accept' | 'recuse' | 'file' | 'vote_refund' | 'vote_inconclusive';
+export type ArbitrationRecusal = 'voluntary' | 'faction' | 'personal_tie' | 'prior_obligation' | 'unavailable';
+export interface ArbitrationAppointment {
+  side: 'requester' | 'provider';
+  appointeeId: string;
+  nominatedTick: number;
+  acceptedTick?: number;
+  endedTick?: number;
+  recusal?: ArbitrationRecusal;
+  vote?: 'refund' | 'inconclusive';
+  votedTick?: number;
+}
+export interface OathTenderObservation {
+  oathId: string;
+  tenderTick: number;
+  siteId: string;
+  observerIds: string[];
+}
+export interface OathArbitrationCase {
+  id: string;
+  oathId: string;
+  siteId: string;
+  requesterId: string;
+  providerId: string;
+  tenderTick: number;
+  openedTick: number;
+  joinUntilTick: number;
+  joinedTick?: number;
+  expiresTick?: number;
+  status: 'offered' | 'hearing' | 'closed';
+  appointments: ArbitrationAppointment[];
+  filing?: { observerId: string; tick: number };
+  closedTick?: number;
+  disposition?: 'refund' | 'inconclusive' | 'unjoined' | 'external_settlement';
+}
+export interface OathArbitrationState { cases: OathArbitrationCase[]; observations: OathTenderObservation[] }
 
 export type MarketGood = HerbId | PillId;
 export interface MarketOrder {
@@ -2128,6 +2168,7 @@ export interface WorldState {
   settlements: SettlementState;
   markets: MarketState;
   oaths: OathState;
+  oathArbitrations: OathArbitrationState;
   mentorship: MentorshipState;
   random: WorldRandomState;
   playerAvatar: PlayerAvatarState;

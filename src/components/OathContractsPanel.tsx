@@ -1,4 +1,5 @@
 import type { Cultivator, WorldState } from '../types/world';
+import { OathArbitrationPanel } from './OathArbitrationPanel';
 
 type Contract = WorldState['oaths']['contracts'][number];
 
@@ -96,6 +97,7 @@ export function OathContractsPanel({ world, cultivator }: { world: WorldState; c
           )}
         </>
       )}
+      <OathArbitrationPanel world={world} cultivator={cultivator} />
     </section>
   );
 }

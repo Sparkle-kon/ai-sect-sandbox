@@ -1,3 +1,4 @@
+import { ARBITRATION_HEARING_WINDOW, ARBITRATION_JOIN_WINDOW, ARBITRATION_MAX_APPOINTMENTS_PER_SIDE, ARBITRATION_MAX_OBSERVERS, createOathArbitrationState } from './oathArbitrationEngine';
 import { createVillageCensusesState, VILLAGE_CENSUS_PERIOD_LIMIT } from './villageCensusEngine';
 import { createRoadState, ROAD_CONDITION_MAX, ROAD_FARE, ROAD_PAID_STRIDE, ROAD_PATH_POINT_LIMIT, ROAD_PATH_TILE_LIMIT } from './roadEngine';
 import { createProbationState, PROBATION_REQUEST_TICKS, PROBATION_REQUIRED_RELIEF, PROBATION_REQUIRED_REVIEWS, PROBATION_SERVICE_TICKS } from './probationEngine';
@@ -106,7 +107,7 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const flowGood = one('stone','jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
@@ -261,6 +262,19 @@ const shape = structure({
       attestations:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,tick,verdict:one('supports','contradicts')})),
       appeal:optional(structure({tick,actorId:id,verdict:one('upheld','rejected'),reason:text})),settledTick:otick,
       reputationSectId:oid,reputationPenalty:percentage,reputationRestored:percentage,reason:otext}))}),
+  oathArbitrations:structure({
+    observations:arr(SAVE_COLLECTION_LIMIT,structure({oathId:id,tenderTick:tick,siteId:id,observerIds:arr(ARBITRATION_MAX_OBSERVERS,id)})),
+    cases:arr(SAVE_COLLECTION_LIMIT,structure({
+      id,oathId:id,siteId:id,requesterId:id,providerId:id,tenderTick:tick,openedTick:tick,joinUntilTick:tick,joinedTick:otick,expiresTick:otick,
+      status:one('offered','hearing','closed'),closedTick:otick,disposition:optional(one('refund','inconclusive','unjoined','external_settlement')),
+      appointments:arr(2 * ARBITRATION_MAX_APPOINTMENTS_PER_SIDE,structure({
+        side:one('requester','provider'),appointeeId:id,nominatedTick:tick,acceptedTick:otick,endedTick:otick,
+        recusal:optional(one('voluntary','faction','personal_tie','prior_obligation','unavailable')),
+        vote:optional(one('refund','inconclusive')),votedTick:otick
+      })),
+      filing:optional(structure({observerId:id,tick}))
+    }))
+  }),
   villageCensuses:structure({periods:arr(VILLAGE_CENSUS_PERIOD_LIMIT,structure({
     tick,year:tick,month,opening:arr(SAVE_COLLECTION_LIMIT,censusCount),closing:optional(arr(SAVE_COLLECTION_LIMIT,censusCount)),
     movements:arr(SAVE_COLLECTION_LIMIT,structure({
@@ -536,6 +550,7 @@ function verifyWorld(value: unknown): WorldState {
       ...(!Object.hasOwn(value, 'mentorship') ? { mentorship: { offers: [], lineage: [], budgets: [] } } : {}),
       ...(!Object.hasOwn(value, 'decisionTrace') ? { decisionTrace: { records: [] } } : {}),
       ...(!Object.hasOwn(value, 'coldHistory') ? { coldHistory: createColdHistoryState() } : {}),
+      ...(!Object.hasOwn(value, 'oathArbitrations') ? { oathArbitrations: createOathArbitrationState() } : {}),
       ...(!Object.hasOwn(value, 'villageCensuses') ? { villageCensuses: createVillageCensusesState() } : {}),
       ...(!Object.hasOwn(value, 'roads') ? { roads: createRoadState() } : {}),
       ...(!Object.hasOwn(value, 'probation') ? { probation: createProbationState() } : {}),
@@ -599,6 +614,63 @@ function verifyWorld(value: unknown): WorldState {
         (cell.lastWorkedTick === undefined) !== (cell.lastWorkedBy === undefined) ||
         (cell.lastWorkedBy !== undefined && !actor.has(cell.lastWorkedBy)) ||
         (cell.workCount > 0 && cell.lastWorkedTick === undefined)) fail('terrainSuccession.cells.references');
+  }
+  unique(w.oathArbitrations.cases, ({ oathId }) => oathId, 'oathArbitrations.cases.oath');
+  const tenderKey = (oathId: string, at: number) => JSON.stringify([oathId, at]);
+  unique(w.oathArbitrations.observations, ({ oathId, tenderTick }) => tenderKey(oathId, tenderTick), 'oathArbitrations.observations.tender');
+  const actualOaths = new Map(w.oaths.contracts.map((row) => [row.id, row]));
+  const observations = new Map(w.oathArbitrations.observations.map((row) => [tenderKey(row.oathId, row.tenderTick), row]));
+  const caseOaths = new Set(w.oathArbitrations.cases.map(({ oathId }) => oathId));
+  for (const row of w.oathArbitrations.observations) {
+    const oath = actualOaths.get(row.oathId);
+    if (row.tenderTick > w.tick || !row.observerIds.length || row.observerIds.some((id) => !actor.has(id)) ||
+        (oath ? row.siteId !== oath.locationId || row.observerIds.includes(oath.requesterId) || row.observerIds.includes(oath.providerId) ||
+          !oath.evidence.some((item) => item.kind === 'tender' && item.actorId === oath.providerId && !item.requesterPresent &&
+            item.locationId === row.siteId && item.tick === row.tenderTick && item.quantity === oath.quantity) : !caseOaths.has(row.oathId)))
+      fail('oathArbitrations.observations.references');
+    unique(row.observerIds, (id) => id, 'oathArbitrations.observations.observer');
+  }
+  for (const panel of w.oathArbitrations.cases) {
+    const oath = actualOaths.get(panel.oathId);
+    const observed = observations.get(tenderKey(panel.oathId, panel.tenderTick));
+    const joined = panel.joinedTick;
+    const closed = panel.closedTick;
+    if (panel.id !== `arbitration-${panel.oathId}` || !observed || observed.siteId !== panel.siteId ||
+        !actor.has(panel.requesterId) || !actor.has(panel.providerId) || panel.requesterId === panel.providerId ||
+        observed.observerIds.includes(panel.requesterId) || observed.observerIds.includes(panel.providerId) ||
+        (oath && (oath.requesterId !== panel.requesterId || oath.providerId !== panel.providerId || oath.locationId !== panel.siteId)) ||
+        panel.tenderTick > panel.openedTick || panel.openedTick > w.tick || panel.joinUntilTick <= panel.openedTick ||
+        panel.joinUntilTick > panel.openedTick + ARBITRATION_JOIN_WINDOW ||
+        (panel.status === 'closed' ? closed === undefined || !panel.disposition || closed < (joined ?? panel.openedTick) || closed > w.tick :
+          closed !== undefined || panel.disposition !== undefined || !oath || oath.settledTick !== undefined) ||
+        (joined === undefined ? panel.status === 'hearing' || panel.expiresTick !== undefined || !!panel.filing || panel.appointments.length > 0 :
+          panel.status === 'offered' || joined < panel.openedTick || joined >= panel.joinUntilTick || joined > w.tick ||
+          panel.expiresTick === undefined || panel.expiresTick < joined + ARBITRATION_HEARING_WINDOW ||
+          (oath && panel.expiresTick !== Math.max(oath.deadlineTick ?? joined, joined) + ARBITRATION_HEARING_WINDOW)) ||
+        (panel.disposition === 'unjoined' && joined !== undefined) ||
+        (panel.disposition === 'refund' && (joined === undefined || !panel.filing ||
+          (oath && (oath.status !== 'excused' || oath.settledTick !== closed))))) fail('oathArbitrations.cases.references');
+    const seated = panel.appointments.filter(({ endedTick }) => endedTick === undefined);
+    unique(seated, ({ side }) => side, 'oathArbitrations.appointments.side');
+    unique(seated, ({ appointeeId }) => appointeeId, 'oathArbitrations.appointments.adjudicator');
+    for (const side of ['requester','provider'] as const) if (panel.appointments.filter((row) => row.side === side).length > ARBITRATION_MAX_APPOINTMENTS_PER_SIDE)
+      fail('oathArbitrations.appointments.history');
+    for (const judge of panel.appointments) {
+      if (!actor.has(judge.appointeeId) || judge.appointeeId === panel.requesterId || judge.appointeeId === panel.providerId ||
+          observed?.observerIds.includes(judge.appointeeId) || judge.nominatedTick < (joined ?? Infinity) ||
+          judge.nominatedTick >= (panel.expiresTick ?? 0) || judge.nominatedTick > (closed ?? w.tick) ||
+          (judge.acceptedTick !== undefined && (judge.acceptedTick < judge.nominatedTick || judge.acceptedTick > (judge.endedTick ?? closed ?? w.tick))) ||
+          (judge.endedTick === undefined) !== (judge.recusal === undefined) ||
+          (judge.endedTick !== undefined && (judge.endedTick < judge.nominatedTick || judge.endedTick > (closed ?? w.tick))) ||
+          (judge.vote === undefined) !== (judge.votedTick === undefined) ||
+          (judge.votedTick !== undefined && (judge.votedTick <= (judge.acceptedTick ?? Infinity) ||
+            judge.votedTick >= (panel.expiresTick ?? 0) || judge.votedTick > (judge.endedTick ?? closed ?? w.tick) ||
+            (judge.vote === 'refund' && (!panel.filing || judge.votedTick < panel.filing.tick))))) fail('oathArbitrations.appointments.references');
+    }
+    if (panel.filing && (!observed?.observerIds.includes(panel.filing.observerId) || panel.filing.tick < (joined ?? Infinity) ||
+        panel.filing.tick >= (panel.expiresTick ?? 0) || panel.filing.tick > (closed ?? w.tick))) fail('oathArbitrations.filing.references');
+    if (panel.disposition === 'refund' && (seated.length !== 2 || seated.some(({ vote, acceptedTick }) => vote !== 'refund' || acceptedTick === undefined)))
+      fail('oathArbitrations.refund.proof');
   }
   let lastCensusTick = -1;
   const censusSources = new Map(w.settlements.records.map((row) => [row.id, row]));

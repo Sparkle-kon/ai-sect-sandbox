@@ -1,3 +1,4 @@
+import { availableOathArbitrationActions } from './oathArbitrationEngine';
 import { availableVillageCensusActions } from './villageCensusEngine';
 import { availableRoadActions } from './roadEngine';
 import { availableProbationActions, probationReliefTargets } from './probationEngine';
@@ -147,6 +148,13 @@ export function computeHeuristicDecision(
       (cultivator.personality === '刚正' || cultivator.personality === '逍遥')) {
     const work = availableTerrainRecoveryActions(cultivator, world)[0];
     if (work) return { ...work, chosenAction: 'TERRAIN_RECOVERY', innerMonologue: '只修脚下已退灾的实地，付出实物，不抹去永久伤痕。' };
+  }
+  const arbitrationMarks = world.oathArbitrations;
+  if (arbitrationMarks.cases.length || arbitrationMarks.observations.length) {
+    const moves = availableOathArbitrationActions(cultivator, world, cultivator.personality === '刚正' || cultivator.personality === '逍遥');
+    const priority = ['vote_refund', 'file', 'accept', 'join', 'appoint', 'open'] as const;
+    const action = priority.map((move) => moves.find(({ arbitrationMove }) => arbitrationMove === move)).find(Boolean);
+    if (action) return { ...action, chosenAction: 'OATH_ARBITRATION', innerMonologue: '核对实际受托的款项和现场亲见；有利害便回避。' };
   }
   const mayCharterRoad = world.tick >= 39 && world.tick % 13 === 5 && cultivator.sectRank === '掌门';
   const mayCareRoad = world.tick % 6 === 4 && world.roads.links.some((road) => !road.closedTick &&
@@ -727,6 +735,7 @@ export async function queryCultivatorLLMDecision(
   const knownLocations = knownMapLocations(world, cultivator);
   const unverifiedTrail = knownRumorLead(cultivator, world);
   const mentorshipOptions = availableMentorshipActions(cultivator, world);
+  const arbitrationOptions = availableOathArbitrationActions(cultivator, world);
   const oathOptions = availableOathActions(cultivator, world);
   const marketOptions = availableMarketActions(cultivator, world);
   const settlementOptions = availableSettlementActions(cultivator, world);
@@ -824,6 +833,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 可提出或质证的已知传闻，仅使用这些证人选项：${JSON.stringify(witnessOptions)}
 - 村镇在地赈济与本人同意的招募选项：${JSON.stringify(settlementOptions)}
 - 坊市当下可用挂单和撤单（参数必须采用给定值）：${JSON.stringify(marketOptions)}
+- 契书仲裁只复制已列动作；双方签署共用现有托管，亲见和裁断身份不得混同：${JSON.stringify(arbitrationOptions)}
 - 两宗契书权限（必须严格采用这些目标与条款）：${JSON.stringify(oathOptions)}
 - 师门传授与回应，只选择给出的行动和目标：${JSON.stringify(mentorshipOptions)}
 - 当前可用的专门交互（必须使用给定 targetId）：${JSON.stringify(availableEncounters(cultivator, world))}
@@ -908,6 +918,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'DECLINE_OATH',
             'FULFILL_OATH',
             'APPEAL_OATH',
+            'OATH_ARBITRATION',
             'PLACE_MARKET_BUY',
             'PLACE_MARKET_SELL',
             'CANCEL_MARKET_ORDER',
@@ -1130,6 +1141,11 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
               : item.marketGood === parsed.marketGood && item.marketQuantity === parsed.marketQuantity && item.marketLimitPrice === parsed.marketLimitPrice));
           if (isMarket && !legalMarket) return undefined;
 
+          const legalArbitration = chosenAction === 'OATH_ARBITRATION' ? arbitrationOptions.find((item) =>
+            item.arbitrationMove === parsed.arbitrationMove && item.targetOathId === parsed.targetOathId &&
+            item.targetCultivatorId === parsed.targetCultivatorId && item.targetTenderTick === parsed.targetTenderTick) : undefined;
+          if (chosenAction === 'OATH_ARBITRATION' && (!legalArbitration || parsed.targetSectId !== undefined ||
+              parsed.targetLocationId !== undefined || parsed.oathTerm !== undefined)) return undefined;
           const oath = chosenAction === 'OFFER_OATH' || chosenAction === 'ACCEPT_OATH' || chosenAction === 'DECLINE_OATH' ||
             chosenAction === 'FULFILL_OATH' || chosenAction === 'APPEAL_OATH';
           const legalOath = oath && oathOptions.find((item) => item.action === chosenAction &&
@@ -1201,7 +1217,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             chosenAction,
             targetLocationId: legalSanctuary ? legalSanctuary.targetLocationId : legalRelocation ? legalRelocation.targetLocationId :
               chosenAction !== 'DOCTRINE' && typeof parsed.targetLocationId === 'string' ? parsed.targetLocationId : undefined,
-            targetCultivatorId: legalWorkshop ? legalWorkshop.targetCultivatorId : legalDoctrine ? legalDoctrine.targetCultivatorId : legalEstate ? legalEstate.targetCultivatorId : legalWitness ? legalWitness.targetCultivatorId : legalOath ? legalOath.targetCultivatorId : legalTraining ? legalTraining.targetCultivatorId
+            targetCultivatorId: legalArbitration ? legalArbitration.targetCultivatorId : legalWorkshop ? legalWorkshop.targetCultivatorId : legalDoctrine ? legalDoctrine.targetCultivatorId : legalEstate ? legalEstate.targetCultivatorId : legalWitness ? legalWitness.targetCultivatorId : legalOath ? legalOath.targetCultivatorId : legalTraining ? legalTraining.targetCultivatorId
               : typeof parsed.targetCultivatorId === 'string' ? parsed.targetCultivatorId : undefined,
             spokenLine: typeof parsed.spokenLine === 'string' ? parsed.spokenLine.trim().slice(0, 90) : undefined,
             facilityKind: legalInfrastructure?.facilityKind,
@@ -1293,7 +1309,9 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             marketQuantity: legalMarket && legalMarket.action !== 'CANCEL_MARKET_ORDER' ? legalMarket.marketQuantity : undefined,
             marketLimitPrice: legalMarket && legalMarket.action !== 'CANCEL_MARKET_ORDER' ? legalMarket.marketLimitPrice : undefined,
             targetMarketOrderId: legalMarket && legalMarket.action === 'CANCEL_MARKET_ORDER' ? legalMarket.targetMarketOrderId : undefined,
-            targetOathId: legalOath ? legalOath.targetOathId : undefined,
+            targetOathId: legalArbitration?.targetOathId ?? (legalOath ? legalOath.targetOathId : undefined),
+            arbitrationMove: legalArbitration?.arbitrationMove,
+            targetTenderTick: legalArbitration?.targetTenderTick,
             oathTerm: legalOath ? legalOath.oathTerm : undefined,
             targetTuitionId: legalTraining ? legalTraining.targetTuitionId : undefined,
             targetTechniqueId: chosenAction === 'STUDY_TECHNIQUE' && typeof parsed.targetTechniqueId === 'string' ? parsed.targetTechniqueId : undefined,

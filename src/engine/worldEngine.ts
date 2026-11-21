@@ -1,3 +1,4 @@
+import { resolveOathArbitrationAction } from './oathArbitrationEngine';
 import { closeVillageCensusPeriod, resolveVillageCensusAction } from './villageCensusEngine';
 import { advanceRoads, resolveRoadAction } from './roadEngine';
 import { advanceProbation, resolveProbationAction } from './probationEngine';
@@ -261,6 +262,8 @@ export function applyCultivatorBrainDecision(
       return resolveHabitatAction(world, cultivator, decision);
     case 'CHRONICLE_ERRATA':
       return resolveChronicleErrataAction(world, cultivator, decision);
+    case 'OATH_ARBITRATION':
+      return resolveOathArbitrationAction(world, cultivator, decision);
     case 'VILLAGE_CENSUS':
       return resolveVillageCensusAction(world, cultivator, decision);
     case 'ROAD':

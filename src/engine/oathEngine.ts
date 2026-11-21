@@ -1,5 +1,6 @@
+import { advanceOathArbitrations, arbitrationHoldUntil, captureOathTenderObservers } from './oathArbitrationEngine';
 import { flowActor, flowOath, recordResourceFlow } from './resourceFlowEngine';
-import type { Cultivator, LLMDecisionPayload, OathContract, OathState, OathTerm, WorldEvent, WorldState } from '../types/world';
+import type { Cultivator, LLMDecisionPayload, OathContract, OathEvidence, OathState, OathTerm, WorldEvent, WorldState } from '../types/world';
 
 export const OATH_TERMS: Record<OathTerm, { name: string; quantity: number; payment: number; collateral: number }> = {
   foundation_pill: { name: '筑基丹', quantity: 1, payment: 115, collateral: 55 },
@@ -45,7 +46,8 @@ export function availableOathActions(actor: Cultivator, world: WorldState, inclu
         holdings(actor, oath.term) >= oath.quantity && !oath.evidence.some(({ tick }) => tick === world.tick)) {
       options.push({ action: 'FULFILL_OATH', targetOathId: oath.id });
     }
-    if (oath.status === 'breached' && !oath.appeal && (oath.appealUntilTick ?? 0) > world.tick) {
+    if (oath.status === 'breached' && !oath.appeal && (oath.appealUntilTick ?? 0) > world.tick &&
+        arbitrationHoldUntil(world, oath.id) === undefined) {
       options.push({ action: 'APPEAL_OATH', targetOathId: oath.id });
     }
   }
@@ -122,9 +124,13 @@ export function resolveOathAction(world: WorldState, actor: Cultivator, choice: 
   }
   if (option.action === 'FULFILL_OATH') {
     const present = isLive(requester) && requester.locationId === oath.locationId;
-    oath.evidence.push({ tick: world.tick, actorId: actor.id, kind: present ? 'delivery' : 'tender',
-      locationId: oath.locationId, quantity: oath.quantity, requesterPresent: present });
-    if (!present) return oathEvent(world, oath, 'tender', '履约到场留证', '供方携有约定货物抵达立约地，买方未到；仅记到场证据，未交货或支付。');
+    const evidence: OathEvidence = { tick: world.tick, actorId: actor.id, kind: present ? 'delivery' : 'tender',
+      locationId: oath.locationId, quantity: oath.quantity, requesterPresent: present };
+    oath.evidence.push(evidence);
+    if (!present) {
+      captureOathTenderObservers(world, oath, evidence);
+      return oathEvent(world, oath, 'tender', '履约到场留证', '供方携有约定货物抵达立约地，买方未到；仅记到场证据，未交货或支付。');
+    }
     if (oath.term === 'foundation_pill') {
       actor.pills.foundation -= oath.quantity; requester.pills.foundation += oath.quantity;
     } else {
@@ -167,11 +173,17 @@ export function advanceOaths(world: WorldState): WorldEvent[] {
       oath.status = 'breached'; oath.appealUntilTick = world.tick + APPEAL_WINDOW;
       oath.outcome = '过期未交货；资金继续托管，供方可在短期内凭已有证据申请复核。';
       events.push(oathEvent(world, oath, 'breach', '天道契书违约待裁', oath.outcome));
-    } else if (oath.status === 'breached' && world.tick >= (oath.appealUntilTick ?? 0) && settle(world, oath, 'forfeit')) {
+    } else if (oath.status === 'breached' && world.tick >= Math.max(oath.appealUntilTick ?? 0, arbitrationHoldUntil(world, oath.id) ?? 0) && settle(world, oath, 'forfeit')) {
       oath.outcome = '复核期限结束：买方收回原款并获供方保证金，结算不可重放。';
       events.push(oathEvent(world, oath, 'forfeit', '契书违约结算', oath.outcome));
     }
   }
+  events.push(...advanceOathArbitrations(world, (oath, caseId) => {
+    if (oath.status !== 'breached' || !world.oaths.contracts.includes(oath) || !settle(world, oath, 'refund')) return null;
+    oath.status = 'excused';
+    oath.outcome = '独立裁断核验实际到场，买方价款与供方保证金原额退还；未重新托管或派发实物。';
+    return { ...oathEvent(world, oath, caseId, '中立裁断原额退款', oath.outcome), witnessScope: 'participants' };
+  }));
   const open = world.oaths.contracts.filter(outstanding);
   world.oaths.contracts = [...open, ...world.oaths.contracts.filter((item) => !outstanding(item)).slice(0, Math.max(0, HISTORY_LIMIT - open.length))];
   return events;
