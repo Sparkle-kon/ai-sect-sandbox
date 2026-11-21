@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createInitialWorld } from '../src/data/initialWorld';
+import { cloneWorldWithColdHistory } from '../src/engine/coldHistoryEngine';
 import { CampaignPersistenceError, readCampaignSource, sealCampaignSource } from '../src/engine/campaignMemento';
 import { createCampaignJournal, createMemoryCampaignBackend } from '../src/engine/campaignJournal';
 import { encodeEraWorldSave } from '../src/engine/storageEngine';
@@ -34,6 +35,22 @@ const shape=(timeline:ReturnType<typeof createTimeline>)=>timeline.branches.map(
   ({id,parentBranchId,forkTick,label,snapshots})=>({id,parentBranchId,forkTick,label,
     snapshots:snapshots.map(snapshot=>[snapshot.tick,encodeEraWorldSave(snapshot.world)])}));
 describe('portable local candidate journal, not an ordinary save slot',()=>{
+  it('admits a newly created or read-back live shape at its first frame without accepting a genuinely changed same-date world',async()=>{
+    const fresh=createInitialWorld(2031);
+    const raw=encodeEraWorldSave(fresh);
+    const timeline=createTimeline(fresh);
+    const source=await sealCampaignSource(timeline,'fresh-world-lineage',fresh);
+    const journal=createCampaignJournal(createMemoryCampaignBackend());
+    const saved=await journal.begin(source,121,rule);
+    expect(saved).toMatchObject({completedTicks:0,status:'pending',source:{tick:fresh.tick,year:fresh.year,month:fresh.month}});
+    const loaded=await journal.load();
+    expect(encodeEraWorldSave(loaded!.source.world)).toBe(encodeEraWorldSave(cloneWorldWithColdHistory(fresh)));
+    expect(encodeEraWorldSave(fresh)).toBe(raw);
+    const changed=structuredClone(fresh);
+    changed.cultivators[0].spiritStones+=1;
+    await expect(sealCampaignSource(timeline,'fresh-world-lineage',changed)).rejects.toBeInstanceOf(CampaignPersistenceError);
+  });
+
   it('restores every original branch and snapshot, and deduplicates shared native bytes without merging worlds',async()=>{
     const {timeline,one}=threeBranches();
     const memento=await sealCampaignSource(timeline,'original-ledger-1',one);

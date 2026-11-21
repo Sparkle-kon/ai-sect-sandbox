@@ -144,7 +144,11 @@ export async function sealCampaignSource(timeline:WorldTimeline,timelineId:strin
     branches.push({id:branch.id,label:branch.label,snapshots,...(branch.parentBranchId!==undefined?{parentBranchId:branch.parentBranchId}:{}),
       ...(branch.forkTick!==undefined?{forkTick:branch.forkTick}:{})});
   }
-  const anchor=seen.get(activeWorld)??ref(activeWorld,(await sealCampaignWorld(activeWorld,signal)).sha256);
+  // Timeline snapshots use the native copy routine, which appends cold-history
+  // storage to the root envelope. Compare an identically cloned live state,
+  // not raw insertion order at a fresh/imported world's first frame.
+  const normalizedActive=seen.has(activeWorld)?activeWorld:cloneWorldWithColdHistory(activeWorld);
+  const anchor=seen.get(activeWorld)??ref(normalizedActive,(await sealCampaignWorld(normalizedActive,signal)).sha256);
   const shell=checkShell({format:FORMAT,version:VERSION,timelineId,activeBranchId:timeline.activeBranchId,
     nextBranchNumber:timeline.nextBranchNumber,active:anchor,branches});
   return freezeTree({...shell,blobs:[...blobs.values()],topologySha256:await shellDigest(shell,signal)});
