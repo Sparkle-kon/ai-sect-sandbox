@@ -1,5 +1,6 @@
 import type { Cultivator, FacilityKind, Sect, WorldState } from '../types/world';
 import { FACILITY_RULES, facilityBuildCost, isGuardAssignmentActive } from '../engine/sectEconomyEngine';
+import { SharedCommonsPanel } from './SharedCommonsPanel';
 import { TerritorialLeasePanel } from './TerritorialLeasePanel';
 import { FormationNetworkPanel } from './FormationNetworkPanel';
 import { InfirmaryPanel } from './InfirmaryPanel';
@@ -93,6 +94,7 @@ export function SectEconomyPanel({ cultivator, sect, world }: SectEconomyPanelPr
       <InfirmaryPanel world={world} cultivator={cultivator} />
       <FormationNetworkPanel world={world} cultivator={cultivator} />
       <TerritorialLeasePanel world={world} cultivator={cultivator} />
+      <SharedCommonsPanel world={world} cultivator={cultivator} />
     </section>
   );
 }

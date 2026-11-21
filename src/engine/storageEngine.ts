@@ -1,3 +1,4 @@
+import { COMMONS_MAINTENANCE_UNIT, COMMONS_MAX_RESERVE, COMMONS_OFFER_TICKS, COMMONS_ROUND_TICKS, COMMONS_TERM_TICKS, commonsQuotaShares, createSharedCommonsState } from './sharedCommonsEngine';
 import { createServiceRetirementState, SERVICE_RETIREMENT_HISTORY_LIMIT, SERVICE_RETIREMENT_MIN_TICKS, isRetiredFromService } from './serviceRetirementEngine';
 import { COLD_HISTORY_MIN_AGE_TICKS, createColdHistoryState, freezeColdHistory } from './coldHistoryEngine';
 import { COURIER_OFFER_TICKS, COURIER_ROUTE_TICKS, COURIER_SERVICE_FEE, createSealedCourierState } from './sealedCourierEngine';
@@ -98,7 +99,7 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER SECT_SERVICE REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER SECT_SERVICE SHARED_COMMONS REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const marketQty = num(1,12,true), marketPrice = num(1,500,true);
@@ -239,6 +240,18 @@ const shape = structure({
       attestations:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,tick,verdict:one('supports','contradicts')})),
       appeal:optional(structure({tick,actorId:id,verdict:one('upheld','rejected'),reason:text})),settledTick:otick,
       reputationSectId:oid,reputationPenalty:percentage,reputationRestored:percentage,reason:otext}))}),
+  sharedCommons:structure({nextId:num(1,100_000_000,true),pacts:arr(SAVE_COLLECTION_LIMIT,structure({
+    id,siteId:id,herbId:one('jade_leaf','earth_root','star_bloom','shadow_moss'),proposerSectId:id,openedTick:tick,offerExpiresTick:tick,
+    status:one('offered','active','closed'),activatedTick:otick,startsTick:otick,endsTick:otick,settledTick:otick,
+    closeReason:optional(one('declined','offer_expiry','title_change','site_lost','term_complete','stale_signer')),
+    parties:arr(3,structure({sectId:id,signerId:id,share:one(1,2),signedTick:otick})),
+    rounds:arr(COMMONS_TERM_TICKS / COMMONS_ROUND_TICKS,structure({
+      startTick:tick,endsTick:tick,stockAtOpen:count,reserved:num(0,COMMONS_MAX_RESERVE,true),
+      allocations:arr(3,structure({sectId:id,maintenanceDue:num(1,2*COMMONS_MAINTENANCE_UNIT,true),
+        maintenancePaid:num(0,2*COMMONS_MAINTENANCE_UNIT,true),quota:num(0,COMMONS_MAX_RESERVE,true),used:num(0,COMMONS_MAX_RESERVE,true)})),
+      harvests:arr(COMMONS_MAX_RESERVE,structure({tick,actorId:id,sectId:id,units:num(1,2,true)}))
+    }))
+  }))}),
   serviceRetirement:structure({nextId:num(1,100_000_000,true),history:arr(SERVICE_RETIREMENT_HISTORY_LIMIT,structure({
     id,actorId:id,sectId:id,tick,kind:one('retire','return'),formerRank:sectRank,forumReleased:bool,leaderReleased:bool,
     guardLocationId:oid,stewardSchoolIds:ids,infirmaryShiftIds:ids
@@ -448,6 +461,7 @@ function verifyWorld(value: unknown): WorldState {
       ...(!Object.hasOwn(value, 'mentorship') ? { mentorship: { offers: [], lineage: [], budgets: [] } } : {}),
       ...(!Object.hasOwn(value, 'decisionTrace') ? { decisionTrace: { records: [] } } : {}),
       ...(!Object.hasOwn(value, 'coldHistory') ? { coldHistory: createColdHistoryState() } : {}),
+      ...(!Object.hasOwn(value, 'sharedCommons') ? { sharedCommons: createSharedCommonsState() } : {}),
       ...(!Object.hasOwn(value, 'serviceRetirement') ? { serviceRetirement: createServiceRetirementState() } : {}),
       ...(!Object.hasOwn(value, 'couriers') ? { couriers: createSealedCourierState() } : {}),
       ...(!Object.hasOwn(value, 'watchlists') ? { watchlists: createWatchlistState() } : {}),
@@ -493,6 +507,64 @@ function verifyWorld(value: unknown): WorldState {
   const sector = unique(w.sects, (item) => item.id, 'sects.id');
   const locations = unique(w.locations, (item) => item.id, 'locations.id');
   const map = unique(w.terrain.tiles, (item) => item.id, 'terrain.tiles.id');
+  unique(w.sharedCommons.pacts, ({ id }) => id, 'sharedCommons.pacts.id');
+  unique(w.sharedCommons.pacts.filter(({ status }) => status !== 'closed'), ({ siteId }) => siteId, 'sharedCommons.openSite');
+  for (const pact of w.sharedCommons.pacts) {
+    const serial = Number(pact.id.match(/^shared-commons-([1-9][0-9]*)$/)?.[1]);
+    unique(pact.parties, ({ sectId }) => sectId, 'sharedCommons.parties.sect');
+    const parties = new Map(pact.parties.map((party) => [party.sectId, party]));
+    unique(pact.parties, ({ signerId }) => signerId, 'sharedCommons.parties.signer');
+    const proposer = parties.get(pact.proposerSectId);
+    const activated = pact.activatedTick;
+    const start = pact.startsTick;
+    const end = pact.endsTick;
+    if (!Number.isSafeInteger(serial) || serial >= w.sharedCommons.nextId || pact.parties.length !== 3 ||
+        pact.openedTick > w.tick || pact.offerExpiresTick !== pact.openedTick + COMMONS_OFFER_TICKS ||
+        !proposer || proposer.signedTick !== pact.openedTick || proposer.share !== 2 ||
+        pact.parties.some((party) => !sector.has(party.sectId) || !actor.has(party.signerId) ||
+          (party.sectId !== pact.proposerSectId && party.share !== 1) ||
+          (party.signedTick !== undefined && (party.signedTick < pact.openedTick || party.signedTick >= pact.offerExpiresTick || party.signedTick > w.tick)))) fail('sharedCommons.pacts.parties');
+    if (activated === undefined) {
+      if (pact.status === 'active' || start !== undefined || end !== undefined || pact.rounds.length ||
+          pact.parties.every(({ signedTick }) => signedTick !== undefined)) fail('sharedCommons.pacts.notActivated');
+    } else if (pact.status === 'offered' || activated > w.tick || activated >= pact.offerExpiresTick ||
+        start !== activated + 1 || end !== start + COMMONS_TERM_TICKS ||
+        pact.parties.some(({ signedTick }) => signedTick === undefined || signedTick > activated) ||
+        !pact.parties.some(({ signedTick }) => signedTick === activated)) fail('sharedCommons.pacts.activation');
+    if (pact.status === 'closed') {
+      if (pact.settledTick === undefined || !pact.closeReason || pact.settledTick > w.tick ||
+          pact.settledTick < (activated ?? pact.openedTick) ||
+          (pact.closeReason === 'offer_expiry' && (activated !== undefined || pact.settledTick < pact.offerExpiresTick)) ||
+          (pact.closeReason === 'term_complete' && (end === undefined || pact.settledTick < end))) fail('sharedCommons.pacts.settlement');
+    } else if (pact.settledTick !== undefined || pact.closeReason !== undefined || !locations.has(pact.siteId)) fail('sharedCommons.pacts.live');
+    let previousRoundIndex = -1;
+    for (const round of pact.rounds) {
+      const allocated = unique(round.allocations, ({ sectId }) => sectId, 'sharedCommons.allocations.sect');
+      unique(round.harvests, ({ tick, actorId }) => JSON.stringify([tick, actorId]), 'sharedCommons.harvests.oneTurn');
+      const roundIndex = (round.startTick - (start ?? Infinity)) / COMMONS_ROUND_TICKS;
+      if (!Number.isSafeInteger(roundIndex) || roundIndex <= previousRoundIndex || roundIndex >= COMMONS_TERM_TICKS / COMMONS_ROUND_TICKS ||
+          round.startTick > w.tick || (pact.settledTick !== undefined && round.startTick > pact.settledTick) ||
+          round.endsTick !== round.startTick + COMMONS_ROUND_TICKS || round.allocations.length !== 3 || round.reserved > round.stockAtOpen ||
+          round.allocations.reduce((sum, row) => sum + row.quota, 0) !== round.reserved) fail('sharedCommons.rounds.window');
+      previousRoundIndex = roundIndex;
+      const shares = commonsQuotaShares(round.stockAtOpen, pact.parties, roundIndex);
+      const entitled = new Map(pact.parties.map(({ sectId }, index) => [sectId, shares[index]]));
+      const used = new Map<string, number>();
+      for (const harvest of round.harvests) {
+        if (!actor.has(harvest.actorId) || !allocated.has(harvest.sectId) || harvest.tick < round.startTick ||
+            harvest.tick >= round.endsTick || harvest.tick > w.tick ||
+            (pact.settledTick !== undefined && harvest.tick > pact.settledTick)) fail('sharedCommons.harvests.references');
+        used.set(harvest.sectId, (used.get(harvest.sectId) ?? 0) + harvest.units);
+      }
+      for (const entry of round.allocations) {
+        const signed = parties.get(entry.sectId);
+        if (!signed || entry.maintenanceDue !== signed.share * COMMONS_MAINTENANCE_UNIT ||
+            (entry.maintenancePaid !== 0 && entry.maintenancePaid !== entry.maintenanceDue) ||
+            entry.quota !== (entry.maintenancePaid === 0 ? 0 : entitled.get(entry.sectId)) || entry.used > entry.quota ||
+            entry.used !== (used.get(entry.sectId) ?? 0)) fail('sharedCommons.allocations.accounting');
+      }
+    }
+  }
   unique(w.serviceRetirement.history, ({ id }) => id, 'serviceRetirement.history.id');
   unique(w.serviceRetirement.history, ({ actorId, tick }) => JSON.stringify([actorId, tick]), 'serviceRetirement.history.action');
   const lastService = new Map<string, typeof w.serviceRetirement.history[number]>();

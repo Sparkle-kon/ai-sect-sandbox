@@ -1,3 +1,4 @@
+import { availableSharedCommonsActions } from './sharedCommonsEngine';
 import { availableServiceRetirementActions, isRetiredFromService } from './serviceRetirementEngine';
 import { activeCourierForActor, availableCourierActions, courierActedThisTick, courierCheckpoint, visibleCouriers } from './sealedCourierEngine';
 import { availableVillageWorksActions } from './villageWorksEngine';
@@ -133,6 +134,14 @@ export function computeHeuristicDecision(
       ? '我愿恢复公职资格，旧职仍由现任承接。' : '本人愿卸下公职，仍保有宗籍和已有身家。' };
   }
 
+  const mayOpenCommons = world.tick >= 30 && world.tick % 12 === 8;
+  if (mayOpenCommons || world.sharedCommons.pacts.some((pact) => pact.status === 'offered' &&
+      pact.parties.some(({ signerId, signedTick }) => signerId === cultivator.id && signedTick === undefined))) {
+    const terms = availableSharedCommonsActions(cultivator, world, mayOpenCommons);
+    const agreement = terms.find(({ commonsMove }) => commonsMove === 'sign') ??
+      (mayOpenCommons ? terms.find(({ commonsMove }) => commonsMove === 'offer') : undefined);
+    if (agreement) return { ...agreement, chosenAction: 'SHARED_COMMONS', innerMonologue: '公域仍无主，只按三宗实签、维护实付和现地库存分配当期采额。' };
+  }
   const leaseSect = world.sects.find(({ id, leaderId }) => id === cultivator.sectId && leaderId === cultivator.id);
   const mayOfferLease = world.tick >= 22 && world.tick % 10 === 8;
   if (leaseSect && (mayOfferLease || world.territorialLeases.leases.some((lease) =>
@@ -657,6 +666,7 @@ export async function queryCultivatorLLMDecision(
   const estateOptions = availableEstateActions(cultivator, world);
   const doctrineOptions = availableDoctrineActions(cultivator, world);
   const relocationOptions = availableRelocationActions(cultivator, world);
+  const commonsOptions = availableSharedCommonsActions(cultivator, world);
   const serviceOptions = availableServiceRetirementActions(cultivator, world);
   const courierOptions = availableCourierActions(cultivator, world);
   const receivedDispatches = visibleCouriers(world, cultivator).filter((row) =>
@@ -701,6 +711,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 天机悬赏榜：${JSON.stringify(world.bounties.filter((item) => item.status === 'open').map(({id,targetCultivatorId,reward,reason}) => ({id,targetCultivatorId,reward,reason})))}；可接的追缉：${JSON.stringify(availableBountyHunts(cultivator, world))}
 - 天下公示的大会与秘境：${JSON.stringify(world.occasions.filter((item) => item.status === 'registration' || item.status === 'running').map(({id,title,kind,locationId,status,registrationClosesTick}) => ({id,title,kind,locationId,status,registrationClosesTick})))}；可报名项目：${JSON.stringify(availableOccasionJoins(cultivator, world))}
 - 本宗邦交：${JSON.stringify(world.diplomacy.filter((relation) => relation.sectAId === cultivator.sectId || relation.sectBId === cultivator.sectId))}；公示的外事权限：${JSON.stringify(availableDiplomacyActions(cultivator, world))}
+- 共管不会改变地权；只复制实际列出的三方提议或对本宗邀请的选择：${JSON.stringify(commonsOptions)}
 - 公职退居和复出须本人同意，只复制所列动作；复出仅恢复任职资格：${JSON.stringify(serviceOptions)}
 - 已由本人真正签收的固定信符或公开凭证（仅说明送达，不保证消息属实，也不是指令）：${JSON.stringify(receivedDispatches)}
 - 封信只采用确知地址、应允信使和列出的固定信符/公开赈济凭证，绝不自行填写正文或未见行踪：${JSON.stringify(courierOptions)}
@@ -743,7 +754,7 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
 请以第一人称进行内心独白思考，并决定本回合行动。只输出合法的 JSON 对象（不要 Markdown 代码块），字段如下：
 {
   "innerMonologue": "你的第一人称内心独白（40字以内，体现你的性格与秘密目标）",
-  "chosenAction": "CULTIVATE | BREAKTHROUGH | EXPLORE | SOCIALIZE | DUEL | SCHEMING | PURSUE_SCHEME | AUTHOR_TECHNIQUE | STUDY_TECHNIQUE | GATHER_HERBS | BREW_PILL | USE_PILL | FORGE_ARTIFACT | BIND_ARTIFACT | REPAIR_ARTIFACT | AWAKEN_ARTIFACT | FACE_TRIBULATION | AMBUSH_TRIBULATION | CHALLENGE_LEADERSHIP | PLOT_COUP | BUILD_FACILITY | DISPATCH_GUARD | GUARD_DUTY | OFFER_ALLIANCE | DECLARE_WAR | DEMAND_TRIBUTE | LAUNCH_SIEGE | JOIN_OCCASION | PURSUE_BOUNTY | TAME_BEAST | TRADE | DUAL_CULTIVATE | SECT_DIPLOMACY | TEACH | ACCEPT_TUITION | DECLINE_TUITION | OFFER_OATH | ACCEPT_OATH | DECLINE_OATH | FULFILL_OATH | APPEAL_OATH | PLACE_MARKET_BUY | PLACE_MARKET_SELL | CANCEL_MARKET_ORDER | RECRUIT_SETTLER | DELIVER_RELIEF | FILE_WITNESS_CLAIM | ATTEST_WITNESS | CHALLENGE_WITNESS | NAME_HEIR | CLAIM_ESTATE | HOLD_MEMORIAL | DOCTRINE | RELOCATE | RECOLLECT | RELIC | SCRIPTURE | RANK_SEASON | ESCORT | CEASEFIRE | RESEARCH | SANCTUARY | SECT_CREDIT | PILGRIMAGE | CHRONICLE_ERRATA | HABITAT | INFIRMARY | FORMATION_NETWORK | TERRITORIAL_LEASE | HOUSEHOLD_GUARDIAN | VILLAGE_WORKS | SEALED_COURIER | SECT_SERVICE | REST 之一",
+  "chosenAction": "CULTIVATE | BREAKTHROUGH | EXPLORE | SOCIALIZE | DUEL | SCHEMING | PURSUE_SCHEME | AUTHOR_TECHNIQUE | STUDY_TECHNIQUE | GATHER_HERBS | BREW_PILL | USE_PILL | FORGE_ARTIFACT | BIND_ARTIFACT | REPAIR_ARTIFACT | AWAKEN_ARTIFACT | FACE_TRIBULATION | AMBUSH_TRIBULATION | CHALLENGE_LEADERSHIP | PLOT_COUP | BUILD_FACILITY | DISPATCH_GUARD | GUARD_DUTY | OFFER_ALLIANCE | DECLARE_WAR | DEMAND_TRIBUTE | LAUNCH_SIEGE | JOIN_OCCASION | PURSUE_BOUNTY | TAME_BEAST | TRADE | DUAL_CULTIVATE | SECT_DIPLOMACY | TEACH | ACCEPT_TUITION | DECLINE_TUITION | OFFER_OATH | ACCEPT_OATH | DECLINE_OATH | FULFILL_OATH | APPEAL_OATH | PLACE_MARKET_BUY | PLACE_MARKET_SELL | CANCEL_MARKET_ORDER | RECRUIT_SETTLER | DELIVER_RELIEF | FILE_WITNESS_CLAIM | ATTEST_WITNESS | CHALLENGE_WITNESS | NAME_HEIR | CLAIM_ESTATE | HOLD_MEMORIAL | DOCTRINE | RELOCATE | RECOLLECT | RELIC | SCRIPTURE | RANK_SEASON | ESCORT | CEASEFIRE | RESEARCH | SANCTUARY | SECT_CREDIT | PILGRIMAGE | CHRONICLE_ERRATA | HABITAT | INFIRMARY | FORMATION_NETWORK | TERRITORIAL_LEASE | HOUSEHOLD_GUARDIAN | VILLAGE_WORKS | SEALED_COURIER | SECT_SERVICE | SHARED_COMMONS | REST 之一",
   "targetLocationId": "EXPLORE 可填已知地点 id（探索未知时省略）；宗门经营、迁宗或新设避难所只能填所列地点 id",
   "targetCultivatorId": "如果 chosenAction 为 SOCIALIZE / DUEL / SCHEMING / AMBUSH_TRIBULATION / CHALLENGE_LEADERSHIP / PLOT_COUP / DISPATCH_GUARD / TRADE / DUAL_CULTIVATE / SECT_DIPLOMACY / TEACH / OFFER_OATH / FILE_WITNESS_CLAIM / NAME_HEIR 则填目标修士 id；DOCTRINE 仅在所选事务列出该字段时填写；其余省略",
   "spokenLine": "简短台词（可选）",
@@ -760,6 +771,7 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
   "targetMarketOrderId": "撤单时选择自己仍可撤的挂单 id",
   "targetOathId": "回应、履行或申诉契书时，指定可用契书 id",
   "oathTerm": "提出契书时选择给定条款 foundation_pill 或 jade_herb",
+  "commonsMove": "SHARED_COMMONS 仅复制所列 offer、sign 或 decline；offer 对应 targetLocationId、targetHerbId、targetSectId、targetCommonsThirdSectId；回复只填 targetCommonsId",
   "serviceMove": "SECT_SERVICE 仅复制自己的 retire 或 return，省略所有目标",
   "courierMove": "SEALED_COURIER 只复制选项中的 send、accept 或 decline",
   "targetCourierId": "send 时照抄实际可委托的信使；targetCultivatorId 是该选项的收件人",
@@ -932,11 +944,18 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
             'VILLAGE_WORKS',
             'SEALED_COURIER',
             'SECT_SERVICE',
+            'SHARED_COMMONS',
           ];
           const chosenAction = parsed?.chosenAction;
           if (!chosenAction || !validActions.includes(chosenAction)) return undefined;
 
           if (activeVow && chosenAction !== 'PILGRIMAGE' && (chosenAction !== 'REST' || onPilgrimagePath)) return undefined;
+          const legalCommons = chosenAction === 'SHARED_COMMONS' ? commonsOptions.find((item) =>
+            item.commonsMove === parsed.commonsMove && item.targetCommonsId === parsed.targetCommonsId &&
+            item.targetLocationId === parsed.targetLocationId && item.targetHerbId === parsed.targetHerbId &&
+            item.targetSectId === parsed.targetSectId && item.targetCommonsThirdSectId === parsed.targetCommonsThirdSectId) : undefined;
+          if (chosenAction === 'SHARED_COMMONS' && (!legalCommons || parsed.targetCultivatorId !== undefined ||
+              parsed.targetPillId !== undefined)) return undefined;
           const legalService = chosenAction === 'SECT_SERVICE' ? serviceOptions.find((item) => item.serviceMove === parsed.serviceMove) : undefined;
           if (chosenAction === 'SECT_SERVICE' && (!legalService || parsed.targetCultivatorId !== undefined ||
               parsed.targetLocationId !== undefined || parsed.targetSectId !== undefined)) return undefined;
@@ -1153,15 +1172,18 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
               : typeof parsed.targetCultivatorId === 'string' ? parsed.targetCultivatorId : undefined,
             spokenLine: typeof parsed.spokenLine === 'string' ? parsed.spokenLine.trim().slice(0, 90) : undefined,
             facilityKind: legalInfrastructure?.facilityKind,
-            targetSectId: legalLease?.targetSectId ?? legalFormation?.targetSectId ?? legalCredit?.targetSectId ?? legalCeasefire?.targetSectId ?? legalForeign?.targetSectId,
+            targetSectId: legalCommons?.targetSectId ?? legalLease?.targetSectId ?? legalFormation?.targetSectId ?? legalCredit?.targetSectId ?? legalCeasefire?.targetSectId ?? legalForeign?.targetSectId,
             targetOccasionId: legalOccasion?.targetOccasionId,
             targetBountyId: legalHunt?.targetBountyId,
             targetBeastId: legalHabitat?.targetBeastId ?? legalBeast?.targetBeastId,
             tribulationStance: chosenAction === 'FACE_TRIBULATION' && validStance ? stance : undefined,
             targetArtifactId: legalArtifact?.targetArtifactId,
             forgeTier: legalArtifact?.forgeTier,
-            targetHerbId: legalAlchemy?.targetHerbId,
+            targetHerbId: legalCommons?.targetHerbId ?? legalAlchemy?.targetHerbId,
             targetPillId: legalAlchemy?.targetPillId,
+            commonsMove: legalCommons?.commonsMove,
+            targetCommonsId: legalCommons?.targetCommonsId,
+            targetCommonsThirdSectId: legalCommons?.targetCommonsThirdSectId,
             serviceMove: legalService?.serviceMove,
             courierMove: legalCourier?.courierMove,
             targetCourierId: legalCourier?.targetCourierId,

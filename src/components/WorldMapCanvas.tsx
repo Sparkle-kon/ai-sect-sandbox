@@ -1,5 +1,6 @@
 import { VILLAGE_WORK_RULES, visibleVillageWorks } from '../engine/villageWorksEngine';
 import { householdCensus } from '../engine/householdEngine';
+import { visibleSharedCommonsMapSites } from './sharedCommonsMapView';
 import { visibleLeaseMapSites } from './leaseMapView';
 import { drawFormationMapLinks, visibleFormationMapLinks } from './formationMapView';
 import { visibleInfirmaries } from '../engine/infirmaryEngine';
@@ -124,6 +125,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     return results;
   }, [world, isCurrentLocation]);
   const localLeaseSites = useMemo(() => visibleLeaseMapSites(world, mapView, selected), [world, mapView, selected]);
+  const localCommons = useMemo(() => visibleSharedCommonsMapSites(world, mapView, selected), [world, mapView, selected]);
   const formationLines = useMemo(() => visibleFormationMapLinks(world, mapView, selected), [world, mapView, selected]);
   const localClinic = useMemo(() => {
     const clinic = visibleInfirmaries(world, selected);
@@ -368,6 +370,15 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           ctx.restore();
         }
 
+        if (localCommons.has(loc.id)) {
+          ctx.save();
+          ctx.fillStyle = '#5eead4';
+          ctx.font = 'bold 10px sans-serif';
+          ctx.textAlign = 'left';
+          ctx.fillText('共', loc.x + 18, loc.y + 18);
+          ctx.restore();
+        }
+
         // Keep the element beside the location name so it doesn't add a competing row.
         ctx.font = 'bold 13px sans-serif';
         const marker = `〈${loc.spiritRoot}〉`;
@@ -603,7 +614,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener('change', stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, hazards, convoys, escortedCaravan, formationLines, localLeaseSites, pilgrimageMark, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, hazards, convoys, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1067,6 +1078,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                 {(localErrata.get(location.id) ?? 0) > 0 && <span className="text-amber-200">· 公开史料有待勘误 {localErrata.get(location.id)} 条</span>}
                 {habitatView && <span className="text-emerald-200">· 复育栖地 {habitatView.wildOccupancy ?? 0}/{habitatView.capacity} 野兽</span>}
                 {localClinic?.siteId === location.id && <span className="text-rose-200">· 静养床 {localClinic.capacity.available}/{localClinic.capacity.beds} 可用</span>}
+                {localCommons.has(location.id) && <span className="text-teal-200">· 中立灵地共管中 · 外来者限采储备之外的余量</span>}
                 {leaseMark && <span className="text-amber-200">· {leaseMark.role === 'owner' ? '本宗授权' : '本宗采集许可'} · 余 {leaseMark.remaining} 株</span>}
                 {assessed && <span className="text-cyan-200">· 剧本末回合 #{assessed.tick} 凭证：灵气 {assessed.qi}（{assessed.passed ? '通过' : '未通过'}）</span>}
                 {localCouncil && <span className="text-violet-300">· 本月议决：{localCouncil.title}</span>}

@@ -1,3 +1,4 @@
+import { advanceSharedCommons, resolveSharedCommonsAction } from './sharedCommonsEngine';
 import { resolveServiceRetirementAction } from './serviceRetirementEngine';
 import { cloneWorldWithColdHistory, compactColdHistory } from './coldHistoryEngine';
 import { activeCourierForActor, advanceCouriers, courierActedThisTick, courierCheckpoint, reconcileCourierDeaths, resolveCourierAction } from './sealedCourierEngine';
@@ -220,6 +221,8 @@ export function applyCultivatorBrainDecision(
     case 'ATTEST_WITNESS':
     case 'CHALLENGE_WITNESS':
       return resolveWitnessAction(world, cultivator, decision);
+    case 'SHARED_COMMONS':
+      return resolveSharedCommonsAction(world, cultivator, decision);
     case 'SECT_SERVICE': {
       const outcome = resolveServiceRetirementAction(world, cultivator, decision);
       if (outcome && decision.serviceMove === 'retire' && !emit) {
@@ -693,7 +696,7 @@ export function advanceWorldTick(
   const avatarOrder = consumeAvatarOrder(nextState);
   maintainAlchemy(nextState);
   maintainSectEconomy(nextState);
-  const newEvents: WorldEvent[] = [...advanceSanctuaries(nextState), ...advanceCeasefires(nextState), ...advanceCompetitionSeasons(nextState), ...advanceMapHazards(nextState), ...advanceCouriers(nextState), ...advancePilgrimages(nextState), ...advanceRelocations(nextState), ...advanceSettlements(nextState), ...advanceVillageWorks(nextState), ...advanceSpiritBeasts(nextState, rng), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...advanceHouseholds(nextState)];
+  const newEvents: WorldEvent[] = [...advanceSanctuaries(nextState), ...advanceCeasefires(nextState), ...advanceCompetitionSeasons(nextState), ...advanceMapHazards(nextState), ...advanceCouriers(nextState), ...advancePilgrimages(nextState), ...advanceRelocations(nextState), ...advanceSettlements(nextState), ...advanceVillageWorks(nextState), ...advanceSpiritBeasts(nextState, rng), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...advanceSharedCommons(nextState), ...advanceHouseholds(nextState)];
   for (const event of newEvents) witnessEvent(nextState, event);
 
   for (const cultivator of [...nextState.cultivators]) {

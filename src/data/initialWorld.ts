@@ -1,3 +1,4 @@
+import { createSharedCommonsState } from '../engine/sharedCommonsEngine';
 import { createServiceRetirementState } from '../engine/serviceRetirementEngine';
 import { createColdHistoryState } from '../engine/coldHistoryEngine';
 import { createSealedCourierState } from '../engine/sealedCourierEngine';
@@ -274,6 +275,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     couriers: createSealedCourierState(),
     coldHistory: createColdHistoryState(),
     serviceRetirement: createServiceRetirementState(),
+    sharedCommons: createSharedCommonsState(),
     witnesses: createWitnessState(),
     estates: createEstateState(),
     decisionTrace: createDecisionTraceState(),

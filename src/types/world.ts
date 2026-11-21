@@ -98,6 +98,7 @@ export type ActionType =
   | 'VILLAGE_WORKS'
   | 'SEALED_COURIER'
   | 'SECT_SERVICE'
+  | 'SHARED_COMMONS'
   | 'GATHER_HERBS'
   | 'BREW_PILL'
   | 'USE_PILL'
@@ -394,6 +395,9 @@ export interface LLMDecisionPayload {
   targetHazardId?: string;
   ceasefireMove?: CeasefireMove;
   targetCeasefireId?: string;
+  commonsMove?: CommonsMove;
+  targetCommonsId?: string;
+  targetCommonsThirdSectId?: string;
   serviceMove?: SectServiceMove;
   courierMove?: CourierMove;
   targetCourierId?: string;
@@ -1785,7 +1789,39 @@ export interface ServiceRetirementRecord {
 }
 export interface ServiceRetirementState { history: ServiceRetirementRecord[]; nextId: number }
 
+export type CommonsMove = 'offer' | 'sign' | 'decline';
+export type CommonsCloseReason = 'declined' | 'offer_expiry' | 'title_change' | 'site_lost' | 'term_complete' | 'stale_signer';
+export interface CommonsParty { sectId: string; signerId: string; share: 1 | 2; signedTick?: number }
+export interface CommonsAllocation { sectId: string; maintenanceDue: number; maintenancePaid: number; quota: number; used: number }
+export interface CommonsHarvestReceipt { tick: number; actorId: string; sectId: string; units: number }
+export interface CommonsQuotaRound {
+  startTick: number;
+  endsTick: number;
+  stockAtOpen: number;
+  reserved: number;
+  allocations: CommonsAllocation[];
+  harvests: CommonsHarvestReceipt[];
+}
+export interface SharedCommonsPact {
+  id: string;
+  siteId: string;
+  herbId: HerbId;
+  proposerSectId: string;
+  openedTick: number;
+  offerExpiresTick: number;
+  status: 'offered' | 'active' | 'closed';
+  parties: CommonsParty[];
+  activatedTick?: number;
+  startsTick?: number;
+  endsTick?: number;
+  settledTick?: number;
+  closeReason?: CommonsCloseReason;
+  rounds: CommonsQuotaRound[];
+}
+export interface SharedCommonsState { pacts: SharedCommonsPact[]; nextId: number }
+
 export interface WorldState {
+  sharedCommons: SharedCommonsState;
   serviceRetirement: ServiceRetirementState;
   coldHistory: ColdHistoryState;
   couriers: SealedCourierState;

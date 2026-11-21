@@ -6,8 +6,11 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        // Keep the stable React runtime cacheable between gameplay updates.
-        manualChunks: { 'react-runtime': ['react', 'react-dom', 'react-dom/client', 'react/jsx-runtime'] },
+        // Keep framework code and shared icons cacheable between gameplay updates.
+        manualChunks: {
+          'react-runtime': ['react', 'react-dom', 'react-dom/client', 'react/jsx-runtime'],
+          'interface-icons': ['lucide-react'],
+        },
       },
     },
   },
