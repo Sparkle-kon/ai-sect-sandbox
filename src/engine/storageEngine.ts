@@ -9,12 +9,14 @@ import { WORKSHOP_ACTIVE_TICKS, WORKSHOP_MAX_WORK_RECEIPTS, WORKSHOP_OFFER_TICKS
 import { createFurnaceReservationState, FURNACE_QUEUE_TICKS, FURNACE_TERMINAL_LIMIT, FURNACE_USE_RETENTION_TICKS } from './furnaceReservationEngine';
 import { createSparringState, SPARRING_MASTERY_MAX, SPARRING_QI_COST } from './sparringEngine';
 import { validateSparringRelationships, validateExpeditionRescueRelationships, validateShortShiftRelationships,
-  validateBoundaryReliefRelationships, validateApprenticeCohortRelationships, validateHouseholdNameRelationships } from './storageActivityValidation';
+  validateBoundaryReliefRelationships, validateApprenticeCohortRelationships, validateHouseholdNameRelationships,
+  validateCaravanRestitutionRelationships } from './storageActivityValidation';
 import { createExpeditionRescueState } from './expeditionRescueEngine';
 import { createShortShiftState, SHORT_SHIFT_WAGE } from './shortShiftEngine';
 import { createBoundaryReliefState, BOUNDARY_RELIEF_MAX_PATH_STEPS } from './boundaryReliefEngine';
 import { createApprenticeCohortState, COHORT_MAX_INVITEES } from './apprenticeCohortEngine';
 import { createHouseholdNameState, HOUSEHOLD_NAME_ALIASES } from './householdNameEngine';
+import { createCaravanRestitutionState } from './caravanRestitutionEngine';
 import { createTerrainSuccessionState, TERRAIN_QUIET_CAP, TERRAIN_RECOVERY_LIMIT } from './terrainSuccessionEngine';
 import { createResourceFlowState, RESOURCE_FLOW_DETAIL_LIMIT, RESOURCE_FLOW_MONTH_LIMIT, RESOURCE_FLOW_REASON, sameFlowAccount } from './resourceFlowEngine';
 import { COMMONS_MAINTENANCE_UNIT, COMMONS_MAX_RESERVE, COMMONS_OFFER_TICKS, COMMONS_ROUND_TICKS, COMMONS_TERM_TICKS, commonsQuotaShares, createSharedCommonsState } from './sharedCommonsEngine';
@@ -120,13 +122,13 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP FURNACE_RESERVATION SPARRING EXPEDITION_RESCUE SHORT_SHIFT BOUNDARY_RELIEF APPRENTICE_COHORT HOUSEHOLD_NAME RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY SEASON_REVIEW REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP FURNACE_RESERVATION SPARRING EXPEDITION_RESCUE SHORT_SHIFT BOUNDARY_RELIEF APPRENTICE_COHORT HOUSEHOLD_NAME CARAVAN_RESTITUTION RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY SEASON_REVIEW REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const flowGood = one('stone','jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const flowMeasure = num(0,Number.MAX_SAFE_INTEGER);
 const flowSerial = num(1,Number.MAX_SAFE_INTEGER,true);
-const flowAccount = structure({kind:one('actor','site','sect','order','shipment','oath','relocation','workshop'),id,
+const flowAccount = structure({kind:one('actor','site','sect','order','shipment','oath','relocation','workshop','salvage'),id,
   pocket:optional(one('payment','collateral'))});
 const flowScope = structure({kind:one('observer','known_sites','participants'),siteIds:optional(arr(8,id)),actorIds:optional(arr(8,id))});
 const marketQty = num(1,12,true), marketPrice = num(1,500,true);
@@ -414,6 +416,11 @@ const shape = structure({
     alias:optional(one(...HOUSEHOLD_NAME_ALIASES)),openedTick:tick,expiresTick:tick,
     status:one('proposed','verified','withdrawn','expired'),closedTick:otick,witnessId:oid,
   }))}),
+  caravanRestitution:structure({lots:arr(SAVE_COLLECTION_LIMIT,structure({
+    id,shipmentId:id,sourceLossEventId:id,siteId:id,tileId:id,hazardId:id,hazardIntensity:one(2),openedTick:tick,
+    good:one('jade_leaf','earth_root'),originalQuantity:count,destroyedQuantity:count,units:one(1),buyerId:id,sellerId:id,
+    status:one('buried','sealed','returned'),finderId:oid,discoveredTick:otick,returnedTick:otick,returnedById:oid,
+  }))}),
   resourceFlow:structure({nextId:flowSerial,months:arr(RESOURCE_FLOW_MONTH_LIMIT,structure({
     tick,year:tick,month,totalEntries:num(0,Number.MAX_SAFE_INTEGER,true),
     totals:arr(9,structure({good:flowGood,transfer:flowMeasure,production:flowMeasure,consumption:flowMeasure,loss:flowMeasure})),
@@ -680,6 +687,7 @@ function verifyWorld(value: unknown): WorldState {
       ...(!Object.hasOwn(value, 'boundaryReliefs') ? { boundaryReliefs: createBoundaryReliefState() } : {}),
       ...(!Object.hasOwn(value, 'apprenticeCohorts') ? { apprenticeCohorts: createApprenticeCohortState() } : {}),
       ...(!Object.hasOwn(value, 'householdNames') ? { householdNames: createHouseholdNameState() } : {}),
+      ...(!Object.hasOwn(value, 'caravanRestitution') ? { caravanRestitution: createCaravanRestitutionState() } : {}),
       ...(!Object.hasOwn(value, 'terrainSuccession') ? { terrainSuccession: createTerrainSuccessionState() } : {}),
       ...(!Object.hasOwn(value, 'resourceFlow') ? { resourceFlow: createResourceFlowState() } : {}),
       ...(!Object.hasOwn(value, 'sharedCommons') ? { sharedCommons: createSharedCommonsState() } : {}),
@@ -1148,6 +1156,7 @@ function verifyWorld(value: unknown): WorldState {
   validateBoundaryReliefRelationships(w, actor, sector, fail);
   validateApprenticeCohortRelationships(w, actor, sector, locations, fail);
   validateHouseholdNameRelationships(w, actor, fail);
+  validateCaravanRestitutionRelationships(w, actor, fail);
   let previousFlowTick = -1;
   let previousFlowId = 0;
   for (const book of w.resourceFlow.months) {

@@ -118,6 +118,7 @@ export type ActionType =
   | 'BOUNDARY_RELIEF'
   | 'APPRENTICE_COHORT'
   | 'HOUSEHOLD_NAME'
+  | 'CARAVAN_RESTITUTION'
   | 'FORGE_ARTIFACT'
   | 'BIND_ARTIFACT'
   | 'REPAIR_ARTIFACT'
@@ -511,6 +512,8 @@ export interface LLMDecisionPayload {
   nameMove?: HouseholdNameMove;
   householdAlias?: string;
   targetHouseholdNameId?: string;
+  restitutionMove?: CaravanRestitutionMove;
+  targetRestitutionId?: string;
   targetWorkshopId?: string;
   workshopTier?: WorkshopTier;
   workshopQuantity?: 1 | 2;
@@ -2084,7 +2087,7 @@ export interface SharedCommonsState { pacts: SharedCommonsPact[]; nextId: number
 export type ResourceFlowGood = 'stone' | MarketGood;
 export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation' | 'terrain' | 'workshop' | 'road' | 'observatory' | 'pilgrimage';
 export type ResourceFlowAccount =
-  | { kind: 'actor' | 'site' | 'sect' | 'order' | 'shipment' | 'relocation' | 'workshop'; id: string }
+  | { kind: 'actor' | 'site' | 'sect' | 'order' | 'shipment' | 'relocation' | 'workshop' | 'salvage'; id: string }
   | { kind: 'oath'; id: string; pocket: 'payment' | 'collateral' };
 export type ResourceFlowVisibility =
   | { kind: 'observer' }
@@ -2355,6 +2358,30 @@ export interface HouseholdNameEntry {
 }
 export interface HouseholdNameState { entries: HouseholdNameEntry[]; nextId: number }
 
+export type CaravanRestitutionMove = 'discover' | 'return';
+export interface CaravanRestitutionLot {
+  id: string;
+  shipmentId: string;
+  sourceLossEventId: string;
+  siteId: string;
+  tileId: string;
+  hazardId: string;
+  hazardIntensity: 2;
+  openedTick: number;
+  good: 'jade_leaf' | 'earth_root';
+  originalQuantity: number;
+  destroyedQuantity: number;
+  units: 1;
+  buyerId: string;
+  sellerId: string;
+  status: 'buried' | 'sealed' | 'returned';
+  finderId?: string;
+  discoveredTick?: number;
+  returnedTick?: number;
+  returnedById?: string;
+}
+export interface CaravanRestitutionState { lots: CaravanRestitutionLot[] }
+
 export type ProbationMove = 'request' | 'admit' | 'review' | 'withdraw' | 'restore';
 export type ProbationVote = 'support' | 'oppose';
 export type ProbationStatus = 'requested' | 'active' | 'ready' | 'reinstated' | 'withdrawn' | 'rejected' | 'expired';
@@ -2460,6 +2487,7 @@ export interface WorldState {
   boundaryReliefs: BoundaryReliefState;
   apprenticeCohorts: ApprenticeCohortState;
   householdNames: HouseholdNameState;
+  caravanRestitution: CaravanRestitutionState;
   resourceFlow: ResourceFlowState;
   roads: RoadState;
   sharedCommons: SharedCommonsState;

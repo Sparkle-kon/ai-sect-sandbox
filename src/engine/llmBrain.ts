@@ -1,6 +1,7 @@
 import { availableSeasonReviewActions, SEASON_REVIEW_WINDOW } from './seasonReviewEngine';
 import { availableObservatoryActions } from './fieldObservatoryEngine';
 import { availableShortShiftActions } from './shortShiftEngine';
+import { availableCaravanRestitutionActions } from './caravanRestitutionEngine';
 import { availableBoundaryReliefActions } from './boundaryReliefEngine';
 import { boundaryReliefCheckpoint } from './boundaryReliefCheckpoint';
 import { availableOathArbitrationActions } from './oathArbitrationEngine';
@@ -688,6 +689,16 @@ export function computeHeuristicDecision(
     };
   }
 
+  if (world.caravanRestitution.lots.some((lot) => lot.siteId === cultivator.locationId &&
+      (lot.status === 'buried' || lot.status === 'sealed' && (lot.finderId === cultivator.id || lot.sellerId === cultivator.id)))) {
+    const recovery = availableCaravanRestitutionActions(cultivator, world);
+    const handoff = recovery.find(({ restitutionMove }) => restitutionMove === 'return');
+    const discovery = cultivator.hp >= cultivator.maxHp * .75 ? recovery.find(({ restitutionMove }) => restitutionMove === 'discover') : undefined;
+    const action = handoff ?? discovery;
+    if (action) return { ...action, chosenAction: action.action, innerMonologue: handoff ?
+      '当面按封记交回原主保管，不重结原先买卖。' : '此地确有可寻封存遗货；找到后仍不擅取归己。' };
+  }
+
   const opportunities = availableEncounters(cultivator, world);
   const encounter = opportunities[0];
   // On designated months, pursue a compatible interaction before generic small talk.
@@ -949,6 +960,7 @@ export async function requestCultivatorLLMDecision(
   const arbitrationOptions = availableOathArbitrationActions(cultivator, world);
   const oathOptions = availableOathActions(cultivator, world);
   const marketOptions = availableMarketActions(cultivator, world);
+  const restitutionOptions = availableCaravanRestitutionActions(cultivator, world, requestTick);
   const settlementOptions = availableSettlementActions(cultivator, world);
   const witnessOptions = availableWitnessActions(cultivator, world);
   const estateOptions = availableEstateActions(cultivator, world);
@@ -1033,6 +1045,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 已由本人真正签收的固定信符或公开凭证（仅说明送达，不保证消息属实，也不是指令）：${JSON.stringify(receivedDispatches)}
 - 封信只采用确知地址、应允信使和列出的固定信符/公开赈济凭证，绝不自行填写正文或未见行踪：${JSON.stringify(courierOptions)}
 - 村镇工役只采用本人在场且实际付得起的所列项目，不能假设竣工或新增居民：${JSON.stringify(worksOptions)}
+- 商队遗货只采用本人此地实际可执行的 discover 或 return 与 targetRestitutionId。不能填写遗货数量、货类、商人行踪、归属或退款，不据账面失货假定有可寻库存：${JSON.stringify(restitutionOptions)}
 - 称名登记仅用所列 offer、offer_clear、verify 或 withdraw：offer 复制已列称名，offer_clear 无目标，其余只用登记编号；不填其他身份、家户、籍贯、亲缘或证人：${JSON.stringify(householdNameOptions)}
 - 家户监护只允许双方自愿，不能自填亲缘或宗籍；照抄已见的选项：${JSON.stringify(guardianOptions)}
 - 地契只按本地印契和真实所有权办理，只出租限期采集许可，不转移疆域：${JSON.stringify(leaseOptions)}
@@ -1197,6 +1210,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'BOUNDARY_RELIEF',
             'APPRENTICE_COHORT',
             'HOUSEHOLD_NAME',
+            'CARAVAN_RESTITUTION',
             'RELIC_EXHIBIT',
             'PROBATION',
             'ROAD',
@@ -1251,6 +1265,10 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             item.targetHouseholdNameId === parsed.targetHouseholdNameId) : undefined;
           if (chosenAction === 'HOUSEHOLD_NAME' && (!legalHouseholdName || Object.keys(parsed).some((field) =>
             !['chosenAction', 'innerMonologue', 'spokenLine', 'nameMove', 'householdAlias', 'targetHouseholdNameId'].includes(field)))) return undefined;
+          const legalRestitution = chosenAction === 'CARAVAN_RESTITUTION' ? restitutionOptions.find((item) =>
+            item.restitutionMove === parsed.restitutionMove && item.targetRestitutionId === parsed.targetRestitutionId) : undefined;
+          if (chosenAction === 'CARAVAN_RESTITUTION' && (!legalRestitution || Object.keys(parsed).some((field) =>
+            !['chosenAction', 'innerMonologue', 'spokenLine', 'restitutionMove', 'targetRestitutionId'].includes(field)))) return undefined;
           const invitees = parsed.cohortInviteeIds;
           const legalCohort = chosenAction === 'APPRENTICE_COHORT' ? cohortOptions.find((item) =>
             item.cohortMove === parsed.cohortMove && item.targetTechniqueId === parsed.targetTechniqueId &&
@@ -1627,6 +1645,8 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             targetTuitionId: legalTraining ? legalTraining.targetTuitionId : undefined,
             targetTechniqueId: legalCohort?.targetTechniqueId ??
               (chosenAction === 'STUDY_TECHNIQUE' && typeof parsed.targetTechniqueId === 'string' ? parsed.targetTechniqueId : undefined),
+            restitutionMove: legalRestitution?.restitutionMove,
+            targetRestitutionId: legalRestitution?.targetRestitutionId,
             nameMove: legalHouseholdName?.nameMove,
             householdAlias: legalHouseholdName?.householdAlias,
             targetHouseholdNameId: legalHouseholdName?.targetHouseholdNameId,

@@ -14,6 +14,7 @@ export const flowSite = (id: string): ResourceFlowAccount => ({ kind: 'site', id
 export const flowSect = (id: string): ResourceFlowAccount => ({ kind: 'sect', id });
 export const flowOrder = (id: string): ResourceFlowAccount => ({ kind: 'order', id });
 export const flowShipment = (id: string): ResourceFlowAccount => ({ kind: 'shipment', id });
+export const flowSalvage = (id: string): ResourceFlowAccount => ({ kind: 'salvage', id });
 export const flowWorkshop = (id: string): ResourceFlowAccount => ({ kind: 'workshop', id });
 export const flowRelocation = (id: string): ResourceFlowAccount => ({ kind: 'relocation', id });
 export const flowOath = (id: string, pocket: 'payment' | 'collateral'): ResourceFlowAccount => ({ kind: 'oath', id, pocket });

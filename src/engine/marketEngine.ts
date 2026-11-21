@@ -1,8 +1,9 @@
 import { escortDirective, settleEscortWithShipment } from './escortEngine';
+import { sealCaravanSalvage } from './caravanRestitutionEngine';
 import { causalChronicleEventId, recordCausalChronicleNode } from './chronicleCausalityEngine';
 import type { CausalChronicleOutcome, CausalChroniclePredecessor } from '../types/world';
-import { flowActor, flowOrder, flowShipment, recordResourceFlow } from './resourceFlowEngine';
-import type { Cultivator, HerbId, LLMDecisionPayload, MarketGood, MarketOrder, MarketReceipt, MarketShipment, MarketState, LocationNode, WorldEvent, WorldState } from '../types/world';
+import { flowActor, flowOrder, flowSalvage, flowShipment, recordResourceFlow } from './resourceFlowEngine';
+import type { Cultivator, HerbId, LLMDecisionPayload, MapHazard, MarketGood, MarketOrder, MarketReceipt, MarketShipment, MarketState, LocationNode, WorldEvent, WorldState } from '../types/world';
 import { terrainTileAt } from './terrainEngine';
 import { weatherTravelFriction } from './weatherEngine';
 
@@ -216,7 +217,7 @@ function match(world: WorldState, bid: MarketOrder, ask: MarketOrder, buyer: Cul
 }
 
 function routeDanger(world: WorldState, shipment: MarketShipment, origin: LocationNode, destination: LocationNode,
-  directive?: ReturnType<typeof escortDirective>): boolean {
+  directive?: ReturnType<typeof escortDirective>): MapHazard | undefined {
   const duration = shipment.arrivalTick - shipment.departedTick;
   const end = Math.min(1, (world.tick - shipment.departedTick - (directive?.baselineDelay ?? 0)) / duration);
   const start = Math.max(0, end - 1 / duration);
@@ -227,13 +228,15 @@ function routeDanger(world: WorldState, shipment: MarketShipment, origin: Locati
     const id = tileId(world, origin.x + (destination.x - origin.x) * progress, origin.y + (destination.y - origin.y) * progress);
     if (id) ids.add(id);
   }
-  const intensity = activeDangers(world, ids).filter((hazard) => hazard.kind !== 'cursed_miasma' || hazard.intensity >= 2)
-    .reduce((maximum, hazard) => Math.max(maximum, hazard.intensity), 0);
-  if (!intensity) return false;
+  const danger = activeDangers(world, ids).filter((hazard) => hazard.kind !== 'cursed_miasma' || hazard.intensity >= 2)
+    .reduce<MapHazard | undefined>((strongest, hazard) => !strongest || hazard.intensity > strongest.intensity ||
+      (hazard.intensity === strongest.intensity && (hazard.tileId < strongest.tileId ||
+        (hazard.tileId === strongest.tileId && hazard.id < strongest.id))) ? hazard : strongest, undefined);
+  if (!danger) return undefined;
   let value = world.terrain.seed ^ Math.imul(shipment.sequence, 0x9e3779b1) ^ Math.imul(world.tick, 0x7feb352d);
   value = Math.imul(value ^ (value >>> 16), 0x846ca68b);
   const roll = ((value ^ (value >>> 16)) >>> 0) / 0x100000000;
-  return roll < Math.min(.55, .14 + intensity * .10) * (directive?.riskMultiplier ?? 1);
+  return roll < Math.min(.55, .14 + danger.intensity * .10) * (directive?.riskMultiplier ?? 1) ? danger : undefined;
 }
 
 function settleShipment(world: WorldState, shipment: MarketShipment): WorldEvent | undefined {
@@ -251,6 +254,7 @@ function settleShipment(world: WorldState, shipment: MarketShipment): WorldEvent
     world.tick > shipment.departedTick + (route?.baselineDelay ?? 0) && world.tick <= effectiveArrival;
   let status: Exclude<MarketShipment['status'], 'in_transit'>;
   let outcome: Extract<CausalChronicleOutcome, 'delivered' | 'route_loss' | 'escort_failed' | 'endpoint_missing' | 'market_closed'>;
+  let struck: MapHazard | undefined;
   let reason: string;
   if (!origin || !destination) {
     status = 'returned';
@@ -261,7 +265,7 @@ function settleShipment(world: WorldState, shipment: MarketShipment): WorldEvent
     outcome = 'escort_failed';
     reason = `护送无法继续，按原货账退买方${price}灵石、卖方${shipment.quantity}份货`;
   } else if (route?.hold) return undefined;
-  else if (isOnRoute && routeDanger(world, shipment, origin, destination, route)) {
+  else if (isOnRoute && (struck = routeDanger(world, shipment, origin, destination, route))) {
     status = 'lost';
     outcome = 'route_loss';
     reason = `商队途经当回合灾区，遗失${shipment.quantity}份货并退买方${price}灵石`;
@@ -286,7 +290,9 @@ function settleShipment(world: WorldState, shipment: MarketShipment): WorldEvent
   shipment.status = status;
   shipment.reason = reason;
   shipment.settledTick = world.tick;
-  record(world, shipment, status, shipment.id, reason);
+  const receiptId = record(world, shipment, status, shipment.id, reason);
+  const fact = event(world, shipment.id, status === 'delivered' ? '商队到货结算' : status === 'lost' ? '商队货损退款' : '商队退运退款',
+    `${reason}。`, [buyer.id, seller.id], shipment.destinationId);
   const participants = [buyer.id, seller.id];
   const from = flowShipment(shipment.id);
   if (status === 'delivered') {
@@ -297,11 +303,20 @@ function settleShipment(world: WorldState, shipment: MarketShipment): WorldEvent
     transfer(world, shipment.id, 'shipment_return', shipment.good, shipment.quantity, participants, from, flowActor(seller.id));
   } else {
     transfer(world, shipment.id, 'shipment_refund', 'stone', price, participants, from, flowActor(buyer.id));
+    const lot = struck && sealCaravanSalvage(world, shipment, fact, struck);
+    if (lot) {
+      transfer(world, shipment.id, 'shipment_salvage', shipment.good, lot.units, participants, from, flowSalvage(lot.id));
+      // The public settlement is still a total delivery failure, not a claim that
+      // every unit was destroyed or that the buyer received any of the residue.
+      reason = `商队途经当回合灾区，原批${shipment.quantity}份货未交付，已退买方${price}灵石`;
+      shipment.reason = reason;
+      fact.description = `${reason}。`;
+      const receipt = world.markets.receipts.find(({ id }) => id === receiptId);
+      if (receipt) receipt.reason = reason;
+    }
     recordResourceFlow(world, { kind: 'loss', mechanism: 'market', refId: shipment.id, reason: 'shipment_loss',
-      good: shipment.good, amount: shipment.quantity, visibility: { kind: 'participants', actorIds: participants }, from });
+      good: shipment.good, amount: shipment.quantity - (lot?.units ?? 0), visibility: { kind: 'participants', actorIds: participants }, from });
   }
-  const fact = event(world, shipment.id, status === 'delivered' ? '商队到货结算' : status === 'lost' ? '商队货损退款' : '商队退运退款',
-    `${reason}。`, [buyer.id, seller.id], shipment.destinationId);
   const departureId = causalChronicleEventId(world, 'market_shipment', shipment.id);
   recordCausalChronicleNode(world, fact, { kind: 'market_settlement', entityId: shipment.id, outcome,
     predecessors: departureId ? [{ eventId: departureId, relation: 'settled_shipment' }] : [] });

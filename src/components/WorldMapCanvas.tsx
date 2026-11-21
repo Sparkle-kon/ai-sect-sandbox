@@ -172,6 +172,14 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     const register = selected && projectHouseholdNames(world, selected);
     return register?.entries.some(({ status }) => status !== 'visitor') ? selected?.locationId : undefined;
   }, [world, selected]);
+  const observedSalvageSites = useMemo(() => {
+    if (!selected?.alive || selected.hp <= 0 || !world.caravanRestitution.lots.some(({ status }) => status === 'sealed'))
+      return new Set<string>();
+    const visible = currentVisibleTileIds(world, selected);
+    return new Set(world.caravanRestitution.lots.filter((row) => row.status === 'sealed' && visible.has(row.tileId) &&
+      world.locations.some((site) => site.id === row.siteId && terrainTileAt(world, site.x, site.y)?.id === row.tileId))
+      .map(({ siteId }) => siteId));
+  }, [world, selected]);
   const { seenLocations, isCurrentLocation } = mapView;
   const liveActors = useMemo(() => {
     const travellers = mapTransitActorIds(world);
@@ -493,6 +501,14 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           ctx.fillText('授', loc.x + 17, loc.y - 13);
           ctx.restore();
         }
+        if (observedSalvageSites.has(loc.id)) {
+          ctx.save();
+          ctx.fillStyle = '#ccfbf1';
+          ctx.font = 'bold 10px sans-serif';
+          ctx.textAlign = 'left';
+          ctx.fillText('封', loc.x + 17, loc.y + 8);
+          ctx.restore();
+        }
 
         // Keep the element beside the location name so it doesn't add a competing row.
         ctx.font = 'bold 13px sans-serif';
@@ -729,7 +745,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener('change', stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, hazards, convoys, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, hazards, convoys, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, observedSalvageSites, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -935,6 +951,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       {extractionMarks.length > 0 && <p className="sr-only">当前看见 {extractionMarks.length} 处实际撤离关口；不是新地点，也未公开路线。</p>}
       {boundaryMarks.length > 0 && <p className="sr-only">当前看见 {boundaryMarks.length} 处实际换防关口。尚在途中的候补不算驻守。</p>}
       {observedCohortSites.size > 0 && <p className="sr-only">当前亲见 {observedCohortSites.size} 处实际合班授课场所，不显示学徒身份。</p>}
+      {observedSalvageSites.size > 0 && <p className="sr-only">当前见到 {observedSalvageSites.size} 处已发现并封存原货的地点，不显示货主身份。</p>}
       {compact && <p className="min-w-0 break-words border-t border-slate-800 px-3 py-2 text-xs text-slate-300" aria-label="地图当前选择">
         {selected ? <>当前选择：<span className="text-slate-100">{selected.name}</span> · {selected.alive ? `${selected.realm}${selected.realmStage}层` : '已陨落'}</> : '轻触地图选择修士。'}
       </p>}
@@ -1217,6 +1234,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                 {coverage && <span className="text-indigo-200">· Tick {coverage.tick} 现场确认：{coverage.kind === 'gap' ? '岗位空缺' :
                   coverage.kind === 'relief' ? '接替者已实到' : '有实际驻守'}</span>}
                 {observedCohortSites.has(location.id) && <span className="text-amber-200">· 本回合已亲见实际合班授课</span>}
+                {observedSalvageSites.has(location.id) && <span className="text-teal-200">· 已亲见货损幸存原物封存</span>}
                 {homeSect && homeSect.arrayMaxHp > 0 && (
                   <span className="text-indigo-300">· 护山阵 {homeSect.arrayHp}/{homeSect.arrayMaxHp}</span>
                 )}

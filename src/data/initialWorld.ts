@@ -14,6 +14,7 @@ import { createShortShiftState } from '../engine/shortShiftEngine';
 import { createBoundaryReliefState } from '../engine/boundaryReliefEngine';
 import { createApprenticeCohortState } from '../engine/apprenticeCohortEngine';
 import { createHouseholdNameState } from '../engine/householdNameEngine';
+import { createCaravanRestitutionState } from '../engine/caravanRestitutionEngine';
 import { createTerrainSuccessionState } from '../engine/terrainSuccessionEngine';
 import { createResourceFlowState } from '../engine/resourceFlowEngine';
 import { createSharedCommonsState } from '../engine/sharedCommonsEngine';
@@ -305,6 +306,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     boundaryReliefs: createBoundaryReliefState(),
     apprenticeCohorts: createApprenticeCohortState(),
     householdNames: createHouseholdNameState(),
+    caravanRestitution: createCaravanRestitutionState(),
     relicExhibits: createRelicExhibitState(),
     probation: createProbationState(),
     roads: createRoadState(),

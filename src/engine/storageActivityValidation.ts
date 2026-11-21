@@ -1,4 +1,4 @@
-import type { WorldState } from '../types/world';
+import type { ResourceFlowEntry, WorldState } from '../types/world';
 import { SPARRING_ACTIVE_TICKS, SPARRING_OFFER_TICKS } from './sparringEngine';
 import { EXPEDITION_RESCUE_OFFER_TICKS, EXPEDITION_RESCUE_STRIDE } from './expeditionRescueEngine';
 import { terrainTileAt } from './terrainEngine';
@@ -388,5 +388,71 @@ export function validateHouseholdNameRelationships(world: WorldState, actors: Re
       if (receipts.has(key)) fail('householdNames.entries.receipt');
       receipts.add(key);
     }
+  }
+}
+
+export function validateCaravanRestitutionRelationships(world: WorldState, actors: ReadonlySet<string>,
+  fail: (path: string) => never): void {
+  if (!world.caravanRestitution.lots.length) return;
+  const shipments = new Map(world.markets.shipments.map((shipment) => [shipment.id, shipment]));
+  const sites = new Map(world.locations.map((site) => [site.id, site]));
+  const hazards = new Map(world.mapHazards.map((hazard) => [hazard.id, hazard]));
+  const tiles = new Set(world.terrain.tiles.map(({ id }) => id));
+  const ids = new Set<string>();
+  const ledgerBySeal = new Map<string, ResourceFlowEntry[]>();
+  for (const { entries } of world.resourceFlow.months) for (const entry of entries) {
+    const endpoints = new Set([
+      'from' in entry && entry.from?.kind === 'salvage' ? entry.from.id : undefined,
+      'to' in entry && entry.to?.kind === 'salvage' ? entry.to.id : undefined,
+    ]);
+    for (const id of endpoints) if (id !== undefined) {
+      const entriesForSeal = ledgerBySeal.get(id);
+      if (entriesForSeal) entriesForSeal.push(entry);
+      else ledgerBySeal.set(id, [entry]);
+    }
+  }
+  for (const row of world.caravanRestitution.lots) {
+    const old = shipments.get(row.shipmentId);
+    const site = sites.get(row.siteId);
+    const hazard = hazards.get(row.hazardId);
+    const seen = row.discoveredTick;
+    const returned = row.returnedTick;
+    const source = world.events.filter(({ id }) => id === row.sourceLossEventId);
+    if (ids.has(row.id) || row.id !== `salvage-${row.shipmentId}` || !/^caravan-[1-9][0-9]*$/.test(row.shipmentId) ||
+        row.sourceLossEventId !== `evt-${row.openedTick}-market-${row.shipmentId}` || row.openedTick > world.tick ||
+        !actors.has(row.buyerId) || !actors.has(row.sellerId) || row.buyerId === row.sellerId ||
+        row.originalQuantity < 2 || row.destroyedQuantity + row.units !== row.originalQuantity ||
+        !tiles.has(row.tileId) || (site && (site.type === 'secret_realm' || site.type === 'abyss' ||
+          terrainTileAt(world, site.x, site.y)?.id !== row.tileId)) ||
+        (hazard && (hazard.kind !== 'beast_tide' || hazard.intensity !== 2 || hazard.tileId !== row.tileId ||
+          hazard.createdTick > row.openedTick || hazard.expiresTick <= row.openedTick)) ||
+        (old && (old.status !== 'lost' || old.settledTick !== row.openedTick || old.good !== row.good ||
+          old.quantity !== row.originalQuantity || old.buyerId !== row.buyerId || old.sellerId !== row.sellerId)) ||
+        (source.length > 0 && (source.length !== 1 || source[0].witnessScope === 'participants' ||
+          source[0].tick !== row.openedTick || source[0].category !== 'diplomacy' ||
+          !source[0].actorIds.includes(row.buyerId) || !source[0].actorIds.includes(row.sellerId))) ||
+        ((row.status === 'buried') !== (seen === undefined)) ||
+        (seen === undefined ? row.finderId !== undefined : (!row.finderId || row.finderId === row.sellerId ||
+          !actors.has(row.finderId) || seen <= row.openedTick || seen > world.tick)) ||
+        ((row.status === 'returned') !== (returned !== undefined)) ||
+        (returned === undefined ? row.returnedById !== undefined : (seen === undefined || returned <= seen || returned > world.tick ||
+          (row.returnedById !== row.finderId && row.returnedById !== row.sellerId))))
+      fail('caravanRestitution.lots.source');
+    ids.add(row.id);
+    const ledger = ledgerBySeal.get(row.id) ?? [];
+    let inflow = 0, outflow = 0;
+    for (const entry of ledger) {
+      if (entry.kind !== 'transfer' || entry.good !== row.good || entry.amount !== row.units) return fail('caravanRestitution.lots.custody');
+      if (entry.to?.kind === 'salvage') {
+        inflow++;
+        if (entry.tick !== row.openedTick || entry.from?.kind !== 'shipment' || entry.from.id !== row.shipmentId)
+          fail('caravanRestitution.lots.custody');
+      } else {
+        outflow++;
+        if (entry.tick !== returned || entry.to?.kind !== 'actor' || entry.to.id !== row.sellerId)
+          fail('caravanRestitution.lots.custody');
+      }
+    }
+    if (inflow > 1 || outflow > 1) fail('caravanRestitution.lots.custody');
   }
 }
