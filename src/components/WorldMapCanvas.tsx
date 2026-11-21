@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { GodBrushKind, LocationNode, MapPoint, WorldEvent, WorldState } from '../types/world';
 import { memoryStrength } from '../engine/memoryEngine';
 import { countCompletedSchemeSteps, SCHEME_STATUS } from './SchemePanel';
@@ -17,10 +17,14 @@ import { buildMapPresentation, MAP_EFFECT_LABELS, MOTION_MS } from './mapPresent
 import { drawFlights, drawMapEffects } from './mapPresentationDraw';
 import { centerCamera, clientToMapViewport, closestViewportTarget, DEFAULT_CAMERA, MAP_HEIGHT, MAP_WIDTH, MAX_ZOOM, panCamera, screenToMap, viewportPixelDistance, zoomCamera } from './mapCamera';
 import type { CameraPoint, MapCamera } from './mapCamera';
+import { focusMapPoint, mapCameraCommand, mapKeyboardCommand, shouldAnimateMap } from './mapKeyboard';
+import type { MapCameraCommand } from './mapKeyboard';
 import { BRUSH_LABELS, brushPoint, drawHazards, getVisibleHazards } from './mapBrushView';
 import { BEAST_COLORS, visibleBeastsByLocation } from './spiritBeastView';
 import { activeAvatar } from '../engine/avatarEngine';
 import { localQiWeather } from '../engine/weatherEngine';
+
+const MapKeyboardExplorer = React.lazy(async () => ({ default: (await import('./MapKeyboardExplorer')).MapKeyboardExplorer }));
 
 const WEATHER_MARK = {
   平息: { symbol: '', color: '#94a3b8' },
@@ -49,8 +53,20 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [camera, setCamera] = useState(DEFAULT_CAMERA);
   const [touchPan, setTouchPan] = useState(false);
+  const [followsSelection, setFollowsSelection] = useState(false);
+  const [explorerOpen, setExplorerOpen] = useState(false);
+  const [focusMessage, setFocusMessage] = useState('');
+  const explorerSummary = useRef<HTMLElement | null>(null);
+  const keyboardHelp = useId();
   const cameraRef = useRef(camera);
-  const updateCamera = (next: MapCamera) => { cameraRef.current = next; setCamera(next); };
+  const updateCamera = (next: MapCamera) => {
+    const previous = cameraRef.current;
+    if (previous.x !== next.x || previous.y !== next.y || previous.zoom !== next.zoom) {
+      cameraRef.current = next;
+      setCamera(next);
+    }
+  };
+  const manualCamera = (next: MapCamera) => { setFollowsSelection(false); updateCamera(next); };
   const [brush, setBrush] = useState<GodBrushKind | 'browse'>('browse');
   const [preview, setPreview] = useState<MapPoint[]>([]);
   const gesture = useRef<{
@@ -70,6 +86,18 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const beastsByLocation = useMemo(() => visibleBeastsByLocation(world, mapView), [world, mapView]);
   const armedBrush = !fog && onBrushStroke && brush !== 'browse' ? brush : undefined;
   const actorPositions = useMemo(() => mapActorPositions(seenLocations, liveActors), [seenLocations, liveActors]);
+  const selectedPoint = actorPositions.find(({ actor }) => actor.id === selectedCultivatorId);
+  const followedActorId = selectedPoint?.actor.id;
+  const followedX = selectedPoint?.x;
+  const followedY = selectedPoint?.y;
+  useEffect(() => {
+    if (!followsSelection) return;
+    if (!followedActorId || followedX === undefined || followedY === undefined) {
+      setFollowsSelection(false);
+      return;
+    }
+    updateCamera(focusMapPoint(cameraRef.current, { x: followedX, y: followedY }));
+  }, [followsSelection, followedActorId, followedX, followedY]);
   const presentation = useMemo(() => buildMapPresentation(world, mapView, actorPositions), [world, mapView, actorPositions]);
   const paintedActors = useRef<typeof actorPositions>([]);
   const playback = useRef<{ source: WorldState['mapPresentation']; start: number } | undefined>();
@@ -412,7 +440,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       if (frame !== undefined) window.cancelAnimationFrame(frame);
       frame = undefined;
       const now = performance.now();
-      const animate = !!preference && !preference.matches && !document.hidden;
+      const animate = shouldAnimateMap(preference?.matches, !document.hidden);
       draw(0, now - motionStart, animate);
       if (animate && (heat || hasMotion && now - motionStart < MOTION_MS)) {
         frame = window.requestAnimationFrame(run);
@@ -440,7 +468,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       const next = zoomCamera(currentCamera, currentCamera.zoom * Math.exp(-delta * 0.002), screen);
       if (next.zoom === currentCamera.zoom) return;
       event.preventDefault();
-      updateCamera(next);
+      manualCamera(next);
     };
     canvas.addEventListener('wheel', wheel, { passive: false });
     return () => canvas.removeEventListener('wheel', wheel);
@@ -475,7 +503,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       if (!active.moved) active.previous = active.initial;
       active.moved = true;
       if (!active.isTouch || touchPan || !compact) {
-        updateCamera(panCamera(currentCamera, { x: screen.x - active.previous.x, y: screen.y - active.previous.y }));
+        manualCamera(panCamera(currentCamera, { x: screen.x - active.previous.x, y: screen.y - active.previous.y }));
       }
     }
     active.previous = screen;
@@ -501,7 +529,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     if (picked) { onSelectCultivator(picked.actor.id); return; }
     const clickedLocation = closestViewportTarget(seenLocations.filter((site) => isCurrentLocation(site.id)),
       cameraRef.current, screen, size, radius);
-    if (clickedLocation) onSelectLocation?.(clickedLocation);
+    if (clickedLocation) focusSite(clickedLocation);
   };
   const cancelGesture = (event: React.PointerEvent<HTMLCanvasElement>) => {
     if (gesture.current?.pointer !== event.pointerId) return;
@@ -510,6 +538,24 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   };
   const minViewport = screenToMap(camera, { x: 0, y: 0 });
   const maxViewport = screenToMap(camera, { x: MAP_WIDTH, y: MAP_HEIGHT });
+  const focusSite = (site: LocationNode) => {
+    const visible = seenLocations.find(({ id }) => id === site.id);
+    if (!visible) return;
+    manualCamera(focusMapPoint(cameraRef.current, visible));
+    if (isCurrentLocation(visible.id)) onSelectLocation?.(visible);
+    setFocusMessage(`地图已定位：${visible.name}`);
+  };
+  const locateActor = (id: string) => {
+    const point = actorPositions.find(({ actor }) => actor.id === id);
+    if (!point) return;
+    onSelectCultivator(id);
+    manualCamera(focusMapPoint(cameraRef.current, point));
+    setFocusMessage(`地图已定位：${point.actor.name}`);
+  };
+  const activateCamera = (command: MapCameraCommand) => {
+    if (command === 'selected' && selectedPoint) setFocusMessage(`地图已定位：${selectedPoint.actor.name}`);
+    manualCamera(mapCameraCommand(cameraRef.current, command, selectedPoint));
+  };
 
   return (
     <div className="relative rounded-xl border border-slate-800 bg-slate-950/90 overflow-hidden shadow-xl">
@@ -535,11 +581,11 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
 
       {compact && <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 px-3 py-1 text-xs text-slate-300" aria-label="地图快捷控制">
         <button type="button" className="min-h-11 min-w-11 rounded border border-slate-700 disabled:opacity-40"
-          aria-label="缩小地图" disabled={camera.zoom <= 1} onClick={() => updateCamera(zoomCamera(camera, camera.zoom / 1.25, centerOfMap))}>−</button>
+          aria-label="缩小地图" disabled={camera.zoom <= 1} onClick={() => activateCamera('out')}>−</button>
         <button type="button" className="min-h-11 min-w-11 rounded border border-slate-700 disabled:opacity-40"
-          aria-label="放大地图" disabled={camera.zoom >= MAX_ZOOM} onClick={() => updateCamera(zoomCamera(camera, camera.zoom * 1.25, centerOfMap))}>＋</button>
+          aria-label="放大地图" disabled={camera.zoom >= MAX_ZOOM} onClick={() => activateCamera('in')}>＋</button>
         <button type="button" className="min-h-11 rounded border border-slate-700 px-2 disabled:opacity-40"
-          disabled={camera.zoom === 1} onClick={() => updateCamera(DEFAULT_CAMERA)}>复位</button>
+          disabled={camera.zoom === 1} onClick={() => activateCamera('home')}>复位</button>
         <span className="tabular-nums">{Math.round(camera.zoom * 100)}%</span>
         <button type="button" aria-pressed={touchPan} onClick={() => setTouchPan((enabled) => !enabled)}
           className={`min-h-11 rounded border px-2 sm:hidden ${touchPan ? 'border-sky-400 text-sky-100' : 'border-slate-700 text-slate-200'}`}>
@@ -563,16 +609,16 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         {heat && <span className="text-[11px] text-slate-400">蓝色至橙红色表示灵气由低到高。</span>}
       </div>
       <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-800 px-4 py-2 text-[11px] text-slate-300" aria-label="地图视角与画笔">
-        {[
-          { label: '缩小地图', text: '−', disabled: camera.zoom <= 1, next: () => zoomCamera(camera, camera.zoom / 1.25, centerOfMap) },
-          { label: '放大地图', text: '+', disabled: camera.zoom >= MAX_ZOOM, next: () => zoomCamera(camera, camera.zoom * 1.25, centerOfMap) },
-          { label: '向左浏览', text: '←', disabled: camera.x >= 0, next: () => panCamera(camera, { x: 125, y: 0 }) },
-          { label: '向右浏览', text: '→', disabled: minViewport.x + MAP_WIDTH / camera.zoom >= MAP_WIDTH - 0.001, next: () => panCamera(camera, { x: -125, y: 0 }) },
-          { label: '向上浏览', text: '↑', disabled: camera.y >= 0, next: () => panCamera(camera, { x: 0, y: 90 }) },
-          { label: '向下浏览', text: '↓', disabled: minViewport.y + MAP_HEIGHT / camera.zoom >= MAP_HEIGHT - 0.001, next: () => panCamera(camera, { x: 0, y: -90 }) },
-          { label: '重置地图视角', text: '重置', disabled: camera.zoom === 1, next: () => DEFAULT_CAMERA },
-        ].map(({ label, text, disabled, next }) => (
-          <button key={label} type="button" aria-label={label} disabled={disabled} onClick={() => updateCamera(next())}
+        {([
+          { label: '缩小地图', text: '−', disabled: camera.zoom <= 1, command: 'out' },
+          { label: '放大地图', text: '+', disabled: camera.zoom >= MAX_ZOOM, command: 'in' },
+          { label: '向左浏览', text: '←', disabled: camera.x >= 0, command: 'left' },
+          { label: '向右浏览', text: '→', disabled: minViewport.x + MAP_WIDTH / camera.zoom >= MAP_WIDTH - 0.001, command: 'right' },
+          { label: '向上浏览', text: '↑', disabled: camera.y >= 0, command: 'up' },
+          { label: '向下浏览', text: '↓', disabled: minViewport.y + MAP_HEIGHT / camera.zoom >= MAP_HEIGHT - 0.001, command: 'down' },
+          { label: '重置地图视角', text: '重置', disabled: camera.zoom === 1, command: 'home' },
+        ] as const).map(({ label, text, disabled, command }) => (
+          <button key={label} type="button" aria-label={label} disabled={disabled} onClick={() => activateCamera(command)}
             className="rounded border border-slate-700 px-2 py-1 text-slate-200 disabled:opacity-35">{text}</button>
         ))}
         <span className="px-1 tabular-nums">{Math.round(camera.zoom * 100)}%</span>
@@ -589,18 +635,28 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         </span>
       </div>
       </details>
+      <p id={keyboardHelp} className="sr-only">方向键平移，加号或减号缩放，Home 复位，F 定位所选修士。山河索引可按地点、修士或事件定位。</p>
       <div className="relative">
         <canvas
         ref={canvasRef}
         width={MAP_WIDTH}
         height={MAP_HEIGHT}
+        tabIndex={0}
+        aria-describedby={keyboardHelp}
+        onKeyDown={(event) => {
+          if (event.currentTarget !== event.target || event.nativeEvent.isComposing) return;
+          const command = mapKeyboardCommand(event);
+          if (!command) return;
+          event.preventDefault();
+          activateCamera(command);
+        }}
         onPointerDown={startGesture}
         onPointerMove={updateGesture}
         onPointerUp={endGesture}
         onPointerCancel={cancelGesture}
         onLostPointerCapture={cancelGesture}
         style={{ touchAction: !compact || touchPan || armedBrush ? 'none' : 'pan-y' }}
-        className={`w-full h-auto select-none block ${armedBrush ? 'cursor-crosshair' : 'cursor-grab active:cursor-grabbing'}`}
+        className={`w-full h-auto select-none block focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-amber-300 ${armedBrush ? 'cursor-crosshair' : 'cursor-grab active:cursor-grabbing'}`}
         aria-label="修仙世界地图。选择修士可查看下方识海状态摘要；也可通过识海面板的修士按钮切换。雷劫用静态闪电标注；围攻地点用玫红虚线圈标注；各地渡劫、驻守、围攻和活跃盛会可在下方列表查看；本月移动、交锋和可见灵兽也有文字摘要。"
       />
         <button
@@ -611,7 +667,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           onClick={(event) => {
             const point = event.detail === 0 ? centerOfMap
               : clientToMapViewport(event.currentTarget.getBoundingClientRect(), { x: event.clientX, y: event.clientY });
-            if (point) updateCamera(centerCamera(camera, point));
+            if (point) manualCamera(centerCamera(cameraRef.current, point));
           }}
         >
           <svg viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`} aria-hidden="true" className="block w-full">
@@ -629,6 +685,17 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           </svg>
         </button>
       </div>
+      <details className="border-t border-slate-800/80 bg-slate-900/40" onToggle={(event) => setExplorerOpen(event.currentTarget.open)}>
+        <summary ref={(node) => { explorerSummary.current = node; }} className="flex min-h-11 cursor-pointer items-center px-3 text-xs font-semibold text-slate-300 focus-visible:outline focus-visible:outline-amber-300">山河索引</summary>
+        {explorerOpen && <React.Suspense fallback={<p className="px-3 pb-2 text-xs text-slate-300" role="status">载入山河索引…</p>}>
+          <MapKeyboardExplorer world={world} view={mapView} actorPositions={actorPositions} presentation={presentation}
+            selected={selectedPoint?.actor} follows={followsSelection} zoom={camera.zoom} onCamera={activateCamera}
+            onActor={(actor) => locateActor(actor.id)} onSite={focusSite}
+            onFollow={() => setFollowsSelection((current) => !current)}
+            onFocusLost={() => { if (explorerSummary.current?.getClientRects().length) explorerSummary.current.focus({ preventScroll: true }); }} />
+        </React.Suspense>}
+      </details>
+      <p role="status" className="sr-only">{focusMessage}</p>
       <div className={`px-4 py-2 border-t border-slate-800/80 bg-slate-900/60 text-[11px] text-slate-400 flex-wrap gap-x-4 gap-y-1 ${compact ? 'hidden' : 'flex'}`} aria-label="选中修士记忆摘要">
         {selected ? (
           <>
