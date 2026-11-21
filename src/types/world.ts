@@ -81,6 +81,7 @@ export type ActionType =
   | 'RELOCATE'
   | 'RECOLLECT'
   | 'RELIC'
+  | 'SCRIPTURE'
   | 'GATHER_HERBS'
   | 'BREW_PILL'
   | 'USE_PILL'
@@ -283,6 +284,7 @@ export interface Cultivator {
   technique: Technique;
   techniqueMastery: number;
   authoredTechnique?: Technique;
+  activeEdition?: ActiveScriptureEdition;
   herbs: Record<HerbId, number>;
   pills: Record<PillId, number>;
   pillToxicity: number;
@@ -365,6 +367,9 @@ export interface LLMDecisionPayload {
   relicMove?: RelicMove;
   targetRelicFragmentId?: string;
   targetRelicSetId?: RelicSetId;
+  editionMove?: ScriptureMove;
+  targetScriptureOriginalId?: string;
+  targetScriptureEditionId?: string;
   targetTechniqueId?: string;
   targetHerbId?: HerbId;
   targetPillId?: PillId;
@@ -1053,7 +1058,38 @@ export interface RelicState {
   fragments: RelicFragment[];
 }
 
+export type ScriptureMove = 'annotate' | 'compare' | 'adopt' | 'revert';
+export type ScriptureEditionKind = 'gloss' | 'misread' | 'corrected';
+export interface ScriptureOriginal {
+  readonly id: string;
+  readonly technique: Readonly<Technique>;
+  readonly firstSeenTick: number;
+  readonly source: 'authored' | 'pavilion' | 'inheritance';
+  readonly sourceLocationId?: string;
+  readonly sourceSectId?: string;
+}
+export interface ScriptureEdition {
+  readonly id: string;
+  readonly originalId: string;
+  readonly authorId: string;
+  readonly kind: ScriptureEditionKind;
+  readonly createdTick: number;
+  readonly locationId: string;
+  readonly parentEditionId?: string;
+  readonly evidence?: Readonly<{ kind: 'pavilion' | 'inheritance' | 'author_manuscript'; locationId: string; sectId?: string }>;
+}
+export interface ActiveScriptureEdition {
+  originalId: string;
+  editionId: string;
+  kind: ScriptureEditionKind;
+}
+export interface ScriptureState {
+  originals: ScriptureOriginal[];
+  editions: ScriptureEdition[];
+}
+
 export interface WorldState {
+  scriptures: ScriptureState;
   relics: RelicState;
   reincarnation: ReincarnationState;
   relocations: RelocationState;

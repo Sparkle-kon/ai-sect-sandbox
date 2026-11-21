@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import type { ReactElement } from 'react';
+import { describe, expect, it, vi } from 'vitest';
 import { App } from '../src/App';
 import { AgentInspector } from '../src/components/AgentInspector';
 import { BountyBoard } from '../src/components/BountyBoard';
@@ -7,6 +8,14 @@ import { WorldMapCanvas } from '../src/components/WorldMapCanvas';
 import { createInitialWorld } from '../src/data/initialWorld';
 
 const noSelect = () => undefined;
+
+/** Wait for nested lazy views so the app assertion still tests the actual integrated panel. */
+async function renderReady(element: ReactElement): Promise<string> {
+  const { renderToReadableStream } = await vi.importActual<typeof import('react-dom/server')>('react-dom/server.browser');
+  const stream = await renderToReadableStream(element);
+  await stream.allReady;
+  return new Response(stream).text();
+}
 
 function makeWorld() {
   const world = createInitialWorld();
@@ -55,12 +64,12 @@ describe('public bounty board UI', () => {
     for (const location of world.locations) expect(html).not.toContain(location.name);
   });
 
-  it('keeps the board in the application outside the selected-character inspector', () => {
+  it('keeps the board in the application outside the selected-character inspector', async () => {
     const html = renderToStaticMarkup(<App initialWorkspace="world" initialSection="bounties" />);
     expect(html).toContain('aria-label="天机悬赏榜"');
     expect(html).toContain('当前没有公开悬赏。');
     expect(html).not.toContain('aria-label="业力与悬赏摘要"');
-    const person = renderToStaticMarkup(<App initialWorkspace="people" />);
+    const person = await renderReady(<App initialWorkspace="people" />);
     expect(person).toContain('aria-label="业力与悬赏摘要"');
     expect(person).not.toContain('aria-label="天机悬赏榜"');
   });

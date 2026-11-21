@@ -17,7 +17,6 @@ import { SandboxWorkspace, WorkspaceSections } from './components/SandboxWorkspa
 import type { WorkspaceId } from './components/SandboxWorkspace';
 import { WorldOccasionsPanel } from './components/WorldOccasionsPanel';
 import { WorldMapCanvas } from './components/WorldMapCanvas';
-import { AgentInspector } from './components/AgentInspector';
 import { BountyBoard } from './components/BountyBoard';
 import { llmScheduler } from './engine/llmScheduler';
 import { settleChronicleOnline } from './engine/chronicleRuntime';
@@ -33,6 +32,7 @@ import type { WorldTimeline } from './engine/timelineEngine';
 import { activeAvatar, possessAvatar, queueAvatarOrder } from './engine/avatarEngine';
 import { resolveAvatarSnapshot } from './engine/avatarRuntime';
 
+const AgentInspector = React.lazy(async () => ({ default: (await import('./components/AgentInspector')).AgentInspector }));
 const AttestationPanel = React.lazy(async () => ({ default: (await import('./components/AttestationPanel')).AttestationPanel }));
 const OathContractsPanel = React.lazy(async () => ({ default: (await import('./components/OathContractsPanel')).OathContractsPanel }));
 const MentorshipPanel = React.lazy(async () => ({ default: (await import('./components/MentorshipPanel')).MentorshipPanel }));
@@ -338,8 +338,9 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
   const aliveCount = visibleWorld.cultivators.filter((c) => c.alive).length;
   const activeActorId = selectedCultivator?.id ?? null;
   const characterLocation = visibleWorld.locations.find((site) => site.id === selectedCultivator?.locationId);
-  const inspect = (workspaceSection: 'profile' | 'cultivation' | 'mind' | 'sect') => <AgentInspector world={visibleWorld}
-    cultivator={selectedCultivator} onSelectCultivator={setSelectedCultivatorId} workspaceSection={workspaceSection} />;
+  const inspect = (workspaceSection: 'profile' | 'cultivation' | 'mind' | 'sect') => <React.Suspense fallback={<p role="status">载入修士档案…</p>}>
+    <AgentInspector world={visibleWorld} cultivator={selectedCultivator} onSelectCultivator={setSelectedCultivatorId} workspaceSection={workspaceSection} />
+  </React.Suspense>;
   const openWorkspace = (next: WorkspaceId) => {
     if (workspace !== next && typeof window !== 'undefined') window.scrollTo({ top: 0 });
     setWorkspace(next);

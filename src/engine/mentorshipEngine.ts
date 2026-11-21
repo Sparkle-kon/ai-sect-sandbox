@@ -107,7 +107,10 @@ export function resolveMentorshipAction(world: WorldState, actor: Cultivator, de
   const sameTechnique = techniqueKey(actor.technique) === techniqueKey(offer.technique);
   const sameLine = old && techniqueKey(old.technique) === techniqueKey(offer.technique);
   const flaw = clamp(sameLine ? Math.round(old.flaw * .50 + inheritedFlaw * .50) + localMistake : inheritedFlaw + localMistake, 0, 100);
-  if (!sameTechnique) actor.technique = { ...offer.technique };
+  if (!sameTechnique) {
+    actor.technique = { ...offer.technique };
+    delete actor.activeEdition;
+  }
   const gain = Math.max(3, Math.round((mentor.techniqueMastery - (sameTechnique ? actor.techniqueMastery : 0)) * .28) - Math.floor(flaw / 10));
   actor.techniqueMastery = Math.min(100, mentor.techniqueMastery, (sameTechnique ? actor.techniqueMastery : 12) + gain);
   if (old) {

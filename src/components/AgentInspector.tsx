@@ -7,6 +7,7 @@ import { ReflectionPanel } from './ReflectionPanel';
 import { RumorPanel } from './RumorPanel';
 import { SchemePanel } from './SchemePanel';
 import { SpiritRootBadge } from './SpiritRootBadge';
+import { visibleScriptureEditions } from '../engine/scriptureEngine';
 import { TechniquePanel } from './TechniquePanel';
 import { AlchemyPanel } from './AlchemyPanel';
 import { heldRelicFragments } from '../engine/relicEngine';
@@ -19,6 +20,7 @@ import { WorldOccasionsPanel } from './WorldOccasionsPanel';
 import { BOUNTY_STATUS, relevantBounty } from './BountyBoard';
 import { SpiritBeastPanel } from './SpiritBeastPanel';
 
+const ScriptureEditionPanel = React.lazy(async () => ({ default: (await import('./ScriptureEditionPanel')).ScriptureEditionPanel }));
 const RelicSetPanel = React.lazy(async () => ({ default: (await import('./RelicSetPanel')).RelicSetPanel }));
 
 interface AgentInspectorProps {
@@ -48,6 +50,7 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
   const cultivation = !workspaceSection || workspaceSection === 'cultivation';
   const mind = !workspaceSection || workspaceSection === 'mind';
   const sectDetails = !workspaceSection || workspaceSection === 'sect';
+  const scriptureCatalog = cultivation && world.scriptures ? visibleScriptureEditions(world, cultivator) : undefined;
   const showsRelic = cultivation && (cultivator.artifacts.some(({ relicSetId }) => relicSetId !== undefined) ||
     !!world.relics && heldRelicFragments(world, cultivator.id).length > 0);
 
@@ -213,6 +216,9 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
       {cultivation && <>
       <TribulationPanel cultivator={cultivator} />
       <TechniquePanel cultivator={cultivator} sect={sect} location={location} cultivators={world.cultivators} />
+      {scriptureCatalog?.original && <React.Suspense fallback={<p role="status" className="text-xs text-slate-400">载入经义校勘…</p>}>
+        <ScriptureEditionPanel world={world} actor={cultivator} catalog={scriptureCatalog} />
+      </React.Suspense>}
       <AlchemyPanel cultivator={cultivator} location={location} />
       </>}
       {mind && <>

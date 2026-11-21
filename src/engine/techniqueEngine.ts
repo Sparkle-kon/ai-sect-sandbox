@@ -1,3 +1,4 @@
+import { registerScriptureOriginal, scriptureEditionModifiers } from './scriptureEngine';
 import type { Cultivator, PersonalityTrait, Technique, WorldEvent, WorldState } from '../types/world';
 import { elementalRelation } from './elementalEngine';
 import { recallMemories, recordMemory } from './memoryEngine';
@@ -19,8 +20,8 @@ export function gainMastery(actor: Cultivator, amount: number): void {
   actor.techniqueMastery = Math.min(100, actor.techniqueMastery + amount);
 }
 
-export function masteryMultiplier(actor: Cultivator): number {
-  return 1 + actor.techniqueMastery * 0.001;
+export function masteryMultiplier(actor: Cultivator, purpose: 'combat' | 'cultivation' = 'combat'): number {
+  return (1 + actor.techniqueMastery * 0.001) * scriptureEditionModifiers(actor)[purpose];
 }
 
 export interface TechniqueOption {
@@ -78,6 +79,8 @@ export function authorTechnique(actor: Cultivator, world: WorldState): WorldEven
     name: `${PERSONAL_STYLES[actor.personality]}${image}${actor.spiritRoot === '天灵根' ? '天' : actor.spiritRoot}诀`,
     spiritRoot: actor.spiritRoot,
   };
+  if (!registerScriptureOriginal(world, technique, 'authored', actor.locationId, actor.sectId || undefined)) return null;
+  delete actor.activeEdition;
   actor.authoredTechnique = { ...technique };
   actor.technique = { ...technique };
   actor.techniqueMastery = 55;
@@ -94,6 +97,9 @@ export function studyTechnique(actor: Cultivator, world: WorldState, techniqueId
   if (!techniqueId || !actor.alive) return null;
   const option = availableTechniques(actor, world).find((entry) => entry.id === techniqueId);
   if (!option) return null;
+  if (!registerScriptureOriginal(world, option.scripture, option.source, actor.locationId,
+    option.source === 'pavilion' ? actor.sectId || undefined : undefined)) return null;
+  delete actor.activeEdition;
   actor.technique = { ...option.scripture };
   const school = option.source === 'pavilion'
     ? world.sects.find((sect) => sect.id === actor.sectId)?.facilities.scripture_pavilion ?? 0 : 0;

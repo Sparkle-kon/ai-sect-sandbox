@@ -1,3 +1,4 @@
+import { resolveScriptureAction } from './scriptureEngine';
 import { reconcileRelicCustody, resolveRelicAction, transferLootedRelics } from './relicEngine';
 import { advanceReincarnation, resolveRecollectionAction } from './reincarnationEngine';
 import { recordNewDeathsForReincarnation } from './reincarnationRuntime';
@@ -182,6 +183,8 @@ export function applyCultivatorBrainDecision(
     case 'ATTEST_WITNESS':
     case 'CHALLENGE_WITNESS':
       return resolveWitnessAction(world, cultivator, decision);
+    case 'SCRIPTURE':
+      return resolveScriptureAction(world, cultivator, decision);
     case 'RELIC':
       return resolveRelicAction(world, cultivator, decision);
     case 'RECOLLECT':
@@ -227,7 +230,7 @@ export function applyCultivatorBrainDecision(
         (target, amount) => adjustRelationship(world, cultivator.id, target.id, amount,
           cultivator.sectId === target.sectId ? '同门' : '竞争'));
     case 'CULTIVATE': {
-      const gain = Math.round((8 + rng() * 10) * qiFactor * cultivationMultiplier(cultivator, location) * masteryMultiplier(cultivator) * mentorshipTechniqueMultiplier(world, cultivator) * sectQiBonus(world, cultivator));
+      const gain = Math.round((8 + rng() * 10) * qiFactor * cultivationMultiplier(cultivator, location) * masteryMultiplier(cultivator, 'cultivation') * mentorshipTechniqueMultiplier(world, cultivator) * sectQiBonus(world, cultivator));
       cultivator.qiProgress = clamp(cultivator.qiProgress + gain, 0, 100);
       gainMastery(cultivator, 3);
       cultivator.hp = clamp(

@@ -1,3 +1,4 @@
+import { createScriptureState } from './scriptureEngine';
 import { createRelicState } from './relicEngine';
 import { createReincarnationState, MORTAL_MATURITY_TICKS } from './reincarnationEngine';
 import { createRelocationState } from './relocationEngine';
@@ -67,12 +68,13 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const marketQty = num(1,12,true), marketPrice = num(1,500,true);
 const pills = structure({foundation:count,golden:count,barrier:count,heart_poison:count});
 const technique = structure({id:oid,authorId:oid,createdTick:otick,name:id,spiritRoot:spirit});
+const editionKind = one('gloss','misread','corrected');
 const relicSet = one('star-balance');
 const artifact = structure({relicSetId:optional(relicSet),relicFragmentIds:optional(arr(2,id)),id:oid,tier:optional(one('法器','灵器','法宝','通天灵宝')),durability:optional(wealth),maxDurability:optional(wealth),boundTo:oid,
   soul:optional(structure({name:id,experience:percentage})),resonance:optional(percentage),name:id,spiritRoot:spirit});
@@ -107,7 +109,8 @@ const shape = structure({
   cultivators:arr(SAVE_COLLECTION_LIMIT,structure({id,name:id,title:text,sectId:strings(240),sectRank,contribution:wealth,transgressions:percentage,realm,realmStage:num(1,9,true),
     qiProgress:percentage,hp:wealth,maxHp:num(1,1_000_000_000),combatPower:wealth,age:wealth,lifespan:wealth,
     personality:one('刚正','阴险','狂傲','苟道','痴情','嗜血','逍遥','诡诈'),locationId:id,spiritStones:wealth,karma:affinity,currentAction:action,
-    innerMonologue:text,secretGoal:text,spiritRoot:spirit,technique,techniqueMastery:percentage,authoredTechnique:optional(technique),herbs,pills,pillToxicity:percentage,
+    innerMonologue:text,secretGoal:text,spiritRoot:spirit,technique,techniqueMastery:percentage,authoredTechnique:optional(technique),
+    activeEdition:optional(structure({originalId:id,editionId:id,kind:editionKind})),herbs,pills,pillToxicity:percentage,
     exploredTileIds:ids,artifacts:arr(SAVE_COLLECTION_LIMIT,artifact),memories:arr(160,memory),coreMemories:arr(160,memory),memorySequence:tick,
     reflections:arr(100,structure({id,tick,kind:one('belief','obsession','heart_demon'),theme:one('cultivation','conflict','community','heavenly'),intensity:num(1,10),statement:text,sourceMemoryIds:ids,source})),
     rumors:arr(200,structure({id,subject:text,locationId:oid,originTick:tick,learnedTick:tick,provenance:one('witness','conversation','flying_sword','fabricated'),
@@ -162,6 +165,12 @@ const shape = structure({
       attestations:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,tick,verdict:one('supports','contradicts')})),
       appeal:optional(structure({tick,actorId:id,verdict:one('upheld','rejected'),reason:text})),settledTick:otick,
       reputationSectId:oid,reputationPenalty:percentage,reputationRestored:percentage,reason:otext}))}),
+  scriptures:structure({
+    originals:arr(SAVE_COLLECTION_LIMIT,structure({id,technique,firstSeenTick:tick,source:one('authored','pavilion','inheritance'),
+      sourceLocationId:oid,sourceSectId:oid})),
+    editions:arr(SAVE_COLLECTION_LIMIT,structure({id,originalId:id,authorId:id,kind:editionKind,createdTick:tick,
+      locationId:id,parentEditionId:oid,evidence:optional(structure({kind:one('pavilion','inheritance','author_manuscript'),
+        locationId:id,sectId:oid}))}))}),
   relics:structure({fragments:arr(SAVE_COLLECTION_LIMIT,structure({id,setId:relicSet,slot:one('frame','core'),
     source:structure({kind:one('wild_cache','expedition'),locationId:id,tick,eventId:oid,occasionId:oid}),
     holder:structure({kind:one('site','actor','estate','consumed'),id})}))}),
@@ -240,6 +249,7 @@ function verifyWorld(value: unknown): WorldState {
     ? { ...value,
       ...(!Object.hasOwn(value, 'mentorship') ? { mentorship: { offers: [], lineage: [], budgets: [] } } : {}),
       ...(!Object.hasOwn(value, 'decisionTrace') ? { decisionTrace: { records: [] } } : {}),
+      ...(!Object.hasOwn(value, 'scriptures') ? { scriptures: createScriptureState() } : {}),
       ...(!Object.hasOwn(value, 'relics') ? { relics: { fragments: [] } } : {}),
       ...(!Object.hasOwn(value, 'reincarnation') ? { reincarnation: createReincarnationState() } : {}),
       ...(!Object.hasOwn(value, 'relocations') ? { relocations: createRelocationState() } : {}),
@@ -374,6 +384,41 @@ function verifyWorld(value: unknown): WorldState {
   for (const row of w.relocations.abandonedSites) {
     if (!sector.has(row.sectId) || !locations.has(row.originId) || !locations.has(row.destinationId) ||
         row.originId === row.destinationId || row.tick > w.tick || row.arrayHp > row.arrayMaxHp) fail('relocations.abandonedSites.references');
+  }
+  unique(w.scriptures.originals, ({ id }) => id, 'scriptures.originals.id');
+  unique(w.scriptures.editions, ({ id }) => id, 'scriptures.editions.id');
+  unique(w.scriptures.editions.filter(({ kind }) => kind !== 'corrected'),
+    ({ originalId, authorId }) => JSON.stringify([originalId, authorId]), 'scriptures.editions.annotator');
+  unique(w.scriptures.editions.filter(({ kind }) => kind === 'corrected'),
+    ({ parentEditionId }) => parentEditionId ?? '', 'scriptures.editions.correction');
+  const originalById = new Map(w.scriptures.originals.map((original) => [original.id, original]));
+  const editionById = new Map(w.scriptures.editions.map((edition) => [edition.id, edition]));
+  for (const original of w.scriptures.originals) {
+    if (original.id !== original.technique.id || original.firstSeenTick > w.tick ||
+        (original.technique.createdTick !== undefined && original.technique.createdTick > original.firstSeenTick) ||
+        (original.technique.authorId && !actor.has(original.technique.authorId)) ||
+        (original.sourceSectId && !sector.has(original.sourceSectId))) fail('scriptures.originals.references');
+  }
+  for (const edition of w.scriptures.editions) {
+    const original = originalById.get(edition.originalId);
+    const parent = edition.parentEditionId ? editionById.get(edition.parentEditionId) : undefined;
+    if (!original || !actor.has(edition.authorId) || edition.createdTick > w.tick || edition.createdTick < original.firstSeenTick ||
+        (edition.kind === 'corrected' && (!parent || parent.id === edition.id || parent.originalId !== original.id ||
+          parent.kind !== 'misread' || parent.createdTick > edition.createdTick || !edition.evidence)) ||
+        (edition.kind !== 'corrected' && (edition.parentEditionId !== undefined || edition.evidence !== undefined)) ||
+        (edition.evidence && (edition.evidence.locationId !== edition.locationId ||
+          (edition.evidence.kind === 'pavilion') !== (edition.evidence.sectId !== undefined))) ||
+        (edition.evidence?.sectId && !sector.has(edition.evidence.sectId))) fail('scriptures.editions.references');
+  }
+  for (const person of w.cultivators) if (person.activeEdition) {
+    const active = person.activeEdition;
+    const edition = editionById.get(active.editionId);
+    const original = originalById.get(active.originalId)?.technique;
+    if (!edition || !original || active.originalId !== person.technique.id || edition.originalId !== active.originalId ||
+        edition.kind !== active.kind || original.name !== person.technique.name || original.spiritRoot !== person.technique.spiritRoot ||
+        original.authorId !== person.technique.authorId || original.createdTick !== person.technique.createdTick) {
+      fail('scriptures.active.references');
+    }
   }
   const fragmentById = new Map(w.relics.fragments.map((fragment) => [fragment.id, fragment]));
   unique(w.relics.fragments, ({ id }) => id, 'relics.fragments.id');

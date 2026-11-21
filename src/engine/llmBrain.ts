@@ -1,3 +1,4 @@
+import { availableScriptureActions, scriptureEditionModifiers } from './scriptureEngine';
 import { availableRelicActions } from './relicEngine';
 import { availableRecollectionActions, visibleRecollection } from './reincarnationEngine';
 import { activeRelocationForActor, availableRelocationActions } from './relocationEngine';
@@ -126,6 +127,22 @@ export function computeHeuristicDecision(
       const recruit = options.find((option) => option.action === 'RECRUIT_SETTLER');
       if (recruit) return { ...recruit, chosenAction: recruit.action, innerMonologue: '此人具仙缘且愿入门，依规发放安置资粮。' };
     }
+  }
+
+  if (cultivator.technique.id && !cultivator.guardAssignment && world.tick >= 12 && world.tick % 4 === 3) {
+    const editions = availableScriptureActions(cultivator, world);
+    const improve = editions.find(({ editionMove }) => editionMove === 'compare');
+    const adoption = editions.find(({ editionMove, targetScriptureEditionId }) => {
+      if (editionMove !== 'adopt') return false;
+      const kind = world.scriptures.editions.find(({ id }) => id === targetScriptureEditionId)?.kind;
+      if (kind === 'corrected') return cultivator.activeEdition?.kind !== 'corrected';
+      if (kind === 'gloss') return !cultivator.activeEdition && cultivator.personality !== '嗜血';
+      return !cultivator.activeEdition && (cultivator.personality === '狂傲' || cultivator.personality === '逍遥');
+    });
+    const revert = cultivator.activeEdition?.kind === 'misread' && cultivator.personality === '苟道'
+      ? editions.find(({ editionMove }) => editionMove === 'revert') : undefined;
+    const choice = improve ?? adoption ?? revert ?? editions.find(({ editionMove }) => editionMove === 'annotate');
+    if (choice) return { ...choice, chosenAction: 'SCRIPTURE', innerMonologue: '经义须以原本核证，异读不可混同。' };
   }
 
   if (!cultivator.guardAssignment && world.tick >= 4 && world.tick % 4 === 1) {
@@ -432,6 +449,8 @@ export async function queryCultivatorLLMDecision(
   const estateOptions = availableEstateActions(cultivator, world);
   const doctrineOptions = availableDoctrineActions(cultivator, world);
   const relocationOptions = availableRelocationActions(cultivator, world);
+  const scriptureOptions = availableScriptureActions(cultivator, world);
+  const currentEdition = scriptureEditionModifiers(cultivator);
   const relicOptions = availableRelicActions(cultivator, world);
   const recollectionOptions = availableRecollectionActions(cultivator, world);
   const ownEcho = visibleRecollection(world, cultivator.id);
@@ -454,6 +473,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 天机悬赏榜：${JSON.stringify(world.bounties.filter((item) => item.status === 'open').map(({id,targetCultivatorId,reward,reason}) => ({id,targetCultivatorId,reward,reason})))}；可接的追缉：${JSON.stringify(availableBountyHunts(cultivator, world))}
 - 天下公示的大会与秘境：${JSON.stringify(world.occasions.filter((item) => item.status === 'registration' || item.status === 'running').map(({id,title,kind,locationId,status,registrationClosesTick}) => ({id,title,kind,locationId,status,registrationClosesTick})))}；可报名项目：${JSON.stringify(availableOccasionJoins(cultivator, world))}
 - 本宗邦交：${JSON.stringify(world.diplomacy.filter((relation) => relation.sectAId === cultivator.sectId || relation.sectBId === cultivator.sectId))}；公示的外事权限：${JSON.stringify(availableDiplomacyActions(cultivator, world))}
+- 功法版本对当前行气和实战的独立倍率（1 为无额外效果）：${JSON.stringify(currentEdition)}；当地可行的校勘与版本选项：${JSON.stringify(scriptureOptions)}
 - 古器可用行动（仅限当前位置可见碎片或实有两部件和已核验炉火）：${JSON.stringify(relicOptions)}
 - 自身残响仅为未证实的主观感受，不提供事件、前人或地点事实：${JSON.stringify(ownEcho ? { theme: ownEcho.theme, confidence: ownEcho.confidence, status: ownEcho.status } : null)}；可选的审视方式：${JSON.stringify(recollectionOptions)}
 - 迁宗议约可用选项（只能按列出的地点或动议选择）：${JSON.stringify(relocationOptions)}
@@ -478,7 +498,7 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
 请以第一人称进行内心独白思考，并决定本回合行动。只输出合法的 JSON 对象（不要 Markdown 代码块），字段如下：
 {
   "innerMonologue": "你的第一人称内心独白（40字以内，体现你的性格与秘密目标）",
-  "chosenAction": "CULTIVATE | BREAKTHROUGH | EXPLORE | SOCIALIZE | DUEL | SCHEMING | PURSUE_SCHEME | AUTHOR_TECHNIQUE | STUDY_TECHNIQUE | GATHER_HERBS | BREW_PILL | USE_PILL | FORGE_ARTIFACT | BIND_ARTIFACT | REPAIR_ARTIFACT | AWAKEN_ARTIFACT | FACE_TRIBULATION | AMBUSH_TRIBULATION | CHALLENGE_LEADERSHIP | PLOT_COUP | BUILD_FACILITY | DISPATCH_GUARD | GUARD_DUTY | OFFER_ALLIANCE | DECLARE_WAR | DEMAND_TRIBUTE | LAUNCH_SIEGE | JOIN_OCCASION | PURSUE_BOUNTY | TAME_BEAST | TRADE | DUAL_CULTIVATE | SECT_DIPLOMACY | TEACH | ACCEPT_TUITION | DECLINE_TUITION | OFFER_OATH | ACCEPT_OATH | DECLINE_OATH | FULFILL_OATH | APPEAL_OATH | PLACE_MARKET_BUY | PLACE_MARKET_SELL | CANCEL_MARKET_ORDER | RECRUIT_SETTLER | DELIVER_RELIEF | FILE_WITNESS_CLAIM | ATTEST_WITNESS | CHALLENGE_WITNESS | NAME_HEIR | CLAIM_ESTATE | HOLD_MEMORIAL | DOCTRINE | RELOCATE | RECOLLECT | RELIC | REST 之一",
+  "chosenAction": "CULTIVATE | BREAKTHROUGH | EXPLORE | SOCIALIZE | DUEL | SCHEMING | PURSUE_SCHEME | AUTHOR_TECHNIQUE | STUDY_TECHNIQUE | GATHER_HERBS | BREW_PILL | USE_PILL | FORGE_ARTIFACT | BIND_ARTIFACT | REPAIR_ARTIFACT | AWAKEN_ARTIFACT | FACE_TRIBULATION | AMBUSH_TRIBULATION | CHALLENGE_LEADERSHIP | PLOT_COUP | BUILD_FACILITY | DISPATCH_GUARD | GUARD_DUTY | OFFER_ALLIANCE | DECLARE_WAR | DEMAND_TRIBUTE | LAUNCH_SIEGE | JOIN_OCCASION | PURSUE_BOUNTY | TAME_BEAST | TRADE | DUAL_CULTIVATE | SECT_DIPLOMACY | TEACH | ACCEPT_TUITION | DECLINE_TUITION | OFFER_OATH | ACCEPT_OATH | DECLINE_OATH | FULFILL_OATH | APPEAL_OATH | PLACE_MARKET_BUY | PLACE_MARKET_SELL | CANCEL_MARKET_ORDER | RECRUIT_SETTLER | DELIVER_RELIEF | FILE_WITNESS_CLAIM | ATTEST_WITNESS | CHALLENGE_WITNESS | NAME_HEIR | CLAIM_ESTATE | HOLD_MEMORIAL | DOCTRINE | RELOCATE | RECOLLECT | RELIC | SCRIPTURE | REST 之一",
   "targetLocationId": "EXPLORE 可填已知地点 id（探索未知时省略）；宗门经营或迁宗提议只能填所列地点 id",
   "targetCultivatorId": "如果 chosenAction 为 SOCIALIZE / DUEL / SCHEMING / AMBUSH_TRIBULATION / CHALLENGE_LEADERSHIP / PLOT_COUP / DISPATCH_GUARD / TRADE / DUAL_CULTIVATE / SECT_DIPLOMACY / TEACH / OFFER_OATH / FILE_WITNESS_CLAIM / NAME_HEIR 则填目标修士 id；DOCTRINE 仅在所选事务列出该字段时填写；其余省略",
   "spokenLine": "简短台词（可选）",
@@ -495,6 +515,9 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
   "targetMarketOrderId": "撤单时选择自己仍可撤的挂单 id",
   "targetOathId": "回应、履行或申诉契书时，指定可用契书 id",
   "oathTerm": "提出契书时选择给定条款 foundation_pill 或 jade_herb",
+  "editionMove": "SCRIPTURE 从当地合法选项照抄 annotate、compare、adopt 或 revert",
+  "targetScriptureOriginalId": "仅复制选项所列原本 id",
+  "targetScriptureEditionId": "仅复制选项所列版本 id",
   "relicMove": "RELIC 从所列古器行动复制 recover 或 assemble",
   "targetRelicFragmentId": "仅复制 recover 选项所列的碎片 id",
   "targetRelicSetId": "仅复制 assemble 选项所列的套装 id",
@@ -609,9 +632,16 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
             'RELOCATE',
             'RECOLLECT',
             'RELIC',
+            'SCRIPTURE',
           ];
           const chosenAction = parsed?.chosenAction;
           if (!chosenAction || !validActions.includes(chosenAction)) return undefined;
+
+          const legalScripture = chosenAction === 'SCRIPTURE' ? scriptureOptions.find((item) =>
+            item.editionMove === parsed.editionMove && item.targetScriptureOriginalId === parsed.targetScriptureOriginalId &&
+            item.targetScriptureEditionId === parsed.targetScriptureEditionId) : undefined;
+          if (chosenAction === 'SCRIPTURE' && (!legalScripture ||
+              parsed.targetCultivatorId !== undefined || parsed.targetLocationId !== undefined)) return undefined;
 
           const legalRelic = chosenAction === 'RELIC' ? relicOptions.find((item) =>
             item.relicMove === parsed.relicMove && item.targetRelicFragmentId === parsed.targetRelicFragmentId &&
@@ -742,6 +772,9 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
             forgeTier: legalArtifact?.forgeTier,
             targetHerbId: legalAlchemy?.targetHerbId,
             targetPillId: legalAlchemy?.targetPillId,
+            editionMove: legalScripture?.editionMove,
+            targetScriptureOriginalId: legalScripture?.targetScriptureOriginalId,
+            targetScriptureEditionId: legalScripture?.targetScriptureEditionId,
             relicMove: legalRelic?.relicMove,
             targetRelicFragmentId: legalRelic?.targetRelicFragmentId,
             targetRelicSetId: legalRelic?.targetRelicSetId,

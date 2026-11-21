@@ -1,3 +1,4 @@
+import { createScriptureState } from '../engine/scriptureEngine';
 import { createRelicState } from '../engine/relicEngine';
 import { createReincarnationState } from '../engine/reincarnationEngine';
 import { createRelocationState } from '../engine/relocationEngine';
@@ -234,6 +235,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     relocations: createRelocationState(),
     reincarnation: createReincarnationState(),
     relics: createRelicState(locations, seed),
+    scriptures: createScriptureState(),
     witnesses: createWitnessState(),
     estates: createEstateState(),
     decisionTrace: createDecisionTraceState(),
