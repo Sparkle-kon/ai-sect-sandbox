@@ -13,6 +13,7 @@ const atOccasion = (world: WorldState, person: Cultivator) => world.occasions.so
 
 export function recordTransgression(actor: Cultivator, kind: 'killing' | 'betrayal'): void {
   const value = kind === 'killing' ? 2 : 3;
+  actor.disciplineRevision = (actor.disciplineRevision ?? 0) + 1;
   actor.transgressions = Math.min(100, actor.transgressions + value);
   actor.karma = Math.max(-100, actor.karma - (kind === 'killing' ? 12 : 18));
 }

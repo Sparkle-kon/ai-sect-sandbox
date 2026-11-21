@@ -1,3 +1,4 @@
+import { canCouncilUseMisconduct, recordProbationExpulsion } from './probationEngine';
 import { isRetiredFromService } from './serviceRetirementEngine';
 import { archiveChronicleEvents } from './novelGenerator';
 import type { CouncilBallot, CouncilBallotReplacement, CouncilPlan, CouncilProposal, CouncilRecord, CouncilVote, Cultivator, Sect, WorldEvent, WorldState } from '../types/world';
@@ -29,6 +30,7 @@ function votersFor(world: WorldState, sect: Sect, proposal: CouncilProposal): Cu
 }
 
 const eligibleTargetForExpulsion = (world: WorldState, target: Cultivator) => target.transgressions >= 4 &&
+  canCouncilUseMisconduct(world, target, target.sectId) &&
   !activeSiegeForActor(world, target) && target.tribulation?.stage !== 'lightning' && target.tribulation?.stage !== 'heart_demon' &&
   !world.occasions.some((occasion) => (occasion.status === 'running' || occasion.status === 'registration') &&
     occasion.participantIds.includes(target.id));
@@ -172,6 +174,7 @@ export function resolveCouncil(world: WorldState, plan: CouncilPlan, replacement
     actorIds: [...current.voterIds], locationId: sect.headquartersId,
   };
   world.councils = [record, ...world.councils].slice(0, Math.max(96, world.sects.length));
+  if (record.status === 'passed' && record.proposal.kind === 'expel') recordProbationExpulsion(world, record);
   const events = [summary, ...(effect ? [effect] : [])];
   archiveChronicleEvents(world, events);
   world.events = [...events, ...world.events].slice(0, 120);

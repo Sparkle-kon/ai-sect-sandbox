@@ -1,3 +1,4 @@
+import { advanceProbation } from './probationEngine';
 import { advanceRelicExhibits } from './relicExhibitEngine';
 import { advanceWorkshops } from './workshopEngine';
 import { rebaselineTerrainPaint, recordTerrainMeteor } from './terrainSuccessionEngine';
@@ -125,7 +126,7 @@ export function applyMapBrush(prev: WorldState, kind: GodBrushKind, points: MapP
       actorIds: hits.map(({ cultivatorId }) => cultivatorId), locationId, ...(hits.length ? { damage: hits } : {}),
     });
   }
-  brushEvents.push(...advanceSanctuaries(world), ...advanceResearch(world), ...advancePilgrimages(world), ...reconcileCourierDeaths(world), ...advanceHouseholds(world), ...advanceWorkshops(world), ...advanceRelicExhibits(world), ...advanceEstates(world));
+  brushEvents.push(...advanceSanctuaries(world), ...advanceResearch(world), ...advancePilgrimages(world), ...reconcileCourierDeaths(world), ...advanceHouseholds(world), ...advanceWorkshops(world), ...advanceRelicExhibits(world), ...advanceProbation(world), ...advanceEstates(world));
   reconcileRelicCustody(world);
   recordNewDeathsForReincarnation(prev, world, brushEvents);
   archiveChronicleEvents(world, brushEvents);

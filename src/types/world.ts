@@ -104,6 +104,7 @@ export type ActionType =
   | 'GATHER_HERBS'
   | 'BREW_PILL'
   | 'USE_PILL'
+  | 'PROBATION'
   | 'WORKSHOP'
   | 'FORGE_ARTIFACT'
   | 'BIND_ARTIFACT'
@@ -285,6 +286,7 @@ export interface Cultivator {
   sectRank: SectRank;
   contribution: number;
   transgressions: number;
+  disciplineRevision?: number;
   realm: CultivationRealm;
   realmStage: number; // 1-9
   qiProgress: number; // 0-100
@@ -440,6 +442,12 @@ export interface LLMDecisionPayload {
   targetPillId?: PillId;
   targetArtifactId?: string;
   forgeTier?: ArtifactTier;
+  probationMove?: ProbationMove;
+  targetProbationId?: string;
+  targetExpulsionId?: string;
+  probationFirstVillageId?: string;
+  probationSecondVillageId?: string;
+  probationVote?: ProbationVote;
   workshopMove?: WorkshopMove;
   targetWorkshopId?: string;
   workshopTier?: WorkshopTier;
@@ -1962,7 +1970,52 @@ export interface WorkshopOrder {
 }
 export interface WorkshopState { orders: WorkshopOrder[]; nextId: number }
 
+export type ProbationMove = 'request' | 'admit' | 'review' | 'withdraw' | 'restore';
+export type ProbationVote = 'support' | 'oppose';
+export type ProbationStatus = 'requested' | 'active' | 'ready' | 'reinstated' | 'withdrawn' | 'rejected' | 'expired';
+export type ProbationReason = 'withdrawn' | 'deadline' | 'new_misconduct' | 'unavailable' | 'review_oppose';
+export interface ProbationExpulsion {
+  id: string;
+  actorId: string;
+  sectId: string;
+  tick: number;
+  transgressions: number;
+  disciplineRevision: number;
+  lastCaseClosedTick?: number;
+  reinstatedTick?: number;
+  reinstatedRevision?: number;
+}
+export interface ProbationReliefReceipt {
+  sourceId: string;
+  tick: number;
+  actorId: string;
+  settlementId: string;
+  stones: number;
+  herbs: number;
+}
+export interface ProbationReview { reviewerId: string; tick: number; vote: ProbationVote }
+export interface ProbationCase {
+  id: string;
+  expulsionId: string;
+  actorId: string;
+  sectId: string;
+  villageIds: [string, string];
+  disciplineRevision: number;
+  status: ProbationStatus;
+  requestedTick: number;
+  requestExpiresTick: number;
+  sponsorId?: string;
+  admittedTick?: number;
+  deadlineTick?: number;
+  settledTick?: number;
+  reason?: ProbationReason;
+  relief: ProbationReliefReceipt[];
+  reviews: ProbationReview[];
+}
+export interface ProbationState { expulsions: ProbationExpulsion[]; cases: ProbationCase[]; nextId: number }
+
 export interface WorldState {
+  probation: ProbationState;
   workshops: WorkshopState;
   resourceFlow: ResourceFlowState;
   sharedCommons: SharedCommonsState;

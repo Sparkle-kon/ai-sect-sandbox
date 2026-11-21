@@ -1,3 +1,4 @@
+import { createProbationState, PROBATION_REQUEST_TICKS, PROBATION_REQUIRED_RELIEF, PROBATION_REQUIRED_REVIEWS, PROBATION_SERVICE_TICKS } from './probationEngine';
 import { createRelicExhibitState, RELIC_EXHIBIT_DURATION, RELIC_EXHIBIT_OFFER_TICKS } from './relicExhibitEngine';
 import { WORKSHOP_ACTIVE_TICKS, WORKSHOP_MAX_WORK_RECEIPTS, WORKSHOP_OFFER_TICKS, createWorkshopState, workshopGradeForScore, workshopTerms } from './workshopEngine';
 import { createTerrainSuccessionState, TERRAIN_QUIET_CAP, TERRAIN_RECOVERY_LIMIT } from './terrainSuccessionEngine';
@@ -103,7 +104,7 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP RELIC_EXHIBIT REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP RELIC_EXHIBIT PROBATION REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const flowGood = one('stone','jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
@@ -191,7 +192,7 @@ const shape = structure({
     monthlyEconomy:optional(structure({tick,taxes:wealth,mining:wealth,upkeep:wealth,net:num(-1_000_000_000,1_000_000_000)}))})),
   locations:arr(1200,structure({id,name:id,x:num(0,1000),y:num(0,600),type:one('sect_hq','spirit_vein','secret_realm','market','abyss'),spiritRoot:spirit,
     spiritQi:num(0,150),ownerSectId:oid,inheritanceScrolls:arr(350,technique),herbs,herbCapacity:herbs,furnaceGrade:one(0,1,2,3),description:text})),
-  cultivators:arr(SAVE_COLLECTION_LIMIT,structure({id,name:id,title:text,sectId:strings(240),sectRank,contribution:wealth,transgressions:percentage,realm,realmStage:num(1,9,true),
+  cultivators:arr(SAVE_COLLECTION_LIMIT,structure({id,name:id,title:text,sectId:strings(240),sectRank,contribution:wealth,transgressions:percentage,disciplineRevision:otick,realm,realmStage:num(1,9,true),
     qiProgress:percentage,hp:wealth,maxHp:num(1,1_000_000_000),combatPower:wealth,age:wealth,lifespan:wealth,
     personality:one('刚正','阴险','狂傲','苟道','痴情','嗜血','逍遥','诡诈'),locationId:id,spiritStones:wealth,karma:affinity,currentAction:action,
     innerMonologue:text,secretGoal:text,spiritRoot:spirit,technique,techniqueMastery:percentage,authoredTechnique:optional(technique),
@@ -256,6 +257,16 @@ const shape = structure({
       attestations:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,tick,verdict:one('supports','contradicts')})),
       appeal:optional(structure({tick,actorId:id,verdict:one('upheld','rejected'),reason:text})),settledTick:otick,
       reputationSectId:oid,reputationPenalty:percentage,reputationRestored:percentage,reason:otext}))}),
+  probation:structure({nextId:num(1,100_000_000,true),expulsions:arr(SAVE_COLLECTION_LIMIT,structure({
+    id,actorId:id,sectId:id,tick,transgressions:percentage,disciplineRevision:tick,reinstatedTick:otick,reinstatedRevision:otick,lastCaseClosedTick:otick
+  })),cases:arr(SAVE_COLLECTION_LIMIT,structure({
+    id,expulsionId:id,actorId:id,sectId:id,villageIds:arr(2,id),disciplineRevision:tick,
+    status:one('requested','active','ready','reinstated','withdrawn','rejected','expired'),requestedTick:tick,requestExpiresTick:tick,
+    sponsorId:oid,admittedTick:otick,deadlineTick:otick,settledTick:otick,
+    reason:optional(one('withdrawn','deadline','new_misconduct','unavailable','review_oppose')),
+    relief:arr(PROBATION_REQUIRED_RELIEF,structure({sourceId:id,tick,actorId:id,settlementId:id,stones:wealth,herbs:count})),
+    reviews:arr(PROBATION_REQUIRED_REVIEWS,structure({reviewerId:id,tick,vote:one('support','oppose')}))
+  }))}),
   relicExhibits:structure({nextId:num(1,100_000_000,true),entries:arr(SAVE_COLLECTION_LIMIT,structure({
     id,artifactId:id,setId:relicSet,ownerId:id,hostSectId:id,hostLeaderId:id,siteId:id,offeredTick:tick,offerExpiresTick:tick,
     status:one('offered','on_display','closed'),acceptedTick:otick,expiresTick:otick,closedTick:otick,
@@ -503,6 +514,7 @@ function verifyWorld(value: unknown): WorldState {
       ...(!Object.hasOwn(value, 'mentorship') ? { mentorship: { offers: [], lineage: [], budgets: [] } } : {}),
       ...(!Object.hasOwn(value, 'decisionTrace') ? { decisionTrace: { records: [] } } : {}),
       ...(!Object.hasOwn(value, 'coldHistory') ? { coldHistory: createColdHistoryState() } : {}),
+      ...(!Object.hasOwn(value, 'probation') ? { probation: createProbationState() } : {}),
       ...(!Object.hasOwn(value, 'relicExhibits') ? { relicExhibits: createRelicExhibitState() } : {}),
       ...(!Object.hasOwn(value, 'workshops') ? { workshops: createWorkshopState() } : {}),
       ...(!Object.hasOwn(value, 'terrainSuccession') ? { terrainSuccession: createTerrainSuccessionState() } : {}),
@@ -563,6 +575,76 @@ function verifyWorld(value: unknown): WorldState {
         (cell.lastWorkedTick === undefined) !== (cell.lastWorkedBy === undefined) ||
         (cell.lastWorkedBy !== undefined && !actor.has(cell.lastWorkedBy)) ||
         (cell.workCount > 0 && cell.lastWorkedTick === undefined)) fail('terrainSuccession.cells.references');
+  }
+  unique(w.probation.expulsions, ({ id }) => id, 'probation.expulsions.id');
+  unique(w.probation.cases, ({ id }) => id, 'probation.cases.id');
+  const activeProbation = (status: WorldState['probation']['cases'][number]['status']) => status === 'requested' || status === 'active' || status === 'ready';
+  unique(w.probation.cases.filter(({ status }) => activeProbation(status)), ({ actorId }) => actorId, 'probation.cases.openActor');
+  const expulsions = new Map(w.probation.expulsions.map((row) => [row.id, row]));
+  const storedCouncils = new Map(w.councils.map((row) => [row.id, row]));
+  const villagers = new Set(w.settlements.villages.map(({ id }) => id));
+  for (const anchor of w.probation.expulsions) {
+    const subject = w.cultivators.find(({ id }) => id === anchor.actorId);
+    const historical = storedCouncils.get(anchor.id);
+    if (!subject || !sector.has(anchor.sectId) || anchor.tick > w.tick ||
+        anchor.id !== `council-${anchor.tick}-${anchor.sectId}-expel:${anchor.actorId}` ||
+        anchor.transgressions < 4 || anchor.disciplineRevision > (subject.disciplineRevision ?? 0) ||
+        (historical && (historical.status !== 'passed' || historical.proposal.kind !== 'expel' ||
+          historical.proposal.targetCultivatorId !== anchor.actorId || historical.tick !== anchor.tick || historical.sectId !== anchor.sectId)) ||
+        (anchor.lastCaseClosedTick !== undefined && (anchor.lastCaseClosedTick < anchor.tick || anchor.lastCaseClosedTick > w.tick)) ||
+        (anchor.reinstatedTick === undefined ? anchor.reinstatedRevision !== undefined :
+          anchor.reinstatedTick < anchor.tick || anchor.reinstatedTick > w.tick ||
+          anchor.reinstatedRevision === undefined || anchor.reinstatedRevision < anchor.disciplineRevision ||
+          anchor.reinstatedRevision > (subject.disciplineRevision ?? 0))) fail('probation.expulsions.references');
+  }
+  const creditedRelief = new Set<string>();
+  const actualVillageReceipts = new Map(w.settlements.records.map((row) => [row.id, row]));
+  for (const plan of w.probation.cases) {
+    const serial = Number(plan.id.match(/^probation-([1-9][0-9]*)$/)?.[1]);
+    const anchor = expulsions.get(plan.expulsionId);
+    const admitted = plan.admittedTick;
+    const settled = plan.settledTick;
+    const live = activeProbation(plan.status);
+    if (!Number.isSafeInteger(serial) || serial >= w.probation.nextId || !anchor || anchor.actorId !== plan.actorId ||
+        anchor.sectId !== plan.sectId || plan.disciplineRevision < anchor.disciplineRevision ||
+        plan.disciplineRevision > (w.cultivators.find(({ id }) => id === plan.actorId)?.disciplineRevision ?? 0) ||
+        plan.requestedTick < anchor.tick ||
+        plan.requestedTick > w.tick || plan.requestExpiresTick !== plan.requestedTick + PROBATION_REQUEST_TICKS ||
+        plan.villageIds.length !== 2 || plan.villageIds[0] === plan.villageIds[1] || plan.villageIds.some((id) => !villagers.has(id)) ||
+        (live ? settled !== undefined || plan.reason !== undefined :
+          settled === undefined || settled < (admitted ?? plan.requestedTick) || settled > w.tick) ||
+        (admitted === undefined ? plan.sponsorId !== undefined || plan.deadlineTick !== undefined || plan.relief.length > 0 || plan.reviews.length > 0 :
+          !plan.sponsorId || plan.sponsorId === plan.actorId || !actor.has(plan.sponsorId) ||
+          admitted < plan.requestedTick || admitted >= plan.requestExpiresTick || admitted > w.tick || plan.deadlineTick !== admitted + PROBATION_SERVICE_TICKS) ||
+        (plan.status === 'requested' && admitted !== undefined) || (plan.status === 'active' && admitted === undefined) ||
+        (plan.status === 'withdrawn' && plan.reason !== 'withdrawn') ||
+        (plan.status === 'expired' && (plan.reason !== 'deadline' || (settled ?? 0) < (plan.deadlineTick ?? plan.requestExpiresTick))) ||
+        (plan.status === 'rejected' && plan.reason !== 'review_oppose' && plan.reason !== 'unavailable' && plan.reason !== 'new_misconduct') ||
+        (plan.status === 'reinstated' && (anchor.reinstatedTick !== settled || anchor.reinstatedRevision !== plan.disciplineRevision || plan.reason !== undefined)) ||
+        ((plan.status === 'ready' || plan.status === 'reinstated') &&
+          (plan.relief.length !== PROBATION_REQUIRED_RELIEF || plan.reviews.length !== PROBATION_REQUIRED_REVIEWS ||
+            plan.reviews.some(({ vote }) => vote !== 'support')))) fail('probation.cases.references');
+    unique(plan.relief, ({ tick }) => String(tick), 'probation.relief.tick');
+    unique(plan.relief, ({ settlementId }) => settlementId, 'probation.relief.village');
+    unique(plan.reviews, ({ reviewerId }) => reviewerId, 'probation.reviews.reviewer');
+    for (const receipt of plan.relief) {
+      const source = actualVillageReceipts.get(receipt.sourceId);
+      if (creditedRelief.has(receipt.sourceId) || receipt.actorId !== plan.actorId ||
+          receipt.sourceId !== `settlement-${receipt.tick}-relief-${receipt.settlementId}-${receipt.actorId}` ||
+          !plan.villageIds.includes(receipt.settlementId) || receipt.stones !== SETTLEMENT_RELIEF.stones || receipt.herbs !== SETTLEMENT_RELIEF.jade_leaf ||
+          (source && (source.kind !== 'relief' || source.actorId !== receipt.actorId || source.tick !== receipt.tick ||
+            source.settlementId !== receipt.settlementId || source.stones !== receipt.stones || source.herbs !== receipt.herbs)) ||
+          receipt.tick <= (admitted ?? Infinity) || receipt.tick >= (plan.deadlineTick ?? 0) || receipt.tick > (settled ?? w.tick))
+        fail('probation.relief.references');
+      creditedRelief.add(receipt.sourceId);
+    }
+    const provedAt = Math.max(...plan.relief.map(({ tick }) => tick));
+    if (plan.reviews.length && plan.relief.length !== PROBATION_REQUIRED_RELIEF) fail('probation.reviews.proof');
+    for (const review of plan.reviews) {
+      if (!actor.has(review.reviewerId) || review.reviewerId === plan.sponsorId || review.reviewerId === plan.actorId ||
+          review.tick < provedAt || review.tick >= (plan.deadlineTick ?? 0) || review.tick > (settled ?? w.tick) ||
+          (review.vote === 'oppose' && (plan.status !== 'rejected' || plan.reason !== 'review_oppose'))) fail('probation.reviews.references');
+    }
   }
   unique(w.workshops.orders, ({ id }) => id, 'workshops.orders.id');
   const activeWorkshops = w.workshops.orders.filter(({ status }) => status === 'active');

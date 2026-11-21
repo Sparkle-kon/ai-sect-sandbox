@@ -1,3 +1,4 @@
+import { createProbationState } from '../engine/probationEngine';
 import { createRelicExhibitState } from '../engine/relicExhibitEngine';
 import { createWorkshopState } from '../engine/workshopEngine';
 import { createTerrainSuccessionState } from '../engine/terrainSuccessionEngine';
@@ -284,6 +285,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     terrainSuccession: createTerrainSuccessionState(),
     workshops: createWorkshopState(),
     relicExhibits: createRelicExhibitState(),
+    probation: createProbationState(),
     witnesses: createWitnessState(),
     estates: createEstateState(),
     decisionTrace: createDecisionTraceState(),

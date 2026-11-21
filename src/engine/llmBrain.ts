@@ -1,3 +1,4 @@
+import { availableProbationActions, probationReliefTargets } from './probationEngine';
 import { availableRelicExhibitActions } from './relicExhibitEngine';
 import { availableWorkshopActions } from './workshopEngine';
 import { COGNITIVE_RESPONSE_GUIDE } from './llmCognitiveResponseGuide';
@@ -142,6 +143,28 @@ export function computeHeuristicDecision(
       (cultivator.personality === '刚正' || cultivator.personality === '逍遥')) {
     const work = availableTerrainRecoveryActions(cultivator, world)[0];
     if (work) return { ...work, chosenAction: 'TERRAIN_RECOVERY', innerMonologue: '只修脚下已退灾的实地，付出实物，不抹去永久伤痕。' };
+  }
+  const mayRequestProbation = !cultivator.sectId && world.tick % 5 === 2 &&
+    world.probation.expulsions.some(({ actorId, reinstatedTick }) => actorId === cultivator.id && reinstatedTick === undefined);
+  if (mayRequestProbation || world.probation.cases.some(({ status }) => status === 'requested' || status === 'active' || status === 'ready')) {
+    const choices = availableProbationActions(cultivator, world, mayRequestProbation);
+    const commitment = choices.find(({ probationMove }) => probationMove === 'restore') ??
+      choices.find(({ probationMove, probationVote }) => probationMove === 'admit' || (probationMove === 'review' && probationVote === 'support')) ??
+      (mayRequestProbation ? choices.find(({ probationMove }) => probationMove === 'request') : undefined);
+    if (commitment) return { ...commitment, chosenAction: 'PROBATION', innerMonologue: '只按实做的赈济和回避后的复核办理，原处分仍在。' };
+    const targets = probationReliefTargets(world, cultivator);
+    if (targets.length) {
+      const relief = availableSettlementActions(cultivator, world).find(({ action, targetSettlementId }) =>
+        action === 'DELIVER_RELIEF' && targets.includes(targetSettlementId));
+      if (relief) return { ...relief, chosenAction: 'DELIVER_RELIEF', innerMonologue: '在见习约定的实际村落交付真实救济。' };
+      if (cultivator.hp >= cultivator.maxHp * .7 && world.tick % 3 === 2) {
+        const known = knownMapLocations(world, cultivator);
+        const destination = targets.map((id) => world.settlements.villages.find((village) => village.id === id))
+          .find((village) => village && village.locationId !== cultivator.locationId &&
+            known.some(({ id }) => id === village.locationId));
+        if (destination) return { chosenAction: 'EXPLORE', targetLocationId: destination.locationId, innerMonologue: '沿已知路线到约定村落，再按实际情况赈济。' };
+      }
+    }
   }
   const mayOfferExhibit = world.tick >= 36 && world.tick % 9 === 4 && cultivator.artifacts.some(({ relicSetId }) => !!relicSetId);
   if (mayOfferExhibit || world.relicExhibits.entries.some((entry) => entry.status === 'offered' && entry.hostLeaderId === cultivator.id)) {
@@ -692,6 +715,7 @@ export async function queryCultivatorLLMDecision(
   const estateOptions = availableEstateActions(cultivator, world);
   const doctrineOptions = availableDoctrineActions(cultivator, world);
   const relocationOptions = availableRelocationActions(cultivator, world);
+  const probationOptions = availableProbationActions(cultivator, world);
   const exhibitOptions = availableRelicExhibitActions(cultivator, world);
   const workshopOptions = availableWorkshopActions(cultivator, world);
   const recoveryOptions = availableTerrainRecoveryActions(cultivator, world);
@@ -740,6 +764,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 天机悬赏榜：${JSON.stringify(world.bounties.filter((item) => item.status === 'open').map(({id,targetCultivatorId,reward,reason}) => ({id,targetCultivatorId,reward,reason})))}；可接的追缉：${JSON.stringify(availableBountyHunts(cultivator, world))}
 - 天下公示的大会与秘境：${JSON.stringify(world.occasions.filter((item) => item.status === 'registration' || item.status === 'running').map(({id,title,kind,locationId,status,registrationClosesTick}) => ({id,title,kind,locationId,status,registrationClosesTick})))}；可报名项目：${JSON.stringify(availableOccasionJoins(cultivator, world))}
 - 本宗邦交：${JSON.stringify(world.diplomacy.filter((relation) => relation.sectAId === cultivator.sectId || relation.sectBId === cultivator.sectId))}；公示的外事权限：${JSON.stringify(availableDiplomacyActions(cultivator, world))}
+- 赎责见习必须复制已列动作；赈济另走真实 DELIVER_RELIEF，复籍不抹去原处分：${JSON.stringify(probationOptions)}
 - 古器陈列只能由真实双方当面应允；复制许可参数，不改写原件持有史：${JSON.stringify(exhibitOptions)}
 - 工坊委制只复制现有许可；须双方同意，按实际加工与质量交付：${JSON.stringify(workshopOptions)}
 - 地脉恢复只可使用现地列出的地格，按实付收费，永久伤痕不能用普通工作抹掉：${JSON.stringify(recoveryOptions)}
@@ -896,11 +921,18 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'TERRAIN_RECOVERY',
             'WORKSHOP',
             'RELIC_EXHIBIT',
+            'PROBATION',
           ];
           const chosenAction = parsed?.chosenAction;
           if (!chosenAction || !validActions.includes(chosenAction)) return undefined;
 
           if (activeVow && chosenAction !== 'PILGRIMAGE' && (chosenAction !== 'REST' || onPilgrimagePath)) return undefined;
+          const legalProbation = chosenAction === 'PROBATION' ? probationOptions.find((item) =>
+            item.probationMove === parsed.probationMove && item.targetProbationId === parsed.targetProbationId &&
+            item.targetExpulsionId === parsed.targetExpulsionId && item.probationFirstVillageId === parsed.probationFirstVillageId &&
+            item.probationSecondVillageId === parsed.probationSecondVillageId && item.probationVote === parsed.probationVote) : undefined;
+          if (chosenAction === 'PROBATION' && (!legalProbation || parsed.targetCultivatorId !== undefined ||
+              parsed.targetLocationId !== undefined || parsed.targetSectId !== undefined)) return undefined;
           const legalExhibit = chosenAction === 'RELIC_EXHIBIT' ? exhibitOptions.find((item) =>
             item.exhibitMove === parsed.exhibitMove && item.targetArtifactId === parsed.targetArtifactId &&
             item.targetRelicExhibitId === parsed.targetRelicExhibitId) : undefined;
@@ -1147,6 +1179,12 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             forgeTier: legalArtifact?.forgeTier,
             targetHerbId: legalCommons?.targetHerbId ?? legalAlchemy?.targetHerbId,
             targetPillId: legalAlchemy?.targetPillId,
+            probationMove: legalProbation?.probationMove,
+            targetProbationId: legalProbation?.targetProbationId,
+            targetExpulsionId: legalProbation?.targetExpulsionId,
+            probationFirstVillageId: legalProbation?.probationFirstVillageId,
+            probationSecondVillageId: legalProbation?.probationSecondVillageId,
+            probationVote: legalProbation?.probationVote,
             exhibitMove: legalExhibit?.exhibitMove,
             targetRelicExhibitId: legalExhibit?.targetRelicExhibitId,
             workshopMove: legalWorkshop?.workshopMove,

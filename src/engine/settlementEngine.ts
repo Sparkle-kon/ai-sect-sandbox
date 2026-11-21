@@ -1,3 +1,4 @@
+import { recordProbationRelief } from './probationEngine';
 import { initializeHouseholds, matureHouseholdBirth, recordHouseholdBirth, recordHouseholdMigration, recordHouseholdMortality,
   recordHouseholdRecruitment, registerHouseholdVolunteer, retireHouseholdVolunteer } from './householdEngine';
 import { attachRecollectionAfterRecruitment, MORTAL_MATURITY_TICKS, maturingReincarnationCases,
@@ -97,8 +98,10 @@ export function availableSettlementActions(actor: Cultivator, world: WorldState)
 function log(world: WorldState, village: MortalSettlement, row: Omit<SettlementRecord, 'id' | 'tick' | 'settlementId'>,
   key: string, title: string): WorldEvent {
   const rowId = `settlement-${world.tick}-${row.kind}-${village.id}-${key}`;
-  world.settlements.records.push({ ...row, id: rowId, tick: world.tick, settlementId: village.id });
+  const actual: SettlementRecord = { ...row, id: rowId, tick: world.tick, settlementId: village.id };
+  world.settlements.records.push(actual);
   world.settlements.records = world.settlements.records.slice(-96);
+  if (actual.kind === 'relief') recordProbationRelief(world, actual);
   return { id: `evt-${rowId}`, tick: world.tick, year: world.year, month: world.month,
     title, description: row.description, actorIds: [row.actorId, row.cultivatorId].filter((id): id is string => Boolean(id)),
     locationId: village.locationId, category: 'diplomacy' };
