@@ -5,6 +5,7 @@ import { weatherHerbRegrowth } from './weatherEngine';
 import type { Cultivator, HerbId, LLMDecisionPayload, PillId, WorldEvent, WorldState } from '../types/world';
 import { recordMemory } from './memoryEngine';
 import { guardingHerbBeast } from './spiritBeastEngine';
+import { canUseFurnace, claimFurnaceUse } from './furnaceReservationEngine';
 
 export const HERB_LABELS: Record<HerbId, string> = {
   jade_leaf: '翡翠灵叶', earth_root: '玄土根', star_bloom: '星露花', shadow_moss: '幽影苔',
@@ -56,12 +57,13 @@ function hostile(actor: Cultivator, target: Cultivator, world: WorldState): bool
 }
 
 /** Used by both brains and re-evaluated at execution, so stale selections spend nothing. */
-export function availableAlchemy(actor: Cultivator, world: WorldState): AlchemyOption[] {
+export function availableAlchemy(actor: Cultivator, world: WorldState, executionTick = world.tick): AlchemyOption[] {
   const place = world.locations.find((node) => node.id === actor.locationId);
   if (!actor.alive || actor.hp <= 0 || !place) return [];
   const result: AlchemyOption[] = [];
   const harvestLimit = authorizedHerbHarvestLimit(world, actor, place);
   const guarding = harvestLimit > 0 ? guardingHerbBeast(world, actor) : undefined;
+  let canBrew: boolean | undefined;
   for (const herb of HERBS) {
     if (harvestLimit > 0 && (place.ownerSectId || commonsHarvestLimit(world, actor, place, herb) > 0) && (!guarding || actor.combatPower >= guarding.power * 1.25) && place.herbs[herb] >= 1 && actor.herbs[herb] < 99) result.push({ action: 'GATHER_HERBS', targetHerbId: herb });
   }
@@ -69,7 +71,8 @@ export function availableAlchemy(actor: Cultivator, world: WorldState): AlchemyO
     const recipe = ALCHEMY_RECIPES[pill];
     if (place.furnaceGrade >= recipe.furnaceGrade && actor.pills[pill] < 99 &&
         actor.spiritStones >= alchemyCost(pill, place.furnaceGrade) &&
-        HERBS.every((herb) => actor.herbs[herb] >= (recipe.herbs[herb] ?? 0))) {
+        HERBS.every((herb) => actor.herbs[herb] >= (recipe.herbs[herb] ?? 0)) &&
+        (canBrew ??= canUseFurnace(world, actor, place.id, 'brew', undefined, executionTick))) {
       result.push({ action: 'BREW_PILL', targetPillId: pill });
     }
     if (actor.pills[pill] < 1) continue;
@@ -117,6 +120,7 @@ export function resolveAlchemy(world: WorldState, actor: Cultivator, decision: L
   const recipe = ALCHEMY_RECIPES[pill];
   if (option.action === 'BREW_PILL') {
     const cost = alchemyCost(pill, place.furnaceGrade);
+    if (!claimFurnaceUse(world, actor, place.id, 'brew')) return null;
     for (const herb of HERBS) {
       const used = recipe.herbs[herb] ?? 0;
       if (!used) continue;

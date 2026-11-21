@@ -1,5 +1,6 @@
 import type { ActionType, Artifact, ArtifactTier, CultivationRealm, Cultivator, HerbId, LLMDecisionPayload, PillId, WorldEvent, WorldState } from '../types/world';
 import { recordMemory } from './memoryEngine';
+import { canUseFurnace, claimFurnaceUse } from './furnaceReservationEngine';
 
 interface ArtifactRule {
   grade: 1 | 2 | 3;
@@ -85,14 +86,18 @@ const bindCost = 15;
 const awakenCost = 85;
 const awakenResonance = 45;
 
-export function availableArtifactActions(actor: Cultivator, world: WorldState): ArtifactOption[] {
+export function availableArtifactActions(actor: Cultivator, world: WorldState, executionTick = world.tick): ArtifactOption[] {
   const site = world.locations.find((location) => location.id === actor.locationId);
   if (!actor.alive || actor.hp <= 0 || !site) return [];
   const options: ArtifactOption[] = [];
+  let canForge: boolean | undefined;
+  let canRepair: boolean | undefined;
+  let canAwaken: boolean | undefined;
   for (const tier of TIERS) {
     const rule = ARTIFACT_RULES[tier];
     if (actor.artifacts.length < 12 && site.furnaceGrade >= rule.grade && actor.spiritStones >= rule.stones &&
-        actor.techniqueMastery >= rule.mastery && REALMS.indexOf(actor.realm) >= REALMS.indexOf(rule.realm)) {
+        actor.techniqueMastery >= rule.mastery && REALMS.indexOf(actor.realm) >= REALMS.indexOf(rule.realm) &&
+        (canForge ??= canUseFurnace(world, actor, site.id, 'forge', undefined, executionTick))) {
       options.push({ action: 'FORGE_ARTIFACT', forgeTier: tier });
     }
   }
@@ -101,11 +106,13 @@ export function availableArtifactActions(actor: Cultivator, world: WorldState): 
     const targetArtifactId = artifactId(actor, item, index);
     const rule = ARTIFACT_RULES[tierOf(item)];
     if (!item.boundTo && durabilityOf(item) > 0 && actor.spiritStones >= bindCost) options.push({ action: 'BIND_ARTIFACT', targetArtifactId });
-    if (site.furnaceGrade >= rule.grade && durabilityOf(item) < maxDurabilityOf(item) && actor.spiritStones >= artifactRepairCost(item)) {
+    if (site.furnaceGrade >= rule.grade && durabilityOf(item) < maxDurabilityOf(item) && actor.spiritStones >= artifactRepairCost(item) &&
+        (canRepair ??= canUseFurnace(world, actor, site.id, 'repair', undefined, executionTick))) {
       options.push({ action: 'REPAIR_ARTIFACT', targetArtifactId });
     }
     if (tierOf(item) !== '法器' && item.boundTo === actor.id && !item.soul && durabilityOf(item) > 0 &&
-        site.furnaceGrade >= rule.grade && actor.spiritStones >= awakenCost && (item.resonance ?? 0) >= awakenResonance) {
+        site.furnaceGrade >= rule.grade && actor.spiritStones >= awakenCost && (item.resonance ?? 0) >= awakenResonance &&
+        (canAwaken ??= canUseFurnace(world, actor, site.id, 'awaken', undefined, executionTick))) {
       options.push({ action: 'AWAKEN_ARTIFACT', targetArtifactId });
     }
   });
@@ -124,6 +131,7 @@ export function resolveArtifactAction(world: WorldState, actor: Cultivator, deci
     const site = world.locations.find((place) => place.id === actor.locationId)!;
     const chance = clamp(rule.success + 0.04 * (site.furnaceGrade - rule.grade) + actor.techniqueMastery * 0.001 +
       (actor.spiritRoot === site.spiritRoot ? 0.06 : 0), 0.05, 0.95);
+    if (!claimFurnaceUse(world, actor, site.id, 'forge')) return null;
     actor.spiritStones -= rule.stones;
     const success = rng() < chance;
     title = success ? '炼器开炉，灵宝成形' : '炉火失控，炼器失败';
@@ -143,6 +151,8 @@ export function resolveArtifactAction(world: WorldState, actor: Cultivator, deci
     const index = actor.artifacts.findIndex((item, i) => artifactId(actor, item, i) === option.targetArtifactId);
     const item = actor.artifacts[index];
     if (!item) return null;
+    if (option.action === 'REPAIR_ARTIFACT' && !claimFurnaceUse(world, actor, actor.locationId, 'repair')) return null;
+    if (option.action === 'AWAKEN_ARTIFACT' && !claimFurnaceUse(world, actor, actor.locationId, 'awaken')) return null;
     item.id ??= artifactId(actor, item, index);
     if (option.action === 'BIND_ARTIFACT') {
       for (const other of actor.artifacts) {

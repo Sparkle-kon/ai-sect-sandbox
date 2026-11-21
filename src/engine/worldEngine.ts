@@ -6,6 +6,7 @@ import { advanceRoads, resolveRoadAction } from './roadEngine';
 import { advanceProbation, resolveProbationAction } from './probationEngine';
 import { advanceRelicExhibits, resolveRelicExhibitAction } from './relicExhibitEngine';
 import { advanceWorkshops, resolveWorkshopAction } from './workshopEngine';
+import { openFurnaceTurn, resolveFurnaceReservationAction, settleFurnaceTurn } from './furnaceReservationEngine';
 import { advanceTerrainSuccession, resolveTerrainRecovery } from './terrainSuccessionEngine';
 import { openResourceFlowMonth } from './resourceFlowEngine';
 import { advanceSharedCommons, resolveSharedCommonsAction } from './sharedCommonsEngine';
@@ -238,6 +239,8 @@ export function applyCultivatorBrainDecision(
       return resolveRelicExhibitAction(world, cultivator, decision);
     case 'WORKSHOP':
       return resolveWorkshopAction(world, cultivator, decision, rng);
+    case 'FURNACE_RESERVATION':
+      return resolveFurnaceReservationAction(world, cultivator, decision);
     case 'TERRAIN_RECOVERY':
       return resolveTerrainRecovery(world, cultivator, decision);
     case 'SHARED_COMMONS':
@@ -728,6 +731,7 @@ export function advanceWorldTick(
   maintainSectEconomy(nextState);
   const newEvents: WorldEvent[] = [...advanceSanctuaries(nextState), ...advanceCeasefires(nextState), ...advanceCompetitionSeasons(nextState), ...advanceMapHazards(nextState), ...advanceTerrainSuccession(nextState), ...advanceRoads(nextState), ...advanceCouriers(nextState), ...advancePilgrimages(nextState), ...advanceRelocations(nextState), ...advanceSettlements(nextState), ...advanceVillageWorks(nextState), ...advanceSpiritBeasts(nextState, rng), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...advanceSharedCommons(nextState), ...advanceHouseholds(nextState)];
   for (const event of newEvents) witnessEvent(nextState, event);
+  openFurnaceTurn(nextState);
 
   for (const cultivator of [...nextState.cultivators]) {
     if (!cultivator.alive) continue;
@@ -775,8 +779,8 @@ export function advanceWorldTick(
       continue;
     }
 
-    const provided = (avatarOrder?.actorId === cultivator.id ? avatarOrder.decision : undefined) ??
-      precomputedDecisions?.[cultivator.id];
+    const supplied = precomputedDecisions && Object.hasOwn(precomputedDecisions, cultivator.id) ? precomputedDecisions[cultivator.id] : undefined;
+    const provided = (avatarOrder?.actorId === cultivator.id ? avatarOrder.decision : undefined) ?? supplied;
     let fieldNegotiation: LLMDecisionPayload | undefined;
     if (activeSiegeForActor(nextState, cultivator)) {
       if (!provided) fieldNegotiation = utilityCeasefireDecision(cultivator, nextState);
@@ -816,7 +820,7 @@ export function advanceWorldTick(
     const validEffect = decision.chosenAction === cultivator.currentAction && (evt !== null ||
       decision.chosenAction === 'REST' || decision.chosenAction === 'CULTIVATE' ||
       (decision.chosenAction === 'EXPLORE' && previousLocation !== cultivator.locationId));
-    if (recordDecisionEffect && precomputedDecisions?.[cultivator.id]) recordDecisionEffect(cultivator.id, validEffect);
+    if (recordDecisionEffect && supplied) recordDecisionEffect(cultivator.id, validEffect);
     traceOptions?.onActor?.(cultivator.id, candidates, validEffect);
     if (captureTrace) recordDecisionTrace(nextState, cultivator.id, candidates, decision,
       avatarOrder?.actorId === cultivator.id ? 'avatar' : traceOptions?.modelActors?.has(cultivator.id) ? 'model' : 'utility', validEffect);
@@ -870,6 +874,7 @@ export function advanceWorldTick(
   }
   advanceFieldObservatories(nextState);
   closeVillageCensusPeriod(nextState);
+  settleFurnaceTurn(nextState);
   compactColdHistory(nextState);
   advanceCausalChronicle(nextState);
   if (nextState.watchlists.watches.length) {
@@ -1031,6 +1036,7 @@ export function executeGodIntervention(
     recordNewDeathsForReincarnation(prevState, nextState, [head]);
     if (head.category === 'death') reconcileRelicCustody(nextState);
     archiveChronicleEvents(nextState, [head]);
+    settleFurnaceTurn(nextState);
     nextState.events = nextState.events.slice(0, 120);
     nextState.mapPresentation = deriveMapPresentation(prevState, nextState, [head]);
   }

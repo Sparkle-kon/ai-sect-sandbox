@@ -40,7 +40,9 @@ describe('forging, equipment, spirit growth and storage ring', () => {
     const { world, actor } = fixture();
     const cost = ARTIFACT_RULES.通天灵宝.stones;
     expect(resolveArtifactAction(world, actor, forge('通天灵宝'), () => 0)?.title).toContain('成形');
+    world.tick++;
     expect(resolveArtifactAction(world, actor, forge('通天灵宝'), () => 0)?.title).toContain('成形');
+    world.tick++;
     expect(resolveArtifactAction(world, actor, forge('通天灵宝'), () => .999)?.title).toContain('失败');
     expect(actor.artifacts).toHaveLength(2);
     expect(new Set(actor.artifacts.map(({ id }) => id)).size).toBe(2);

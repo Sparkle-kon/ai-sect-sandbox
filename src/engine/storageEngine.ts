@@ -6,6 +6,7 @@ import { createRoadState, ROAD_CONDITION_MAX, ROAD_FARE, ROAD_PAID_STRIDE, ROAD_
 import { createProbationState, PROBATION_REQUEST_TICKS, PROBATION_REQUIRED_RELIEF, PROBATION_REQUIRED_REVIEWS, PROBATION_SERVICE_TICKS } from './probationEngine';
 import { createRelicExhibitState, RELIC_EXHIBIT_DURATION, RELIC_EXHIBIT_OFFER_TICKS } from './relicExhibitEngine';
 import { WORKSHOP_ACTIVE_TICKS, WORKSHOP_MAX_WORK_RECEIPTS, WORKSHOP_OFFER_TICKS, createWorkshopState, workshopGradeForScore, workshopTerms } from './workshopEngine';
+import { createFurnaceReservationState, FURNACE_QUEUE_TICKS, FURNACE_TERMINAL_LIMIT, FURNACE_USE_RETENTION_TICKS } from './furnaceReservationEngine';
 import { createTerrainSuccessionState, TERRAIN_QUIET_CAP, TERRAIN_RECOVERY_LIMIT } from './terrainSuccessionEngine';
 import { createResourceFlowState, RESOURCE_FLOW_DETAIL_LIMIT, RESOURCE_FLOW_MONTH_LIMIT, RESOURCE_FLOW_REASON, sameFlowAccount } from './resourceFlowEngine';
 import { COMMONS_MAINTENANCE_UNIT, COMMONS_MAX_RESERVE, COMMONS_OFFER_TICKS, COMMONS_ROUND_TICKS, COMMONS_TERM_TICKS, commonsQuotaShares, createSharedCommonsState } from './sharedCommonsEngine';
@@ -111,7 +112,7 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY SEASON_REVIEW REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP FURNACE_RESERVATION RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY SEASON_REVIEW REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const flowGood = one('stone','jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
@@ -349,6 +350,14 @@ const shape = structure({
     work:arr(WORKSHOP_MAX_WORK_RECEIPTS,structure({tick,makerId:id,piece:one(1,2),stage:one('blank','finish'),
       stonesUsed:count,herbsUsed:count,quality:optional(one('failed','standard','fine')),
       qualityScore:optional(num(0,100,true)),artifactId:oid,feePaid:optional(count)}))
+  }))}),
+  furnaceReservations:structure({nextId:num(1,Number.MAX_SAFE_INTEGER,true),reservations:arr(SAVE_COLLECTION_LIMIT,structure({
+    id,actorId:id,siteId:id,workshopOrderId:oid,requestedTick:tick,expiresTick:tick,
+    status:one('queued','reserved','used','cancelled','expired'),assignedTick:otick,slot:optional(one(1,2,3)),closedTick:otick,
+    reason:optional(one('owner_cancelled','actor_unavailable','site_unavailable','workshop_closed','queue_expired','turn_missed')),
+  })),uses:arr(SAVE_COLLECTION_LIMIT,structure({
+    siteId:id,actorId:id,tick,slot:one(1,2,3),kind:one('brew','forge','repair','awaken','workshop','relic'),
+    workshopOrderId:oid,reservationId:oid,
   }))}),
   resourceFlow:structure({nextId:flowSerial,months:arr(RESOURCE_FLOW_MONTH_LIMIT,structure({
     tick,year:tick,month,totalEntries:num(0,Number.MAX_SAFE_INTEGER,true),
@@ -605,6 +614,7 @@ function verifyWorld(value: unknown): WorldState {
       ...(!Object.hasOwn(value, 'probation') ? { probation: createProbationState() } : {}),
       ...(!Object.hasOwn(value, 'relicExhibits') ? { relicExhibits: createRelicExhibitState() } : {}),
       ...(!Object.hasOwn(value, 'workshops') ? { workshops: createWorkshopState() } : {}),
+      ...(!Object.hasOwn(value, 'furnaceReservations') ? { furnaceReservations: createFurnaceReservationState() } : {}),
       ...(!Object.hasOwn(value, 'terrainSuccession') ? { terrainSuccession: createTerrainSuccessionState() } : {}),
       ...(!Object.hasOwn(value, 'resourceFlow') ? { resourceFlow: createResourceFlowState() } : {}),
       ...(!Object.hasOwn(value, 'sharedCommons') ? { sharedCommons: createSharedCommonsState() } : {}),
@@ -1013,6 +1023,59 @@ function verifyWorld(value: unknown): WorldState {
     if (order.escrowStones + order.refundedStones + usedStones !== (accepted === undefined ? 0 : terms.totalStones) ||
         order.escrowHerbs + order.refundedHerbs + usedHerbs !== (accepted === undefined ? 0 : terms.totalHerbs))
       fail('workshops.orders.custody');
+  }
+  const furnace = w.furnaceReservations;
+  unique(furnace.reservations, ({ id }) => id, 'furnaceReservations.reservations.id');
+  unique(furnace.uses, ({ siteId, tick, slot }) => JSON.stringify([siteId, tick, slot]), 'furnaceReservations.uses.siteTurn');
+  unique(furnace.uses, ({ actorId, tick }) => JSON.stringify([actorId, tick]), 'furnaceReservations.uses.actorTurn');
+  const activeFurnace = furnace.reservations.filter(({ status }) => status === 'queued' || status === 'reserved');
+  unique(activeFurnace, ({ actorId }) => actorId, 'furnaceReservations.active.actor');
+  unique(activeFurnace.filter(({ status }) => status === 'reserved'), ({ siteId, assignedTick, slot }) =>
+    JSON.stringify([siteId, assignedTick, slot]), 'furnaceReservations.active.siteTurn');
+  const furnaceById = new Map(furnace.reservations.map((row) => [row.id, row]));
+  const furnaceSitesById = new Map(w.locations.map((site) => [site.id, site]));
+  const workshopById = new Map(w.workshops.orders.map((order) => [order.id, order]));
+  const furnaceActorsById = new Map(w.cultivators.map((person) => [person.id, person]));
+  const usageByReservation = new Set<string>();
+  for (const use of furnace.uses) {
+    const reservation = use.reservationId ? furnaceById.get(use.reservationId) : undefined;
+    const order = use.workshopOrderId ? workshopById.get(use.workshopOrderId) : undefined;
+    if (!actor.has(use.actorId) || use.tick > w.tick || w.tick - use.tick >= FURNACE_USE_RETENTION_TICKS ||
+        (use.kind === 'workshop') !== Boolean(use.workshopOrderId) ||
+        (use.reservationId !== undefined && (!reservation || usageByReservation.has(use.reservationId) ||
+          reservation.status !== 'used' || reservation.actorId !== use.actorId || reservation.siteId !== use.siteId ||
+          reservation.assignedTick !== use.tick || reservation.slot !== use.slot ||
+          reservation.workshopOrderId !== use.workshopOrderId)) ||
+        (order && (order.makerId !== use.actorId || order.siteId !== use.siteId || !order.work.some(({ tick }) => tick === use.tick))))
+      fail('furnaceReservations.uses.source');
+    if (use.reservationId) usageByReservation.add(use.reservationId);
+  }
+  if (furnace.reservations.filter((row) => row.closedTick !== undefined && !usageByReservation.has(row.id)).length > FURNACE_TERMINAL_LIMIT)
+    fail('furnaceReservations.reservations.history');
+  for (const row of furnace.reservations) {
+    const serial = Number(row.id.match(/^furnace-([1-9][0-9]*)$/)?.[1]);
+    const site = furnaceSitesById.get(row.siteId);
+    const order = row.workshopOrderId ? workshopById.get(row.workshopOrderId) : undefined;
+    const maker = furnaceActorsById.get(row.actorId);
+    const isActive = row.status === 'queued' || row.status === 'reserved';
+    const assigned = row.assignedTick;
+    if (!Number.isSafeInteger(serial) || serial >= furnace.nextId || !actor.has(row.actorId) ||
+        row.requestedTick > w.tick || row.expiresTick !== row.requestedTick + FURNACE_QUEUE_TICKS ||
+        (assigned === undefined) !== (row.slot === undefined) ||
+        (assigned !== undefined && (assigned <= row.requestedTick || assigned >= row.expiresTick || assigned > w.tick)) ||
+        (isActive && (!site?.furnaceGrade || !maker?.alive || maker.hp <= 0 || maker.locationId !== row.siteId ||
+          row.expiresTick <= w.tick || row.closedTick !== undefined || row.reason !== undefined ||
+          (row.status === 'queued' ? assigned !== undefined : assigned !== w.tick || (row.slot ?? 0) > site.furnaceGrade))) ||
+        (!isActive && (row.closedTick === undefined || row.closedTick < (assigned ?? row.requestedTick) || row.closedTick > w.tick)) ||
+        (row.status === 'used' && (assigned === undefined || row.closedTick !== assigned || row.reason !== undefined ||
+          (w.tick - assigned < FURNACE_USE_RETENTION_TICKS && !usageByReservation.has(row.id)))) ||
+        (row.status === 'cancelled' && (!row.reason || row.reason === 'queue_expired' || row.reason === 'turn_missed')) ||
+        (row.status === 'expired' && (row.reason !== 'queue_expired' && row.reason !== 'turn_missed')) ||
+        (row.reason === 'queue_expired' && (assigned !== undefined || (row.closedTick ?? 0) < row.expiresTick)) ||
+        (row.reason === 'turn_missed' && (assigned === undefined || (row.closedTick ?? 0) < assigned)) ||
+        (isActive && row.workshopOrderId && (!order || order.status !== 'active')) ||
+        (order && (order.makerId !== row.actorId || order.siteId !== row.siteId)))
+      fail('furnaceReservations.reservations.source');
   }
   let previousFlowTick = -1;
   let previousFlowId = 0;

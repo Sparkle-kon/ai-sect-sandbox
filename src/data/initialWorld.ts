@@ -7,6 +7,7 @@ import { createRoadState } from '../engine/roadEngine';
 import { createProbationState } from '../engine/probationEngine';
 import { createRelicExhibitState } from '../engine/relicExhibitEngine';
 import { createWorkshopState } from '../engine/workshopEngine';
+import { createFurnaceReservationState } from '../engine/furnaceReservationEngine';
 import { createTerrainSuccessionState } from '../engine/terrainSuccessionEngine';
 import { createResourceFlowState } from '../engine/resourceFlowEngine';
 import { createSharedCommonsState } from '../engine/sharedCommonsEngine';
@@ -291,6 +292,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     resourceFlow: createResourceFlowState(),
     terrainSuccession: createTerrainSuccessionState(),
     workshops: createWorkshopState(),
+    furnaceReservations: createFurnaceReservationState(),
     relicExhibits: createRelicExhibitState(),
     probation: createProbationState(),
     roads: createRoadState(),

@@ -6,6 +6,7 @@ import { availableRoadActions } from './roadEngine';
 import { availableProbationActions, probationReliefTargets } from './probationEngine';
 import { availableRelicExhibitActions } from './relicExhibitEngine';
 import { availableWorkshopActions } from './workshopEngine';
+import { availableFurnaceReservationActions, heldFurnaceReservation } from './furnaceReservationEngine';
 import { COGNITIVE_RESPONSE_GUIDE } from './llmCognitiveResponseGuide';
 import { availableTerrainRecoveryActions } from './terrainSuccessionEngine';
 import { availableSharedCommonsActions } from './sharedCommonsEngine';
@@ -217,6 +218,37 @@ export function computeHeuristicDecision(
   }
 
   const workshopState = world.workshops.orders;
+  if (cultivator.hp >= cultivator.maxHp * .65) {
+    const held = heldFurnaceReservation(world, cultivator);
+    if (held) {
+      const existingCommission = held.workshopOrderId;
+      if (existingCommission) {
+        const work = availableWorkshopActions(cultivator, world, false).find(({ workshopMove, targetWorkshopId }) =>
+          workshopMove === 'work' && targetWorkshopId === existingCommission);
+        if (work) return { ...work, chosenAction: work.action, innerMonologue: '持已分配的炉位完成这份委制工序。' };
+      } else {
+        const work = availableAlchemy(cultivator, world).find(({ action }) => action === 'BREW_PILL') ??
+          availableArtifactActions(cultivator, world).find(({ action }) => action === 'FORGE_ARTIFACT' ||
+            action === 'REPAIR_ARTIFACT' || action === 'AWAKEN_ARTIFACT') ??
+          availableRelicActions(cultivator, world).find(({ relicMove }) => relicMove === 'assemble');
+        if (work) return { ...work, chosenAction: work.action, innerMonologue: '用本轮真实炉位，只按实有材料与工艺开炉。' };
+      }
+    } else if ((world.tick + cultivator.id.charCodeAt(cultivator.id.length - 1)) % 11 === 6) {
+      const offers = availableFurnaceReservationActions(cultivator, world).filter(({ furnaceMove }) => furnaceMove === 'reserve');
+      if (offers.length) {
+        const currentWork = availableWorkshopActions(cultivator, world, false);
+        const nextWork = availableWorkshopActions(cultivator, world, false, world.tick + 1);
+        const commission = offers.find(({ targetWorkshopId }) => targetWorkshopId !== undefined &&
+          !currentWork.some((item) => item.workshopMove === 'work' && item.targetWorkshopId === targetWorkshopId) &&
+          nextWork.some((item) => item.workshopMove === 'work' && item.targetWorkshopId === targetWorkshopId));
+        const ordinary = (at: number) => availableAlchemy(cultivator, world, at).some(({ action }) => action === 'BREW_PILL') ||
+          availableArtifactActions(cultivator, world, at).some(({ action }) => action === 'FORGE_ARTIFACT');
+        const request = commission ?? (!ordinary(world.tick) && ordinary(world.tick + 1) ?
+          offers.find(({ targetWorkshopId }) => targetWorkshopId === undefined) : undefined);
+        if (request) return { ...request, chosenAction: request.action, innerMonologue: '当轮炉位已满，按本地许可为下一轮排位。' };
+      }
+    }
+  }
   const mayCommission = world.tick >= 28 && (world.tick + cultivator.id.charCodeAt(cultivator.id.length - 1)) % 13 === 6;
   if (mayCommission || workshopState.some((order) => (order.status === 'offered' || order.status === 'active') && order.makerId === cultivator.id)) {
     const orders = availableWorkshopActions(cultivator, world, mayCommission);
@@ -783,7 +815,8 @@ export async function requestCultivatorLLMDecision(
   const roadOptions = availableRoadActions(cultivator, world);
   const probationOptions = availableProbationActions(cultivator, world);
   const exhibitOptions = availableRelicExhibitActions(cultivator, world);
-  const workshopOptions = availableWorkshopActions(cultivator, world);
+  const workshopOptions = availableWorkshopActions(cultivator, world, true, requestTick);
+  const furnaceOptions = availableFurnaceReservationActions(cultivator, world, requestTick);
   const recoveryOptions = availableTerrainRecoveryActions(cultivator, world);
   const commonsOptions = availableSharedCommonsActions(cultivator, world);
   const serviceOptions = availableServiceRetirementActions(cultivator, world);
@@ -805,7 +838,7 @@ export async function requestCultivatorLLMDecision(
   const competitionOptions = availableCompetitionActions(cultivator, world);
   const scriptureOptions = availableScriptureActions(cultivator, world);
   const currentEdition = scriptureEditionModifiers(cultivator);
-  const relicOptions = availableRelicActions(cultivator, world);
+  const relicOptions = availableRelicActions(cultivator, world, requestTick);
   const recollectionOptions = availableRecollectionActions(cultivator, world);
   const ownEcho = visibleRecollection(world, cultivator.id);
   const prompt = activeVow ? `你是修仙沙盒中自愿参加巡礼的修士。只能使用本人的可执行行动，不许传送、额外援药或虚构站点。
@@ -864,8 +897,9 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 宗门经营许可：${JSON.stringify(availableSectEconomyActions(cultivator, world))}；巡守派任：${JSON.stringify(cultivator.guardAssignment ?? null)}
 - 宗门职位：${cultivator.sectRank}；贡献：${cultivator.contribution}；当前可行的宗门权力行动：${JSON.stringify(availableLeadershipActions(cultivator, world))}
 - 自身天劫：${JSON.stringify(isTribulationActive(cultivator) ? cultivator.tribulation : null)}；如果正在应劫，须选择 FACE_TRIBULATION；同地可袭扰的仇敌：${JSON.stringify(availableAmbushTargets(cultivator, world).map((target) => ({ id: target.id, name: target.name })))}
-- 法宝状况：${JSON.stringify(cultivator.artifacts)}；本地可用炼器行动：${JSON.stringify(availableArtifactActions(cultivator, world))}
-- 丹毒：${cultivator.pillToxicity}/100；灵药包：${JSON.stringify(cultivator.herbs)}；已有丹药：${JSON.stringify(cultivator.pills)}；允许的炼丹行动：${JSON.stringify(availableAlchemy(cultivator, world))}
+- 法宝状况：${JSON.stringify(cultivator.artifacts)}；本地可用炼器行动：${JSON.stringify(availableArtifactActions(cultivator, world, requestTick))}
+- 丹毒：${cultivator.pillToxicity}/100；灵药包：${JSON.stringify(cultivator.herbs)}；已有丹药：${JSON.stringify(cultivator.pills)}；允许的炼丹行动：${JSON.stringify(availableAlchemy(cultivator, world, requestTick))}
+- 炉位预约仅复制执行回合的实际许可：${JSON.stringify(furnaceOptions)}；预约不是已开炉，不自填时间、容量或物料。
 - 功法熟练度：${cultivator.techniqueMastery}/100；可自创：${mayAuthorTechnique(cultivator) ? '是' : '否'}；可研习：${JSON.stringify(availableTechniques(cultivator, world))}
 - 可行的归葬、继承或立嗣选项：${JSON.stringify(estateOptions)}
 - 可提出或质证的已知传闻，仅使用这些证人选项：${JSON.stringify(witnessOptions)}
@@ -996,6 +1030,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'SHARED_COMMONS',
             'TERRAIN_RECOVERY',
             'WORKSHOP',
+            'FURNACE_RESERVATION',
             'RELIC_EXHIBIT',
             'PROBATION',
             'ROAD',
@@ -1023,6 +1058,11 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             item.targetRelicExhibitId === parsed.targetRelicExhibitId) : undefined;
           if (chosenAction === 'RELIC_EXHIBIT' && (!legalExhibit || parsed.targetCultivatorId !== undefined ||
               parsed.targetLocationId !== undefined || parsed.targetSectId !== undefined)) return undefined;
+          const legalFurnace = chosenAction === 'FURNACE_RESERVATION' ? furnaceOptions.find((item) =>
+            item.furnaceMove === parsed.furnaceMove && item.targetLocationId === parsed.targetLocationId &&
+            item.targetWorkshopId === parsed.targetWorkshopId && item.targetFurnaceReservationId === parsed.targetFurnaceReservationId) : undefined;
+          if (chosenAction === 'FURNACE_RESERVATION' && (!legalFurnace || Object.keys(parsed).some((field) =>
+            !['innerMonologue', 'chosenAction', 'spokenLine', 'furnaceMove', 'targetLocationId', 'targetWorkshopId', 'targetFurnaceReservationId'].includes(field)))) return undefined;
           const legalWorkshop = chosenAction === 'WORKSHOP' ? workshopOptions.find((item) =>
             item.workshopMove === parsed.workshopMove && item.targetWorkshopId === parsed.targetWorkshopId &&
             item.targetCultivatorId === parsed.targetCultivatorId && item.workshopTier === parsed.workshopTier &&
@@ -1242,11 +1282,11 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             item.targetCultivatorId === parsed.targetCultivatorId && item.targetLocationId === parsed.targetLocationId) : undefined;
           if (infrastructureChoice && !legalInfrastructure) return undefined;
           const artifactAction = chosenAction === 'FORGE_ARTIFACT' || chosenAction === 'BIND_ARTIFACT' || chosenAction === 'REPAIR_ARTIFACT' || chosenAction === 'AWAKEN_ARTIFACT';
-          const legalArtifact = artifactAction ? availableArtifactActions(cultivator, world).find((item) =>
+          const legalArtifact = artifactAction ? availableArtifactActions(cultivator, world, requestTick).find((item) =>
             item.action === chosenAction && item.targetArtifactId === parsed.targetArtifactId && item.forgeTier === parsed.forgeTier) : undefined;
           if (artifactAction && !legalArtifact) return undefined;
           const alchemyAction = chosenAction === 'GATHER_HERBS' || chosenAction === 'BREW_PILL' || chosenAction === 'USE_PILL';
-          const legalAlchemy = alchemyAction ? availableAlchemy(cultivator, world).find((option) =>
+          const legalAlchemy = alchemyAction ? availableAlchemy(cultivator, world, requestTick).find((option) =>
             option.action === chosenAction && option.targetHerbId === parsed.targetHerbId &&
             option.targetPillId === parsed.targetPillId && option.targetCultivatorId === parsed.targetCultivatorId) : undefined;
           if (alchemyAction && !legalAlchemy) return undefined;
@@ -1268,7 +1308,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
               cultivator.innerMonologue ||
               '天道无常，唯有苦修方是正途。',
             chosenAction,
-            targetLocationId: legalSanctuary ? legalSanctuary.targetLocationId : legalRelocation ? legalRelocation.targetLocationId :
+            targetLocationId: legalFurnace ? legalFurnace.targetLocationId : legalSanctuary ? legalSanctuary.targetLocationId : legalRelocation ? legalRelocation.targetLocationId :
               chosenAction !== 'DOCTRINE' && typeof parsed.targetLocationId === 'string' ? parsed.targetLocationId : undefined,
             targetCultivatorId: legalObservatory ? legalObservatory.targetCultivatorId : legalArbitration ? legalArbitration.targetCultivatorId : legalWorkshop ? legalWorkshop.targetCultivatorId : legalDoctrine ? legalDoctrine.targetCultivatorId : legalEstate ? legalEstate.targetCultivatorId : legalWitness ? legalWitness.targetCultivatorId : legalOath ? legalOath.targetCultivatorId : legalTraining ? legalTraining.targetCultivatorId
               : typeof parsed.targetCultivatorId === 'string' ? parsed.targetCultivatorId : undefined,
@@ -1294,7 +1334,9 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             exhibitMove: legalExhibit?.exhibitMove,
             targetRelicExhibitId: legalExhibit?.targetRelicExhibitId,
             workshopMove: legalWorkshop?.workshopMove,
-            targetWorkshopId: legalWorkshop?.targetWorkshopId,
+            furnaceMove: legalFurnace?.furnaceMove,
+            targetFurnaceReservationId: legalFurnace?.targetFurnaceReservationId,
+            targetWorkshopId: legalFurnace?.targetWorkshopId ?? legalWorkshop?.targetWorkshopId,
             workshopTier: legalWorkshop?.workshopTier,
             workshopQuantity: legalWorkshop?.workshopQuantity,
             workshopQualityFloor: legalWorkshop?.workshopQualityFloor,

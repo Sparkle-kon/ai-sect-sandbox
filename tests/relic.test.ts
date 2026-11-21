@@ -74,6 +74,11 @@ describe('relic provenance and equipped set resonance', () => {
     actor.spiritStones = 5;
     expect(assemble()).toBeNull();
     actor.spiritStones = 500;
+    expect(assemble()).toBeNull();
+    // The manually seeded loot receipt completes the only expedition entry.
+    occasion.remainingIds = [];
+    expect(advanceOccasions(world, () => 0).some(({ title }) => title.endsWith('落幕'))).toBe(true);
+    expect(occasion.status).toBe('completed');
     const rule = RELIC_SETS['star-balance'];
     expect(availableRelicActions(actor, world)).toContainEqual({ action: 'RELIC', relicMove: 'assemble', targetRelicSetId: 'star-balance' });
     expect(assemble()?.title).toBe('遗器合璧重铸');

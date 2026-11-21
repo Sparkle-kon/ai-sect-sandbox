@@ -14,6 +14,7 @@ export default defineConfig({
           'resource-journal': ['./src/engine/resourceFlowEngine.ts'],
           'agreement-rules': ['./src/engine/oathEngine.ts', './src/engine/oathArbitrationEngine.ts'],
           'cognitive-protocol': ['./src/engine/llmCognitiveResponseGuide.ts', './src/engine/llmScheduler.ts', './src/engine/fairModelTurnEngine.ts'],
+          'furnace-rules': ['./src/engine/furnaceReservationEngine.ts'],
           'institution-rules': ['./src/engine/estateEngine.ts', './src/engine/sectCreditEngine.ts', './src/engine/serviceRetirementEngine.ts', './src/engine/relicExhibitEngine.ts'],
           'archive-rules': ['./src/engine/coldHistoryEngine.ts', './src/engine/memoryEngine.ts', './src/engine/scenarioObjectiveEngine.ts'],
           'personal-rules': ['./src/engine/artifactEngine.ts', './src/engine/reincarnationEngine.ts', './src/engine/schemeEngine.ts', './src/engine/elementalEngine.ts'],

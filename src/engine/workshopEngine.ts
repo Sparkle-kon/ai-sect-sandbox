@@ -3,6 +3,7 @@ import type {
   WorkshopOutputGrade, WorkshopQualityFloor, WorkshopState, WorkshopTier, WorkshopWorkReceipt, WorldEvent, WorldState,
 } from '../types/world';
 import { ARTIFACT_RULES } from './artifactEngine';
+import { canUseFurnace, claimFurnaceUse } from './furnaceReservationEngine';
 import { activeEscortForActor } from './escortEngine';
 import { pilgrimageCheckpoint } from './pilgrimageEngine';
 import { activeRelocationForActor } from './relocationEngine';
@@ -80,11 +81,11 @@ const artifactIdFor = (order: WorkshopOrder, piece: number) => `workshop-artifac
 const choice = (workshopMove: WorkshopMove, targetWorkshopId: string): WorkshopOption =>
   ({ action: 'WORKSHOP', workshopMove, targetWorkshopId });
 
-export function availableWorkshopActions(actor: Cultivator, world: WorldState, includeOffers = true): WorkshopOption[] {
+export function availableWorkshopActions(actor: Cultivator, world: WorldState, includeOffers = true, executionTick = world.tick): WorkshopOption[] {
   if (!alive(actor) || person(world, actor.id) !== actor) return [];
   const { orders } = world.workshops;
   const result: WorkshopOption[] = [];
-  const makerWorked = orders.some(order => order.makerId === actor.id && order.work.at(-1)?.tick === world.tick);
+  const makerWorked = orders.some(order => order.makerId === actor.id && order.work.at(-1)?.tick === executionTick);
   for (const order of orders) {
     if (!participant(actor, order)) continue;
     const site = at(world, order.siteId);
@@ -102,14 +103,15 @@ export function availableWorkshopActions(actor: Cultivator, world: WorldState, i
     }
     if (active(world, order)) {
       result.push(choice('cancel', order.id));
-      if (actor.id !== order.makerId || makerWorked || world.tick <= (order.acceptedTick ?? Infinity) ||
+      if (actor.id !== order.makerId || makerWorked || executionTick <= (order.acceptedTick ?? Infinity) ||
+          executionTick >= (order.deadlineTick ?? -Infinity) ||
           !makerEligible(world, actor, site, order.tier) || !availableAt(world, patron, site) || order.work.length >= order.quantity * 2) continue;
       const finish = order.work.length % 2 === 1;
       const terms = workshopTerms(order.tier, order.quantity);
       if (order.escrowHerbs < 1 || order.escrowStones < (finish ? terms.finishFuel + terms.feePerPiece : terms.blankFuel)) continue;
       if (finish && (patron.artifacts.length >= WORKSHOP_CAPACITY ||
           hasCanonicalArtifact(world, artifactIdFor(order, Math.floor(order.work.length / 2) + 1)))) continue;
-      result.push(choice('work', order.id));
+      if (canUseFurnace(world, actor, order.siteId, 'workshop', order.id, executionTick)) result.push(choice('work', order.id));
     }
   }
   if (!includeOffers) return result;
@@ -256,7 +258,9 @@ export function resolveWorkshopAction(world: WorldState, actor: Cultivator, payl
     order.deadlineTick = world.tick + WORKSHOP_ACTIVE_TICKS;
     return event(world, order, 'accept', '工坊委制生效', `实托${order.escrowStones}灵石、${order.escrowHerbs}份玄土根；需工匠逐回合加工。`);
   }
-  if (valid.workshopMove === 'work') return work(world, order, actor, rng);
+  if (valid.workshopMove === 'work') {
+    return claimFurnaceUse(world, actor, order.siteId, 'workshop', order.id) ? work(world, order, actor, rng) : null;
+  }
   if (valid.workshopMove === 'decline') {
     settle(world, order, 'declined');
     return event(world, order, 'decline', '工匠谢绝委制', '未签约，无实际扣款。');

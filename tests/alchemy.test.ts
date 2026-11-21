@@ -52,6 +52,7 @@ describe('fictional alchemy resources and remedies', () => {
     expect(actor.herbs.jade_leaf).toBe(8);
     expect(actor.herbs.earth_root).toBe(9);
     expect(actor.spiritStones).toBe(500 - cost);
+    world.tick++;
     expect(resolveAlchemy(world, actor, brew('foundation'), () => 0.9999)?.title).toContain('失手');
     expect(actor.pills.foundation).toBe(1);
     expect(actor.herbs.jade_leaf).toBe(6);

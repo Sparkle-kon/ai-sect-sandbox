@@ -111,6 +111,7 @@ export type ActionType =
   | 'SEASON_REVIEW'
   | 'PROBATION'
   | 'WORKSHOP'
+  | 'FURNACE_RESERVATION'
   | 'FORGE_ARTIFACT'
   | 'BIND_ARTIFACT'
   | 'REPAIR_ARTIFACT'
@@ -487,6 +488,8 @@ export interface LLMDecisionPayload {
   probationSecondVillageId?: string;
   probationVote?: ProbationVote;
   workshopMove?: WorkshopMove;
+  furnaceMove?: 'reserve' | 'cancel';
+  targetFurnaceReservationId?: string;
   targetWorkshopId?: string;
   workshopTier?: WorkshopTier;
   workshopQuantity?: 1 | 2;
@@ -2128,6 +2131,35 @@ export interface WorkshopOrder {
 }
 export interface WorkshopState { orders: WorkshopOrder[]; nextId: number }
 
+export type FurnaceUseKind = 'brew' | 'forge' | 'repair' | 'awaken' | 'workshop' | 'relic';
+export interface FurnaceReservation {
+  id: string;
+  actorId: string;
+  siteId: string;
+  workshopOrderId?: string;
+  requestedTick: number;
+  expiresTick: number;
+  status: 'queued' | 'reserved' | 'used' | 'cancelled' | 'expired';
+  assignedTick?: number;
+  slot?: number;
+  closedTick?: number;
+  reason?: 'owner_cancelled' | 'actor_unavailable' | 'site_unavailable' | 'workshop_closed' | 'queue_expired' | 'turn_missed';
+}
+export interface FurnaceUseReceipt {
+  siteId: string;
+  actorId: string;
+  tick: number;
+  slot: number;
+  kind: FurnaceUseKind;
+  workshopOrderId?: string;
+  reservationId?: string;
+}
+export interface FurnaceReservationState {
+  reservations: FurnaceReservation[];
+  uses: FurnaceUseReceipt[];
+  nextId: number;
+}
+
 export type ProbationMove = 'request' | 'admit' | 'review' | 'withdraw' | 'restore';
 export type ProbationVote = 'support' | 'oppose';
 export type ProbationStatus = 'requested' | 'active' | 'ready' | 'reinstated' | 'withdrawn' | 'rejected' | 'expired';
@@ -2226,6 +2258,7 @@ export interface WorldState {
   villageCensuses: VillageCensusesState;
   probation: ProbationState;
   workshops: WorkshopState;
+  furnaceReservations: FurnaceReservationState;
   resourceFlow: ResourceFlowState;
   roads: RoadState;
   sharedCommons: SharedCommonsState;

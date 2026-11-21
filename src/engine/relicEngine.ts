@@ -1,5 +1,6 @@
 import type { Cultivator, LLMDecisionPayload, LocationNode, RelicFragment, RelicMove, RelicSetId, RelicSlot,
   RelicState, WorldEvent, WorldOccasion, WorldState } from '../types/world';
+import { canUseFurnace, claimFurnaceUse } from './furnaceReservationEngine';
 
 const SET: RelicSetId = 'star-balance';
 const SLOTS: readonly RelicSlot[] = ['frame', 'core'];
@@ -60,7 +61,7 @@ function event(world: WorldState, key: string, title: string, description: strin
     title, description, actorIds: [actorId], locationId };
 }
 
-export function availableRelicActions(actor: Cultivator, world: WorldState): RelicOption[] {
+export function availableRelicActions(actor: Cultivator, world: WorldState, executionTick = world.tick): RelicOption[] {
   if (!live(actor) || !world.cultivators.includes(actor)) return [];
   const site = world.locations.find(({ id }) => id === actor.locationId);
   if (!site) return [];
@@ -70,7 +71,8 @@ export function availableRelicActions(actor: Cultivator, world: WorldState): Rel
     .sort(byId).map(({ id }) => ({ action: 'RELIC', relicMove: 'recover', targetRelicFragmentId: id }));
   const rules = RELIC_SETS[SET];
   if (site.furnaceGrade >= rules.furnaceGrade && actor.spiritStones >= rules.stoneCost &&
-      actor.herbs.earth_root >= rules.earthCost && findPair(world, actor.id, SET)) {
+      actor.herbs.earth_root >= rules.earthCost && findPair(world, actor.id, SET) &&
+      canUseFurnace(world, actor, site.id, 'relic', undefined, executionTick)) {
     options.push({ action: 'RELIC', relicMove: 'assemble', targetRelicSetId: SET });
   }
   return options;
@@ -100,6 +102,7 @@ export function resolveRelicAction(world: WorldState, actor: Cultivator, decisio
   const pair = findPair(world, actor.id, SET)!;
   const rules = RELIC_SETS[SET];
   const id = uniqueAssemblyId(world, pair);
+  if (!claimFurnaceUse(world, actor, actor.locationId, 'relic')) return null;
   actor.spiritStones -= rules.stoneCost;
   actor.herbs.earth_root -= rules.earthCost;
   for (const item of pair) item.holder = { kind: 'consumed', id };
