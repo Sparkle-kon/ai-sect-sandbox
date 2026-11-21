@@ -8,6 +8,7 @@ import type { WorldState } from '../types/world';
 import { FastForwardPanel } from './FastForwardPanel';
 import type { FastForwardControls } from './FastForwardPanel';
 import { BranchComparisonPanel } from './BranchComparisonPanel';
+import { EraCounterpointPanel } from './EraCounterpointPanel';
 import { ReplayReceiptPanel } from './ReplayReceiptPanel';
 import type { ReplayVerificationSource } from './ReplayReceiptPanel';
 
@@ -185,6 +186,7 @@ export function TimelinePanel({ timeline, previewTick, busy, onPreview, onSelect
         </section>
       )}
       {eraEntry}
+      <EraCounterpointPanel timeline={timeline} viewerId={comparisonViewerId} scopeKey={comparisonScopeKey} />
       <BranchComparisonPanel timeline={timeline} viewerId={comparisonViewerId} scopeKey={comparisonScopeKey} preferredTick={previewTick} />
       <ReplayReceiptPanel source={verificationSource} />
       {fastForward && <FastForwardPanel controls={fastForward} timeline={timeline} branchLimit={!canFork} blocked={busy || previewTick !== null || !!pending} />}
