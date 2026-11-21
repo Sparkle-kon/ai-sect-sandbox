@@ -3,6 +3,7 @@ import type { FastForwardCheckpoint, FastForwardProgress, FastForwardWorkerReque
 import type { SaveBranchSource } from './engine/storageEngine';
 import { courierCheckpoint } from './engine/sealedCourierEngine';
 import { expeditionRescueCheckpoint } from './engine/expeditionRescueCheckpoint';
+import { boundaryReliefCheckpoint } from './engine/boundaryReliefCheckpoint';
 import { applyWatchMutation, captureWatchDigests } from './engine/watchlistEngine';
 import type { WatchlistCommand, WatchlistMutationResult } from './engine/watchlistEngine';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -72,6 +73,7 @@ const ChronicleFeed = React.lazy(async () => ({ default: (await import('./compon
 const ChronicleLibraryPanel = React.lazy(async () => ({ default: (await import('./components/ChronicleLibraryPanel')).ChronicleLibraryPanel }));
 const WorldOccasionsPanel = React.lazy(async () => ({ default: (await import('./components/WorldOccasionsPanel')).WorldOccasionsPanel }));
 const ExpeditionRescuePanel = React.lazy(async () => ({ default: (await import('./components/ExpeditionRescuePanel')).ExpeditionRescuePanel }));
+const BoundaryReliefPanel = React.lazy(async () => ({ default: (await import('./components/BoundaryReliefPanel')).BoundaryReliefPanel }));
 const WeatherAtlasPanel = React.lazy(async () => ({ default: (await import('./components/WeatherAtlasPanel')).WeatherAtlasPanel }));
 const ShortShiftPanel = React.lazy(async () => ({ default: (await import('./components/ShortShiftPanel')).ShortShiftPanel }));
 const MarketCaravansPanel = React.lazy(async () => ({ default: (await import('./components/MarketCaravansPanel')).MarketCaravansPanel }));
@@ -94,7 +96,7 @@ interface ChronicleTrail extends ChronicleFeedReturn {
 const chronicleWorkspace = { site: 'map', actor: 'people', sect: 'sect' } as const;
 const chronicleFeedFact = (entry: WorldEvent) => !entry.id.startsWith('evt-sealed-dispatch-') &&
   !(entry.witnessScope === 'participants' && (entry.id.startsWith('evt-sparring-') || entry.id.startsWith('evt-expedition-rescue-') ||
-    entry.id.startsWith('evt-short-shift-') ||
+    entry.id.startsWith('evt-short-shift-') || entry.id.startsWith('evt-boundary-relief-') ||
     /^evt-pilgrimage-[1-9]\d*-(?:camp(?:-expiry|-interruption)?|dismantled|resumed)-\d+$/.test(entry.id)));
 type FastForwardPhase = 'idle' | 'running' | 'pausing' | 'paused' | 'staging' | 'ready' | 'error';
 type FastForwardViewState = { phase: FastForwardPhase; progress?: FastForwardProgress; notice?: string };
@@ -704,7 +706,8 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
             </div>
             {selectedCultivator && <p className="break-words text-xs leading-relaxed text-slate-300">
               {selectedCultivator.realm} {selectedCultivator.realmStage}层 · {selectedCultivator.alive ? `气血 ${selectedCultivator.hp}/${selectedCultivator.maxHp}` : '已陨落'} · {expeditionRescueCheckpoint(visibleWorld, selectedCultivator) ? '位于实际撤离关口' :
-                courierCheckpoint(visibleWorld, selectedCultivator) ? '信使途中' : characterLocation?.name ?? '所在地点未详'}
+                boundaryReliefCheckpoint(visibleWorld, selectedCultivator) ? '位于实际换防关口' :
+                  courierCheckpoint(visibleWorld, selectedCultivator) ? '信使途中' : characterLocation?.name ?? '所在地点未详'}
             </p>}
           </aside>
         </div>,
@@ -770,7 +773,12 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
           </React.Suspense> },
         ]} />,
         sect: <WorkspaceSections label="宗门事务" initialOpen={focusSect ? 'governance' : opened('sect', 'governance')} sections={[
-          { id: 'governance', label: '宗门地位、库账与外交', content: focusSect ? <FocusedSectSummary name={focusSect.name} alignment={focusSect.alignment} /> : inspect('sect') },
+          { id: 'governance', label: '宗门地位、库账与外交', content: focusSect
+            ? <FocusedSectSummary name={focusSect.name} alignment={focusSect.alignment} />
+            : <div className="space-y-2.5">{inspect('sect')}
+              {activeActorId && visibleWorld.boundaryReliefs.cases.length > 0 &&
+                <React.Suspense fallback={null}><BoundaryReliefPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense>}
+            </div> },
           { id: 'oaths', label: '天道契书与宗门仲裁', content: <React.Suspense fallback={<p role="status">载入契书记录…</p>}><OathContractsPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense> },
           { id: 'doctrine', label: '道统与分合', content: <React.Suspense fallback={<p role="status">载入道统记录…</p>}>
             <SectDoctrinePanel world={visibleWorld} cultivator={selectedCultivator} />

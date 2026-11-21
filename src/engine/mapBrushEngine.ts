@@ -7,6 +7,7 @@ import { courierCheckpoint, reconcileCourierDeaths } from './sealedCourierEngine
 import { advanceHouseholds } from './householdEngine';
 import { advancePilgrimages, pilgrimageCheckpoint } from './pilgrimageEngine';
 import { expeditionRescueCheckpoint } from './expeditionRescueCheckpoint';
+import { boundaryReliefCheckpoint } from './boundaryReliefCheckpoint';
 import { advanceSanctuaries } from './sanctuaryEngine';
 import { advanceResearch } from './researchEngine';
 import { activeEscortForActor } from './escortEngine';
@@ -35,7 +36,7 @@ function peopleAtTile(world: WorldState, tileId: string): Cultivator[] {
   return world.cultivators.filter((person) => {
     if (!person.alive || person.hp <= 0) return false;
     const convoy = activeRelocationForActor(world, person) ?? activeEscortForActor(world, person);
-    const checkpoint = expeditionRescueCheckpoint(world, person) ?? convoy?.path[convoy.pathIndex] ??
+    const checkpoint = expeditionRescueCheckpoint(world, person) ?? boundaryReliefCheckpoint(world, person) ?? convoy?.path[convoy.pathIndex] ??
       pilgrimageCheckpoint(world, person) ?? courierCheckpoint(world, person);
     return checkpoint ? terrainTileAt(world, checkpoint.x, checkpoint.y)?.id === tileId : matching.has(person.locationId);
   });

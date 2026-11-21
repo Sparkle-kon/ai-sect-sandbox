@@ -1,6 +1,8 @@
 import { flowSect, recordResourceFlow } from './resourceFlowEngine';
 import { isRetiredFromService } from './serviceRetirementEngine';
 import { activeRelocationForSect } from './relocationEngine';
+import { boundaryReliefCheckpoint } from './boundaryReliefCheckpoint';
+import { boundaryReliefBlocksLegacyDispatch } from './boundaryReliefEngine';
 import type { ActionType, Cultivator, FacilityKind, LLMDecisionPayload, LocationNode, Sect, WorldEvent, WorldState } from '../types/world';
 import { rewardContribution } from './sectPoliticsEngine';
 
@@ -41,9 +43,14 @@ export function isGuardAssignmentActive(actor: Cultivator, world: WorldState): b
     world.sects.some(({ id, leaderId }) => id === actor.sectId && actor.id !== leaderId));
 }
 
+export const isGuardPhysicallyOnDuty = (actor: Cultivator, world: WorldState): boolean =>
+  isGuardAssignmentActive(actor, world) && actor.guardAssignment?.locationId === actor.locationId &&
+  !boundaryReliefCheckpoint(world, actor);
+
 export function availableSectEconomyActions(actor: Cultivator, world: WorldState): SectEconomyOption[] {
   const sect = world.sects.find(({ id }) => id === actor.sectId);
-  if (!sect || !actor.alive || actor.hp <= 0 || isRetiredFromService(actor)) return [];
+  // A traveller's siteId remains their origin; it must not authorize ordinary guard movement or headquarters work.
+  if (!sect || !actor.alive || actor.hp <= 0 || isRetiredFromService(actor) || boundaryReliefCheckpoint(world, actor)) return [];
   const options: SectEconomyOption[] = [];
   if (isGuardAssignmentActive(actor, world)) options.push({ action: 'GUARD_DUTY', targetLocationId: actor.guardAssignment?.locationId });
   if (activeRelocationForSect(world, sect.id) || sect.leaderId !== actor.id || actor.locationId !== sect.headquartersId) return options;
@@ -58,7 +65,8 @@ export function availableSectEconomyActions(actor: Cultivator, world: WorldState
     if (guard.id === actor.id || !guard.alive || guard.hp <= 0 || isRetiredFromService(guard) || guard.sectId !== sect.id || guard.locationId !== hq.id ||
         isGuardAssignmentActive(guard, world)) continue;
     for (const site of world.locations) {
-      if (isResourceSite(site, sect.id) && !world.cultivators.some((member) => member.sectId === sect.id &&
+      if (isResourceSite(site, sect.id) && !boundaryReliefBlocksLegacyDispatch(world, guard.id, site.id) &&
+          !world.cultivators.some((member) => member.sectId === sect.id &&
           member.guardAssignment?.locationId === site.id && isGuardAssignmentActive(member, world))) {
         options.push({ action: 'DISPATCH_GUARD', targetCultivatorId: guard.id, targetLocationId: site.id });
       }
@@ -123,8 +131,8 @@ export function maintainSectEconomy(world: WorldState): void {
     const hq = world.locations.find(({ id }) => id === sect.headquartersId);
     const controlsHq = hq && (!hq.ownerSectId || hq.ownerSectId === sect.id);
     const holdings = world.locations.filter(({ ownerSectId }) => ownerSectId === sect.id);
-    const guarded = new Set(world.cultivators.filter((actor) => actor.sectId === sect.id && isGuardAssignmentActive(actor, world) &&
-      actor.guardAssignment?.locationId === actor.locationId).map(({ locationId }) => locationId));
+    const guarded = new Set(world.cultivators.filter((actor) => actor.sectId === sect.id && isGuardPhysicallyOnDuty(actor, world))
+      .map(({ locationId }) => locationId));
     const taxes = holdings.reduce((income, node) => income + (node.type === 'sect_hq' || node.type === 'market' ? 12 + Math.floor(node.spiritQi / 8) : 0), 0);
     const mining = controlsHq && sect.facilities.spirit_mine > 0 ? sect.facilities.spirit_mine *
       (22 + 8 * holdings.filter((node) => node.type === 'spirit_vein').length + 10 * guarded.size) : 0;

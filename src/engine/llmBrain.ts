@@ -1,6 +1,8 @@
 import { availableSeasonReviewActions, SEASON_REVIEW_WINDOW } from './seasonReviewEngine';
 import { availableObservatoryActions } from './fieldObservatoryEngine';
 import { availableShortShiftActions } from './shortShiftEngine';
+import { availableBoundaryReliefActions } from './boundaryReliefEngine';
+import { boundaryReliefCheckpoint } from './boundaryReliefCheckpoint';
 import { availableOathArbitrationActions } from './oathArbitrationEngine';
 import { availableVillageCensusActions } from './villageCensusEngine';
 import { availableRoadActions } from './roadEngine';
@@ -117,6 +119,25 @@ export function computeHeuristicDecision(
       chosenAction: 'FACE_TRIBULATION', tribulationStance,
       innerMonologue: tribulationStance === 'focus' ? '抱守道心，不为幻象所动。' : '雷云不散，且运转护身法诀抵挡。',
     };
+  }
+  const boundaryRow = world.boundaryReliefs.cases.find((row) => row.incomingId === cultivator.id &&
+    (row.status === 'offered' || row.status === 'travelling' || row.status === 'returning'));
+  if (boundaryRow) {
+    const choices = availableBoundaryReliefActions(cultivator, world);
+    const fatigued = cultivator.hp < cultivator.maxHp * .65;
+    if (boundaryRow.status === 'offered') {
+      const move = choices.find(({ boundaryReliefMove }) => boundaryReliefMove === (fatigued ? 'decline' : 'accept'));
+      if (move) return { ...move, chosenAction: move.action, innerMonologue: fatigued ?
+        '伤势未愈，由本人谢绝，不让同门失去已有岗哨。' : '我愿按实际路线前往；抵达前不算换防。' };
+    } else {
+      // This is an explicit reversal only while the return leg is no longer than the unfinished outward leg.
+      const returnCostIsLower = boundaryRow.pathIndex * 2 <= boundaryRow.path.length - 1;
+      const withdraw = boundaryRow.status === 'travelling' && fatigued && returnCostIsLower ?
+        choices.find(({ boundaryReliefMove }) => boundaryReliefMove === 'withdraw') : undefined;
+      if (withdraw) return { ...withdraw, chosenAction: withdraw.action,
+        innerMonologue: '伤势累进，在可实走退回时由本人撤回，不虚报已到岗。' };
+      return { chosenAction: 'REST', innerMonologue: '换防途中仅按实际关口推进，不在旧站另行办事。' };
+    }
   }
   const rescue = utilityExpeditionRescueDecision(cultivator, world);
   if (rescue) return rescue;
@@ -346,7 +367,7 @@ export function computeHeuristicDecision(
     (c) =>
       c.alive &&
       c.id !== cultivator.id &&
-      c.locationId === cultivator.locationId && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) && !courierCheckpoint(world, c)
+      c.locationId === cultivator.locationId && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) && !courierCheckpoint(world, c) && !boundaryReliefCheckpoint(world, c)
   );
 
   const localTile = currentLocation ? terrainTileAt(world, currentLocation.x, currentLocation.y) : undefined;
@@ -755,6 +776,14 @@ export function computeHeuristicDecision(
     if (invitation) return { ...invitation, chosenAction: 'SHORT_SHIFT', innerMonologue: '只为已有实测的观象点请在场道友短聘，须本人同意。' };
   }
 
+  if (cultivator.sectRank === '掌门' && world.tick >= 36 &&
+      (world.tick + cultivator.id.charCodeAt(cultivator.id.length - 1)) % 29 === 11 &&
+      world.cultivators.some((guard) => guard.alive && guard.sectId === cultivator.sectId &&
+        guard.guardAssignment && guard.locationId === guard.guardAssignment.locationId)) {
+    const offer = availableBoundaryReliefActions(cultivator, world).find(({ boundaryReliefMove }) => boundaryReliefMove === 'offer');
+    if (offer) return { ...offer, chosenAction: offer.action, innerMonologue: '只请现有候任同门自行应允；守位实到才能移交。' };
+  }
+
   // 5. Socialize; trust in fellowship makes seeking a partner more attractive.
   const fellowship = cultivator.reflections.some(
     (entry) => entry.kind === 'belief' && entry.theme === 'community' && entry.intensity >= 6
@@ -845,6 +874,9 @@ export async function requestCultivatorLLMDecision(
   const onPilgrimagePath = activeVow && Boolean(pilgrimageCheckpoint(world, cultivator));
   const pilgrimageOptions = availablePilgrimageActions(cultivator, world, true, requestTick);
   if (onPilgrimagePath && !pilgrimageOptions.length) return undefined;
+  const boundaryReliefOptions = availableBoundaryReliefActions(cultivator, world, requestTick);
+  const boundaryReliefOnly = Boolean(boundaryReliefCheckpoint(world, cultivator));
+  if (boundaryReliefOnly && !boundaryReliefOptions.length) return undefined;
   const rescueOptions = availableExpeditionRescueActions(cultivator, world, requestTick);
   const rescueOnly = activeOccasionForActor(world, cultivator)?.kind === 'expedition' || world.expeditionRescues.requests.some((row) =>
     row.status === 'extracting' && (row.explorerId === cultivator.id || row.rescuerId === cultivator.id));
@@ -855,7 +887,7 @@ export async function requestCultivatorLLMDecision(
     (c) =>
       c.alive &&
       c.id !== cultivator.id &&
-      c.locationId === cultivator.locationId && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) && !courierCheckpoint(world, c)
+      c.locationId === cultivator.locationId && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) && !courierCheckpoint(world, c) && !boundaryReliefCheckpoint(world, c)
   );
   const recalled = recallMemories(cultivator, world.tick).map((m) => ({
     tick: m.tick,
@@ -913,7 +945,10 @@ export async function requestCultivatorLLMDecision(
   const relicOptions = availableRelicActions(cultivator, world, requestTick);
   const recollectionOptions = availableRecollectionActions(cultivator, world);
   const ownEcho = visibleRecollection(world, cultivator.id);
-  const prompt = rescueOnly ? `你是修仙沙盒中参与秘境求援的修士。只从本人执行回合的许可原样复制求援、应援或撤回：${JSON.stringify(rescueOptions)}。
+  const prompt = boundaryReliefOnly ?
+    `你是修仙沙盒中正在路上的换防修士，不在上个实站。若由本人撤回，只复制执行回合许可的动作与换防编号：${JSON.stringify(boundaryReliefOptions)}。
+路线和守备都以实际进度为准，不能填坐标、灵气、地权、守卫或宣布到岗。只返回合法 JSON。` :
+    rescueOnly ? `你是修仙沙盒中参与秘境求援的修士。只从本人执行回合的许可原样复制求援、应援或撤回：${JSON.stringify(rescueOptions)}。
 确认由当事人分别作出，撤离必须实走。不要填写坐标、地点名称、路线、补给数量或战利品。只返回合法 JSON。` :
     activeVow ? `你是修仙沙盒中自愿参加巡礼的修士。只能使用本人的可执行行动，不许传送、额外援药或虚构站点。
 当前已实到 ${activeVow.stopsVisited.length - 1} 个巡礼站点；${onPilgrimagePath ? '仍在道路途中，不在旧站。' : '当前在已到达的实站，可调息。'}
@@ -940,6 +975,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 本宗邦交：${JSON.stringify(world.diplomacy.filter((relation) => relation.sectAId === cultivator.sectId || relation.sectBId === cultivator.sectId))}；公示的外事权限：${JSON.stringify(availableDiplomacyActions(cultivator, world))}
 - 赛季复核只选真实可核验收据；提交不会改写原榜：${JSON.stringify(honorReviewOptions)}
 - 临时观象只复制实际地点的 fund、到期 measure 或带原日期 relay；只能记录实测，不能填写强度：${JSON.stringify(observatoryOptions)}
+- 巡界换防只复制当前获准选项；offer 必须用已列真实哨位和候任修士，accept、decline、withdraw 只用换防编号。不可填写路线、灵气、地权、岗哨覆盖或其他守卫：${JSON.stringify(boundaryReliefOptions)}
 - 跨宗短聘只复制现场许可的 offer、accept、decline、withdraw 或 work；offer 用已列的目标修士和真实观象日期，其他只用该短聘编号。不能填写报酬、地点、天气或宗籍：${JSON.stringify(shortShiftOptions)}
 - 坊籍核点必须本人在场，只可复制已列村落：${JSON.stringify(censusOptions)}
 - 驿路选项要求实地维修和真实资源；巡礼只有实际列出的付费路才可选，普通路线不另收路费：${JSON.stringify(roadOptions)}
@@ -1112,6 +1148,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'SPARRING',
             'EXPEDITION_RESCUE',
             'SHORT_SHIFT',
+            'BOUNDARY_RELIEF',
             'RELIC_EXHIBIT',
             'PROBATION',
             'ROAD',
@@ -1122,6 +1159,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
           const chosenAction = parsed?.chosenAction;
           if (!chosenAction || !validActions.includes(chosenAction)) return undefined;
 
+          if (boundaryReliefOnly && chosenAction !== 'BOUNDARY_RELIEF') return undefined;
           if (rescueOnly && chosenAction !== 'EXPEDITION_RESCUE') return undefined;
           if (activeVow && chosenAction !== 'PILGRIMAGE' && (chosenAction !== 'REST' || onPilgrimagePath)) return undefined;
           const legalRoad = chosenAction === 'ROAD' ? roadOptions.find((item) =>
@@ -1155,6 +1193,11 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             item.targetExpeditionRescueId === parsed.targetExpeditionRescueId) : undefined;
           if (chosenAction === 'EXPEDITION_RESCUE' && (!legalRescue || Object.keys(parsed).some((field) =>
             !['chosenAction', 'innerMonologue', 'spokenLine', 'rescueMove', 'targetOccasionId', 'targetExpeditionRescueId'].includes(field)))) return undefined;
+          const legalBoundaryRelief = chosenAction === 'BOUNDARY_RELIEF' ? boundaryReliefOptions.find((item) =>
+            item.boundaryReliefMove === parsed.boundaryReliefMove && item.targetLocationId === parsed.targetLocationId &&
+            item.targetCultivatorId === parsed.targetCultivatorId && item.targetBoundaryReliefId === parsed.targetBoundaryReliefId) : undefined;
+          if (chosenAction === 'BOUNDARY_RELIEF' && (!legalBoundaryRelief || Object.keys(parsed).some((field) =>
+            !['chosenAction', 'innerMonologue', 'spokenLine', 'boundaryReliefMove', 'targetLocationId', 'targetCultivatorId', 'targetBoundaryReliefId'].includes(field)))) return undefined;
           const legalShortShift = chosenAction === 'SHORT_SHIFT' ? shortShiftOptions.find((item) =>
             item.shortShiftMove === parsed.shortShiftMove && item.targetCultivatorId === parsed.targetCultivatorId &&
             item.targetObservatoryTick === parsed.targetObservatoryTick && item.targetShortShiftId === parsed.targetShortShiftId) : undefined;
@@ -1408,9 +1451,9 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
               cultivator.innerMonologue ||
               '天道无常，唯有苦修方是正途。',
             chosenAction,
-            targetLocationId: legalFurnace ? legalFurnace.targetLocationId : legalSanctuary ? legalSanctuary.targetLocationId : legalRelocation ? legalRelocation.targetLocationId :
+            targetLocationId: legalBoundaryRelief ? legalBoundaryRelief.targetLocationId : legalFurnace ? legalFurnace.targetLocationId : legalSanctuary ? legalSanctuary.targetLocationId : legalRelocation ? legalRelocation.targetLocationId :
               chosenAction !== 'DOCTRINE' && typeof parsed.targetLocationId === 'string' ? parsed.targetLocationId : undefined,
-            targetCultivatorId: legalShortShift ? legalShortShift.targetCultivatorId : legalSparring ? legalSparring.targetCultivatorId : legalObservatory ? legalObservatory.targetCultivatorId : legalArbitration ? legalArbitration.targetCultivatorId : legalWorkshop ? legalWorkshop.targetCultivatorId : legalDoctrine ? legalDoctrine.targetCultivatorId : legalEstate ? legalEstate.targetCultivatorId : legalWitness ? legalWitness.targetCultivatorId : legalOath ? legalOath.targetCultivatorId : legalTraining ? legalTraining.targetCultivatorId
+            targetCultivatorId: legalBoundaryRelief ? legalBoundaryRelief.targetCultivatorId : legalShortShift ? legalShortShift.targetCultivatorId : legalSparring ? legalSparring.targetCultivatorId : legalObservatory ? legalObservatory.targetCultivatorId : legalArbitration ? legalArbitration.targetCultivatorId : legalWorkshop ? legalWorkshop.targetCultivatorId : legalDoctrine ? legalDoctrine.targetCultivatorId : legalEstate ? legalEstate.targetCultivatorId : legalWitness ? legalWitness.targetCultivatorId : legalOath ? legalOath.targetCultivatorId : legalTraining ? legalTraining.targetCultivatorId
               : typeof parsed.targetCultivatorId === 'string' ? parsed.targetCultivatorId : undefined,
             spokenLine: typeof parsed.spokenLine === 'string' ? parsed.spokenLine.trim().slice(0, 90) : undefined,
             facilityKind: legalInfrastructure?.facilityKind,
@@ -1513,6 +1556,8 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             targetScoreId: legalSeasonReview?.targetScoreId,
             observatoryMove: legalObservatory?.observatoryMove,
             targetObservatoryTick: legalShortShift?.targetObservatoryTick ?? legalObservatory?.targetObservatoryTick,
+            boundaryReliefMove: legalBoundaryRelief?.boundaryReliefMove,
+            targetBoundaryReliefId: legalBoundaryRelief?.targetBoundaryReliefId,
             shortShiftMove: legalShortShift?.shortShiftMove,
             targetShortShiftId: legalShortShift?.targetShortShiftId,
             arbitrationMove: legalArbitration?.arbitrationMove,

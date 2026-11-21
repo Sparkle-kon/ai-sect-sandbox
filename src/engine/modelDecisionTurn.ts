@@ -4,6 +4,8 @@ import { activeSiegeForActor } from './diplomacyEngine';
 import { activeEscortForActor } from './escortEngine';
 import { activeOccasionForActor } from './occasionEngine';
 import { availableExpeditionRescueActions } from './expeditionRescueEngine';
+import { availableBoundaryReliefActions } from './boundaryReliefEngine';
+import { boundaryReliefCheckpoint } from './boundaryReliefCheckpoint';
 import { activeRelocationForActor } from './relocationEngine';
 import { availablePilgrimageActions, pilgrimageCheckpoint } from './pilgrimageEngine';
 import { activeCourierForActor } from './sealedCourierEngine';
@@ -53,6 +55,7 @@ export function modelDecisionCandidates(world: WorldState): Cultivator[] {
     (world.month < 12 || actor.age + 1 < actor.lifespan) &&
     !activeCourierForActor(world, actor) && !activeEscortForActor(world, actor) && !activeRelocationForActor(world, actor) &&
     !activeSiegeForActor(world, actor) && isEligibleForOccasionDecision(world, actor, nextTick) &&
+    (!boundaryReliefCheckpoint(world, actor) || availableBoundaryReliefActions(actor, world, nextTick).length > 0) &&
     (!pilgrimageCheckpoint(world, actor) || availablePilgrimageActions(actor, world, false, nextTick).length > 0));
 }
 

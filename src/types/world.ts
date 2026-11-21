@@ -115,6 +115,7 @@ export type ActionType =
   | 'SPARRING'
   | 'EXPEDITION_RESCUE'
   | 'SHORT_SHIFT'
+  | 'BOUNDARY_RELIEF'
   | 'FORGE_ARTIFACT'
   | 'BIND_ARTIFACT'
   | 'REPAIR_ARTIFACT'
@@ -500,6 +501,8 @@ export interface LLMDecisionPayload {
   targetExpeditionRescueId?: string;
   shortShiftMove?: ShortShiftMove;
   targetShortShiftId?: string;
+  boundaryReliefMove?: BoundaryReliefMove;
+  targetBoundaryReliefId?: string;
   targetWorkshopId?: string;
   workshopTier?: WorkshopTier;
   workshopQuantity?: 1 | 2;
@@ -2252,6 +2255,41 @@ export interface ShortShift {
 }
 export interface ShortShiftState { shifts: ShortShift[]; nextId: number }
 
+export type BoundaryReliefMove = 'offer' | 'accept' | 'decline' | 'withdraw';
+export type BoundaryCoverageKind = 'incumbent' | 'gap' | 'relief' | 'other';
+export interface BoundaryCoverage {
+  tick: number;
+  kind: BoundaryCoverageKind;
+  guardId?: string;
+}
+export interface BoundaryRelief {
+  id: string;
+  sectId: string;
+  leaderId: string;
+  incumbentId: string;
+  incomingId: string;
+  originSiteId: string;
+  postSiteId: string;
+  incumbentAssignedTick: number;
+  offeredTick: number;
+  offerExpiresTick: number;
+  status: 'offered' | 'travelling' | 'returning' | 'completed' | 'declined' | 'withdrawn' | 'expired' | 'interrupted';
+  acceptedTick?: number;
+  deadlineTick?: number;
+  path: MapPoint[];
+  pathIndex: number;
+  lastAdvancedTick?: number;
+  outboundSteps: number;
+  returnSteps: number;
+  strainSpent: number;
+  closedTick?: number;
+  closedById?: string;
+  closeReason?: 'declined' | 'withdrawn' | 'offer_expired' | 'title_lost' | 'conflicting_duty' | 'actor_lost' | 'route_blocked' | 'late';
+  coverage: BoundaryCoverage;
+  firstGapTick?: number;
+}
+export interface BoundaryReliefState { cases: BoundaryRelief[]; nextId: number }
+
 export type ProbationMove = 'request' | 'admit' | 'review' | 'withdraw' | 'restore';
 export type ProbationVote = 'support' | 'oppose';
 export type ProbationStatus = 'requested' | 'active' | 'ready' | 'reinstated' | 'withdrawn' | 'rejected' | 'expired';
@@ -2354,6 +2392,7 @@ export interface WorldState {
   sparring: SparringState;
   expeditionRescues: ExpeditionRescueState;
   shortShifts: ShortShiftState;
+  boundaryReliefs: BoundaryReliefState;
   resourceFlow: ResourceFlowState;
   roads: RoadState;
   sharedCommons: SharedCommonsState;

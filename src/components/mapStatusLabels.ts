@@ -1,6 +1,6 @@
 import type { Cultivator, HerbId, WorldState } from '../types/world';
 import { HERB_LABELS } from '../engine/alchemyEngine';
-import { isGuardAssignmentActive } from '../engine/sectEconomyEngine';
+import { isGuardPhysicallyOnDuty } from '../engine/sectEconomyEngine';
 
 type Scheme = NonNullable<Cultivator['activeScheme']>;
 
@@ -32,6 +32,5 @@ export function countHerbs(inventory: Record<HerbId, number>): number {
 }
 
 export function isGuardOnDuty(actor: Cultivator, world: WorldState): boolean {
-  return Boolean(actor.guardAssignment && actor.locationId === actor.guardAssignment.locationId &&
-    isGuardAssignmentActive(actor, world));
+  return isGuardPhysicallyOnDuty(actor, world);
 }

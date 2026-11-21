@@ -19,6 +19,7 @@ export default defineConfig({
           'archive-rules': ['./src/engine/coldHistoryEngine.ts', './src/engine/memoryEngine.ts', './src/engine/scenarioObjectiveEngine.ts'],
           'personal-rules': ['./src/engine/artifactEngine.ts', './src/engine/reincarnationEngine.ts', './src/engine/schemeEngine.ts', './src/engine/elementalEngine.ts'],
           'world-identity': ['./src/engine/worldRandom.ts', './src/engine/worldIdentity.ts', './src/engine/worldgenProfiles.ts'],
+          'travel-checkpoints': ['./src/engine/expeditionRescueCheckpoint.ts', './src/engine/boundaryReliefCheckpoint.ts'],
           'map-controls': ['./src/components/mapCamera.ts', './src/components/mapKeyboard.ts', './src/components/mapActorClusters.ts',
             './src/components/mapBrushView.ts', './src/components/mapTouchGesture.ts'],
           'provenance-rules': ['./src/engine/relicEngine.ts', './src/engine/witnessEngine.ts', './src/engine/competitionEngine.ts',

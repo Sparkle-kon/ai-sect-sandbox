@@ -2,6 +2,7 @@ import type { Cultivator, LocationNode, WorldEvent, WorldState } from '../types/
 import { courierCheckpoint } from './sealedCourierEngine';
 import { pilgrimageCheckpoint } from './pilgrimageEngine';
 import { expeditionRescueCheckpoint } from './expeditionRescueCheckpoint';
+import { boundaryReliefCheckpoint } from './boundaryReliefCheckpoint';
 import { currentVisibleTileIds, terrainTileAt } from './terrainEngine';
 
 export type ChronicleFocusKind = 'site' | 'actor' | 'sect';
@@ -86,7 +87,7 @@ export function createChronicleFocusResolver(world: WorldState, viewerId?: strin
     for (const actorId of new Set(fact.actorIds)) {
       const actor = observedFact ? actors.get(actorId) : undefined;
       const observedPoint = actor?.alive && actor.hp > 0 && !unsettledStation(world, actor) ?
-        expeditionRescueCheckpoint(world, actor) ?? courierCheckpoint(world, actor) ??
+        expeditionRescueCheckpoint(world, actor) ?? boundaryReliefCheckpoint(world, actor) ?? courierCheckpoint(world, actor) ??
           pilgrimageCheckpoint(world, actor) ?? sites.get(actor.locationId) : undefined;
       if (actor && isVisible(world, observed, observedPoint)) {
         if (people++ < MAX_ACTOR_LINKS) add('actor', actor.id, actor.name);

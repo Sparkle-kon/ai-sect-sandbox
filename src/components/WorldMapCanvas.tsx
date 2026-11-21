@@ -37,6 +37,7 @@ import { visiblePilgrimageCampMarks, visiblePilgrimageMapCheckpoint } from './pi
 import { visibleSanctuaryMapMarks } from './sanctuaryView';
 import { resolveChronicleFocus } from '../engine/chronicleFocusEngine';
 import { availableFurnaceSlotSummary } from '../engine/furnaceReservationEngine';
+import { getCurrentBoundaryCoverage } from '../engine/boundaryReliefEngine';
 import type { ChronicleFocusRequest } from '../engine/chronicleFocusEngine';
 
 const TerrainSuccessionPanel = React.lazy(async () => ({ default: (await import('./TerrainSuccessionPanel')).TerrainSuccessionPanel }));
@@ -130,6 +131,11 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const extractionMarks = useMemo(() => [...new Map(
     [...mapView.extractionPositions.values()].map((point) => [`${point.x}:${point.y}`, point]),
   ).values()], [mapView]);
+  const boundaryMarks = useMemo(() => [...new Map(
+    [...mapView.boundaryPositions.values()].map((point) => [`${point.x}:${point.y}`, point]),
+  ).values()], [mapView]);
+  const boundaryCoverage = useMemo(() => new Map(getCurrentBoundaryCoverage(world, selected)
+    .map((coverage) => [coverage.postSiteId, coverage])), [world, selected]);
   const { seenLocations, isCurrentLocation } = mapView;
   const liveActors = useMemo(() => {
     const travellers = mapTransitActorIds(world);
@@ -349,6 +355,16 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         ctx.font = 'bold 11px sans-serif';
         ctx.textAlign = 'center';
         ctx.fillText('撤', x, y - 21);
+        ctx.restore();
+      }
+      for (const { x, y } of boundaryMarks) {
+        ctx.save();
+        ctx.fillStyle = '#27254a';
+        ctx.fillRect(x - 9, y - 33, 18, 16);
+        ctx.fillStyle = '#c7d2fe';
+        ctx.font = 'bold 11px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('换', x, y - 21);
         ctx.restore();
       }
 
@@ -669,7 +685,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener('change', stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, hazards, convoys, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, hazards, convoys, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1067,6 +1083,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       {pilgrimageMark && <p className="sr-only">所选修士的巡礼关口：第 {pilgrimageMark.row} 行，第 {pilgrimageMark.col} 列。</p>}
       {campMarks.length > 0 && <p className="sr-only">已观测夜宿营地 {campMarks.length} 处，共 {campMarks.reduce((count, camp) => count + camp.parties, 0)} 队，不是新地点。</p>}
       {extractionMarks.length > 0 && <p className="sr-only">当前看见 {extractionMarks.length} 处实际撤离关口；不是新地点，也未公开路线。</p>}
+      {boundaryMarks.length > 0 && <p className="sr-only">当前看见 {boundaryMarks.length} 处实际换防关口。尚在途中的候补不算驻守。</p>}
       {escortedCaravan && <div className="border-t border-slate-800/80 px-3 text-xs text-sky-200">
         <button type="button" className="min-h-11 text-left" onClick={() => commandCamera(focusMapPoint(cameraRef.current, escortedCaravan.marker))}>
           定位所选护镖车队 · 第 {escortedCaravan.row} 行，第 {escortedCaravan.col} 列
@@ -1125,6 +1142,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
             const villageRegister = localVillage ? householdCensus(world, localVillage.id) : undefined;
             const construction = localVillage ? localConstruction.get(localVillage.id) : undefined;
             const sanctuary = sanctuaryMarks.get(location.id);
+            const coverage = boundaryCoverage.get(location.id);
             return (
               <li key={location.id} className="inline-flex items-center gap-1.5">
                 <span>{location.name} · 灵脉</span>
@@ -1142,6 +1160,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                   · 炉位 {furnaceShift.used + furnaceShift.reserved}/{furnaceShift.capacity} 已用或预留 · 候炉 {furnaceShift.queued} 位
                 </span>}
                 {guardCount > 0 && <span className="text-indigo-300">· 驻守 {guardCount} 人</span>}
+                {coverage && <span className="text-indigo-200">· Tick {coverage.tick} 现场确认：{coverage.kind === 'gap' ? '岗位空缺' :
+                  coverage.kind === 'relief' ? '接替者已实到' : '有实际驻守'}</span>}
                 {homeSect && homeSect.arrayMaxHp > 0 && (
                   <span className="text-indigo-300">· 护山阵 {homeSect.arrayHp}/{homeSect.arrayMaxHp}</span>
                 )}

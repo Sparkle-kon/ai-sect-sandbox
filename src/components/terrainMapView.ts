@@ -1,6 +1,7 @@
 import { courierCheckpoint } from '../engine/sealedCourierEngine';
 import { pilgrimageCheckpoint } from '../engine/pilgrimageEngine';
 import { expeditionRescueCheckpoint } from '../engine/expeditionRescueCheckpoint';
+import { boundaryReliefCheckpoint } from '../engine/boundaryReliefCheckpoint';
 import type { Cultivator, LocationNode, MapPoint, MapTile, TerrainBiome, WorldState } from '../types/world';
 import { currentVisibleTileIds, terrainTileAt } from '../engine/terrainEngine';
 
@@ -26,22 +27,26 @@ export function createTerrainMapView(world: WorldState, viewer: Cultivator | und
   const seenLocations = world.locations.filter(({ id }) => !known || known.has(locationTile.get(id)?.id ?? ''));
   const trailPositions = new Map<string, MapPoint>();
   const extractionPositions = new Map<string, MapPoint>();
-  const rescueTiles = world.expeditionRescues.requests.some(({ status, pathIndex }) =>
-    status === 'extracting' || status === 'interrupted' && pathIndex > 0)
+  const boundaryPositions = new Map<string, MapPoint>();
+  const guardedTravelTiles = world.expeditionRescues.requests.some(({ status, pathIndex }) =>
+    status === 'extracting' || status === 'interrupted' && pathIndex > 0) ||
+    world.boundaryReliefs.cases.some(({ status }) => status === 'travelling' || status === 'returning')
     ? (current ?? (viewer?.alive ? currentVisibleTileIds(world, viewer) : new Set<string>())) : undefined;
   const liveActors = world.cultivators.filter((actor) => {
     if (!actor.alive) return false;
-    const rescue = rescueTiles && expeditionRescueCheckpoint(world, actor);
-    const checkpoint = rescue ?? courierCheckpoint(world, actor) ?? pilgrimageCheckpoint(world, actor);
+    const rescue = guardedTravelTiles && expeditionRescueCheckpoint(world, actor);
+    const relief = guardedTravelTiles && boundaryReliefCheckpoint(world, actor);
+    const checkpoint = rescue ?? relief ?? courierCheckpoint(world, actor) ?? pilgrimageCheckpoint(world, actor);
     if (!checkpoint) return isCurrentLocation(actor.locationId);
-    const tiles = rescue ? rescueTiles : current;
+    const tiles = rescue || relief ? guardedTravelTiles : current;
     if (tiles && !tiles.has(terrainTileAt(world, checkpoint.x, checkpoint.y)?.id ?? '')) return false;
     trailPositions.set(actor.id, checkpoint);
     if (rescue) extractionPositions.set(actor.id, rescue);
+    if (relief) boundaryPositions.set(actor.id, relief);
     return true;
   });
   return {
-    current, known, locationTile, tileState, isCurrentLocation, seenLocations, liveActors, trailPositions, extractionPositions,
+    current, known, locationTile, tileState, isCurrentLocation, seenLocations, liveActors, trailPositions, extractionPositions, boundaryPositions,
   };
 }
 

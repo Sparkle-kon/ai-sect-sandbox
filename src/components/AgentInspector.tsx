@@ -2,6 +2,7 @@ import React from 'react';
 import { Brain, Shield, Coins, Compass, Heart, Sparkles } from 'lucide-react';
 import { Cultivator, WorldState } from '../types/world';
 import { expeditionRescueCheckpoint } from '../engine/expeditionRescueCheckpoint';
+import { boundaryReliefCheckpoint } from '../engine/boundaryReliefCheckpoint';
 import { MemoryPanel } from './MemoryPanel';
 import { RecollectionPanel } from './RecollectionPanel';
 import { ReflectionPanel } from './ReflectionPanel';
@@ -51,7 +52,8 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
 
   const sect = world.sects.find((s) => s.id === cultivator.sectId);
   const extractionPoint = expeditionRescueCheckpoint(world, cultivator);
-  const location = extractionPoint ? undefined : world.locations.find((l) => l.id === cultivator.locationId);
+  const reliefPoint = boundaryReliefCheckpoint(world, cultivator);
+  const location = extractionPoint || reliefPoint ? undefined : world.locations.find((l) => l.id === cultivator.locationId);
   const bounty = relevantBounty(world.bounties, cultivator.id);
   const profile = !workspaceSection || workspaceSection === 'profile';
   const cultivation = !workspaceSection || workspaceSection === 'cultivation';
@@ -161,7 +163,7 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
             <Compass className="w-3 h-3 text-emerald-400" /> 所在灵地
           </div>
           <div className="font-semibold text-slate-100 mt-0.5 truncate">
-            {extractionPoint ? '实际撤离关口' : location?.name ?? cultivator.locationId}
+            {extractionPoint ? '实际撤离关口' : reliefPoint ? '实际换防关口' : location?.name ?? cultivator.locationId}
           </div>
         </div>
       </div>

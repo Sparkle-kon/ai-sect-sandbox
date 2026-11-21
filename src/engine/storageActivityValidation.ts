@@ -4,6 +4,7 @@ import { EXPEDITION_RESCUE_OFFER_TICKS, EXPEDITION_RESCUE_STRIDE } from './exped
 import { terrainTileAt } from './terrainEngine';
 import { OBSERVATORY_LEAD_TICKS } from './fieldObservatoryEngine';
 import { SHORT_SHIFT_OFFER_TICKS, SHORT_SHIFT_WAGE } from './shortShiftEngine';
+import { BOUNDARY_RELIEF_LATE_GRACE_TICKS, BOUNDARY_RELIEF_OFFER_TICKS, BOUNDARY_RELIEF_QI_PER_TILE, BOUNDARY_RELIEF_STRIDE } from './boundaryReliefEngine';
 
 export function validateSparringRelationships(w: WorldState, actor: ReadonlySet<string>,
   locations: ReadonlySet<string>, fail: (path: string) => never): void {
@@ -190,5 +191,85 @@ export function validateShortShiftRelationships(world: WorldState, actors: Reado
       realAttendance.add(workerAt);
       realAttendance.add(siteAt);
     }
+  }
+}
+
+export function validateBoundaryReliefRelationships(world: WorldState, actors: ReadonlySet<string>,
+  sects: ReadonlySet<string>, fail: (path: string) => never): void {
+  const state = world.boundaryReliefs;
+  if (!state.cases.length) return;
+  const ids = new Set<string>();
+  const livePosts = new Set<string>();
+  const liveNominees = new Set<string>();
+  const sites = new Map(world.locations.map((site) => [site.id, site]));
+  for (const row of state.cases) {
+    const serial = Number(row.id.match(/^boundary-relief-([1-9][0-9]*)$/)?.[1]);
+    const open = row.status === 'offered' || row.status === 'travelling' || row.status === 'returning';
+    const accepted = row.acceptedTick;
+    const post = sites.get(row.postSiteId);
+    const origin = sites.get(row.originSiteId);
+    const coverage = row.coverage;
+    if (!Number.isSafeInteger(serial) || serial >= state.nextId || ids.has(row.id) || !sects.has(row.sectId) ||
+        !actors.has(row.leaderId) || !actors.has(row.incumbentId) || !actors.has(row.incomingId) ||
+        new Set([row.leaderId, row.incumbentId, row.incomingId]).size !== 3 ||
+        row.originSiteId === row.postSiteId || (open && (!origin || !post || post.type !== 'spirit_vein')) ||
+        row.incumbentAssignedTick > row.offeredTick || row.offeredTick > world.tick ||
+        row.offerExpiresTick !== row.offeredTick + BOUNDARY_RELIEF_OFFER_TICKS ||
+        (row.status === 'offered' && (accepted !== undefined || row.closeReason !== undefined || world.tick >= row.offerExpiresTick)) ||
+        (accepted === undefined) !== (row.deadlineTick === undefined) ||
+        (open !== (row.closedTick === undefined)) ||
+        (row.closedTick !== undefined && (row.closedTick < (accepted ?? row.offeredTick) || row.closedTick > world.tick)) ||
+        (row.closedById !== undefined && row.closedById !== row.leaderId && row.closedById !== row.incomingId) ||
+        (row.status === 'declined' && (row.closeReason !== 'declined' || row.closedById !== row.incomingId || accepted !== undefined)) ||
+        (row.status === 'withdrawn' && (row.closeReason !== 'withdrawn' || !row.closedById)) ||
+        (row.status === 'expired' && (accepted === undefined ?
+          row.closeReason !== 'offer_expired' || (row.closedTick ?? 0) < row.offerExpiresTick :
+          row.closeReason !== 'late' || (row.closedTick ?? 0) < (row.deadlineTick ?? Infinity) || row.pathIndex !== 0)) ||
+        (row.status === 'interrupted' && row.closeReason === undefined) ||
+        (row.status === 'returning' && row.closeReason === undefined) ||
+        ((row.status === 'completed' || row.status === 'travelling') && row.closeReason !== undefined) ||
+        coverage.tick < row.offeredTick || coverage.tick > (row.closedTick ?? world.tick) ||
+        (row.firstGapTick !== undefined && (row.firstGapTick < row.offeredTick || row.firstGapTick > coverage.tick)) ||
+        (coverage.kind === 'gap' ? coverage.guardId !== undefined || row.firstGapTick === undefined :
+          !coverage.guardId || !actors.has(coverage.guardId) ||
+          (coverage.kind === 'relief' ? coverage.guardId !== row.incomingId || row.status !== 'completed' :
+            coverage.kind === 'incumbent' ? coverage.guardId !== row.incumbentId :
+            coverage.guardId === row.incumbentId || coverage.guardId === row.incomingId))) {
+      fail('boundaryReliefs.cases.source');
+    }
+    ids.add(row.id);
+    if (open) {
+      if (livePosts.has(row.postSiteId) || liveNominees.has(row.incomingId)) fail('boundaryReliefs.cases.overlap');
+      livePosts.add(row.postSiteId);
+      liveNominees.add(row.incomingId);
+    }
+    const pathLength = row.path.length - 1;
+    const travelled = row.outboundSteps + row.returnSteps;
+    if (accepted === undefined) {
+      if (row.path.length !== 0 || row.pathIndex !== 0 || travelled !== 0 || row.lastAdvancedTick !== undefined ||
+          row.strainSpent !== 0 || row.status === 'travelling' || row.status === 'returning' || row.status === 'completed')
+        fail('boundaryReliefs.cases.unaccepted');
+      continue;
+    }
+    const first = row.path[0];
+    const last = row.path.at(-1);
+    if (accepted <= row.offeredTick || accepted >= row.offerExpiresTick || accepted > world.tick ||
+        pathLength < 1 || row.deadlineTick !== accepted + Math.ceil(pathLength / BOUNDARY_RELIEF_STRIDE) + BOUNDARY_RELIEF_LATE_GRACE_TICKS ||
+        row.pathIndex > pathLength || row.outboundSteps > pathLength || row.outboundSteps - row.returnSteps !== row.pathIndex ||
+        row.strainSpent !== travelled * BOUNDARY_RELIEF_QI_PER_TILE || (travelled === 0) !== (row.lastAdvancedTick === undefined) ||
+        (row.lastAdvancedTick !== undefined && (row.lastAdvancedTick <= accepted || row.lastAdvancedTick > (row.closedTick ?? world.tick) ||
+          travelled > (row.lastAdvancedTick - accepted) * BOUNDARY_RELIEF_STRIDE)) ||
+        (origin && (first?.x !== origin.x || first.y !== origin.y)) ||
+        (post && (last?.x !== post.x || last.y !== post.y)) ||
+        (row.status === 'travelling' && (row.pathIndex >= pathLength || row.returnSteps !== 0)) ||
+        (row.status === 'completed' && (row.pathIndex !== pathLength || row.returnSteps !== 0 ||
+          row.coverage.kind !== 'relief' || row.coverage.tick !== row.closedTick || row.lastAdvancedTick !== row.closedTick))) {
+      fail('boundaryReliefs.cases.route');
+    }
+    const tiles = row.path.map(({ x, y }) => terrainTileAt(world, x, y));
+    if (tiles.some((tile, index) => {
+      const previous = tiles[index - 1];
+      return !tile || (index > 0 && (!previous || Math.abs(tile.col - previous.col) + Math.abs(tile.row - previous.row) !== 1));
+    })) fail('boundaryReliefs.cases.path_steps');
   }
 }
