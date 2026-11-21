@@ -98,7 +98,7 @@ export function mapExplorerIndex(world: WorldState, view: Terrain, actorPosition
   return { sites, actors, events };
 }
 
-export function MapKeyboardExplorer({ world, view, actorPositions, presentation, selected, follows, zoom, marks = noMarks,
+export function MapKeyboardExplorer({ world, view, actorPositions, presentation, selected, follows, zoom, marks = noMarks, villageLabels,
   onFollow, onCamera, onSite, onActor, onPoint, onFocusLost }: {
   world: WorldState;
   view: Terrain;
@@ -108,6 +108,7 @@ export function MapKeyboardExplorer({ world, view, actorPositions, presentation,
   follows: boolean;
   zoom: number;
   marks?: readonly PaintedMapMark[];
+  villageLabels?: ReadonlyMap<string, { name: string; stage?: string }>;
   onFollow: () => void;
   onCamera: (command: MapCameraCommand) => void;
   onSite: (site: LocationNode) => void;
@@ -120,14 +121,21 @@ export function MapKeyboardExplorer({ world, view, actorPositions, presentation,
   const [kind, setKind] = useState<ExplorerKind>('sites');
   const [page, setPage] = useState(0);
   const [actorSearch, setActorSearch] = useState('');
+  const [siteSearch, setSiteSearch] = useState('');
   const actorPage = mapActorPage(kind === 'actors' ? index.actors : [], actorSearch, page);
   const focusOwner = useRef<HTMLElement>();
   const currentMarks = useRef({ marks, kind, onPoint });
   currentMarks.current = { marks, kind, onPoint };
   const layer = isMarkKind(kind) ? kind : undefined;
   const layerRows = layer && onPoint ? exactPaintedMarks(marks, layer) : [];
-  const rows = kind === 'sites' ? index.sites.map(({ site, current }) => ({ key: site.id, title: site.name,
-    summary: current ? '当前可定位' : '已探索，当前不可见', activate: () => onSite(site) }))
+  const siteQuery = siteSearch.trim().toLowerCase();
+  const rows = kind === 'sites' ? index.sites.filter(({ site }) => !villageLabels?.size || !siteQuery ||
+    [site.name, villageLabels.get(site.id)?.name].some((name) => name?.toLowerCase().includes(siteQuery))).map(({ site, current }) => {
+    const village = villageLabels?.get(site.id);
+    return { key: site.id, title: site.name,
+      summary: [village && village.name !== site.name ? village.name : undefined, village?.stage, current ? '当前可定位' : '已探索，当前不可见']
+        .filter(Boolean).join(' · '), activate: () => onSite(site) };
+  })
     : kind === 'actors' ? actorPage.actors.map((actor) => ({ key: actor.id, title: actor.name,
       summary: `${actor.realm} ${actor.realmStage}层`, activate: () => onActor(actor) }))
       : kind === 'events' ? index.events.map(({ id, label, site }) => ({ key: id, title: label, summary: site.name, activate: () => onSite(site) })) : [];
@@ -162,6 +170,10 @@ export function MapKeyboardExplorer({ world, view, actorPositions, presentation,
         {Object.entries(standardLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         {onPoint && <optgroup label="实绘图层">{Object.entries(markLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</optgroup>}
       </select>
+      {kind === 'sites' && !!villageLabels?.size && <label className="grid gap-1 text-xs text-slate-300">查找已知地点或村镇旧名
+        <input type="search" className={field} value={siteSearch} placeholder="地点或村镇旧名"
+          onChange={(event) => { setSiteSearch(event.currentTarget.value); setPage(0); }} />
+      </label>}
       {kind === 'actors' && <label className="grid gap-1 text-xs text-slate-300">搜索可见修士
         <input type="search" className={field} value={actorSearch} placeholder="姓名、境界或编号"
           onChange={(event) => { setActorSearch(event.currentTarget.value); setPage(0); }} />

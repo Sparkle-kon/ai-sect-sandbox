@@ -3153,6 +3153,28 @@ export interface DanxiaSeasonReview {
 }
 export interface DanxiaReviewsState { reviews:DanxiaSeasonReview[] }
 
+export type VillageEvolutionStage='village'|'town'|'ruin';
+export interface VillageEvolutionSample {
+  tick:number;population:number;juveniles:number;namedRemaining:number;stress:number;capacity:number;
+  wellId?:string;usableWell:boolean;passableCorridors:number;corridorAgreementId?:string;
+}
+export interface VillageEvolutionChange {
+  tick:number;from:VillageEvolutionStage;to:VillageEvolutionStage;
+  reason:'sustained_growth'|'depopulated'|'actual_return';population:number;
+  sourceRecordId?:string;growthSamples?:VillageEvolutionSample[];
+}
+export interface VillageEvolutionRecord {
+  settlementId:string;siteId:string;registeredName:string;status:VillageEvolutionStage;
+  samples:VillageEvolutionSample[];changes:VillageEvolutionChange[];pendingDepopulationRecordId?:string;
+}
+export interface VillageEvolutionHouseholdMove {householdId:string;adults:number}
+export interface VillageEvolutionMigration {
+  id:string;tick:number;fromSettlementId:string;toSettlementId:string;agreementId:string;path:string[];people:number;
+  fromBefore:number;fromAfter:number;toBefore:number;toAfter:number;leftJuveniles:number;leftNamed:number;
+  households:VillageEvolutionHouseholdMove[];
+}
+export interface VillageEvolutionState {villages:VillageEvolutionRecord[];migrations:VillageEvolutionMigration[]}
+
 export interface WorldState {
   fieldObservatories: FieldObservatoriesState;
   danxiaShortages: DanxiaShortagesState;
@@ -3224,6 +3246,7 @@ export interface WorldState {
   estates: EstateState;
   witnesses: WitnessState;
   settlements: SettlementState;
+  villageEvolution:VillageEvolutionState;
   markets: MarketState;
   oaths: OathState;
   oathArbitrations: OathArbitrationState;

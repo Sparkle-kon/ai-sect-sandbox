@@ -1,3 +1,4 @@
+import { finishVillageEvolution, noteVillageEvolutionSettlement, observeVillageEvolution, planVillageEvolutionMigration, recordVillageEvolutionMigration, villageEvolutionBlocksMigration, villageEvolutionLocalObserverIds, villageEvolutionPinnedSettlementIds } from './villageEvolutionEngine';
 import {danxiaReviewPinnedReliefIds} from './danxiaSeasonTerms';
 import {recordEraMigration} from './eraHistoryIndex';
 import { captureCivicReliefDeed } from './civicMemorialEngine';
@@ -101,13 +102,15 @@ export function availableSettlementActions(actor: Cultivator, world: WorldState)
 }
 
 function log(world: WorldState, village: MortalSettlement, row: Omit<SettlementRecord, 'id' | 'tick' | 'settlementId'>,
-  key: string, title: string): WorldEvent {
+  key: string, title: string, privateWitnessIds?:string[]): WorldEvent {
   const rowId = `settlement-${world.tick}-${row.kind}-${village.id}-${key}`;
   const actual: SettlementRecord = { ...row, id: rowId, tick: world.tick, settlementId: village.id };
   world.settlements.records.push(actual);
+  noteVillageEvolutionSettlement(world,actual);
   const tail=Math.max(0,world.settlements.records.length-96);
   if(tail){
     const pinned=danxiaReviewPinnedReliefIds(world);
+    for(const id of villageEvolutionPinnedSettlementIds(world))pinned.add(id);
     world.settlements.records=world.settlements.records.filter((entry,index)=>index>=tail||pinned.has(entry.id));
   }
   if (actual.kind === 'relief') {
@@ -116,7 +119,8 @@ function log(world: WorldState, village: MortalSettlement, row: Omit<SettlementR
   }
   else recordVillageCensusSettlement(world, actual);
   const event:WorldEvent={id:`evt-${rowId}`,tick:world.tick,year:world.year,month:world.month,title,description:row.description,
-    actorIds:[row.actorId,row.cultivatorId].filter((id):id is string=>Boolean(id)),locationId:village.locationId,category:'diplomacy'};
+    actorIds:privateWitnessIds??[row.actorId,row.cultivatorId].filter((id):id is string=>Boolean(id)),category:'diplomacy',
+    ...(privateWitnessIds?{witnessScope:'participants'}:{locationId:village.locationId})};
   recordEraMigration(world,actual,event);
   return event;
 }
@@ -281,23 +285,43 @@ export function advanceSettlements(world: WorldState): WorldEvent[] {
   }
   // A given village can send or receive once in a migration round. Population is transferred, never minted.
   const involved = new Set<string>();
+  const evolution = observeVillageEvolution(world,villages);
+  // Give an actual three-period water/road relocation first opportunity; the native
+  // census transaction remains the only path that moves these anonymous adults.
+  const relocate = (origin:MortalSettlement,destination:MortalSettlement,people:number,verifiedCorridor=false) => {
+    origin.population -= people;
+    destination.population += people;
+    const householdMoves=recordHouseholdMigration(world, origin, destination, people);
+    involved.add(origin.id);
+    involved.add(destination.id);
+    const privateMove=verifiedCorridor&&[origin,destination].some(village=>
+      world.locations.find(site=>site.id===village.locationId)?.type!=='market');
+    const witnesses=privateMove?villageEvolutionLocalObserverIds(world,new Set([origin.id,destination.id])):undefined;
+    const event = log(world, origin, { kind: 'migration', targetSettlementId: destination.id, people, stones: 0, herbs: 0,
+      description: verifiedCorridor ? `沿此前实际走过且此刻可通的路段迁居 ${people} 人。` :
+        `${people}名乡民从${origin.name}迁至压力更低、仍有余位的村落。` },
+      destination.id, verifiedCorridor?'循已证通路迁居':'凡人迁居',witnesses);
+    events.push(event);
+    return {receipt:state.records.find(row => `evt-${row.id}`===event.id),householdMoves};
+  };
+  if(evolution)for(const origin of villages){
+    const plan=planVillageEvolutionMigration(world,evolution,origin,involved);
+    if(!plan)continue;
+    const {receipt,householdMoves}=relocate(origin,plan.destination,plan.migration.people,true);
+    if(receipt)recordVillageEvolutionMigration(world,plan.migration,receipt,householdMoves);
+  }
   for (const origin of villages) {
     if (involved.has(origin.id) || origin.stress < 45 || origin.population <= 1) continue;
     const destination = villages.filter((target) => target.id !== origin.id && !involved.has(target.id) &&
-      target.population < target.capacity && target.stress + 20 <= origin.stress)
+      !villageEvolutionBlocksMigration(evolution,origin.id,target.id) && target.population < target.capacity && target.stress + 20 <= origin.stress)
       .sort((a, b) => a.stress - b.stress || byId(a, b))[0];
     if (!destination) continue;
     const people = Math.min(4, unregisteredAdults(origin), destination.capacity - destination.population);
     // Ordinary residents migrate as a cohort; named candidate records remain at their home village.
     if (people <= 0) continue;
-    origin.population -= people;
-    destination.population += people;
-    recordHouseholdMigration(world, origin, destination, people);
-    involved.add(origin.id);
-    involved.add(destination.id);
-    events.push(log(world, origin, { kind: 'migration', targetSettlementId: destination.id, people, stones: 0, herbs: 0,
-      description: `${people}名乡民从${origin.name}迁至压力更低、仍有余位的村落。` }, destination.id, '凡人迁居'));
+    relocate(origin,destination,people);
   }
+  if(evolution)events.push(...finishVillageEvolution(world,evolution));
   closeVillageCensusPeriod(world);
   return events;
 }

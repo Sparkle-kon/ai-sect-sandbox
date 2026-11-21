@@ -199,14 +199,17 @@ function withdrawAnonymous(world: WorldState, settlementId: string, count: numbe
 export function recordHouseholdMortality(world: WorldState, village: MortalSettlement, count: number): void {
   withdrawAnonymous(world, village.id, count, (_group, row, people) => { row.deaths += people; });
 }
-export function recordHouseholdMigration(world: WorldState, from: MortalSettlement, to: MortalSettlement, count: number): void {
-  if (from.id === to.id) return;
+export function recordHouseholdMigration(world: WorldState, from: MortalSettlement, to: MortalSettlement, count: number): Array<{householdId:string;adults:number}> {
+  const moves:Array<{householdId:string;adults:number}>=[];
+  if (from.id === to.id) return moves;
   withdrawAnonymous(world, from.id, count, (group, row, people) => {
     const destination = ensurePresence(group, to.id);
     row.migratedOut += people;
     destination.adults += people;
     destination.migratedIn += people;
+    moves.push({householdId:group.id,adults:people});
   });
+  return moves;
 }
 
 const pending = (world: WorldState, row: HouseholdGuardianship) => row.status === 'offered' &&

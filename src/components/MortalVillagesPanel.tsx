@@ -13,6 +13,9 @@ import { CensusPanel } from './CensusPanel';
 import { VillageSupplyPanel } from './VillageSupplyPanel';
 import { VillageMemorialPanel } from './VillageMemorialPanel';
 import { VillageFairPanel } from './VillageFairPanel';
+import { projectVillageEvolution } from '../engine/villageEvolutionEngine';
+import { projectVillageGranary } from '../engine/villageGranaryEngine';
+import { VillageEvolutionDetails, villageDisplayLabel } from './VillageEvolutionDetails';
 
 type RecordEntry = WorldState['settlements']['records'][number];
 const KIND_LABELS: Record<RecordEntry['kind'], string> = {
@@ -28,6 +31,8 @@ export function MortalVillagesPanel({ world, cultivator }: { world: WorldState; 
   const villages = (world.settlements?.villages ?? []).filter(({ locationId }) => knownLocations.has(locationId));
   const visible = new Set(cultivator?.alive && world.settlements
     ? visibleSettlements(world, cultivator).filter(({ locationId }) => terrain.isCurrentLocation(locationId)).map(({ id }) => id) : []);
+  const evolution = new Map(projectVillageEvolution(world, cultivator).map(row => [row.settlementId, row]));
+  const nativeStock = projectVillageGranary(world, cultivator);
   const worksView = cultivator && visible.size > 0 ? visibleVillageWorks(world, cultivator) : [];
   const householdView = cultivator && visible.size > 0 ? visibleHouseholds(world, cultivator) : undefined;
   const personalHousing = projectSeasonalHousing(world,cultivator);
@@ -52,6 +57,11 @@ export function MortalVillagesPanel({ world, cultivator }: { world: WorldState; 
         <div className="max-h-[28rem] space-y-1.5 overflow-y-auto">
           {villages.map((village) => {
             const observed = visible.has(village.id);
+            const growth = evolution.get(village.id);
+            const stage = observed ? villageDisplayLabel(growth) : undefined;
+            const stock = growth?.currentLocal && nativeStock?.siteId === village.locationId ? nativeStock : undefined;
+            const evolutionDetails = <VillageEvolutionDetails row={growth} observed={observed}
+              local={{ stock }} />;
             const census = observed && householdCensuses.get(village.id);
             const eligibleIds = new Set(observed ? options.flatMap((option) =>
               option.action === 'RECRUIT_SETTLER' && option.targetSettlementId === village.id && option.targetVolunteerId
@@ -64,7 +74,7 @@ export function MortalVillagesPanel({ world, cultivator }: { world: WorldState; 
             return (
               <details key={village.id} className="min-w-0 rounded border border-slate-800 bg-slate-950/60 p-2">
                 <summary className="cursor-pointer break-words text-xs text-slate-100">
-                  {village.name} · {observed ? `人口 ${village.population}/${village.capacity}` : '当前未观测'}
+                  {growth?.registeredName ?? village.name}{stage ? ` · ${stage}` : ''} · {observed ? `人口 ${village.population}/${village.capacity}` : '当前未观测'}
                 </summary>
                 {observed ? (
                   <div className="mt-2 space-y-2 text-xs text-slate-300">
@@ -73,6 +83,7 @@ export function MortalVillagesPanel({ world, cultivator }: { world: WorldState; 
                       {village.lastDisasterTick !== undefined ? ` · 最近受灾 Tick #${village.lastDisasterTick}` : ''}
                       {village.lastReliefTick !== undefined ? ` · 最近赈济 Tick #${village.lastReliefTick}` : ''}
                     </p>
+                    {evolutionDetails}
                     {census && householdView && cultivator && <HouseholdRegisterPanel world={world} census={census} view={householdView} cultivator={cultivator} />}
                     {cultivator && <CensusPanel world={world} cultivator={cultivator} villageId={village.id} />}
                     {cultivator && <VillageMemorialPanel world={world} cultivator={cultivator} villageId={village.id} />}
@@ -119,6 +130,7 @@ export function MortalVillagesPanel({ world, cultivator }: { world: WorldState; 
                   </div>
                 ) : <div className="mt-2 space-y-2 text-xs text-slate-400">
                   <p>已知地名，但当前不在视野中，不显示实时人口、招募或账目。</p>
+                  {evolutionDetails}
                   {cultivator && <SeasonalHousingReceipts rows={personalHousing.filter(row=>row.settlementId===village.id)} viewerId={cultivator.id} />}
                 </div>}
               </details>

@@ -56,6 +56,8 @@ import { validateSeedCultureHistory } from './storageSeedCultureValidation';
 import { createCareFollowupsState } from './careFollowupEngine';
 import { createDanxiaShortagesState } from './danxiaShortageEngine';
 import { DANXIA_MEDICINE_MAX_STEPS } from './danxiaMedicineTerms';
+import { validateVillageEvolutionHistory } from './storageVillageEvolutionValidation';
+import { VILLAGE_EVOLUTION_MAX_ADULTS_PER_MOVE,VILLAGE_EVOLUTION_SAMPLE_COUNT } from './villageEvolutionTerms';
 import { validateDanxiaSeasonReviewHistory } from './storageDanxiaSeasonReviewValidation';
 import { validateDanxiaMedicineHistory } from './storageDanxiaMedicineValidation';
 import { validateDanxiaShortageHistory } from './storageDanxiaShortageValidation';
@@ -298,6 +300,9 @@ const observatoryActors: Validator = (value, path) => {
     observatoryActor(account, `${path}.${actorId}`);
   }
 };
+const evolutionStage=one('village','town','ruin');
+const evolutionSample=structure({tick,population:count,juveniles:count,namedRemaining:count,stress:percentage,
+  capacity:count,wellId:oid,usableWell:bool,passableCorridors:num(0,47,true),corridorAgreementId:oid});
 const censusNumber = num(0,Number.MAX_SAFE_INTEGER,true);
 const censusCount = structure({villageId:id,population:censusNumber,juveniles:censusNumber});
 const locationKind = one('sect_hq','spirit_vein','secret_realm','market','abyss');
@@ -888,6 +893,17 @@ const shape = structure({
     records:arr(128,structure({id,tick,schoolId:id,
       kind:one('endorse','proposal','separation','reconciliation','declined','expired','invalidated','join','leave','training'),
       actorIds:ids,amount:doctrineAmount,support:tick,description:text}))}),
+  villageEvolution:structure({
+    villages:arr(48,structure({settlementId:id,siteId:id,registeredName:id,status:evolutionStage,
+      pendingDepopulationRecordId:oid,samples:arr(VILLAGE_EVOLUTION_SAMPLE_COUNT,evolutionSample),
+      changes:arr(SAVE_COLLECTION_LIMIT,structure({tick,from:evolutionStage,to:evolutionStage,
+        reason:one('sustained_growth','depopulated','actual_return'),population:count,sourceRecordId:oid,
+        growthSamples:optional(arr(VILLAGE_EVOLUTION_SAMPLE_COUNT,evolutionSample))}))})),
+    migrations:arr(SAVE_COLLECTION_LIMIT,structure({id,tick,fromSettlementId:id,toSettlementId:id,agreementId:id,
+      path:arr(VILLAGE_SUPPLY_MAX_ROUTE_TILES,id),people:num(1,VILLAGE_EVOLUTION_MAX_ADULTS_PER_MOVE,true),
+      fromBefore:count,fromAfter:count,toBefore:count,toAfter:count,leftJuveniles:count,leftNamed:count,
+      households:arr(VILLAGE_EVOLUTION_MAX_ADULTS_PER_MOVE,structure({householdId:id,adults:num(1,VILLAGE_EVOLUTION_MAX_ADULTS_PER_MOVE,true)}))})),
+  }),
   settlements:structure({lastAdvancedTick:otick,
     villages:arr(48,structure({id,locationId:id,name:id,population:count,capacity:count,stress:percentage,
       volunteers:arr(SAVE_COLLECTION_LIMIT,structure({id,name:id,age:wealth,spiritRoot:spirit,willingness:percentage,aptitude:percentage,
@@ -1008,6 +1024,7 @@ function verifyWorld(value: unknown): WorldState {
       ...(!Object.hasOwn(value, 'territorialLeases') ? { territorialLeases: createTerritorialLeaseState() } : {}),
       ...(!Object.hasOwn(value, 'formations') ? { formations: createFormationNetworkState() } : {}),
       ...(!Object.hasOwn(value, 'infirmaries') ? { infirmaries: createInfirmaryState() } : {}),
+      ...(!Object.hasOwn(value, 'villageEvolution') ? { villageEvolution: { villages:[],migrations:[] } } : {}),
       ...(!Object.hasOwn(value, 'danxiaReviews') ? { danxiaReviews: { reviews:[] } } : {}),
       ...(!Object.hasOwn(value, 'danxiaMedicine') ? { danxiaMedicine: { commitments:[] } } : {}),
       ...(!Object.hasOwn(value, 'danxiaShortages') ? { danxiaShortages: createDanxiaShortagesState() } : {}),
@@ -2692,6 +2709,7 @@ function verifyWorld(value: unknown): WorldState {
         (row.actorId && !actor.has(row.actorId)) || (row.sectId && !sector.has(row.sectId)) ||
         (row.volunteerId && !volunteerIds.has(row.volunteerId)) || (row.cultivatorId && !actor.has(row.cultivatorId))) fail('settlements.records.references');
   }
+  validateVillageEvolutionHistory(w,fail);
   unique(w.villageWorks.projects, ({ id }) => id, 'villageWorks.projects.id');
   unique(w.villageWorks.projects.filter(({ status }) => status === 'building'), ({ settlementId }) => settlementId,
     'villageWorks.projects.active_village');

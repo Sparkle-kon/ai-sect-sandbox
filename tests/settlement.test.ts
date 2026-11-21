@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { createInitialWorld } from '../src/data/initialWorld';
 import { advanceSettlements, availableSettlementActions, createSettlementState, resolveSettlementAction, MORTAL_MATURITY_TICKS, SETTLEMENT_RECRUIT_STIPEND, SETTLEMENT_RELIEF, visibleSettlements } from '../src/engine/settlementEngine';
+import { danxiaReviewPinnedReliefIds } from '../src/engine/danxiaSeasonTerms';
+import { villageEvolutionPinnedSettlementIds } from '../src/engine/villageEvolutionEngine';
 import { terrainTileAt } from '../src/engine/terrainEngine';
 import type { WorldState } from '../src/types/world';
 
@@ -135,7 +137,9 @@ describe('finite villages and voluntary sect recruitment', () => {
           target.population <= target.capacity && target.stress >= 0 && target.stress <= 100)).toBe(true);
       }
       expect(world.settlements.villages.reduce((sum, target) => sum + target.population, 0)).toBe(initial + births - fatalities);
-      expect(world.settlements.records.length).toBeLessThanOrEqual(96);
+      const pins=new Set([...danxiaReviewPinnedReliefIds(world),...villageEvolutionPinnedSettlementIds(world)]);
+      expect(world.settlements.records.filter(row=>!pins.has(row.id)).length).toBeLessThanOrEqual(96);
+      expect([...pins].every(id=>world.settlements.records.some(row=>row.id===id))).toBe(true);
     }
   });
 });

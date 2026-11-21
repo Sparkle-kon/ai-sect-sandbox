@@ -1,5 +1,8 @@
 import {localDanxiaSeasonReviewSite} from '../engine/danxiaSeasonReviewEngine';
 import { VILLAGE_WORK_RULES, visibleVillageWorks } from '../engine/villageWorksEngine';
+import { projectVillageEvolution } from '../engine/villageEvolutionEngine';
+import { villageDisplayLabel } from './VillageEvolutionDetails';
+import { drawUsedVillageMigrationSegments, projectUsedVillageMigrationSegments, USED_MIGRATION_ROUTE_LEGEND } from './villageEvolutionMap';
 import { householdCensus } from '../engine/householdEngine';
 import { visibleSharedCommonsMapSites } from './sharedCommonsMapView';
 import { visibleLeaseMapSites } from './leaseMapView';
@@ -219,6 +222,14 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       .map(({ siteId }) => siteId));
   }, [world, selected]);
   const { seenLocations, isCurrentLocation } = mapView;
+  // Turning off terrain fog does not create a civic observation.
+  const civicSight = useMemo(() => selected?.alive && selected.hp > 0 && world.cultivators.includes(selected)
+    ? currentVisibleTileIds(world, selected) : new Set<string>(), [world, selected]);
+  const observesVillage = (siteId: string) => civicSight.has(mapView.locationTile.get(siteId)?.id ?? '');
+  const villageMapLabels = useMemo(() => new Map(projectVillageEvolution(world, selected).map(row => [
+    row.siteId, { name: row.registeredName, stage: civicSight.has(mapView.locationTile.get(row.siteId)?.id ?? '') ? villageDisplayLabel(row) : undefined },
+  ])), [world, selected, civicSight, mapView.locationTile]);
+  const usedVillageSegments = useMemo(() => projectUsedVillageMigrationSegments(world, selected), [world, selected]);
   const territorySemantics = useMemo(() => projectMapTerritories(world,mapView.tileState), [world,mapView]);
   const locallyObservedWorkshopClosure = useMemo(() => {
     if (!selected?.alive || selected.hp <= 0 || !isCurrentLocation(selected.locationId) ||
@@ -430,6 +441,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
 
       // 2. Terrain, spirit qi overlay and sect boundaries.
       drawTerrain(ctx, world, mapView.tileState, heat, phase, territorySemantics, logicalPerCssPixel);
+      drawUsedVillageMigrationSegments(ctx, usedVillageSegments, camera.zoom);
       drawHazards(ctx, hazards);
       annotationView?.drawMapAnnotationPins(ctx, annotationPins, camera.zoom);
       drawMapConvoys(ctx, convoys, camera.zoom);
@@ -683,12 +695,12 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           ctx.restore();
         }
         const localVillage = villagesAt.get(loc.id);
-        if (localVillage && isCurrentLocation(loc.id)) {
+        if (localVillage && observesVillage(loc.id)) {
           ctx.save();
           ctx.font = 'bold 10px sans-serif';
           ctx.textAlign = 'center';
           ctx.fillStyle = localVillage.stress >= 55 ? '#fdba74' : '#bef264';
-          ctx.fillText(`村 ${localVillage.population}${localGranary?.siteId === loc.id ? ' · 仓' : ''}`, loc.x, loc.y + 43);
+          ctx.fillText(`${villageMapLabels.get(loc.id)?.stage ?? '村'} ${localVillage.population}${localGranary?.siteId === loc.id ? ' · 仓' : ''}`, loc.x, loc.y + 43);
           ctx.restore();
         }
         const localCouncil = currentCouncils.get(headquarters.get(loc.id)?.id ?? '');
@@ -862,7 +874,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener('change', stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, observedSalvageSites, localGranary, furnaceShift, localPavilionDesk, localMemorial, localVillageFair, localStipend, localSeedCulture, localToolLoans, localAlignedWeather, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, observedSalvageSites, localGranary, villageMapLabels, civicSight, usedVillageSegments, furnaceShift, localPavilionDesk, localMemorial, localVillageFair, localStipend, localSeedCulture, localToolLoans, localAlignedWeather, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1247,7 +1259,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         {explorerOpen && <React.Suspense fallback={<p className="px-3 pb-2 text-xs text-slate-300" role="status">载入山河索引…</p>}>
           <MapKeyboardExplorer world={world} view={mapView} actorPositions={actorPositions} presentation={presentation}
             selected={selectedPoint?.actor} follows={followsSelection} zoom={camera.zoom} onCamera={activateCamera}
-            onActor={(actor) => locateActor(actor.id)} onSite={focusSite} marks={semanticMarks}
+            onActor={(actor) => locateActor(actor.id)} onSite={focusSite} marks={semanticMarks} villageLabels={villageMapLabels}
             onPoint={(point) => {
               abandonGesture();
               commandCamera(focusMapPoint(cameraRef.current,point));
@@ -1319,12 +1331,14 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         {formationLines.length > 0 && <ul className="mt-2 space-y-1 text-cyan-200" aria-label="当前可见聚灵阵链">
           {formationLines.map(({ id, status, a, b }) => <li key={id}>{a.name}与{b.name}：{status === 'broken' ? '阵链已断' : '阵链有效'}</li>)}
         </ul>}
+        {usedVillageSegments.length > 0 && <p className="mt-2 text-slate-400">{USED_MIGRATION_ROUTE_LEGEND}</p>}
         {fog && seenLocations.length === 0 && <p className="mt-2">无已发现的地点。</p>}
         <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-2">
           {seenLocations.map((location) => {
             const tile = mapView.locationTile.get(location.id);
+            const villageLabel = villageMapLabels.get(location.id);
             if (!isCurrentLocation(location.id)) {
-              return <li key={location.id}>{location.name} · 已探索，当前不可见</li>;
+              return <li key={location.id}>{location.name}{villageLabel && villageLabel.name !== location.name ? ` · ${villageLabel.name}` : ''} · 已探索，当前不可见</li>;
             }
             const herbCount = countHerbs(location.herbs);
             const trialCount = trialsByLocation.get(location.id) ?? 0;
@@ -1332,7 +1346,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
             const homeSect = headquarters.get(location.id);
             const localOccasions = occasionsByLocation.get(location.id) ?? [];
             const localCouncil = currentCouncils.get(homeSect?.id ?? '');
-            const localVillage = villagesAt.get(location.id);
+            const localVillage = observesVillage(location.id) ? villagesAt.get(location.id) : undefined;
             const localWeather = weatherAtVisibleSites.get(location.id);
             const localBeasts = beastsByLocation.get(location.id) ?? [];
             const habitatView = localHabitat.get(location.id);
@@ -1385,7 +1399,9 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                 {homeSect && homeSect.arrayMaxHp > 0 && (
                   <span className="text-indigo-300">· 护山阵 {homeSect.arrayHp}/{homeSect.arrayMaxHp}</span>
                 )}
-                {localVillage && <span className="text-lime-200">· {localVillage.name} {localVillage.population} 人</span>}
+                {(villageLabel || localVillage) && <span className="text-lime-200">
+                  · {villageLabel?.name ?? localVillage?.name}{villageLabel?.stage ? ` · ${villageLabel.stage}` : ''}{localVillage ? ` · ${localVillage.population} 人` : ''}
+                </span>}
                 {location.id === localNameRegisterSite && isCurrentLocation(location.id) &&
                   <span className="text-lime-200">· 本地称名簿可核对实际身份</span>}
                 {location.id === localGranary?.siteId && isCurrentLocation(location.id) &&
