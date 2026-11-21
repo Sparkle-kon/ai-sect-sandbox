@@ -1,3 +1,4 @@
+import {danxiaReviewPinnedReliefIds} from './danxiaSeasonTerms';
 import {recordEraMigration} from './eraHistoryIndex';
 import { captureCivicReliefDeed } from './civicMemorialEngine';
 import { closeVillageCensusPeriod, openVillageCensusPeriod, recordVillageCensusMaturation, recordVillageCensusSettlement } from './villageCensusEngine';
@@ -104,7 +105,11 @@ function log(world: WorldState, village: MortalSettlement, row: Omit<SettlementR
   const rowId = `settlement-${world.tick}-${row.kind}-${village.id}-${key}`;
   const actual: SettlementRecord = { ...row, id: rowId, tick: world.tick, settlementId: village.id };
   world.settlements.records.push(actual);
-  world.settlements.records = world.settlements.records.slice(-96);
+  const tail=Math.max(0,world.settlements.records.length-96);
+  if(tail){
+    const pinned=danxiaReviewPinnedReliefIds(world);
+    world.settlements.records=world.settlements.records.filter((entry,index)=>index>=tail||pinned.has(entry.id));
+  }
   if (actual.kind === 'relief') {
     recordProbationRelief(world, actual);
     captureCivicReliefDeed(world, actual);

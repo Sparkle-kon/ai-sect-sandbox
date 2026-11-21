@@ -126,6 +126,14 @@ function sharedOrigin(timeline:WorldTimeline,left:TimelineBranch,right:TimelineB
   return undefined;
 }
 
+/** The retained actual common snapshot, not authorship inferred from a seed or timestamp. */
+export function readBranchFateOrigin(timeline:WorldTimeline,leftId:string,rightId:string,throughTick:number):WorldState|undefined{
+  if(leftId===rightId||!nat(throughTick))return undefined;
+  const left=branchAt(timeline,leftId),right=branchAt(timeline,rightId);
+  if(!left||!right||!frame(left,throughTick)||!frame(right,throughTick))return undefined;
+  return sharedOrigin(timeline,left,right,throughTick)?.world;
+}
+
 const clearlySettled=(world:WorldState,actor:WorldState['cultivators'][number])=>
   !activeCourierForActor(world,actor)&&!activeEscortForActor(world,actor)&&!activeRelocationForActor(world,actor)&&
   !pilgrimageCheckpoint(world,actor)&&!expeditionRescueCheckpoint(world,actor)&&!boundaryReliefCheckpoint(world,actor)&&

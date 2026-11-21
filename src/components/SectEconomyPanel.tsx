@@ -1,4 +1,5 @@
 import type {DanxiaMedicineControlsProps} from './DanxiaMedicineControls';
+import type {DanxiaSeasonReviewControlsProps} from './DanxiaSeasonReviewControls';
 import type { Cultivator, FacilityKind, Sect, WorldState } from '../types/world';
 import { FACILITY_RULES, facilityBuildCost, isGuardAssignmentActive } from '../engine/sectEconomyEngine';
 import { RelicExhibitsPanel } from './RelicExhibitsPanel';
@@ -17,12 +18,13 @@ export function signedStones(value: number): string {
 
 interface SectEconomyPanelProps {
   medicineControls?:DanxiaMedicineControlsProps;
+  seasonReviewControls?:DanxiaSeasonReviewControlsProps;
   cultivator: Cultivator;
   sect: Sect | undefined;
   world: WorldState;
 }
 
-export function SectEconomyPanel({ cultivator, sect, world, medicineControls }: SectEconomyPanelProps) {
+export function SectEconomyPanel({ cultivator, sect, world, medicineControls, seasonReviewControls }: SectEconomyPanelProps) {
   const assignment = cultivator.guardAssignment;
   const guardSite = assignment ? world.locations.find(({ id }) => id === assignment.locationId) : undefined;
   const guardStatus = !cultivator.alive ? '陨落留档'
@@ -94,7 +96,7 @@ export function SectEconomyPanel({ cultivator, sect, world, medicineControls }: 
       ) : (
         <p className="text-[11px] text-slate-400">无驻守任务。</p>
       )}
-      <InfirmaryPanel world={world} cultivator={cultivator} medicineControls={medicineControls} />
+      <InfirmaryPanel world={world} cultivator={cultivator} medicineControls={medicineControls} seasonReviewControls={seasonReviewControls} />
       <FormationNetworkPanel world={world} cultivator={cultivator} />
       <TerritorialLeasePanel world={world} cultivator={cultivator} />
       <SharedCommonsPanel world={world} cultivator={cultivator} />

@@ -1,6 +1,8 @@
-import {activeAvatar,canQueueAvatarSalvage,queueAvatarDanxiaMedicine} from './engine/avatarEngine';
+import {activeAvatar,canQueueAvatarSalvage,queueAvatarDanxiaMedicine,queueAvatarDanxiaReview} from './engine/avatarEngine';
 import {availableDanxiaMedicineActions,type DanxiaMedicineOption} from './engine/danxiaMedicineEngine';
 import type {DanxiaMedicineControlsProps} from './components/DanxiaMedicineControls';
+import {availableDanxiaReviewActions,type DanxiaReviewOption} from './engine/danxiaSeasonReviewEngine';
+import type {DanxiaSeasonReviewControlsProps} from './components/DanxiaSeasonReviewControls';
 import { StoryFirstHome } from './components/StoryFirstHome';
 import { PlayerStoryEntry } from './components/PlayerStoryEntry';
 import { enterStoryLead, orderStoryAvatar, projectStoryPlayerRole, storyOrderOutcome } from './components/storyPlayerController';
@@ -830,8 +832,30 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
     disabled:isStepping||fastForwardLocked||!!preview,
     ...(medicineAvatar?{onQueue:queueDanxiaMedicine}:{}),
   }:undefined;
+  const queueDanxiaReview=(option:DanxiaReviewOption)=>{
+    if(!medicineAvatar||browsing.current||stepInFlight.current||fastForwardRun.current||campaignGuard.current||
+      history.current!==timeline||authority.current!==world||saveContextVersion.current!==medicineContextVersion)return false;
+    const updated=updateWorld(current=>{
+      const next=structuredClone(current);
+      return queueAvatarDanxiaReview(next,medicineAvatar.id,option)?next:current;
+    });
+    if(updated!==world)setIsRunning(false);
+    return updated!==world;
+  };
+  const seasonReviewControls:DanxiaSeasonReviewControlsProps|undefined=medicineControls&&medicineAvatar?{
+    scopeKey:medicineControls.scopeKey,revisionKey:visibleWorld,disabled:medicineControls.disabled,onQueue:queueDanxiaReview,
+    choices:availableDanxiaReviewActions(medicineAvatar,world,world.tick+1).map(option=>{
+      const review=world.danxiaReviews.reviews.find(row=>row.id===option.targetDanxiaReviewId);
+      const village=review&&world.settlements.villages.find(row=>row.id===review.settlementId);
+      const relief=option.targetSettlementRecordId&&world.settlements.records.find(row=>row.id===option.targetSettlementRecordId);
+      const donor=relief?world.cultivators.find(row=>row.id===relief.actorId):undefined;
+      return {option,label:[village?.name,review?`第 ${review.openedTick} 轮核约`:undefined,
+        donor?`${donor.name}实赈`:undefined,relief?`第 ${relief.tick} 轮`:undefined].filter(Boolean).join(' · ')};
+    }),
+  }:undefined;
   const inspect = (workspaceSection: 'profile' | 'cultivation' | 'mind' | 'sect') => <React.Suspense fallback={<p role="status">载入修士档案…</p>}>
     <AgentInspector world={visibleWorld} cultivator={selectedCultivator} onSelectCultivator={setSelectedCultivatorId} workspaceSection={workspaceSection} medicineControls={workspaceSection==='sect'?medicineControls:undefined}
+      seasonReviewControls={workspaceSection==='sect'?seasonReviewControls:undefined}
       artifactSalvage={{ scopeKey:viewScopeKey, busy:isStepping || fastForwardLocked, readOnly:!!preview, onConfirm:queueSelectedSalvage }} />
   </React.Suspense>;
   const openWorkspace = (next: WorkspaceId) => {

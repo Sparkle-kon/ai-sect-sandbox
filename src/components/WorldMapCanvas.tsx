@@ -1,3 +1,4 @@
+import {localDanxiaSeasonReviewSite} from '../engine/danxiaSeasonReviewEngine';
 import { VILLAGE_WORK_RULES, visibleVillageWorks } from '../engine/villageWorksEngine';
 import { householdCensus } from '../engine/householdEngine';
 import { visibleSharedCommonsMapSites } from './sharedCommonsMapView';
@@ -253,6 +254,10 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     const clinic = visibleInfirmaries(world, selected);
     return clinic?.capacity && isCurrentLocation(clinic.siteId) ? { siteId: clinic.siteId, capacity: clinic.capacity } : undefined;
   }, [world, selected, isCurrentLocation]);
+  const localSeasonReviewSite=useMemo(()=>{
+    const siteId=localDanxiaSeasonReviewSite(world,selected);
+    return siteId&&isCurrentLocation(siteId)?siteId:undefined;
+  },[world,selected,isCurrentLocation]);
   const localCourierHandoff = useMemo(() => projectLocalCourierHandoff(world, selected), [world, selected]);
   const localDamageAssurance = useMemo(() => world.damageAssurance.claims.length ?
     projectLocalDamageAssurance(world, selected) : undefined, [world, selected]);
@@ -1393,6 +1398,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                 {sanctuary !== undefined && <span className="text-cyan-200">· 本人通行权有效 · {sanctuary > 0 ? `护阵可挡 ${sanctuary} 次决斗` : '护阵已耗尽'}</span>}
                 {(localErrata.get(location.id) ?? 0) > 0 && <span className="text-amber-200">· 公开史料有待勘误 {localErrata.get(location.id)} 条</span>}
                 {habitatView && <span className="text-emerald-200">· 复育栖地 {habitatView.wildOccupancy ?? 0}/{habitatView.capacity} 野兽</span>}
+                {localSeasonReviewSite===location.id&&<span className="text-teal-200">· 这里有你可核对的旧药约</span>}
                 {localClinic?.siteId === location.id && <span className="text-rose-200">· 静养床 {localClinic.capacity.available}/{localClinic.capacity.beds} 本轮可受理</span>}
                 {localCourierHandoff?.siteId === location.id && isCurrentLocation(location.id) &&
                   <span className="text-sky-200">· 经手的封函停在此驿，{localCourierHandoff.status === 'offered' ? '转接须另一人实地应允' : '尚未转托'}，并未送达</span>}

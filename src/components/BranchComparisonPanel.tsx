@@ -1,3 +1,7 @@
+import {DanxiaSeasonBranchComparison,type DanxiaSeasonBranchTarget} from './DanxiaSeasonBranchComparison';
+import {readBranchFateOrigin} from '../engine/branchFateComparison';
+import {compareDanxiaSeasonReviews} from '../engine/danxiaSeasonReviewEngine';
+import {readTimelineSnapshot} from '../engine/timelineEngine';
 import { useMemo, useState } from 'react';
 import { BranchFateComparison } from './BranchFateComparison';
 import { compareAlignedBranches, listAlignedBranchTicks, type BranchComparisonResult } from '../engine/branchComparisonEngine';
@@ -103,6 +107,26 @@ function OpenComparison({ timeline, viewerId, preferredTick }: { timeline: World
   const reviewed = reading?.left === left && reading.right === right && reading.tick === tick ? reading : undefined;
   const result = useMemo(() => reviewed ? compareAlignedBranches(timeline, reviewed.left, reviewed.right, reviewed.tick, viewerId) : undefined,
     [timeline, reviewed, viewerId]);
+  const originalMedicinePairs=useMemo(()=>{
+    if(!result?.ok||!reviewed||!viewerId)return [];
+    const x=readTimelineSnapshot(timeline,reviewed.tick,reviewed.left),y=readTimelineSnapshot(timeline,reviewed.tick,reviewed.right);
+    if(!x?.danxiaReviews.reviews.length||!y?.danxiaReviews.reviews.length)return [];
+    const original=readBranchFateOrigin(timeline,reviewed.left,reviewed.right,reviewed.tick);
+    if(!original)return [];
+    return original.danxiaShortages.cases.flatMap(row=>{
+      const pair=compareDanxiaSeasonReviews(original,x,y,row.id,viewerId);
+      if(!pair)return [];
+      const disciple=original.cultivators.find(actor=>actor.id===row.discipleId);
+      const village=original.settlements.villages.find(place=>place.id===row.settlementId);
+      return disciple&&village?[{discipleId:row.discipleId,settlementId:row.settlementId,shortageId:row.id,
+        label:`${disciple.name} · ${village.name} · 第 ${row.openedTick} 轮原案`,pair}]:[];
+    });
+  },[result,reviewed,timeline,viewerId]);
+  const readOriginalMedicinePair=(target:DanxiaSeasonBranchTarget)=>{
+    const match=originalMedicinePairs.find(row=>row.shortageId===target.shortageId&&
+      row.discipleId===target.discipleId&&row.settlementId===target.settlementId);
+    return match?{kind:'paired' as const,left:match.pair.first,right:match.pair.second}:{kind:'unavailable' as const};
+  };
   const changePair = () => { setTick(undefined); setReading(undefined); };
 
   return <div className="space-y-2 px-3 pb-3">
@@ -146,6 +170,9 @@ function OpenComparison({ timeline, viewerId, preferredTick }: { timeline: World
       if (tick !== undefined && ticks.includes(tick) && canAlign) { setTick(tick); setReading({ left, right, tick }); }
     }}>对照此轮</button>
     {result && <BranchComparisonReading result={result} />}
+    {reviewed&&originalMedicinePairs.length>0&&<DanxiaSeasonBranchComparison
+      scopeKey={JSON.stringify([reviewed.left,reviewed.right,reviewed.tick,viewerId])} revision={timeline}
+      options={originalMedicinePairs} onRead={readOriginalMedicinePair} />}
     {canAlign && tick !== undefined && <BranchFateComparison timeline={timeline} leftId={left} rightId={right}
       throughTick={tick} viewerId={viewerId} />}
   </div>;

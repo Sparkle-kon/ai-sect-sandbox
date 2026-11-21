@@ -119,6 +119,7 @@ export type ActionType =
   | 'INFIRMARY'
   | 'CARE_FOLLOWUP'
   | 'DANXIA_MEDICINE'
+  | 'DANXIA_REVIEW'
   | 'FORMATION_NETWORK'
   | 'TERRITORIAL_LEASE'
   | 'HOUSEHOLD_GUARDIAN'
@@ -465,6 +466,9 @@ export interface LLMDecisionPayload {
   innerMonologue: string;
   chosenAction: ActionType;
   danxiaMedicineMove?: DanxiaMedicineMove;
+  danxiaReviewMove?: DanxiaReviewMove;
+  targetDanxiaReviewId?: string;
+  targetSettlementRecordId?: string;
   targetDanxiaShortageId?: string;
   targetDanxiaMedicineId?: string;
   observatoryMove?: ObservatoryMove;
@@ -997,6 +1001,7 @@ export type AvatarOrder = 'REST' | 'CULTIVATE';
 export type AvatarPendingOrder = { actorId: string; queuedTick: number } & (
   | { action: AvatarOrder }
   | { action: 'SALVAGE_ARTIFACT'; targetArtifactId: string; targetLocationId: string }
+  | { action: 'DANXIA_REVIEW'; danxiaReviewMove: DanxiaReviewMove; targetDanxiaReviewId:string; targetSettlementRecordId?:string }
   | { action: 'DANXIA_MEDICINE'; danxiaMedicineMove: DanxiaMedicineMove; targetDanxiaShortageId?:string; targetDanxiaMedicineId?:string; targetCultivatorId?:string }
 );
 export interface AvatarTranscriptEntry extends AvatarInteractionRequest {
@@ -1768,23 +1773,26 @@ export interface EscortState {
 }
 
 export interface ScenarioOrigin {
-  version: 1 | 2;
+  version: 1 | 2 | 3;
   ruleset: 1;
   id: string;
   endTick: number;
 }
 
+export type ScenarioDanxiaOutcome = 'delivered'|'renewed'|'switched'|'refused';
 export type ScenarioObjective =
   | { kind: 'cultivator_survives'; actorId: string }
   | { kind: 'living_population'; minimum: number }
   | { kind: 'site_qi'; locationId: string; minimum: number }
-  | { kind: 'sect_treasury'; sectId: string; minimum: number };
+  | { kind: 'sect_treasury'; sectId: string; minimum: number }
+  | { kind: 'danxia_medicine_outcome'; actorId: string; settlementId: string; required: ScenarioDanxiaOutcome };
 
 export type ScenarioAuditEvidence =
   | { kind: 'cultivator_survives'; found: boolean; alive: boolean; hp: number }
   | { kind: 'living_population'; count: number }
   | { kind: 'site_qi'; found: boolean; qi: number }
-  | { kind: 'sect_treasury'; found: boolean; atSite: number; inTransit: number; total: number };
+  | { kind: 'sect_treasury'; found: boolean; atSite: number; inTransit: number; total: number }
+  | { kind: 'danxia_medicine_outcome'; verified: boolean };
 
 export type ScenarioAuditCard = { id: string; passed: boolean } & {
   [Kind in ScenarioObjective['kind']]: {
@@ -3128,10 +3136,28 @@ export interface AlignedWeatherComparison {
 }
 export interface AlignedWeatherState { comparisons: AlignedWeatherComparison[]; nextId: number }
 
+export type DanxiaReviewMove = 'propose_renew'|'propose_switch'|'refuse'|'accept'|'decline';
+export type DanxiaSeasonOutcome = 'delivered'|'unfulfilled'|'observed'|'no_commitment';
+export interface DanxiaSeasonSource {
+  outcome:DanxiaSeasonOutcome;finalTick:number;deliveredLeaves:0|2;
+}
+export interface DanxiaSeasonReliefProof {
+  id:string;tick:number;siteId:string;stones:12;herbs:2;
+}
+export interface DanxiaSeasonReview {
+  id:string;shortageId:string;commitmentId?:string;discipleId:string;patientId:string;householdId:string;volunteerId:string;
+  settlementId:string;source:DanxiaSeasonSource;openedTick:number;expiresTick:number;
+  status:'open'|'proposed'|'renewed'|'switched'|'refused'|'no_agreement';
+  proposal?:{kind:'renew'|'switch';representativeId:string;sectId:string;proposedTick:number;relief?:DanxiaSeasonReliefProof};
+  decision?:{tick:number;actorId?:string;reason:'signed'|'refused'|'declined'|'expired'};
+}
+export interface DanxiaReviewsState { reviews:DanxiaSeasonReview[] }
+
 export interface WorldState {
   fieldObservatories: FieldObservatoriesState;
   danxiaShortages: DanxiaShortagesState;
   danxiaMedicine: DanxiaMedicineState;
+  danxiaReviews: DanxiaReviewsState;
   expeditionOmens: ExpeditionOmensState;
   alignedWeather: AlignedWeatherState;
   villageCensuses: VillageCensusesState;

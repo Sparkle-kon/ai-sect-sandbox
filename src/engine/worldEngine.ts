@@ -1,4 +1,5 @@
 import { advanceDanxiaMedicine, resolveDanxiaMedicineAction } from './danxiaMedicineEngine';
+import { advanceDanxiaSeasonReviews, resolveDanxiaReviewAction } from './danxiaSeasonReviewEngine';
 import { activeDanxiaMedicineEscort, danxiaMedicineActedThisTick } from './danxiaMedicineTerms';
 import {advanceDanxiaShortages,openDanxiaShortage} from './danxiaShortageEngine';
 import { isScopedExpeditionGate } from './expeditionOmenTerms';
@@ -382,6 +383,8 @@ export function applyCultivatorBrainDecision(
       return resolveCareFollowupAction(world, cultivator, decision);
     case 'DANXIA_MEDICINE':
       return resolveDanxiaMedicineAction(world,cultivator,decision,rng);
+    case 'DANXIA_REVIEW':
+      return resolveDanxiaReviewAction(world,cultivator,decision);
     case 'HABITAT':
       return resolveHabitatAction(world, cultivator, decision);
     case 'CHRONICLE_ERRATA':
@@ -854,7 +857,7 @@ export function advanceWorldTick(
   const avatarOrder = consumeAvatarOrder(nextState);
   const danxiaRegrowth = maintainAlchemy(nextState);
   maintainSectEconomy(nextState);
-  const newEvents: WorldEvent[] = [...advanceSanctuaries(nextState), ...advanceCeasefires(nextState), ...advanceCompetitionSeasons(nextState), ...advanceMapHazards(nextState), ...advanceTerrainSuccession(nextState), ...advanceRoads(nextState), ...advanceCouriers(nextState), ...advanceDanxiaMedicine(nextState), ...advancePilgrimages(nextState), ...advanceRelocations(nextState), ...advanceWorkshopInstitutionClosures(nextState), ...advanceSettlements(nextState), ...advanceVillageSupply(nextState), ...advanceVillageWorks(nextState), ...advanceSpiritBeasts(nextState, rng), ...advanceSeedCulture(nextState), ...advanceVillageFairs(nextState), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...advanceSharedCommons(nextState), ...advanceHouseholds(nextState), ...advanceSeasonalHousing(nextState)];
+  const newEvents: WorldEvent[] = [...advanceSanctuaries(nextState), ...advanceCeasefires(nextState), ...advanceCompetitionSeasons(nextState), ...advanceMapHazards(nextState), ...advanceTerrainSuccession(nextState), ...advanceRoads(nextState), ...advanceCouriers(nextState), ...advanceDanxiaMedicine(nextState), ...advanceDanxiaSeasonReviews(nextState), ...advancePilgrimages(nextState), ...advanceRelocations(nextState), ...advanceWorkshopInstitutionClosures(nextState), ...advanceSettlements(nextState), ...advanceVillageSupply(nextState), ...advanceVillageWorks(nextState), ...advanceSpiritBeasts(nextState, rng), ...advanceSeedCulture(nextState), ...advanceVillageFairs(nextState), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...advanceSharedCommons(nextState), ...advanceHouseholds(nextState), ...advanceSeasonalHousing(nextState)];
   newEvents.push(...openDanxiaShortage(nextState,danxiaRegrowth));
   for (const event of newEvents) witnessEvent(nextState, event);
   openFurnaceTurn(nextState);

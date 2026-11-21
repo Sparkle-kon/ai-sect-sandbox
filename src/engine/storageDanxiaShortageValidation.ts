@@ -7,7 +7,7 @@ const compare = (a: string,b: string) => a < b ? -1 : a > b ? 1 : 0;
 export function validateDanxiaShortageHistory(world: WorldState, actorIds: ReadonlySet<string>, fail: (path: string) => never): void {
   if (!world.danxiaShortages.cases.length) return;
   // Original appointment/money/shift validation runs before this additional authored-incident proof.
-  const pinnedShortages = new Set(world.danxiaMedicine.commitments.map(row=>row.shortageId));
+  const pinnedShortages = new Set([...world.danxiaMedicine.commitments,...world.danxiaReviews.reviews].map(row=>row.shortageId));
   const appointments = new Map(world.careFollowups.appointments.map(row=>[row.id,row]));
   const household = new Map(world.households.groups.map(row=>[row.id,row]));
   const members = new Map(world.households.members.map(row=>[row.volunteerId,row]));

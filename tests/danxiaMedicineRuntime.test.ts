@@ -223,7 +223,7 @@ describe('native E2-4 distinct, exactly once custody outcomes',()=>{
     }
   });
 
-  it('keeps an actually observed original beyond ordinary E2-3 compaction, without fabricating a source in the parallel branch',()=>{
+  it('pins the actual source through compaction without inventing a medicine commitment on the parallel branch',()=>{
     const f=shortageFixture();
     let bound=danxiaTurn(f.world,{[disciple]:pledge('observe',f.shortageId)});
     let unbound=danxiaTurn(f.world);
@@ -232,7 +232,12 @@ describe('native E2-4 distinct, exactly once custody outcomes',()=>{
     const beyond=resolution!.tick+121;
     while(bound.tick<beyond)bound=danxiaTurn(bound);
     while(unbound.tick<beyond)unbound=danxiaTurn(unbound);
-    expect(unbound.danxiaShortages.cases.some(item=>item.id===f.shortageId)).toBe(false);
+    const noMedicine=load(unbound);
+    expect(noMedicine.danxiaShortages.cases.find(item=>item.id===f.shortageId)?.resolution).toEqual(resolution);
+    expect(noMedicine.danxiaMedicine.commitments.some(item=>item.shortageId===f.shortageId)).toBe(false);
+    expect(noMedicine.danxiaReviews.reviews.find(item=>item.shortageId===f.shortageId)).toMatchObject({
+      source:{outcome:'no_commitment',deliveredLeaves:0},status:'no_agreement',decision:{reason:'expired'},
+    });
     const archived=load(bound);
     expect(archived.danxiaShortages.cases.find(item=>item.id===f.shortageId)?.resolution).toEqual(resolution);
     expect(commitment(archived)).toMatchObject({shortageId:f.shortageId,status:'observed'});

@@ -1,3 +1,4 @@
+import { verifiableDanxiaScenarioOutcome } from './scenarioDanxiaOutcome';
 import type { ScenarioAudit, ScenarioAuditCard, ScenarioAuditEvidence, ScenarioObjective, WorldState } from '../types/world';
 
 export const SCENARIO_MIN_OBJECTIVES = 1;
@@ -56,6 +57,12 @@ function normalizeObjective(value: unknown): ScenarioObjective | undefined {
       return row && isId(row.sectId) && isInteger(row.minimum, 0, SCENARIO_MAX_TREASURY_TARGET) ?
         { kind, sectId: row.sectId, minimum: unsignedZero(row.minimum) } : undefined;
     }
+    case 'danxia_medicine_outcome': {
+      const row = exactRecord(value, ['kind','actorId','settlementId','required']);
+      if(!row || !isId(row.actorId) || !isId(row.settlementId) ||
+        (row.required!=='delivered'&&row.required!=='renewed'&&row.required!=='switched'&&row.required!=='refused'))return undefined;
+      return {kind,actorId:row.actorId,settlementId:row.settlementId,required:row.required};
+    }
     default:
       return undefined;
   }
@@ -68,6 +75,7 @@ export function scenarioObjectiveKey(objective: ScenarioObjective): string {
     case 'site_qi': return `${objective.kind}:${objective.locationId}`;
     case 'sect_treasury': return `${objective.kind}:${objective.sectId}`;
     case 'living_population': return objective.kind;
+    case 'danxia_medicine_outcome': return `${objective.kind}:${objective.actorId}:${objective.settlementId}:${objective.required}`;
   }
 }
 
@@ -92,7 +100,10 @@ export function validateScenarioObjectiveReferences(world: WorldState, objective
   objectives.forEach((objective, index) => {
     const valid = objective.kind === 'cultivator_survives' ? world.cultivators.some((actor) => actor.id === objective.actorId && actor.alive && actor.hp > 0) :
       objective.kind === 'site_qi' ? world.locations.some(({ id }) => id === objective.locationId) :
-      objective.kind === 'sect_treasury' ? world.sects.some(({ id }) => id === objective.sectId) : true;
+      objective.kind === 'sect_treasury' ? world.sects.some(({ id }) => id === objective.sectId) :
+      objective.kind === 'danxia_medicine_outcome' ?
+        world.cultivators.some(actor=>actor.id===objective.actorId&&actor.alive&&actor.hp>0)&&
+        world.settlements.villages.some(village=>village.id===objective.settlementId&&village.population>0) : true;
     if (!valid) throw new ScenarioObjectiveError('initial_ref', '目标引用须来自此种子和谱系的实际初始世界。', index);
   });
 }
@@ -103,6 +114,7 @@ export function scenarioObjectivePassed(objective: ScenarioObjective, evidence: 
     case 'living_population': return evidence.kind === objective.kind && evidence.count >= objective.minimum;
     case 'site_qi': return evidence.kind === objective.kind && evidence.found && evidence.qi >= objective.minimum;
     case 'sect_treasury': return evidence.kind === objective.kind && evidence.found && evidence.total >= objective.minimum;
+    case 'danxia_medicine_outcome': return evidence.kind===objective.kind&&evidence.verified;
   }
 }
 
@@ -112,6 +124,10 @@ export function evaluateScenarioObjectives(world: WorldState, input: readonly Sc
   return objectives.map((objective, index): ScenarioAuditCard => {
     const id = `objective-${index + 1}`;
     switch (objective.kind) {
+      case 'danxia_medicine_outcome': {
+        const evidence={kind:objective.kind,verified:verifiableDanxiaScenarioOutcome(world,objective)};
+        return {id,objective,passed:scenarioObjectivePassed(objective,evidence),evidence};
+      }
       case 'cultivator_survives': {
         const actor = world.cultivators.find((row) => row.id === objective.actorId);
         const evidence = { kind: objective.kind, found: Boolean(actor), alive: Boolean(actor?.alive && actor.hp > 0), hp: actor?.hp ?? 0 };
@@ -142,10 +158,13 @@ export function evaluateScenarioObjectives(world: WorldState, input: readonly Sc
 /** Scenario replay alone attaches the returned report after its complete, isolated v2 endpoint. Never mutates the input. */
 export function sealScenarioAudit(world: WorldState, input: readonly ScenarioObjective[]): ScenarioAudit {
   const origin = world.scenarioOrigin;
-  if (!origin || origin.version !== 2 || origin.ruleset !== 1 || origin.endTick !== world.tick) {
+  if (!origin || (origin.version !== 2 && origin.version !== 3) || origin.ruleset !== 1 || origin.endTick !== world.tick) {
     throw new ScenarioObjectiveError('authority', '只能在目标版剧本离线复演的确切末回合签发凭证。');
   }
   const objectives = normalizeScenarioObjectives(input);
+  if(objectives.some(item=>item.kind==='danxia_medicine_outcome')!==(origin.version===3)){
+    throw new ScenarioObjectiveError('authority','过程目标与已核验剧本版本不一致。');
+  }
   const profileId = world.worldgen?.profileId ?? 'classic';
   const seed = world.random.seed;
   if (world.scenarioAudit) {

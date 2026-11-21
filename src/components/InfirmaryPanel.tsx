@@ -13,6 +13,9 @@ import { DanxiaShortageReceipts } from './DanxiaShortageReceipts';
 import { projectDanxiaMedicine } from '../engine/danxiaMedicineEngine';
 import { DanxiaMedicineControls, type DanxiaMedicineControlsProps } from './DanxiaMedicineControls';
 import { DanxiaMedicineReceipts } from './DanxiaMedicineReceipts';
+import { projectDanxiaSeasonReviews } from '../engine/danxiaSeasonReviewEngine';
+import { DanxiaSeasonReviewReceipts } from './DanxiaSeasonReviewReceipts';
+import { DanxiaSeasonReviewControls,type DanxiaSeasonReviewControlsProps } from './DanxiaSeasonReviewControls';
 
 const STATUS: Record<InfirmaryCase['status'], string> = {
   waiting: '等待救治', treated: '已同意并接受救治', refused: '本人已拒绝', closed: '排队已结束',
@@ -23,17 +26,18 @@ const END: Record<NonNullable<InfirmaryCase['reason']>, string> = {
 
 const DUTY: Record<StaffedDutyKind, string> = { observatory: '观象实测', cohort: '合班实授' };
 
-export function InfirmaryPanel({ world, cultivator, medicineControls }: {
-  world: WorldState; cultivator: Cultivator; medicineControls?: DanxiaMedicineControlsProps;
+export function InfirmaryPanel({ world, cultivator, medicineControls, seasonReviewControls }: {
+  world: WorldState; cultivator: Cultivator; medicineControls?: DanxiaMedicineControlsProps; seasonReviewControls?:DanxiaSeasonReviewControlsProps;
 }) {
   const viewer = world.cultivators.find(({ id }) => id === cultivator.id);
   const view = visibleInfirmaries(world, viewer);
   const followups = projectCareFollowups(world, viewer);
   const shortages = projectDanxiaShortages(world, viewer);
   const medicine = projectDanxiaMedicine(world, viewer);
+  const seasonReviews = projectDanxiaSeasonReviews(world, viewer);
   const { capacity, ownCases = [], ownShift, ownQueuePosition, ownDutyDisposition } = view ?? {};
   const followupCapacity = capacity ? projectLocalCareFollowupCapacity(world, viewer) : undefined;
-  if (!capacity && !ownCases.length && !ownShift && !followups.length && !shortages.length && !medicine.length) return null;
+  if (!capacity && !ownCases.length && !ownShift && !followups.length && !shortages.length && !medicine.length && !seasonReviews.length) return null;
   const sect = world.sects.find(({ id }) => id === view?.sectId);
   const sites = new Map(world.locations.map(({ id, name }) => [id, name]));
 
@@ -90,6 +94,8 @@ export function InfirmaryPanel({ world, cultivator, medicineControls }: {
         <CareFollowupReceipts appointments={followups} tick={world.tick} />
         <DanxiaShortageReceipts rows={shortages} />
         <DanxiaMedicineReceipts rows={medicine} />
+        <DanxiaSeasonReviewReceipts rows={seasonReviews} />
+        {seasonReviews.length>0&&seasonReviewControls&&<DanxiaSeasonReviewControls {...seasonReviewControls} />}
         {(shortages.length > 0 || medicine.length > 0) && medicineControls && <DanxiaMedicineControls {...medicineControls} />}
       </div>
     </details>

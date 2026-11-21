@@ -3,15 +3,17 @@ import {
   scenarioObjectiveKey, SCENARIO_MAX_OBJECTIVES, SCENARIO_MAX_POPULATION_TARGET, SCENARIO_MAX_SITE_QI_TARGET, SCENARIO_MAX_TREASURY_TARGET,
 } from '../engine/scenarioObjectiveEngine';
 import { WORLDGEN_PROFILES } from '../engine/worldgenProfiles';
-import type { ScenarioAudit, ScenarioObjective, WorldState } from '../types/world';
+import type { ScenarioAudit, ScenarioDanxiaOutcome, ScenarioObjective, WorldState } from '../types/world';
 
 type ObjectiveKind = ScenarioObjective['kind'];
 interface Target { id: string; name: string }
-export interface ObjectiveCatalog { cultivators: Target[]; locations: Target[]; sects: Target[] }
+export interface ObjectiveCatalog { cultivators: Target[]; locations: Target[]; sects: Target[]; settlements?: Target[] }
 const LABELS: Record<ObjectiveKind, string> = {
   cultivator_survives: '指定修士在世', living_population: '在世修士数', site_qi: '指定地点灵气', sect_treasury: '指定宗门公库',
+  danxia_medicine_outcome: '丹霞药约经过',
 };
-const MAX: Record<Exclude<ObjectiveKind, 'cultivator_survives'>, number> = {
+const DANXIA_OUTCOMES: Record<ScenarioDanxiaOutcome,string> = {delivered:'实际签收',renewed:'双方续约',switched:'转与另一宗合作',refused:'明确拒绝合作'};
+const MAX: Record<Exclude<ObjectiveKind, 'cultivator_survives'|'danxia_medicine_outcome'>, number> = {
   living_population: SCENARIO_MAX_POPULATION_TARGET, site_qi: SCENARIO_MAX_SITE_QI_TARGET, sect_treasury: SCENARIO_MAX_TREASURY_TARGET,
 };
 
@@ -19,8 +21,12 @@ const input = 'min-h-11 min-w-0 w-full rounded border border-slate-700 bg-slate-
 const button = 'min-h-11 rounded border border-slate-700 bg-slate-900 px-2.5 text-xs font-semibold text-slate-100 disabled:opacity-40';
 const label = 'grid min-w-0 gap-1 text-xs text-slate-300';
 
-export function objectiveFromInputs(kind: ObjectiveKind, target: string, threshold: string, catalog?: ObjectiveCatalog): ScenarioObjective | undefined {
+export function objectiveFromInputs(kind: ObjectiveKind, target: string, threshold: string, catalog?: ObjectiveCatalog,
+  process?:{settlementId:string;required:ScenarioDanxiaOutcome}): ScenarioObjective | undefined {
   if (!catalog) return undefined;
+  if(kind==='danxia_medicine_outcome')return process&&Object.hasOwn(DANXIA_OUTCOMES,process.required)&&
+    catalog.cultivators.some(row=>row.id===target)&&catalog.settlements?.some(row=>row.id===process.settlementId)?
+    {kind,actorId:target,settlementId:process.settlementId,required:process.required}:undefined;
   if (kind === 'cultivator_survives') return catalog.cultivators.some(({ id }) => id === target) ? { kind, actorId: target } : undefined;
   const text = threshold.trim();
   const minimum = Number(text);
@@ -37,6 +43,8 @@ function objectiveLabel(row: ScenarioObjective, catalog?: ObjectiveCatalog) {
     case 'cultivator_survives':
       return `${catalog?.cultivators.find(({ id }) => id === row.actorId)?.name ?? '修士未详'}在末回合仍在世`;
     case 'living_population': return `在世修士 ≥ ${row.minimum} 人`;
+    case 'danxia_medicine_outcome':
+      return `${catalog?.cultivators.find(({id})=>id===row.actorId)?.name??'修士未详'} · ${catalog?.settlements?.find(({id})=>id===row.settlementId)?.name??'村庄未详'}：${DANXIA_OUTCOMES[row.required]}`;
     case 'site_qi': return `${catalog?.locations.find(({ id }) => id === row.locationId)?.name ?? '地点未详'}灵气 ≥ ${row.minimum}`;
     case 'sect_treasury': return `${catalog?.sects.find(({ id }) => id === row.sectId)?.name ?? '宗门未详'}公库 ≥ ${row.minimum} 灵石`;
   }
@@ -48,9 +56,11 @@ export function ScenarioObjectiveEditor({ objectives, catalog, onChange }: {
   const [kind, setKind] = useState<ObjectiveKind>('cultivator_survives');
   const [target, setTarget] = useState('');
   const [threshold, setThreshold] = useState('1');
-  const pool = kind === 'cultivator_survives' ? catalog?.cultivators : kind === 'site_qi' ? catalog?.locations
+  const [settlementId,setSettlementId]=useState('');
+  const [required,setRequired]=useState<ScenarioDanxiaOutcome>('delivered');
+  const pool = kind === 'cultivator_survives' || kind==='danxia_medicine_outcome' ? catalog?.cultivators : kind === 'site_qi' ? catalog?.locations
     : kind === 'sect_treasury' ? catalog?.sects : undefined;
-  const candidate = objectiveFromInputs(kind, target, threshold, catalog);
+  const candidate = objectiveFromInputs(kind,target,threshold,catalog,{settlementId,required});
   const duplicate = candidate && objectives.some((value) => scenarioObjectiveKey(value) === scenarioObjectiveKey(candidate));
   return (
     <details className="min-w-0 space-y-2 rounded-lg border border-slate-800 bg-slate-950/45 p-2.5">
@@ -71,7 +81,24 @@ export function ScenarioObjectiveEditor({ objectives, catalog, onChange }: {
             {pool?.map(({ id, name }) => <option value={id} key={id}>{name}</option>)}
           </select>
         </label>}
-        {kind !== 'cultivator_survives' && <label className={label}>目标下限（{kind === 'living_population' ? 1 : 0}–{MAX[kind]}）
+        {kind==='danxia_medicine_outcome' && <>
+          <label className={label}>核定村庄
+            <select className={input} value={settlementId} onChange={event=>setSettlementId(event.currentTarget.value)}>
+              <option value="">请选择</option>
+              {catalog?.settlements?.map(({id,name})=><option value={id} key={id}>{name}</option>)}
+            </select>
+          </label>
+          <label className={label}>需要核实的经过
+            <select className={input} value={required} onChange={event=>{
+              const value=event.currentTarget.value;
+              if(Object.hasOwn(DANXIA_OUTCOMES,value))setRequired(value as ScenarioDanxiaOutcome);
+            }}>
+              {Object.entries(DANXIA_OUTCOMES).map(([value,name])=><option value={value} key={value}>{name}</option>)}
+            </select>
+          </label>
+          <p className="text-xs text-slate-400">只核对截至末回合的实际记录，不预设药约必然发生。</p>
+        </>}
+        {kind !== 'cultivator_survives' && kind!=='danxia_medicine_outcome' && <label className={label}>目标下限（{kind === 'living_population' ? 1 : 0}–{MAX[kind]}）
           <input className={input} inputMode="numeric" value={threshold} onChange={(event) => setThreshold(event.currentTarget.value)} />
         </label>}
       </div>
@@ -92,6 +119,7 @@ function evidenceText(evidence: ScenarioAudit['cards'][number]['evidence']) {
   switch (evidence.kind) {
     case 'cultivator_survives': return evidence.found ? `在世：${evidence.alive ? '是' : '否'} · 气血 ${evidence.hp}` : '末回合无对应修士记录';
     case 'living_population': return `实测在世 ${evidence.count} 人`;
+    case 'danxia_medicine_outcome': return evidence.verified ? '确有本线已核验经过' : '本线截至末回合未核实到所需经过';
     case 'site_qi': return evidence.found ? `末回合实测灵气 ${evidence.qi}` : '末回合无对应地点记录';
     case 'sect_treasury': return evidence.found ? `实测公库 ${evidence.total} 灵石（库中 ${evidence.atSite} · 流转中 ${evidence.inTransit}）` : '末回合无对应宗门记录';
   }
@@ -100,7 +128,7 @@ function evidenceText(evidence: ScenarioAudit['cards'][number]['evidence']) {
 export function ScenarioAuditCards({ world, preview }: { world: WorldState; preview?: boolean }) {
   const audit = world.scenarioAudit;
   if (!audit) return null;
-  const targets = { cultivators: world.cultivators, locations: world.locations, sects: world.sects };
+  const targets = { cultivators: world.cultivators, locations: world.locations, sects: world.sects, settlements:world.settlements.villages };
   const passed = audit.cards.filter((card) => card.passed).length;
   return (
     <section aria-label="纪元目标凭证" className="min-w-0 space-y-2 rounded border border-emerald-400/25 bg-slate-950/65 p-2.5 text-xs">

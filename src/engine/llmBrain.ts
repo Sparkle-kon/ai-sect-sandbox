@@ -1,4 +1,5 @@
 import {availableDanxiaMedicineActions} from './danxiaMedicineEngine';
+import {availableDanxiaReviewActions} from './danxiaSeasonReviewEngine';
 import {activeDanxiaMedicineEscort,danxiaMedicineActedThisTick} from './danxiaMedicineTerms';
 import {hasOrdinaryIntentHistory,rankOrdinaryIntents} from './ordinaryIntentEngine';
 import { availableSeasonalHousingActions, seasonalHousingTravelTarget, type SeasonalHousingOption } from './seasonalHousingEngine';
@@ -1417,6 +1418,16 @@ export function computeHeuristicDecision(
     const chosen=pending??initial;
     if(chosen)return {...chosen,chosenAction:chosen.action,innerMonologue:'只按实际持药、同意和位置处理；药到手也不表示已施治。'};
   }
+  if(world.danxiaReviews.reviews.length){
+    const options=availableDanxiaReviewActions(cultivator,world);
+    const reply=cultivator.personality==='阴险'?
+      options.find(row=>row.danxiaReviewMove==='decline'):options.find(row=>row.danxiaReviewMove==='accept');
+    const request=options.find(row=>row.danxiaReviewMove==='propose_renew')??options.find(row=>row.danxiaReviewMove==='propose_switch');
+    const refusal=options.find(row=>row.danxiaReviewMove==='refuse'&&world.danxiaReviews.reviews.some(review=>
+      review.id===row.targetDanxiaReviewId&&review.source.outcome==='unfulfilled'));
+    const chosen=reply??request??(cultivator.personality==='刚正'?refusal:undefined);
+    if(chosen)return {...chosen,chosenAction:chosen.action,innerMonologue:'先查上次实际交付，再独自决定是否签新约。'};
+  }
   const ordinary=utilityRankedOrdinaryDecision(cultivator,world);
   if(ordinary)return ordinary;
 
@@ -1706,6 +1717,7 @@ export async function requestCultivatorLLMDecision(
     ({ stipendMove, targetInfirmaryCaseId, targetStipendId }));
   const careFollowupOptions = availableCareFollowupActions(cultivator, world, requestTick);
   const danxiaOptions=availableDanxiaMedicineActions(cultivator,world,requestTick);
+  const danxiaReviewOptions=availableDanxiaReviewActions(cultivator,world,requestTick);
   const careFollowupPromptOptions = careFollowupOptions.map(({ careFollowupMove, targetInfirmaryCaseId, targetCareFollowupId }) =>
     ({ careFollowupMove, targetInfirmaryCaseId, targetCareFollowupId }));
   const infirmaryOptions = availableInfirmaryActions(cultivator, world, requestTick)
@@ -1794,6 +1806,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 阵网只用实际签约、到场与灵气选项；overload 是主动超载且必会断链，不是默认调拨：${JSON.stringify(formationOptions)}
 - 退居俸养只复制本人执行回合许可：offer 只填已有旧勤凭据的 targetInfirmaryCaseId；accept、adopt、decline、withdraw 只填 targetStipendId。不得填写姓名、病况、钱款、日期、继任依据、发放结果或复职：${JSON.stringify(stipendPromptOptions)}
 - 丹霞留药、托运、签收或取回只照抄本人选项；不得补写药量、路程、不在场的人、收药结果或施治：${JSON.stringify(danxiaOptions)}
+- 原药约次季只照抄本人在场选项；单方提议或到期不表示对方签字，不安排药材或施治：${JSON.stringify(danxiaReviewOptions)}
 - 出院后复诊只复制本人实际许可：schedule 只填本人既有出诊的 targetInfirmaryCaseId；attend、withdraw 只填 targetCareFollowupId。不得填写当值人、日期、费用、症状、优先级或疗效：${JSON.stringify(careFollowupPromptOptions)}
 - 静养院只可复制本人执行回合的 request、staff、accept、accept_handoff 或 refuse。accept_handoff 是病患另行同意真实已值守的候补，只抄本人候诊编号；不填人员、班次、病况、地名、冲突细节、费用和奖励：${JSON.stringify(infirmaryOptions)}${mayStaffFollowup
     ? '\n- 此地已有可由后来当值人处理的复诊约期；若自愿值守，只复制现有 INFIRMARY staff，不指定人。' : ''}
@@ -1918,6 +1931,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'INFIRMARY',
             'CARE_FOLLOWUP',
             'DANXIA_MEDICINE',
+            'DANXIA_REVIEW',
             'SECT_STIPEND',
             'FORMATION_NETWORK',
             'TERRITORIAL_LEASE',
@@ -2172,6 +2186,15 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             return legalStipend.stipendMove === 'offer'
               ? { chosenAction: 'SECT_STIPEND', stipendMove: 'offer', targetInfirmaryCaseId: legalStipend.targetInfirmaryCaseId, innerMonologue }
               : { chosenAction: 'SECT_STIPEND', stipendMove: legalStipend.stipendMove, targetStipendId: legalStipend.targetStipendId, innerMonologue };
+          }
+          if(chosenAction==='DANXIA_REVIEW'){
+            const choice=danxiaReviewOptions.find(row=>row.danxiaReviewMove===parsed.danxiaReviewMove&&
+              row.targetDanxiaReviewId===parsed.targetDanxiaReviewId&&row.targetSettlementRecordId===parsed.targetSettlementRecordId);
+            if(!choice||Object.keys(parsed).some(field=>!['chosenAction','innerMonologue','danxiaReviewMove','targetDanxiaReviewId',
+              ...(choice.danxiaReviewMove==='propose_switch'?['targetSettlementRecordId']:[])].includes(field)))return undefined;
+            const {action,...allowed}=choice;
+            const text=typeof parsed.innerMonologue==='string'?parsed.innerMonologue.trim().slice(0,160):'';
+            return {...allowed,chosenAction:action,innerMonologue:text||'按本人与实交凭据核对旧约。'};
           }
           if(chosenAction==='DANXIA_MEDICINE'){
             const choice=danxiaOptions.find(row=>row.danxiaMedicineMove===parsed.danxiaMedicineMove&&

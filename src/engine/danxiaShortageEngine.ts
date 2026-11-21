@@ -1,3 +1,4 @@
+import {danxiaReviewPinnedShortageIds} from './danxiaSeasonTerms';
 import type { CareFollowup, Cultivator, DanxiaRegrowthSample, DanxiaShortage, DanxiaShortagesState, WorldEvent, WorldState } from '../types/world';
 import { CARE_FOLLOWUP_JADE_LEAF, CARE_FOLLOWUP_NEED_THRESHOLD } from './careFollowupTerms';
 import { DANXIA_CLOSED_RETENTION_TICKS, DANXIA_REGROWTH_CADENCE, DANXIA_SECT_ID, danxiaMedicineSite, danxiaShortageId, suppressedDanxiaRegrowth } from './danxiaShortageTerms';
@@ -106,7 +107,8 @@ export function advanceDanxiaShortages(world: WorldState): WorldEvent[] {
     row.resolution = { tick:world.tick,reason,requiredLeaves,availableLeaves };
     results.push(caseEvent(world,row,'closed'));
   }
-  const cited=new Set(world.danxiaMedicine.commitments.map(row=>row.shortageId));
+  const cited=danxiaReviewPinnedShortageIds(world);
+  for(const commitment of world.danxiaMedicine.commitments)cited.add(commitment.shortageId);
   world.danxiaShortages.cases = world.danxiaShortages.cases.filter(row => row.status === 'open' || cited.has(row.id) ||
     !row.resolution || world.tick - row.resolution.tick <= DANXIA_CLOSED_RETENTION_TICKS);
   return results;

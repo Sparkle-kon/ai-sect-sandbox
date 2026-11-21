@@ -1,4 +1,5 @@
 import { availableDanxiaMedicineActions } from './danxiaMedicineEngine';
+import {availableDanxiaReviewActions,type DanxiaReviewOption} from './danxiaSeasonReviewEngine';
 import { activeDanxiaMedicineEscort,danxiaMedicineActedThisTick } from './danxiaMedicineTerms';
 import type { AvatarIntent, AvatarInteractionMode, AvatarInteractionOption, AvatarInteractionRequest, AvatarOrder, AvatarTranscriptEntry, Cultivator, LLMDecisionPayload, PlayerAvatarState, WorldState } from '../types/world';
 import { availableArtifactSalvageActions } from './artifactSalvageEngine';
@@ -117,6 +118,17 @@ export function queueAvatarDanxiaMedicine(world:WorldState,actorId:string,choice
   return true;
 }
 
+export function queueAvatarDanxiaReview(world:WorldState,actorId:string,option:DanxiaReviewOption):boolean {
+  const host=activeAvatar(world);
+  if(!host||!canQueueAvatarSalvage(world,actorId))return false;
+  const legal=availableDanxiaReviewActions(host,world,world.tick+1).find(row=>row.danxiaReviewMove===option.danxiaReviewMove&&
+    row.targetDanxiaReviewId===option.targetDanxiaReviewId&&row.targetSettlementRecordId===option.targetSettlementRecordId);
+  if(!legal)return false;
+  world.playerAvatar.essence-=AVATAR_ORDER_COST;
+  world.playerAvatar.pendingOrder={actorId,queuedTick:world.tick,...legal};
+  return true;
+}
+
 export function consumeAvatarOrder(world: WorldState): { actorId: string; decision: LLMDecisionPayload } | undefined {
   const state = world.playerAvatar;
   const order = state?.pendingOrder;
@@ -126,7 +138,9 @@ export function consumeAvatarOrder(world: WorldState): { actorId: string; decisi
   const targets = order.action === 'SALVAGE_ARTIFACT' ?
     { targetArtifactId: order.targetArtifactId, targetLocationId: order.targetLocationId } :
     order.action==='DANXIA_MEDICINE'?{danxiaMedicineMove:order.danxiaMedicineMove,targetDanxiaShortageId:order.targetDanxiaShortageId,
-      targetDanxiaMedicineId:order.targetDanxiaMedicineId,targetCultivatorId:order.targetCultivatorId}:{};
+      targetDanxiaMedicineId:order.targetDanxiaMedicineId,targetCultivatorId:order.targetCultivatorId}:
+    order.action==='DANXIA_REVIEW'?{danxiaReviewMove:order.danxiaReviewMove,targetDanxiaReviewId:order.targetDanxiaReviewId,
+      targetSettlementRecordId:order.targetSettlementRecordId}:{};
 
   return { actorId: order.actorId, decision: { chosenAction: order.action, innerMonologue: '遵化身指令行动', ...targets } };
 }
