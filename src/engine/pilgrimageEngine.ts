@@ -1,3 +1,4 @@
+import { ROAD_FARE, availableRoadPilgrimageRoutes, beginRoadPilgrimageCrossing, roadCrossingForLeg } from './roadEngine';
 import type { Cultivator, LocationNode, LLMDecisionPayload, MapPoint, PilgrimageEndReason, PilgrimageJourney, PilgrimageMove,
   PilgrimageState, WorldEvent, WorldState } from '../types/world';
 import { findMapPath } from './mapMotionEngine';
@@ -18,6 +19,7 @@ export interface PilgrimageOption {
   action: 'PILGRIMAGE';
   pilgrimageMove: PilgrimageMove;
   targetPilgrimageId?: string;
+  targetRoadId?: string;
   targetPilgrimageNextStopId?: string;
   targetLocationId?: string;
   targetCultivatorId?: string;
@@ -154,7 +156,19 @@ export function availablePilgrimageActions(actor: Cultivator, world: WorldState,
     }
     if (!both || world.tick <= (existing.startedTick ?? world.tick) || existing.lastMovedTick === world.tick ||
       !existing.stopIds.every((id) => getSite(world, id))) return options;
-    if (actor.id === existing.organizerId && (existing.path.length > 1 || canDepart(world, existing, both.leader, both.companion).length > 1)) add('advance');
+    if (actor.id === existing.organizerId) {
+      if (existing.path.length > 1) add('advance');
+      else {
+        const normal = canDepart(world, existing, both.leader, both.companion);
+        if (normal.length > 1) {
+          add('advance');
+          if (world.roads.links.length && both.leader.spiritStones >= PILGRIMAGE_LEG_COST + ROAD_FARE) for (const route of availableRoadPilgrimageRoutes(world, existing,
+              both.leader, both.companion, normal, PILGRIMAGE_TILE_STRIDE, PILGRIMAGE_LEG_COST)) {
+            options.push({ action: 'PILGRIMAGE', pilgrimageMove: 'advance', targetPilgrimageId: existing.id, targetRoadId: route.roadId });
+          }
+        }
+      }
+    }
     if (existing.path.length) return options;
     const other = actor.id === both.leader.id ? both.companion : both.leader;
     const site = existing.stopsVisited.at(-1)?.locationId;
@@ -213,7 +227,7 @@ export function resolvePilgrimageAction(world: WorldState, actor: Cultivator, de
   const option = availablePilgrimageActions(actor, world, decision.pilgrimageMove === 'propose').find((candidate) =>
     candidate.pilgrimageMove === decision.pilgrimageMove && candidate.targetPilgrimageId === decision.targetPilgrimageId &&
     candidate.targetPilgrimageNextStopId === decision.targetPilgrimageNextStopId && candidate.targetLocationId === decision.targetLocationId &&
-    candidate.targetCultivatorId === decision.targetCultivatorId);
+    candidate.targetCultivatorId === decision.targetCultivatorId && candidate.targetRoadId === decision.targetRoadId);
   if (!option) return null;
   if (option.pilgrimageMove === 'propose') {
     const journey: PilgrimageJourney = { id: `pilgrimage-${world.pilgrimages.nextId++}`, organizerId: actor.id,
@@ -246,14 +260,19 @@ export function resolvePilgrimageAction(world: WorldState, actor: Cultivator, de
     return event(world, journey, `relief-${journey.aid.length}`, '同行者互助', `使用一株真实青玉叶，恢复${hpRestored}点气血。`, actor.locationId);
   }
   if (!journey.path.length) {
-    journey.path = canDepart(world, journey, members.leader, members.companion);
-    // The option and transaction use the same checked current route; the fee is only for actual departure.
-    if (journey.path.length < 2) return null;
+    const normal = canDepart(world, journey, members.leader, members.companion);
+    // No extra debit until both base fares and the exact currently eligible route are verified.
+    if (normal.length < 2 || (option.targetRoadId && members.leader.spiritStones < PILGRIMAGE_LEG_COST + ROAD_FARE)) return null;
+    const paid = option.targetRoadId ? beginRoadPilgrimageCrossing(world, journey, members.leader, members.companion,
+      option.targetRoadId, normal, PILGRIMAGE_TILE_STRIDE, PILGRIMAGE_LEG_COST) : undefined;
+    if (option.targetRoadId && !paid) return null;
+    journey.path = paid?.path ?? normal;
     members.leader.spiritStones -= PILGRIMAGE_LEG_COST;
     members.companion.spiritStones -= PILGRIMAGE_LEG_COST;
     journey.spentByEach += PILGRIMAGE_LEG_COST;
   }
-  const next = Math.min(journey.path.length - 1, journey.pathIndex + PILGRIMAGE_TILE_STRIDE);
+  const stride = roadCrossingForLeg(world, journey)?.stride ?? PILGRIMAGE_TILE_STRIDE;
+  const next = Math.min(journey.path.length - 1, journey.pathIndex + stride);
   const visitedTiles = journey.path.slice(journey.pathIndex + 1, next + 1).flatMap((point) => {
     const tile = terrainTileAt(world, point.x, point.y);
     return tile ? [tile.id] : [];

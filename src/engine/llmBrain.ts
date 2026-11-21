@@ -1,3 +1,4 @@
+import { availableRoadActions } from './roadEngine';
 import { availableProbationActions, probationReliefTargets } from './probationEngine';
 import { availableRelicExhibitActions } from './relicExhibitEngine';
 import { availableWorkshopActions } from './workshopEngine';
@@ -101,6 +102,8 @@ export function computeHeuristicDecision(
     const worried = cultivator.hp < cultivator.maxHp * .35 || (pendingVow && cultivator.hp < cultivator.maxHp * .65);
     const move = moves.find(({ pilgrimageMove }) => pilgrimageMove === 'relieve' ||
       (worried ? pilgrimageMove === 'withdraw' || pilgrimageMove === 'decline' : pilgrimageMove === 'accept')) ??
+      ((!worried && (cultivator.personality === '刚正' || cultivator.personality === '逍遥'))
+        ? moves.find(({ pilgrimageMove, targetRoadId }) => pilgrimageMove === 'advance' && targetRoadId !== undefined) : undefined) ??
       moves.find(({ pilgrimageMove }) => pilgrimageMove === 'advance');
     if (move) return { ...move, chosenAction: 'PILGRIMAGE', innerMonologue: '只按同伴应允与实走的路程行事。' };
     if (pilgrim) return { chosenAction: 'REST', innerMonologue: '等同伴沿已知路段前行，到站再作休整。' };
@@ -143,6 +146,15 @@ export function computeHeuristicDecision(
       (cultivator.personality === '刚正' || cultivator.personality === '逍遥')) {
     const work = availableTerrainRecoveryActions(cultivator, world)[0];
     if (work) return { ...work, chosenAction: 'TERRAIN_RECOVERY', innerMonologue: '只修脚下已退灾的实地，付出实物，不抹去永久伤痕。' };
+  }
+  const mayCharterRoad = world.tick >= 39 && world.tick % 13 === 5 && cultivator.sectRank === '掌门';
+  const mayCareRoad = world.tick % 6 === 4 && world.roads.links.some((road) => !road.closedTick &&
+    road.sectId === cultivator.sectId && road.condition < 62);
+  if (mayCharterRoad || mayCareRoad) {
+    const plans = availableRoadActions(cultivator, world, mayCharterRoad);
+    const road = plans.find(({ roadMove }) => roadMove === 'maintain') ??
+      plans.find(({ roadMove }) => roadMove === 'patrol') ?? plans.find(({ roadMove }) => roadMove === 'charter');
+    if (road) return { ...road, chosenAction: 'ROAD', innerMonologue: '只修真实路段，恪守实付与实际当值；原路线不因驿路收费而封闭。' };
   }
   const mayRequestProbation = !cultivator.sectId && world.tick % 5 === 2 &&
     world.probation.expulsions.some(({ actorId, reinstatedTick }) => actorId === cultivator.id && reinstatedTick === undefined);
@@ -715,6 +727,7 @@ export async function queryCultivatorLLMDecision(
   const estateOptions = availableEstateActions(cultivator, world);
   const doctrineOptions = availableDoctrineActions(cultivator, world);
   const relocationOptions = availableRelocationActions(cultivator, world);
+  const roadOptions = availableRoadActions(cultivator, world);
   const probationOptions = availableProbationActions(cultivator, world);
   const exhibitOptions = availableRelicExhibitActions(cultivator, world);
   const workshopOptions = availableWorkshopActions(cultivator, world);
@@ -764,6 +777,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 天机悬赏榜：${JSON.stringify(world.bounties.filter((item) => item.status === 'open').map(({id,targetCultivatorId,reward,reason}) => ({id,targetCultivatorId,reward,reason})))}；可接的追缉：${JSON.stringify(availableBountyHunts(cultivator, world))}
 - 天下公示的大会与秘境：${JSON.stringify(world.occasions.filter((item) => item.status === 'registration' || item.status === 'running').map(({id,title,kind,locationId,status,registrationClosesTick}) => ({id,title,kind,locationId,status,registrationClosesTick})))}；可报名项目：${JSON.stringify(availableOccasionJoins(cultivator, world))}
 - 本宗邦交：${JSON.stringify(world.diplomacy.filter((relation) => relation.sectAId === cultivator.sectId || relation.sectBId === cultivator.sectId))}；公示的外事权限：${JSON.stringify(availableDiplomacyActions(cultivator, world))}
+- 驿路选项要求实地维修和真实资源；巡礼只有实际列出的付费路才可选，普通路线不另收路费：${JSON.stringify(roadOptions)}
 - 赎责见习必须复制已列动作；赈济另走真实 DELIVER_RELIEF，复籍不抹去原处分：${JSON.stringify(probationOptions)}
 - 古器陈列只能由真实双方当面应允；复制许可参数，不改写原件持有史：${JSON.stringify(exhibitOptions)}
 - 工坊委制只复制现有许可；须双方同意，按实际加工与质量交付：${JSON.stringify(workshopOptions)}
@@ -922,11 +936,17 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'WORKSHOP',
             'RELIC_EXHIBIT',
             'PROBATION',
+            'ROAD',
           ];
           const chosenAction = parsed?.chosenAction;
           if (!chosenAction || !validActions.includes(chosenAction)) return undefined;
 
           if (activeVow && chosenAction !== 'PILGRIMAGE' && (chosenAction !== 'REST' || onPilgrimagePath)) return undefined;
+          const legalRoad = chosenAction === 'ROAD' ? roadOptions.find((item) =>
+            item.roadMove === parsed.roadMove && item.targetRoadId === parsed.targetRoadId &&
+            item.targetLocationId === parsed.targetLocationId) : undefined;
+          if (chosenAction === 'ROAD' && (!legalRoad || parsed.targetCultivatorId !== undefined ||
+              parsed.targetSectId !== undefined)) return undefined;
           const legalProbation = chosenAction === 'PROBATION' ? probationOptions.find((item) =>
             item.probationMove === parsed.probationMove && item.targetProbationId === parsed.targetProbationId &&
             item.targetExpulsionId === parsed.targetExpulsionId && item.probationFirstVillageId === parsed.probationFirstVillageId &&
@@ -1007,6 +1027,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
           const legalPilgrimage = chosenAction === 'PILGRIMAGE' ? pilgrimageOptions.find((item) =>
             item.pilgrimageMove === parsed.pilgrimageMove && item.targetPilgrimageId === parsed.targetPilgrimageId &&
             item.targetLocationId === parsed.targetLocationId && item.targetPilgrimageNextStopId === parsed.targetPilgrimageNextStopId &&
+            item.targetRoadId === parsed.targetRoadId &&
             item.targetCultivatorId === parsed.targetCultivatorId) : undefined;
           if (chosenAction === 'PILGRIMAGE' && (!legalPilgrimage || parsed.targetSectId !== undefined)) return undefined;
 
@@ -1179,6 +1200,8 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             forgeTier: legalArtifact?.forgeTier,
             targetHerbId: legalCommons?.targetHerbId ?? legalAlchemy?.targetHerbId,
             targetPillId: legalAlchemy?.targetPillId,
+            roadMove: legalRoad?.roadMove,
+            targetRoadId: legalRoad?.targetRoadId ?? legalPilgrimage?.targetRoadId,
             probationMove: legalProbation?.probationMove,
             targetProbationId: legalProbation?.targetProbationId,
             targetExpulsionId: legalProbation?.targetExpulsionId,

@@ -1,5 +1,6 @@
 import { PILGRIMAGE_LEG_COST, PILGRIMAGE_RELIEF_HP, visiblePilgrimages } from '../engine/pilgrimageEngine';
 import type { Cultivator, PilgrimageJourney, WorldState } from '../types/world';
+import { visibleRoadCrossings } from '../engine/roadEngine';
 
 const STATUS: Record<PilgrimageJourney['status'], string> = {
   proposed: '同行邀约待回应', active: '巡礼进行中', completed: '已完成巡礼',
@@ -17,6 +18,7 @@ export function PilgrimagePanel({ world, cultivator }: { world: WorldState; cult
     Number(a.journey.status === 'active' || a.journey.status === 'proposed')
   ) || b.journey.proposedTick - a.journey.proposedTick);
   if (!selected || rows.length === 0) return null;
+  const crossings = visibleRoadCrossings(world, selected).filter(({ departedTick }) => departedTick <= world.tick);
   const people = new Map(world.cultivators.map(({ id, name }) => [id, name]));
   const sites = new Map(world.locations.map(({ id, name }) => [id, name]));
 
@@ -47,8 +49,19 @@ export function PilgrimagePanel({ world, cultivator }: { world: WorldState; cult
                 {accepted && <p>同行者已接受 · Tick #{journey.startedTick}{journey.expiresTick !== undefined && ` · 巡礼截止 Tick #${journey.expiresTick}`}</p>}
                 {journey.reason && <p>结案：{END[journey.reason]}{journey.settledTick !== undefined && ` · Tick #${journey.settledTick}`}</p>}
                 {journey.status === 'completed' && journey.settledTick !== undefined && <p>实际完成：Tick #{journey.settledTick}</p>}
-                <p>实际已到检查站：{routeDone}/2 · 每人已实付：{journey.spentByEach} 灵石</p>
+                <p>实际已到检查站：{routeDone}/2 · 每人已实付：{journey.spentByEach} 灵石（不含另列的路权费）</p>
                 {journey.status === 'active' && checkpoint && currentLeg <= 2 && <p className="text-teal-200">正在第 {currentLeg} 段路上，尚未抵达下一站。</p>}
+                {crossings.filter(({ journeyId }) => journeyId === journey.id).map((crossing) => {
+                  const freeTicks = Math.ceil(crossing.freeSteps / crossing.freeStride);
+                  const paidTicks = Math.ceil(crossing.paidSteps / crossing.stride);
+                  const arrivalTick = visited.get(journey.stopIds[crossing.legIndex + 1]);
+                  return <div key={crossing.id} className="rounded border border-teal-400/20 px-2 py-1.5">
+                    <p className="font-medium text-teal-100">第 {crossing.legIndex + 1} 段驿路启程凭证 · Tick #{crossing.departedTick}</p>
+                    <p>{crossing.payerId === selected.id ? '本人' : '发起人'}实付路权费 {crossing.fee} 灵石（一次；同行者未另付）。</p>
+                    <p>启程时估算：驿路 {crossing.paidSteps} 步 / {paidTicks} 轮行进；普通路线 {crossing.freeSteps} 步 / {freeTicks} 轮行进（不另收路权费）。</p>
+                    {arrivalTick !== undefined ? <p>实际到站 Tick #{arrivalTick}。</p> : <p>尚无实际到站记录。</p>}
+                  </div>;
+                })}
                 <ol aria-label="按顺序查看起点和两处检查站" className="space-y-1">
                   {journey.stopIds.map((id, index) => {
                     const tick = visited.get(id);

@@ -7,6 +7,7 @@ import type { Cultivator, MapTile, WorldState } from '../types/world';
 import type { createTerrainMapView } from './terrainMapView';
 import { observedRouteTargets, proveObservedTerrainRoute } from './observedRouteProof';
 import type { ObservedRouteProof } from './observedRouteProof';
+import { RoadMaintenancePanel } from './RoadMaintenancePanel';
 
 type TerrainView = ReturnType<typeof createTerrainMapView>;
 type Cell = ReturnType<typeof visibleTerrainSuccession>[number];
@@ -71,6 +72,7 @@ export function TerrainSuccessionPanel({ world, view, selected }: { world: World
           <button type="button" className={control} disabled={page === 0} onClick={() => setCursor(page - 1)}>上一页</button>
           <button type="button" className={control} disabled={page + 1 === pageCount} onClick={() => setCursor(page + 1)}>下一页</button>
         </div>}
+        <RoadMaintenancePanel world={world} view={view} selected={selected} />
         <div className="space-y-1.5 border-t border-slate-800 pt-2">
           <h5 className="font-semibold text-emerald-100">实测可见路线</h5>
           <p className="text-slate-400">使用实际地形路线计算，不设新障碍。迷雾开启时只检查当前可见地格；绕行检核另外避开所选地格。</p>

@@ -101,6 +101,7 @@ export type ActionType =
   | 'SHARED_COMMONS'
   | 'TERRAIN_RECOVERY'
   | 'RELIC_EXHIBIT'
+  | 'ROAD'
   | 'GATHER_HERBS'
   | 'BREW_PILL'
   | 'USE_PILL'
@@ -390,6 +391,8 @@ export interface LLMDecisionPayload {
   relicMove?: RelicMove;
   exhibitMove?: RelicExhibitMove;
   targetRelicExhibitId?: string;
+  roadMove?: RoadMove;
+  targetRoadId?: string;
   targetRelicFragmentId?: string;
   targetRelicSetId?: RelicSetId;
   editionMove?: ScriptureMove;
@@ -1532,6 +1535,43 @@ export interface PilgrimageState {
   nextId: number;
 }
 
+export type RoadMove = 'charter' | 'maintain' | 'patrol';
+export interface RoadLink {
+  id: string;
+  sectId: string;
+  anchorSiteId: string;
+  otherSiteId: string;
+  path: MapPoint[];
+  condition: number;
+  openedTick: number;
+  lastMaintainedTick?: number;
+  lastMaintainedBy?: string;
+  lastPatrolledTick?: number;
+  lastPatrolledBy?: string;
+  closedTick?: number;
+  closeReason?: 'title_lost' | 'endpoint_lost';
+}
+export interface RoadCrossing {
+  id: string;
+  roadId: string;
+  journeyId: string;
+  legIndex: 0 | 1;
+  payerId: string;
+  companionId: string;
+  departedTick: number;
+  fee: number;
+  stride: number;
+  paidSteps: number;
+  freeSteps: number;
+  freeStride: number;
+}
+export interface RoadState {
+  links: RoadLink[];
+  crossings: RoadCrossing[];
+  nextId: number;
+  lastAdvancedTick?: number;
+}
+
 export type ChronicleErrataMove = 'retell' | 'correct';
 export type ChronicleReliefReading = 'full_supplies' | 'unfunded';
 export type ChronicleReading = { kind: 'duel'; winnerId: string } | { kind: 'relief'; delivery: ChronicleReliefReading };
@@ -1888,7 +1928,7 @@ export interface SharedCommonsPact {
 export interface SharedCommonsState { pacts: SharedCommonsPact[]; nextId: number }
 
 export type ResourceFlowGood = 'stone' | MarketGood;
-export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation' | 'terrain' | 'workshop';
+export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation' | 'terrain' | 'workshop' | 'road';
 export type ResourceFlowAccount =
   | { kind: 'actor' | 'site' | 'sect' | 'order' | 'shipment' | 'relocation' | 'workshop'; id: string }
   | { kind: 'oath'; id: string; pocket: 'payment' | 'collateral' };
@@ -2018,6 +2058,7 @@ export interface WorldState {
   probation: ProbationState;
   workshops: WorkshopState;
   resourceFlow: ResourceFlowState;
+  roads: RoadState;
   sharedCommons: SharedCommonsState;
   serviceRetirement: ServiceRetirementState;
   coldHistory: ColdHistoryState;

@@ -1,3 +1,4 @@
+import { createRoadState, ROAD_CONDITION_MAX, ROAD_FARE, ROAD_PAID_STRIDE, ROAD_PATH_POINT_LIMIT, ROAD_PATH_TILE_LIMIT } from './roadEngine';
 import { createProbationState, PROBATION_REQUEST_TICKS, PROBATION_REQUIRED_RELIEF, PROBATION_REQUIRED_REVIEWS, PROBATION_SERVICE_TICKS } from './probationEngine';
 import { createRelicExhibitState, RELIC_EXHIBIT_DURATION, RELIC_EXHIBIT_OFFER_TICKS } from './relicExhibitEngine';
 import { WORKSHOP_ACTIVE_TICKS, WORKSHOP_MAX_WORK_RECEIPTS, WORKSHOP_OFFER_TICKS, createWorkshopState, workshopGradeForScore, workshopTerms } from './workshopEngine';
@@ -23,7 +24,7 @@ import { createHabitatState, HABITAT_MIN_HEALTH, HABITAT_RESTORATION_TICKS,
   HABITAT_SURVEY_DELAY, HABITAT_SURVEY_WINDOW } from './habitatEngine';
 import { CHRONICLE_ERRATA_MAX_RETELLINGS, CHRONICLE_ERRATA_WINDOW, createChronicleErrataState } from './chronicleErrataEngine';
 import { terrainTileAt } from './terrainEngine';
-import { createPilgrimageState, PILGRIMAGE_ACTIVE_TICKS, PILGRIMAGE_LEG_COST, PILGRIMAGE_OFFER_TICKS, PILGRIMAGE_RELIEF_HP } from './pilgrimageEngine';
+import { createPilgrimageState, PILGRIMAGE_ACTIVE_TICKS, PILGRIMAGE_LEG_COST, PILGRIMAGE_OFFER_TICKS, PILGRIMAGE_RELIEF_HP, PILGRIMAGE_TILE_STRIDE } from './pilgrimageEngine';
 import { createSectCreditState, SECT_CREDIT_COLLECTION_TICKS, SECT_CREDIT_OFFER_TICKS,
   SECT_CREDIT_PAYMENT_MAX, SECT_CREDIT_PRINCIPAL, SECT_CREDIT_TERM_TICKS } from './sectCreditEngine';
 import { createSanctuaryState, SANCTUARY_BLOCK_HP, SANCTUARY_CHARTER_TICKS, SANCTUARY_FOUND_COST,
@@ -104,7 +105,7 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP RELIC_EXHIBIT PROBATION REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP RELIC_EXHIBIT PROBATION ROAD REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const flowGood = one('stone','jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
@@ -257,6 +258,15 @@ const shape = structure({
       attestations:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,tick,verdict:one('supports','contradicts')})),
       appeal:optional(structure({tick,actorId:id,verdict:one('upheld','rejected'),reason:text})),settledTick:otick,
       reputationSectId:oid,reputationPenalty:percentage,reputationRestored:percentage,reason:otext}))}),
+  roads:structure({nextId:num(1,100_000_000,true),lastAdvancedTick:otick,links:arr(SAVE_COLLECTION_LIMIT,structure({
+    id,sectId:id,anchorSiteId:id,otherSiteId:id,path:arr(ROAD_PATH_POINT_LIMIT,structure({x:num(0,1000),y:num(0,600)})),
+    condition:num(0,ROAD_CONDITION_MAX,true),openedTick:tick,lastMaintainedTick:otick,lastMaintainedBy:oid,lastPatrolledTick:otick,
+    lastPatrolledBy:oid,closedTick:otick,closeReason:optional(one('title_lost','endpoint_lost'))
+  })),crossings:arr(SAVE_COLLECTION_LIMIT,structure({
+    id,roadId:id,journeyId:id,legIndex:one(0,1),payerId:id,companionId:id,departedTick:tick,
+    fee:num(ROAD_FARE,ROAD_FARE,true),stride:num(ROAD_PAID_STRIDE,ROAD_PAID_STRIDE,true),
+    paidSteps:num(1,ROAD_PATH_POINT_LIMIT - 1,true),freeSteps:num(1,6402,true),freeStride:num(PILGRIMAGE_TILE_STRIDE,PILGRIMAGE_TILE_STRIDE,true)
+  }))}),
   probation:structure({nextId:num(1,100_000_000,true),expulsions:arr(SAVE_COLLECTION_LIMIT,structure({
     id,actorId:id,sectId:id,tick,transgressions:percentage,disciplineRevision:tick,reinstatedTick:otick,reinstatedRevision:otick,lastCaseClosedTick:otick
   })),cases:arr(SAVE_COLLECTION_LIMIT,structure({
@@ -288,7 +298,7 @@ const shape = structure({
     tick,year:tick,month,totalEntries:num(0,Number.MAX_SAFE_INTEGER,true),
     totals:arr(9,structure({good:flowGood,transfer:flowMeasure,production:flowMeasure,consumption:flowMeasure,loss:flowMeasure})),
     entries:arr(RESOURCE_FLOW_DETAIL_LIMIT,structure({
-      id:flowSerial,tick,mechanism:one('alchemy','market','sect_economy','oath','commons','relocation','terrain','workshop'),
+      id:flowSerial,tick,mechanism:one('alchemy','market','sect_economy','oath','commons','relocation','terrain','workshop','road'),
       refId:id,reason:strings(40,1),good:flowGood,amount:flowMeasure,visibility:flowScope,
       kind:one('transfer','production','consumption','loss'),from:optional(flowAccount),to:optional(flowAccount)
     }))
@@ -514,6 +524,7 @@ function verifyWorld(value: unknown): WorldState {
       ...(!Object.hasOwn(value, 'mentorship') ? { mentorship: { offers: [], lineage: [], budgets: [] } } : {}),
       ...(!Object.hasOwn(value, 'decisionTrace') ? { decisionTrace: { records: [] } } : {}),
       ...(!Object.hasOwn(value, 'coldHistory') ? { coldHistory: createColdHistoryState() } : {}),
+      ...(!Object.hasOwn(value, 'roads') ? { roads: createRoadState() } : {}),
       ...(!Object.hasOwn(value, 'probation') ? { probation: createProbationState() } : {}),
       ...(!Object.hasOwn(value, 'relicExhibits') ? { relicExhibits: createRelicExhibitState() } : {}),
       ...(!Object.hasOwn(value, 'workshops') ? { workshops: createWorkshopState() } : {}),
@@ -575,6 +586,59 @@ function verifyWorld(value: unknown): WorldState {
         (cell.lastWorkedTick === undefined) !== (cell.lastWorkedBy === undefined) ||
         (cell.lastWorkedBy !== undefined && !actor.has(cell.lastWorkedBy)) ||
         (cell.workCount > 0 && cell.lastWorkedTick === undefined)) fail('terrainSuccession.cells.references');
+  }
+  if ((w.roads.lastAdvancedTick ?? 0) > w.tick) fail('roads.lastAdvancedTick');
+  unique(w.roads.links, ({ id }) => id, 'roads.links.id');
+  unique(w.roads.links.filter(({ closedTick }) => closedTick === undefined),
+    ({ anchorSiteId, otherSiteId }) => JSON.stringify([anchorSiteId, otherSiteId].sort()), 'roads.links.activePair');
+  unique(w.roads.crossings, ({ id }) => id, 'roads.crossings.id');
+  unique(w.roads.crossings, ({ journeyId, legIndex }) => JSON.stringify([journeyId, legIndex]), 'roads.crossings.leg');
+  const roadsById = new Map(w.roads.links.map((road) => [road.id, road]));
+  const roadSerials = new Set<number>();
+  const walksById = new Map(w.pilgrimages.journeys.map((journey) => [journey.id, journey]));
+  for (const link of w.roads.links) {
+    const serial = Number(link.id.match(/^road-([1-9][0-9]*)$/)?.[1]);
+    const closed = link.closedTick;
+    const from = w.locations.find(({ id }) => id === link.anchorSiteId);
+    const to = w.locations.find(({ id }) => id === link.otherSiteId);
+    if (!Number.isSafeInteger(serial) || serial >= w.roads.nextId || roadSerials.has(serial) || !sector.has(link.sectId) || link.anchorSiteId === link.otherSiteId ||
+        link.openedTick > w.tick || (closed === undefined ? link.closeReason !== undefined || !from || !to :
+          !link.closeReason || closed < link.openedTick || closed > w.tick) ||
+        (link.lastMaintainedTick === undefined) !== (link.lastMaintainedBy === undefined) ||
+        (link.lastPatrolledTick === undefined) !== (link.lastPatrolledBy === undefined) ||
+        (link.lastMaintainedTick !== undefined && (link.lastMaintainedTick < link.openedTick || link.lastMaintainedTick > (closed ?? w.tick) ||
+          !actor.has(link.lastMaintainedBy!))) ||
+        (link.lastPatrolledTick !== undefined && (link.lastPatrolledTick < link.openedTick || link.lastPatrolledTick > (closed ?? w.tick) ||
+          !actor.has(link.lastPatrolledBy!))) || link.path.length < 2 ||
+        (from && (link.path[0].x !== from.x || link.path[0].y !== from.y)) ||
+        (to && (link.path.at(-1)?.x !== to.x || link.path.at(-1)?.y !== to.y))) fail('roads.links.references');
+    roadSerials.add(serial);
+    const points = link.path.map(({ x, y }) => terrainTileAt(w, x, y));
+    const walked = points.filter((cell, index) => index === 0 || cell?.id !== points[index - 1]?.id);
+    if (points.some((tile) => !tile) || walked.length < 2 || walked.length > ROAD_PATH_TILE_LIMIT || walked.length !== points.length ||
+        new Set(walked.map((cell) => cell?.id)).size !== walked.length ||
+        walked.some((cell, index) => index > 0 && (!cell ||
+          Math.abs(cell.col - walked[index - 1]!.col) + Math.abs(cell.row - walked[index - 1]!.row) !== 1))) fail('roads.links.path');
+  }
+  for (const crossing of w.roads.crossings) {
+    const serial = Number(crossing.id.match(/^crossing-([1-9][0-9]*)$/)?.[1]);
+    const road = roadsById.get(crossing.roadId);
+    const journey = walksById.get(crossing.journeyId);
+    const from = journey?.stopIds[crossing.legIndex], to = journey?.stopIds[crossing.legIndex + 1];
+    if (!Number.isSafeInteger(serial) || serial >= w.roads.nextId || roadSerials.has(serial) || !road || !actor.has(crossing.payerId) || !actor.has(crossing.companionId) || crossing.payerId === crossing.companionId ||
+        crossing.departedTick < road.openedTick || crossing.departedTick > w.tick ||
+        (road.closedTick !== undefined && crossing.departedTick > road.closedTick) ||
+        crossing.paidSteps !== road.path.length - 1 ||
+        Math.ceil(crossing.paidSteps / crossing.stride) >= Math.ceil(crossing.freeSteps / crossing.freeStride) ||
+        (journey && (journey.organizerId !== crossing.payerId || journey.companionId !== crossing.companionId ||
+          crossing.departedTick <= (journey.startedTick ?? Infinity) || crossing.departedTick >= (journey.expiresTick ?? 0) ||
+          !((from === road.anchorSiteId && to === road.otherSiteId) || (from === road.otherSiteId && to === road.anchorSiteId)) ||
+          (journey.status === 'active' && journey.legIndex === crossing.legIndex && (journey.path.length !== crossing.paidSteps + 1 ||
+            journey.path.some(({ x, y }, index) => {
+              const step = road.path[from === road.anchorSiteId ? index : road.path.length - index - 1];
+              return !step || x !== step.x || y !== step.y;
+            })))))) fail('roads.crossings.references');
+    roadSerials.add(serial);
   }
   unique(w.probation.expulsions, ({ id }) => id, 'probation.expulsions.id');
   unique(w.probation.cases, ({ id }) => id, 'probation.cases.id');
