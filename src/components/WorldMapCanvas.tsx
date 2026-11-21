@@ -3,6 +3,7 @@ import { householdCensus } from '../engine/householdEngine';
 import { visibleSharedCommonsMapSites } from './sharedCommonsMapView';
 import { visibleLeaseMapSites } from './leaseMapView';
 import { drawFormationMapLinks, visibleFormationMapLinks } from './formationMapView';
+import { projectLocalCourierHandoff } from '../engine/sealedCourierEngine';
 import { projectLocalDamageAssurance } from '../engine/damageAssuranceEngine';
 import { projectLocalAlignedWeather } from '../engine/alignedWeatherEngine';
 import { projectLocalCareFollowupCapacity } from '../engine/careFollowupEngine';
@@ -252,6 +253,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     const clinic = visibleInfirmaries(world, selected);
     return clinic?.capacity && isCurrentLocation(clinic.siteId) ? { siteId: clinic.siteId, capacity: clinic.capacity } : undefined;
   }, [world, selected, isCurrentLocation]);
+  const localCourierHandoff = useMemo(() => projectLocalCourierHandoff(world, selected), [world, selected]);
   const localDamageAssurance = useMemo(() => world.damageAssurance.claims.length ?
     projectLocalDamageAssurance(world, selected) : undefined, [world, selected]);
   const localAlignedWeather = useMemo(() => world.alignedWeather.comparisons.length ?
@@ -1391,6 +1393,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                 {(localErrata.get(location.id) ?? 0) > 0 && <span className="text-amber-200">· 公开史料有待勘误 {localErrata.get(location.id)} 条</span>}
                 {habitatView && <span className="text-emerald-200">· 复育栖地 {habitatView.wildOccupancy ?? 0}/{habitatView.capacity} 野兽</span>}
                 {localClinic?.siteId === location.id && <span className="text-rose-200">· 静养床 {localClinic.capacity.available}/{localClinic.capacity.beds} 本轮可受理</span>}
+                {localCourierHandoff?.siteId === location.id && isCurrentLocation(location.id) &&
+                  <span className="text-sky-200">· 经手的封函停在此驿，{localCourierHandoff.status === 'offered' ? '转接须另一人实地应允' : '尚未转托'}，并未送达</span>}
                 {localDamageAssurance?.siteId === location.id && isCurrentLocation(location.id) &&
                   <span className="text-amber-200">· 原炉损 {localDamageAssurance.initialLoss} 点，已记实修后尚缺 {localDamageAssurance.remaining} 点，不作复炉凭据</span>}
                 {localAlignedWeather?.siteId === location.id && isCurrentLocation(location.id) &&

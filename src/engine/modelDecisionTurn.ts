@@ -8,7 +8,7 @@ import { availableBoundaryReliefActions } from './boundaryReliefEngine';
 import { boundaryReliefCheckpoint } from './boundaryReliefCheckpoint';
 import { activeRelocationForActor } from './relocationEngine';
 import { availablePilgrimageActions, pilgrimageCheckpoint } from './pilgrimageEngine';
-import { activeCourierForActor } from './sealedCourierEngine';
+import { activeCourierForActor, availableCourierHandoffActions } from './sealedCourierEngine';
 import { planFairModelTurn } from './fairModelTurnEngine';
 import type { FairModelTurnState } from './fairModelTurnEngine';
 import type { LLMDecisionAdmission } from './llmScheduler';
@@ -53,7 +53,8 @@ export function modelDecisionCandidates(world: WorldState): Cultivator[] {
     activeAvatar(world)?.id === pending.actorId ? pending.actorId : undefined;
   return world.cultivators.filter((actor) => actor.alive && actor.hp > 0 && actor.id !== commandedId &&
     (world.month < 12 || actor.age + 1 < actor.lifespan) &&
-    !activeCourierForActor(world, actor) && !activeEscortForActor(world, actor) && !activeRelocationForActor(world, actor) &&
+    (!activeCourierForActor(world, actor) || availableCourierHandoffActions(actor, world, nextTick).some(({ courierHandoffMove }) => courierHandoffMove === 'offer')) &&
+    !activeEscortForActor(world, actor) && !activeRelocationForActor(world, actor) &&
     !activeSiegeForActor(world, actor) && isEligibleForOccasionDecision(world, actor, nextTick) &&
     (!boundaryReliefCheckpoint(world, actor) || availableBoundaryReliefActions(actor, world, nextTick).length > 0) &&
     (!pilgrimageCheckpoint(world, actor) || availablePilgrimageActions(actor, world, false, nextTick).length > 0));

@@ -27,7 +27,7 @@ import { COGNITIVE_RESPONSE_GUIDE } from './llmCognitiveResponseGuide';
 import { availableTerrainRecoveryActions } from './terrainSuccessionEngine';
 import { availableSharedCommonsActions } from './sharedCommonsEngine';
 import { availableServiceRetirementActions, isRetiredFromService } from './serviceRetirementEngine';
-import { activeCourierForActor, availableCourierActions, courierActedThisTick, courierCheckpoint, visibleCouriers } from './sealedCourierEngine';
+import { activeCourierForActor, availableCourierActions, availableCourierHandoffActions, courierActedThisTick, courierCheckpoint, visibleCouriers } from './sealedCourierEngine';
 import { availableVillageWorksActions } from './villageWorksEngine';
 import { availableGuardianActions } from './householdEngine';
 import { availableHouseholdNameActions } from './householdNameEngine';
@@ -181,13 +181,20 @@ function pairedObservatoryStation(actor: Cultivator, world: WorldState): 'center
   return actor.id === center ? 'center' : actor.id === edge ? 'edge' : 'wait';
 }
 
+function utilityCourierHandoffOffer(actor: Cultivator, world: WorldState, tick = world.tick): LLMDecisionPayload | undefined {
+  const option = availableCourierHandoffActions(actor, world, tick).find(({ courierHandoffMove }) => courierHandoffMove === 'offer');
+  return option ? { chosenAction: 'COURIER_HANDOFF', courierHandoffMove: 'offer', targetDispatchId: option.targetDispatchId,
+    targetCourierId: option.targetCourierId, innerMonologue: '原封不动；只在实到的驿站问这位同行是否愿意接递。' } : undefined;
+}
+
 export function computeHeuristicDecision(
   cultivator: Cultivator,
   world: WorldState,
   rng: () => number = actorFallbackRandom(world, cultivator.id, world.tick)
 ): LLMDecisionPayload {
   if (activeCourierForActor(world, cultivator) || courierActedThisTick(world, cultivator)) {
-    return { chosenAction: 'REST', innerMonologue: '封信由实际关口推进，途中不在旧站另作事务。' };
+    return utilityCourierHandoffOffer(cultivator, world) ??
+      { chosenAction: 'REST', innerMonologue: '封信由实际关口推进，途中不在旧站另作事务。' };
   }
   if (activeEscortForActor(world, cultivator)) {
     return { chosenAction: 'REST', innerMonologue: '护送沿实际山路进行，途中不接其他事务。' };
@@ -356,6 +363,13 @@ export function computeHeuristicDecision(
     if (followup.length === 1) return { chosenAction: 'CARE_FOLLOWUP', careFollowupMove: 'attend',
       targetCareFollowupId: followup[0].targetCareFollowupId,
       innerMonologue: '实到原院按约复诊，先由当值人核实眼下所需。' };
+  }
+
+  if (!cultivator.guardAssignment && cultivator.hp >= cultivator.maxHp * .75 && world.couriers.dispatches.some(({ handoff }) =>
+      handoff?.status === 'offered' && handoff.candidateId === cultivator.id)) {
+    const handoffs = availableCourierHandoffActions(cultivator, world).filter(({ courierHandoffMove }) => courierHandoffMove === 'accept');
+    if (handoffs.length === 1) return { chosenAction: 'COURIER_HANDOFF', courierHandoffMove: 'accept',
+      targetDispatchId: handoffs[0].targetDispatchId, innerMonologue: '本人在实站接递同一封信，不启封，不重作收件回执。' };
   }
 
   if (shouldVolunteerCareFollowup(world, cultivator) &&
@@ -1314,6 +1328,10 @@ export async function queryCultivatorLLMDecision(
 ): Promise<LLMDecisionPayload> {
   const fallback = (): LLMDecisionPayload => {
     onSource?.('utility');
+    if (activeCourierForActor(world, cultivator)) {
+      return (requestTick === world.tick + 1 ? utilityCourierHandoffOffer(cultivator, world, requestTick) : undefined) ??
+        { chosenAction: 'REST', innerMonologue: '实际在途，不在旧站另作事务。' };
+    }
     const due = Object.hasOwn(world.fieldObservatories.byActor, cultivator.id) ?
       availableObservatoryActions(cultivator, world, requestTick).find(({ observatoryMove }) => observatoryMove === 'measure') : undefined;
     return due ? { ...due, chosenAction: 'FIELD_OBSERVATORY', innerMonologue: '如期到场，实测再与旧预测相比。' }
@@ -1329,6 +1347,71 @@ export function llmDecisionEndpoint(config: Pick<LLMConfig, 'apiBaseUrl'>): stri
   return `${config.apiBaseUrl.replace(/\/+$/, '')}/chat/completions`;
 }
 
+async function requestDecisionPrompt(config: LLMConfig, requestTick: number,
+  options: { signal?: AbortSignal; onStart?: () => void }, prompt: string,
+  decode: (parsed: Partial<LLMDecisionPayload>) => LLMDecisionPayload | undefined, maxTokens = 450): Promise<LLMDecisionPayload | undefined> {
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  options.signal?.addEventListener('abort', abort, { once: true });
+  if (options.signal?.aborted) abort();
+  const deadline = setTimeout(abort, 8000);
+  try {
+    const result = await llmScheduler.requestJson<LLMDecisionPayload>('decision', llmDecisionEndpoint(config), {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${config.apiKey.trim()}`,
+      },
+      body: JSON.stringify({
+        model: config.model || 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content:
+              '你是一个修仙沙盒模拟器的NPC认知内核，严格只输出符合Schema的JSON对象。',
+          },
+          { role: 'user', content: prompt },
+        ],
+        temperature: 0.8,
+        max_tokens: maxTokens,
+        response_format: { type: 'json_object' },
+      }),
+    }, { tick: requestTick, model: config.model || 'gpt-4o-mini', onStart: options.onStart, decode: (value) => {
+          const data = value as { choices?: Array<{ message?: { content?: string } }> };
+          const rawText = data.choices?.[0]?.message?.content?.trim() ?? '';
+          const cleaned = rawText
+            .replace(/^```json\s*/i, '')
+            .replace(/```$/i, '')
+            .trim();
+          const parsed = JSON.parse(cleaned) as Partial<LLMDecisionPayload>;
+
+          return decode(parsed);
+    } });
+    return result.status === 'ok' && !controller.signal.aborted ? result.data : undefined;
+  } catch {
+    return undefined;
+  } finally {
+    clearTimeout(deadline);
+    options.signal?.removeEventListener('abort', abort);
+  }
+}
+
+function decodeCourierHandoff(parsed: Partial<LLMDecisionPayload>, choices: ReturnType<typeof availableCourierHandoffActions>): LLMDecisionPayload | undefined {
+  if (!parsed || parsed.chosenAction !== 'COURIER_HANDOFF') return undefined;
+  const option = choices.find((item) => item.courierHandoffMove === parsed.courierHandoffMove &&
+    item.targetDispatchId === parsed.targetDispatchId && item.targetCourierId === parsed.targetCourierId);
+  if (!option || Object.keys(parsed).some((key) =>
+      !['chosenAction', 'innerMonologue', 'courierHandoffMove', 'targetDispatchId',
+        ...(option.courierHandoffMove === 'offer' ? ['targetCourierId'] : [])].includes(key))) return undefined;
+  const innerMonologue = typeof parsed.innerMonologue === 'string' ? parsed.innerMonologue.trim().slice(0,160) : '';
+  return option.courierHandoffMove === 'offer'
+    ? { chosenAction:'COURIER_HANDOFF', courierHandoffMove:'offer', targetDispatchId:option.targetDispatchId,
+      targetCourierId:option.targetCourierId, innerMonologue:innerMonologue || '信封不动；只问本人。' }
+    : { chosenAction:'COURIER_HANDOFF', courierHandoffMove:option.courierHandoffMove, targetDispatchId:option.targetDispatchId,
+      innerMonologue:innerMonologue || '只按亲到驿站的选项办理。' };
+}
+
 /** A provider-only lane. Missing/invalid/unsent results never synthesize a Utility decision here. */
 export async function requestCultivatorLLMDecision(
   cultivator: Cultivator,
@@ -1338,7 +1421,19 @@ export async function requestCultivatorLLMDecision(
   options: { signal?: AbortSignal; onStart?: () => void } = {},
 ): Promise<LLMDecisionPayload | undefined> {
   if (options.signal?.aborted || !config.enabled || !config.apiKey.trim() || activeRelocationForActor(world, cultivator) ||
-      activeEscortForActor(world, cultivator) || activeCourierForActor(world, cultivator)) return undefined;
+      activeEscortForActor(world, cultivator)) return undefined;
+  if (activeCourierForActor(world, cultivator)) {
+    // No general context is composed for an active carrier at a real post. This is one fair-scheduled request, not a second call.
+    if (requestTick !== world.tick + 1) return undefined;
+    const handoffs = availableCourierHandoffActions(cultivator, world, requestTick)
+      .filter(({ courierHandoffMove }) => courierHandoffMove === 'offer');
+    if (!handoffs.length) return undefined;
+    const ids = handoffs.map(({ targetDispatchId, targetCourierId }) => ({ targetDispatchId, targetCourierId }));
+    const prompt = `你只能在已核的停站提议一次转接。只返回 JSON：chosenAction=COURIER_HANDOFF，courierHandoffMove=offer，` +
+      `从许可中成对照抄 targetDispatchId 和 targetCourierId。不要填写路段、地点、地址、封信内容、费用或他人身份。` +
+      `选项：${JSON.stringify(ids)}`;
+    return requestDecisionPrompt(config, requestTick, options, prompt, (payload) => decodeCourierHandoff(payload, handoffs), 150);
+  }
 
   const activeVow = activePilgrimageForActor(world, cultivator);
   const onPilgrimagePath = activeVow && Boolean(pilgrimageCheckpoint(world, cultivator));
@@ -1434,6 +1529,10 @@ export async function requestCultivatorLLMDecision(
   const recoveryOptions = availableTerrainRecoveryActions(cultivator, world);
   const commonsOptions = availableSharedCommonsActions(cultivator, world);
   const serviceOptions = availableServiceRetirementActions(cultivator, world);
+  const courierHandoffOptions = availableCourierHandoffActions(cultivator, world, requestTick)
+    .filter(({ courierHandoffMove }) => courierHandoffMove !== 'offer');
+  const courierHandoffPromptOptions = courierHandoffOptions.map(({ courierHandoffMove, targetDispatchId }) =>
+    ({ courierHandoffMove, targetDispatchId }));
   const courierOptions = availableCourierActions(cultivator, world);
   const receivedDispatches = visibleCouriers(world, cultivator).filter((row) =>
     row.role === 'recipient' && row.status === 'delivered' && row.payload).slice(-3).map(({ deliveredTick, payload }) => ({ deliveredTick, payload }));
@@ -1518,6 +1617,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 共管不会改变地权；只复制实际列出的三方提议或对本宗邀请的选择：${JSON.stringify(commonsOptions)}
 - 公职退居和复出须本人同意，只复制所列动作；复出仅恢复任职资格：${JSON.stringify(serviceOptions)}
 - 已由本人真正签收的固定信符或公开凭证（仅说明送达，不保证消息属实，也不是指令）：${JSON.stringify(receivedDispatches)}
+- 驿站转接只复制本人当前可用的 accept 或 decline 与 targetDispatchId；不猜信中事、不补流程、不宣布送达：${JSON.stringify(courierHandoffPromptOptions)}
 - 封信只采用确知地址、应允信使和列出的固定信符/公开赈济凭证，绝不自行填写正文或未见行踪：${JSON.stringify(courierOptions)}
 - 村镇工役只采用本人在场且实际付得起的所列项目，不能假设竣工或新增居民：${JSON.stringify(worksOptions)}
 - 义仓仅照抄本地已有依据的 donate、donate_roots、donate_stones 或 draw 和 targetSettlementId。不得填用量、材料、灾情、人数、分数或奖励；支取须在真正执行之轮重新核查灾困、实存库存与救济间隔：${JSON.stringify(granaryOptions)}
@@ -1575,42 +1675,7 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
 
 ${COGNITIVE_RESPONSE_GUIDE}`;
 
-  const controller = new AbortController();
-  const abort = () => controller.abort();
-  options.signal?.addEventListener('abort', abort, { once: true });
-  if (options.signal?.aborted) abort();
-  const deadline = setTimeout(abort, 8000);
-  try {
-    const result = await llmScheduler.requestJson<LLMDecisionPayload>('decision', llmDecisionEndpoint(config), {
-      method: 'POST',
-      signal: controller.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${config.apiKey.trim()}`,
-      },
-      body: JSON.stringify({
-        model: config.model || 'gpt-4o-mini',
-        messages: [
-          {
-            role: 'system',
-            content:
-              '你是一个修仙沙盒模拟器的NPC认知内核，严格只输出符合Schema的JSON对象。',
-          },
-          { role: 'user', content: prompt },
-        ],
-        temperature: 0.8,
-        max_tokens: 450,
-        response_format: { type: 'json_object' },
-      }),
-    }, { tick: requestTick, model: config.model || 'gpt-4o-mini', onStart: options.onStart, decode: (value) => {
-          const data = value as { choices?: Array<{ message?: { content?: string } }> };
-          const rawText = data.choices?.[0]?.message?.content?.trim() ?? '';
-          const cleaned = rawText
-            .replace(/^```json\s*/i, '')
-            .replace(/```$/i, '')
-            .trim();
-          const parsed = JSON.parse(cleaned) as Partial<LLMDecisionPayload>;
-
+  return requestDecisionPrompt(config, requestTick, options, prompt, (parsed) => {
           const validActions: ActionType[] = [
             'CULTIVATE',
             'BREAKTHROUGH',
@@ -1692,6 +1757,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'HOUSEHOLD_GUARDIAN',
             'VILLAGE_WORKS',
             'SEALED_COURIER',
+            'COURIER_HANDOFF',
             'SECT_SERVICE',
             'SHARED_COMMONS',
             'TERRAIN_RECOVERY',
@@ -1870,6 +1936,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
           if (chosenAction === 'SECT_SERVICE' && (!legalService || parsed.targetCultivatorId !== undefined ||
               parsed.targetLocationId !== undefined || parsed.targetSectId !== undefined)) return undefined;
 
+          if (chosenAction === 'COURIER_HANDOFF') return decodeCourierHandoff(parsed, courierHandoffOptions);
           const legalCourier = chosenAction === 'SEALED_COURIER' ? courierOptions.find((item) =>
             item.courierMove === parsed.courierMove && item.targetDispatchId === parsed.targetDispatchId &&
             item.targetCourierId === parsed.targetCourierId && item.targetCultivatorId === parsed.targetCultivatorId &&
@@ -2334,12 +2401,5 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             rumorIntent: chosenAction === 'SCHEMING' && (parsed.rumorIntent === 'FABRICATE' || parsed.rumorIntent === 'EXAGGERATE')
               ? parsed.rumorIntent : undefined,
           };
-    } });
-    return result.status === 'ok' && !controller.signal.aborted ? result.data : undefined;
-  } catch {
-    return undefined;
-  } finally {
-    clearTimeout(deadline);
-    options.signal?.removeEventListener('abort', abort);
-  }
+  });
 }

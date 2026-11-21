@@ -123,6 +123,7 @@ export type ActionType =
   | 'HOUSEHOLD_GUARDIAN'
   | 'VILLAGE_WORKS'
   | 'SEALED_COURIER'
+  | 'COURIER_HANDOFF'
   | 'SECT_SERVICE'
   | 'SHARED_COMMONS'
   | 'TERRAIN_RECOVERY'
@@ -497,6 +498,7 @@ export interface LLMDecisionPayload {
   targetTerrainTileId?: string;
   serviceMove?: SectServiceMove;
   courierMove?: CourierMove;
+  courierHandoffMove?: CourierHandoffMove;
   targetCourierId?: string;
   targetDispatchId?: string;
   targetDispatchSourceId?: string;
@@ -2241,7 +2243,28 @@ export type DispatchPayload = { kind: 'private_cue'; cue: DispatchCue } |
   { kind: 'public_relief'; sourceEventId: string; settlementId: string; stones: number; herbs: number };
 export type DispatchReason = 'recipient_absent' | 'recipient_unavailable' | 'hazard' | 'courier_death' |
   'route_lost' | 'deadline' | 'declined' | 'offer_expiry';
+export type CourierHandoffMove = 'offer' | 'accept' | 'decline';
+export interface CourierHandoff {
+  postId: string;
+  tileId: string;
+  path: MapPoint[];
+  fromPathIndex: number;
+  pathIndex: number;
+  arrivedTick: number;
+  fromCourierId: string;
+  furthestPathIndex: number;
+  status: 'arrived' | 'offered' | 'transferred' | 'declined' | 'missed' | 'interrupted';
+  candidateId?: string;
+  offeredTick?: number;
+  lastHeldTick?: number;
+  settledTick?: number;
+  reason?: 'unoffered' | 'unconfirmed' | 'carrier_unavailable' | 'post_unavailable' | 'hazard' | 'route_interrupted';
+  turnback?: { tick: number; pathIndex: number; reason: Extract<DispatchReason, 'recipient_absent' | 'recipient_unavailable' | 'hazard' | 'route_lost'> };
+  terminal?: { tick: number; pathIndex: number; courierId: string; status: 'delivered' | 'returned' | 'lost' };
+}
 export interface SealedDispatch {
+  originalCourierId?: string;
+  handoff?: CourierHandoff;
   id: string;
   senderId: string;
   recipientId: string;

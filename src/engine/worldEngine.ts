@@ -33,7 +33,8 @@ import { advanceSharedCommons, resolveSharedCommonsAction } from './sharedCommon
 import { resolveServiceRetirementAction } from './serviceRetirementEngine';
 import { cloneWorldWithColdHistory, compactColdHistory } from './coldHistoryEngine';
 import { advanceCausalChronicle } from './chronicleCausalityEngine';
-import { activeCourierForActor, advanceCouriers, courierActedThisTick, courierCheckpoint, reconcileCourierDeaths, resolveCourierAction } from './sealedCourierEngine';
+import { activeCourierForActor, advanceCouriers, courierActedThisTick, courierCheckpoint, courierHandoffMayOfferNow,
+  reconcileCourierDeaths, resolveCourierAction, resolveCourierHandoffAction } from './sealedCourierEngine';
 import { captureWatchDigests } from './watchlistEngine';
 import { advanceVillageWorks, resolveVillageWorksAction } from './villageWorksEngine';
 import { advanceHouseholds, resolveGuardianAction } from './householdEngine';
@@ -190,6 +191,15 @@ export function applyCultivatorBrainDecision(
     return resolveTribulation(world, cultivator, stance, rng);
   }
   if (activeCourierForActor(world, cultivator) || courierActedThisTick(world, cultivator)) {
+    if (decision.chosenAction === 'COURIER_HANDOFF' && decision.courierHandoffMove === 'offer' &&
+        courierHandoffMayOfferNow(world, cultivator)) {
+      const offered = resolveCourierHandoffAction(world, cultivator, decision);
+      if (offered) {
+        cultivator.currentAction = 'COURIER_HANDOFF';
+        cultivator.innerMonologue = '只请眼前的同行者接手封函，不许拆封，也不报送达。';
+        return offered;
+      }
+    }
     cultivator.currentAction = 'SEALED_COURIER';
     cultivator.innerMonologue = '信使正沿实路前进，本轮不能在旧站另作行动。';
     return null;
@@ -336,6 +346,8 @@ export function applyCultivatorBrainDecision(
     }
     case 'SEALED_COURIER':
       return resolveCourierAction(world, cultivator, decision);
+    case 'COURIER_HANDOFF':
+      return resolveCourierHandoffAction(world, cultivator, decision);
     case 'VILLAGE_WORKS':
       return resolveVillageWorksAction(world, cultivator, decision);
     case 'HOUSEHOLD_GUARDIAN':
@@ -851,6 +863,27 @@ export function advanceWorldTick(
     }
 
     if (activeCourierForActor(nextState, cultivator) || courierActedThisTick(nextState, cultivator)) {
+      const supplied = precomputedDecisions && Object.hasOwn(precomputedDecisions, cultivator.id) ? precomputedDecisions[cultivator.id] : undefined;
+      const allowedHandoff = courierHandoffMayOfferNow(nextState, cultivator);
+      if (allowedHandoff || supplied?.chosenAction === 'COURIER_HANDOFF') {
+        const decision = supplied ?? computeHeuristicDecision(cultivator, nextState, rng);
+        if (decision.chosenAction === 'COURIER_HANDOFF' && decision.courierHandoffMove === 'offer') {
+          const event = allowedHandoff ? applyCultivatorBrainDecision(nextState, cultivator, decision, rng) : null;
+          const applied = event !== null;
+          if (traceOptions?.tape) rememberReplayDecision(traceOptions.tape, cultivator.id, decision, 0);
+          if (supplied) recordDecisionEffect?.(cultivator.id, applied);
+          traceOptions?.onActor?.(cultivator.id, [], applied);
+          if (traceOptions?.captureTrace !== false) recordDecisionTrace(nextState, cultivator.id, [], decision,
+            traceOptions?.modelActors?.has(cultivator.id) ? 'model' : 'utility', applied);
+          if (event) {
+            newEvents.push(event);
+            witnessEvent(nextState, event);
+            continue;
+          }
+        } else if (supplied && traceOptions?.tape) {
+          rememberReplayDecision(traceOptions.tape, cultivator.id, decision, 0);
+        }
+      }
       cultivator.currentAction = 'SEALED_COURIER';
       cultivator.innerMonologue = '沿实际关口投递或折返，本轮不另作行动。';
       continue;
