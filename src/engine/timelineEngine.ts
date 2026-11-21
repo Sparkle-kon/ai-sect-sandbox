@@ -4,7 +4,7 @@ import type { WorldState } from '../types/world';
 import { executeGodIntervention } from './worldEngine';
 import type { GodInterventionCommand } from './worldEngine';
 import { validFastForwardCount } from './fastForwardEngine';
-import { addFastForwardCalendarMonths } from './fastForwardCalendar';
+import { addFastForwardCalendarMonths, addCampaignCalendarMonths, FAST_FORWARD_CAMPAIGN_MAX_MONTHS } from './fastForwardCalendar';
 import type { FastForwardCheckpoint } from './fastForwardEngine';
 
 export const TIMELINE_MAX_TICKS = 50;
@@ -116,6 +116,33 @@ export function forkTimeline(timeline: WorldTimeline, tick: number, command: God
     label: (typeof label === 'string' && cut(label, TIMELINE_MAX_LABEL)) || `支线 ${number}` },
     [...base.snapshots.slice(0, index), saveSnapshot(changed)]);
   return Object.freeze({ activeBranchId: newBranch.id, nextBranchNumber: number + 1, branches: Object.freeze([...timeline.branches, newBranch]) });
+}
+
+/** Only after the entire durable campaign and the original live source have been separately verified. */
+export function forkTimelineCampaignCheckpoint(timeline: WorldTimeline, sourceBranchId: string, sourceTick: number,
+  checkpoint: FastForwardCheckpoint, label?: string): WorldTimeline {
+  if (timeline.branches.length >= TIMELINE_MAX_BRANCHES) throw new TimelineError('branch_limit','时间线已满，不会删除原分支。');
+  const invalid=()=>new TimelineError('invalid_checkpoint','长局检查点与原始分支或目标年月不吻合。');
+  if(timeline.activeBranchId!==sourceBranchId)throw invalid();
+  const source=branchOf(timeline,sourceBranchId),anchor=source?.snapshots.at(-1);
+  if(!source||!anchor||anchor.tick!==sourceTick)throw invalid();
+  const base=anchor.world;
+  if(!checkpoint?.world||checkpoint.startTick!==sourceTick||!Number.isSafeInteger(checkpoint.requestedTicks)||
+      checkpoint.requestedTicks<1||checkpoint.requestedTicks>FAST_FORWARD_CAMPAIGN_MAX_MONTHS||
+      checkpoint.completedTicks!==checkpoint.requestedTicks||checkpoint.world.tick!==sourceTick+checkpoint.completedTicks||
+      checkpoint.baseRandomState!==base.random.state||checkpoint.baseInterventionSequence!==base.interventionSequence||
+      checkpoint.world.interventionSequence!==base.interventionSequence||checkpoint.world.random.algorithm!==base.random.algorithm||
+      !sameGeneratedWorld(checkpoint.world,base))throw invalid();
+  const date=addCampaignCalendarMonths(base,checkpoint.completedTicks);
+  if(!date||checkpoint.world.year!==date.year||checkpoint.world.month!==date.month)throw invalid();
+  const ids=new Set(checkpoint.world.cultivators.map(({id})=>id));
+  if(ids.size!==checkpoint.world.cultivators.length||base.cultivators.some(({id})=>!ids.has(id)))throw invalid();
+  const number=timeline.nextBranchNumber;
+  const branch=immutableBranch({id:`branch-${number}`,parentBranchId:sourceBranchId,forkTick:sourceTick,
+    label:(typeof label==='string'&&cut(label,TIMELINE_MAX_LABEL))||`长局支线 ${number}`},
+    [anchor,saveSnapshot(checkpoint.world)]);
+  return Object.freeze({activeBranchId:branch.id,nextBranchNumber:number+1,
+    branches:Object.freeze([...timeline.branches,branch])});
 }
 
 /** Commit one exact isolated checkpoint to a new branch; never synthesize intermediate history or a God action. */

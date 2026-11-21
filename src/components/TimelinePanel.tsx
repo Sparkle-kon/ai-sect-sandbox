@@ -78,7 +78,7 @@ export function TimelinePanel({ timeline, previewTick, busy, onPreview, onSelect
     <section aria-label="时光回溯与分支" className="min-w-0 space-y-3 rounded-xl border border-violet-500/30 bg-slate-900/70 p-3 text-slate-100 sm:p-4">
       <header className="space-y-1">
         <h3 className="text-sm font-semibold text-violet-100">时光回溯与分支</h3>
-        <p className="text-xs text-slate-300">每条分支最多 {TIMELINE_MAX_TICKS} 个 Tick · 分支 {timeline.branches.length}/{TIMELINE_MAX_BRANCHES}（含原线）。时间线只保留在当前运行，本机存档保存的是单个世界。</p>
+        <p className="text-xs text-slate-300">每条分支最多 {TIMELINE_MAX_TICKS} 个 Tick · 分支 {timeline.branches.length}/{TIMELINE_MAX_BRANCHES}（含原线）。时间线只保留在当前运行，本机存档保存的是单个世界。{fastForward?.campaignAvailable && ' 已落档的长局候选另行保留开始时的原分支，可在确认后恢复。'}</p>
         <p className={`break-words text-xs ${previewTick === null ? 'text-emerald-200' : 'text-amber-200'}`}>
           {previewTick === null
             ? `当前分支：${current?.label ?? '无'} · 实时状态`

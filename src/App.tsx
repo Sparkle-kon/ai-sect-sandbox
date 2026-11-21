@@ -1,7 +1,10 @@
 import { StoryFirstHome } from './components/StoryFirstHome';
 import { projectStoryHomepage } from './engine/storyHomepage';
 import { FAST_FORWARD_MAX_TICKS } from './engine/fastForwardEngine';
-import { addFastForwardCalendarMonths, planFastForwardCalendar } from './engine/fastForwardCalendar';
+import { addFastForwardCalendarMonths } from './engine/fastForwardCalendar';
+import { FAST_FORWARD_CAMPAIGN_MAX_TICKS, planFastForwardCampaign } from './engine/fastForwardCampaignEngine';
+import { useFastForwardCampaign } from './components/useFastForwardCampaign';
+import { CampaignResumeNotice } from './components/CampaignResumeNotice';
 import { projectWitnessedPersonalStory } from './engine/witnessedPersonalStory';
 import { WitnessedPersonalStory, WitnessedStoryScopeToggle } from './components/WitnessedPersonalStory';
 import { createPublicDialogueResolver } from './engine/publicDialogueProvenance';
@@ -164,6 +167,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
   const saveContextVersion = useRef(0);
   const fastForwardSerial = useRef(0);
   const fastForwardRun = useRef<ActiveFastForward>();
+  const campaignGuard = useRef(false);
   const modelStepAbort = useRef<AbortController>();
   const fairTurns = useRef(new Map<string, { state: FairModelTurnState; coverage: FairModelCoverage }>());
   const [fastForwardView, setFastForwardView] = useState<FastForwardViewState>({ phase: 'idle' });
@@ -230,7 +234,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
   };
 
   const handleStepTick = useCallback(async () => {
-    if (stepInFlight.current || browsing.current || fastForwardRun.current) return;
+    if (stepInFlight.current || browsing.current || fastForwardRun.current || campaignGuard.current) return;
     stepInFlight.current = true;
     setIsStepping(true);
     let modelAbort: AbortController | undefined;
@@ -553,8 +557,8 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
   }, [world, timeline, preview]);
 
   const startFastForward = (requestedTicks: number, binding: FastForwardPreflightBinding) => {
-    if (fastForwardRun.current || typeof Worker !== 'function' || stepInFlight.current || browsing.current ||
-        !Number.isSafeInteger(requestedTicks) || requestedTicks < 1 || requestedTicks > FAST_FORWARD_MAX_TICKS) return;
+    if (fastForwardRun.current || campaignGuard.current || typeof Worker !== 'function' || stepInFlight.current || browsing.current ||
+        !Number.isSafeInteger(requestedTicks) || requestedTicks < 1 || requestedTicks > FAST_FORWARD_CAMPAIGN_MAX_TICKS) return;
     const at = history.current;
     const head = at.branches.find(({id})=>id===at.activeBranchId)?.snapshots.at(-1);
     if (!binding || binding.world !== authority.current || binding.timeline !== at || binding.branchId !== at.activeBranchId ||
@@ -563,7 +567,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
       setFastForwardView({ phase: 'error', notice: '快进预检已与当前分支不符，请重新预检。当前世界未推进。' });
       return;
     }
-    const plan = binding.target && head && planFastForwardCalendar(head.world,String(binding.target.year),String(binding.target.month));
+    const plan = binding.target && head && planFastForwardCampaign(head.world,String(binding.target.year),String(binding.target.month));
     if (!head || !plan || !plan.ok || plan.months !== requestedTicks || binding.world.year !== head.world.year ||
         binding.world.month !== head.world.month) {
       setFastForwardView({phase:'error',notice:'目标仙历与当前分支年月不符，请重新预检。当前世界未改变。'});
@@ -573,6 +577,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
       setFastForwardView({ phase: 'error', notice: '分支位已满，未开始快进，也没有删除任何分支。' });
       return;
     }
+    if(requestedTicks>FAST_FORWARD_MAX_TICKS){campaign.start(binding);return;}
     let worker: Worker;
     try { worker = new Worker(new URL('./engine/fastForward.worker.ts', import.meta.url), { type: 'module' }); }
     catch { setFastForwardView({ phase: 'error', notice: '浏览器未能启动隔离推演，当前世界未改变。' }); return; }
@@ -647,7 +652,38 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
     }
   };
 
-  const fastForwardLocked = fastForwardView.phase !== 'idle' && fastForwardView.phase !== 'error';
+  const campaign=useFastForwardCampaign({
+    world,timeline,timelineId:saveTimelineId,inspect:dashboardOpen&&workspace==='chronicle',inPreview:!!preview,guard:campaignGuard,
+    isCurrent:(candidate,source)=>authority.current===candidate&&history.current===source&&!browsing.current&&!stepInFlight.current&&!fastForwardRun.current,
+    pauseLive:()=>setIsRunning(false),
+    openSource:(source)=>{
+      replayTapes.current.clear();fairTurns.current.clear();setRestoredReadingOrigin(undefined);
+      setSaveTimelineId(source.timelineId);setViewEpoch((prev)=>prev+1);
+      activateTimeline(source.timeline,source.world);
+    },
+    openResult:(next,incoming,sourceTimelineId)=>{
+      if(sourceTimelineId){
+        replayTapes.current.clear();fairTurns.current.clear();setRestoredReadingOrigin(undefined);
+        setSaveTimelineId(sourceTimelineId);setViewEpoch((prev)=>prev+1);
+      }
+      activateTimeline(next,incoming);
+    },
+  });
+  const campaignPhase:FastForwardPhase = campaign.working?'staging':
+    campaign.state?.phase==='checkpointing'||campaign.state?.phase==='cancelling'?'staging':
+    campaign.state?.phase==='running'||campaign.state?.phase==='pausing'||campaign.state?.phase==='paused'||campaign.state?.phase==='ready'
+      ?campaign.state.phase:'idle';
+  const fastForwardLocked = (fastForwardView.phase !== 'idle' && fastForwardView.phase !== 'error')||campaign.active||campaign.working;
+  const pendingCampaign = campaign.pending ? campaign.pending.status==='cancelled' ?
+    <div className="space-y-1"><p>这次长局已取消，不可再续跑。</p><button type="button" className={action} disabled={campaign.working} onClick={campaign.discard}>清除已取消记录</button></div> :
+    <CampaignResumeNotice receipt={{source:campaign.pending.source,target:campaign.pending.target,
+      verified:campaign.pending.completedTicks?campaign.pendingDate:undefined,completedMonths:campaign.pending.completedTicks,
+      requestedMonths:campaign.pending.requestedTicks}} scope={campaign.sameSource?'same_source':'different_context'}
+      confirmedResult={campaign.pending.status==='finalized'} confirmingRestore={campaign.reviewing}
+      restoringOnlyOriginal={campaign.reviewingOriginal} onReviewOriginal={campaign.showOriginalOnly?campaign.reviewOriginal:undefined}
+      disabled={campaign.working||Boolean(preview)||isStepping}
+      onResume={campaign.resumePending} onReviewRestore={campaign.review} onConfirmRestore={campaign.restore}
+      onCancelRestore={campaign.cancelReview} onDiscard={campaign.discard} /> : undefined;
   const activeSaveBranch = timeline.branches.find(({ id }) => id === timeline.activeBranchId);
   const sourceBranch: SaveBranchSource | undefined = activeSaveBranch ? {
     branchId: activeSaveBranch.id, label: activeSaveBranch.label, ...(saveTimelineId ? { timelineId: saveTimelineId } : {}),
@@ -801,7 +837,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
     rememberFold('people', 'profile');
     setRosterFocus({ id, scope: viewScopeKey });
   };
-  const toggleAutoplay = () => { if (!fastForwardRun.current) setIsRunning((current) => !current); };
+  const toggleAutoplay = () => { if (!fastForwardRun.current && !campaignGuard.current) setIsRunning((current) => !current); };
   const changeHandedness = (value: string) => {
     if (value !== 'default' && value !== 'left' && value !== 'right') return;
     const next: HandednessPreference = value;
@@ -815,7 +851,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
     setDashboardOpen(true);
   };
   const backToStory = () => {
-    if (stepInFlight.current || fastForwardRun.current) return;
+    if (stepInFlight.current || fastForwardRun.current || campaignGuard.current) return;
     setIsRunning(false);
     if (browsing.current) clearPreview();
     else discardChronicleContext();
@@ -976,10 +1012,16 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
               verificationSource={{world:visibleWorld,branchId:timeline.activeBranchId,scopeKey:viewScopeKey,
                 busy:isStepping || isRunning || fastForwardLocked}}
               onPreview={handleTimelinePreview} onSelectBranch={handleTimelineSelectBranch} onFork={handleTimelineFork} notice={timelineNotice}
-              fastForward={{ ...fastForwardView, available: typeof Worker === 'function' && !preview && !isStepping && timeline.branches.length < TIMELINE_MAX_BRANCHES,
+              fastForward={{ ...(campaign.active||campaign.working?{phase:campaignPhase}:fastForwardView),
+                available: typeof Worker === 'function' && !preview && !isStepping && timeline.branches.length < TIMELINE_MAX_BRANCHES,
                 capacitySource: {world,contextVersion:saveContextVersion.current,scopeKey:viewScopeKey},
-                onStart: startFastForward, onPause: () => commandFastForward('pause'), onResume: () => commandFastForward('resume'),
-                onStage: () => commandFastForward('stage'), onCancel: () => stopFastForward('已取消并丢弃暂存结果，原分支不变。'), onApply: applyFastForward }} />
+                campaignAvailable:campaign.available,campaignState:campaign.state,campaignPreparing:campaign.working,
+                pendingCampaign,campaignNotice:campaign.notice,
+                onStart: startFastForward, onPause: campaign.active?campaign.pause:() => commandFastForward('pause'),
+                onResume: campaign.active?campaign.resume:() => commandFastForward('resume'),
+                onStage: () => commandFastForward('stage'),
+                onCancel: campaign.active?campaign.cancel:campaign.working?campaign.abortOperation:() => stopFastForward('已取消并丢弃暂存结果，原分支不变。'),
+                onApply: campaign.active?campaign.apply:applyFastForward }} />
           </React.Suspense> },
           { id: 'witness', label: '证词与名誉复核', content: <React.Suspense fallback={<p role="status">载入证词记录…</p>}><AttestationPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense> },
           { id: 'estate', label: '归葬与遗产', content: <React.Suspense fallback={<p role="status">载入遗产账簿…</p>}>

@@ -1,5 +1,7 @@
 import {FAST_FORWARD_MAX_TICKS} from './fastForwardEngine';
 
+export const FAST_FORWARD_CAMPAIGN_MAX_MONTHS=1200;
+
 export interface FastForwardCalendarDate {readonly year:number;readonly month:number}
 export interface FastForwardCalendarSource extends FastForwardCalendarDate {readonly tick?:number}
 export type FastForwardCalendarPlan=
@@ -15,7 +17,15 @@ function nativeSourceValid(source:FastForwardCalendarSource):boolean{
 
 /** Native month calculation for a current base and an actual worker's integer progress, not UTC. */
 export function addFastForwardCalendarMonths(source:FastForwardCalendarSource,months:number):FastForwardCalendarDate|undefined{
-  if(!nativeSourceValid(source)||!Number.isSafeInteger(months)||months<0||months>FAST_FORWARD_MAX_TICKS||
+  return advanceCalendar(source,months,FAST_FORWARD_MAX_TICKS);
+}
+
+export function addCampaignCalendarMonths(source:FastForwardCalendarSource,months:number):FastForwardCalendarDate|undefined{
+  return advanceCalendar(source,months,FAST_FORWARD_CAMPAIGN_MAX_MONTHS);
+}
+
+function advanceCalendar(source:FastForwardCalendarSource,months:number,maximum:number):FastForwardCalendarDate|undefined{
+  if(!nativeSourceValid(source)||!Number.isSafeInteger(months)||months<0||months>maximum||
     source.tick!==undefined&&!Number.isSafeInteger(source.tick+months))return undefined;
   const position=source.month-1+months,year=source.year+Math.floor(position/12);
   if(!Number.isSafeInteger(year))return undefined;
@@ -23,6 +33,14 @@ export function addFastForwardCalendarMonths(source:FastForwardCalendarSource,mo
 }
 
 export function planFastForwardCalendar(source:FastForwardCalendarSource,targetYear:string,targetMonth:string):FastForwardCalendarPlan{
+  return planCalendar(source,targetYear,targetMonth,FAST_FORWARD_MAX_TICKS);
+}
+
+export function planCampaignCalendar(source:FastForwardCalendarSource,targetYear:string,targetMonth:string):FastForwardCalendarPlan{
+  return planCalendar(source,targetYear,targetMonth,FAST_FORWARD_CAMPAIGN_MAX_MONTHS);
+}
+
+function planCalendar(source:FastForwardCalendarSource,targetYear:string,targetMonth:string,maximum:number):FastForwardCalendarPlan{
   if(!nativeSourceValid(source)||typeof targetYear!=='string'||typeof targetMonth!=='string'||
     !/^[1-9][0-9]{0,15}(?![\s\S])/.test(targetYear)||!/^(?:0?[1-9]|1[0-2])(?![\s\S])/.test(targetMonth))
     return {ok:false,reason:'invalid_date'};
@@ -31,8 +49,8 @@ export function planFastForwardCalendar(source:FastForwardCalendarSource,targetY
   if(target.year<source.year||target.year===source.year&&target.month<=source.month)return {ok:false,reason:'not_future'};
   const years=target.year-source.year;
   // Bound before multiplying, avoiding an inexact year*12 absolute epoch on old/future saves.
-  if(years>Math.ceil(FAST_FORWARD_MAX_TICKS/12)+1)return {ok:false,reason:'out_of_range'};
+  if(years>Math.ceil(maximum/12)+1)return {ok:false,reason:'out_of_range'};
   const months=years*12+target.month-source.month;
-  if(!addFastForwardCalendarMonths(source,months))return {ok:false,reason:'out_of_range'};
+  if(!advanceCalendar(source,months,maximum))return {ok:false,reason:'out_of_range'};
   return {ok:true,target,months};
 }

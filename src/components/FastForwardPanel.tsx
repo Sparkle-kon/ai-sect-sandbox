@@ -5,6 +5,9 @@ import { FAST_FORWARD_MAX_TICKS } from '../engine/fastForwardEngine';
 import { measureSaveCapacity } from '../engine/saveCapacityEngine';
 import type { FastForwardProgress } from '../engine/fastForwardEngine';
 import { addFastForwardCalendarMonths, planFastForwardCalendar } from '../engine/fastForwardCalendar';
+import { FAST_FORWARD_CAMPAIGN_MAX_TICKS, planFastForwardCampaign, type CampaignControllerState } from '../engine/fastForwardCampaignEngine';
+import type { ReactNode } from 'react';
+
 
 export interface FastForwardCapacitySource { world: WorldState; contextVersion: number; scopeKey: string }
 export interface FastForwardPreflightBinding {
@@ -41,6 +44,12 @@ export interface FastForwardControls {
   progress?: FastForwardProgress;
   notice?: string;
   capacitySource?: FastForwardCapacitySource;
+  campaignAvailable?:boolean;
+  campaignState?:CampaignControllerState;
+  campaignPreparing?:boolean;
+  pendingCampaign?:ReactNode;
+  campaignNotice?:string;
+
   onStart: (count: number, binding: FastForwardPreflightBinding) => void;
   onPause: () => void;
   onResume: () => void;
@@ -69,9 +78,11 @@ export function FastForwardPanel({ controls, timeline, branchLimit, blocked }: {
   blocked: boolean;
 }) {
   const [dateDraft, setDateDraft] = useState<{ scope: string; year: string; month: string }>();
-  const [approval, setApproval] = useState<FastForwardProgress>();
+  const [approval, setApproval] = useState<FastForwardProgress | CampaignControllerState>();
   const [preflight, setPreflight] = useState<Prepare>();
-  const { available, phase, progress } = controls;
+  const { available, phase, progress, campaignState, pendingCampaign } = controls;
+  const proof = campaignState?.phase==='ready'?campaignState:progress;
+  const max=controls.campaignAvailable?FAST_FORWARD_CAMPAIGN_MAX_TICKS:FAST_FORWARD_MAX_TICKS;
   const isActive = phase === 'running' || phase === 'pausing' || phase === 'paused' || phase === 'staging' || phase === 'ready';
   const branch = timeline.branches.find(({ id }) => id === timeline.activeBranchId);
   const head = branch?.snapshots.at(-1);
@@ -80,11 +91,11 @@ export function FastForwardPanel({ controls, timeline, branchLimit, blocked }: {
   const defaultDate = head && addFastForwardCalendarMonths(head.world, Math.min(12, FAST_FORWARD_MAX_TICKS));
   const date = dateDraft?.scope === dateScope ? dateDraft :
     { year: defaultDate ? String(defaultDate.year) : '', month: defaultDate ? String(defaultDate.month) : '' };
-  const datePlan = head && planFastForwardCalendar(head.world, date.year, date.month);
+  const datePlan = head && (controls.campaignAvailable ? planFastForwardCampaign : planFastForwardCalendar)(head.world,date.year,date.month);
   const sourceMismatch = !!source && !!head &&
     (source.world.tick !== head.tick || source.world.year !== head.world.year || source.world.month !== head.world.month);
   const mayChoose = available && !branchLimit && !blocked && !isActive && !!head && !sourceMismatch;
-  const mayPreview = mayChoose && !!datePlan?.ok;
+  const mayPreview = mayChoose && !!datePlan?.ok && (!pendingCampaign || datePlan.months<=FAST_FORWARD_MAX_TICKS);
   const binding = mayPreview && branch && head && datePlan?.ok ? {
     world: source?.world ?? head.world, timeline, branchId: branch.id, head, count: datePlan.months, target: datePlan.target,
     contextVersion: source?.contextVersion, scopeKey: source?.scopeKey,
@@ -115,7 +126,7 @@ export function FastForwardPanel({ controls, timeline, branchLimit, blocked }: {
       serial.current++;
       setPreflight(undefined);
     }
-  }, [timeline, head, source?.world, source?.contextVersion, source?.scopeKey, available, date.year, date.month, blocked, branchLimit, isActive]);
+  }, [timeline, head, source?.world, source?.contextVersion, source?.scopeKey, available, date.year, date.month, blocked, branchLimit, isActive, controls.campaignAvailable, pendingCampaign!==undefined]);
   const measure = async () => {
     const start = activeBinding.current;
     if (!start) return;
@@ -138,13 +149,16 @@ export function FastForwardPanel({ controls, timeline, branchLimit, blocked }: {
       }
     }
   };
-  const mayApply = available && !branchLimit && !blocked && phase === 'ready' && !!progress && progress.completedTicks > 0;
-  const approved = mayApply && approval !== undefined && approval === progress;
+  const mayApply = available && !branchLimit && !blocked && phase === 'ready' && !!proof && proof.completedTicks > 0 && !controls.campaignPreparing;
+  const approved = mayApply && approval !== undefined && approval === proof;
   useEffect(() => { if (phase !== 'ready') setApproval(undefined); }, [phase]);
   return <details className="min-w-0 rounded border border-violet-400/25 bg-slate-950/55">
     <summary className="min-h-11 cursor-pointer break-words px-2.5 py-2.5 text-xs font-semibold text-violet-100">长局快进与可取消回放</summary>
     <div className="space-y-2 px-2.5 pb-2.5 text-xs leading-relaxed text-slate-300">
-      <p>从当前实时刻在独立副本推演，最多 {FAST_FORWARD_MAX_TICKS} 个月；用本地规则，不调用模型。原分支不变，不会自动进入新分支。</p>
+      <p>从当前时刻在独立副本推演，单批最多 {FAST_FORWARD_MAX_TICKS} 个月；原分支不变，不调用模型。</p>
+      {controls.campaignAvailable && <p>目标最多 {FAST_FORWARD_CAMPAIGN_MAX_TICKS} 个月。超出单批会暂存在本机，只有最终确认才占一个新分支。</p>}
+      {pendingCampaign}
+      {controls.campaignNotice && <p role="status" className="break-words text-violet-200">{controls.campaignNotice}</p>}
       {!available && <p className="text-amber-200">当前无法启动独立快进（此上下文不可用或浏览器不支持独立推演所需的工作线程）。</p>}
       {branchLimit && <p className="text-amber-200">分支上限已到，暂不能应用新检查点。</p>}
       {blocked && !isActive && <p className="text-amber-200">先返回实时状态并结束其他待确认操作，再开始快进。</p>}
@@ -175,9 +189,12 @@ export function FastForwardPanel({ controls, timeline, branchLimit, blocked }: {
           </div>
           {head && <p className="mt-1">当前分支：{dateLabel(head.world)}。</p>}
           {datePlan && <p role="status" className={datePlan.ok ? 'text-violet-100' : 'text-amber-200'}>
-            {datePlan.ok ? `预计推演 ${datePlan.months} 个月，抵达${dateLabel(datePlan.target)}。` : dateError[datePlan.reason]}
+            {datePlan.ok ? `预计推演 ${datePlan.months} 个月，抵达${dateLabel(datePlan.target)}。` :
+              datePlan.reason==='out_of_range' && controls.campaignAvailable ? `目标超出 ${max} 个月的长局范围。` : dateError[datePlan.reason]}
           </p>}
         </fieldset>
+        {pendingCampaign && datePlan?.ok && datePlan.months>FAST_FORWARD_MAX_TICKS &&
+          <p className="text-amber-200">先续跑或丢弃现有的本地长局候选，再开启另一个。</p>}
         <button type="button" className={action} disabled={!mayPreview || validPreflight?.phase==='measuring'}
           onClick={() => void measure()}>预检文件与快照</button>
         <button type="submit" className={action} disabled={!mayStart}>开始独立快进</button>
@@ -201,17 +218,25 @@ export function FastForwardPanel({ controls, timeline, branchLimit, blocked }: {
         <progress className="h-2 w-full accent-violet-400" aria-label="已经完成的独立推演月份" max={progress.requestedTicks} value={progress.completedTicks} />
         <p>当前副本：在世 {progress.living} 人 · 全部角色记录 {progress.totalActors} 人</p>
       </div>}
+      {campaignState && <div className="min-w-0 space-y-1 rounded border border-slate-800 p-2">
+        <p>候选已推进到{dateLabel(campaignState.currentDate)} · {campaignState.completedTicks}/{campaignState.requestedTicks} 月。</p>
+        <p>已核验并落档：{dateLabel(campaignState.durableDate)} · {campaignState.durableTicks} 月。关页后从此处续跑。</p>
+        <progress className="h-2 w-full accent-violet-400" aria-label="长局候选已持久保存的月份"
+          max={campaignState.requestedTicks} value={campaignState.durableTicks} />
+      </div>}
       {isActive && <div className="flex flex-wrap gap-1.5">
         {phase === 'running' && <button type="button" className={action} onClick={controls.onPause}>暂停快进</button>}
         {phase === 'paused' && <>
           <button type="button" className={action} onClick={controls.onResume}>继续快进</button>
-          <button type="button" className={action} disabled={!progress?.completedTicks || blocked} onClick={controls.onStage}>核验已完成的检查点</button>
+          {!campaignState && <button type="button" className={action} disabled={!progress?.completedTicks || blocked} onClick={controls.onStage}>核验已完成的检查点</button>}
         </>}
-        {phase === 'ready' && !approved && <button type="button" className={action} disabled={!mayApply} onClick={() => setApproval(progress)}>准备应用到新分支</button>}
-        <button type="button" className={action} onClick={() => { setApproval(undefined); controls.onCancel(); }}>取消并丢弃快进结果</button>
+        {phase === 'ready' && !approved && <button type="button" className={action} disabled={!mayApply} onClick={() => setApproval(proof)}>准备应用到新分支</button>}
+        <button type="button" className={action} disabled={controls.campaignPreparing&&!!campaignState}
+          onClick={() => { setApproval(undefined); controls.onCancel(); }}>
+          {controls.campaignPreparing&&!campaignState?'取消本次核验':'取消并丢弃快进结果'}</button>
       </div>}
       {approved && <section aria-label="确认应用独立检查点" className="space-y-1.5 rounded border border-amber-500/60 bg-amber-950/50 p-2 text-amber-100">
-        <p>以已核验的 Tick #{approval.currentTick} 创建并进入新分支？应用前会再次校验，原分支保持不变。</p>
+        <p>以已核验的 {'currentTick' in approval ? `Tick #${approval.currentTick}` : dateLabel(approval.durableDate)} 创建并进入新分支？应用前会再次校验，原分支保持不变。</p>
         <div className="flex flex-wrap gap-1.5">
           <button type="button" className={action} onClick={() => { if (approved) { setApproval(undefined); controls.onApply(); } }}>确认创建并进入新分支</button>
           <button type="button" className={action} onClick={() => setApproval(undefined)}>返回核对</button>
