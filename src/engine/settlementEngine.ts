@@ -1,3 +1,4 @@
+import { closeVillageCensusPeriod, openVillageCensusPeriod, recordVillageCensusMaturation, recordVillageCensusSettlement } from './villageCensusEngine';
 import { recordProbationRelief } from './probationEngine';
 import { initializeHouseholds, matureHouseholdBirth, recordHouseholdBirth, recordHouseholdMigration, recordHouseholdMortality,
   recordHouseholdRecruitment, registerHouseholdVolunteer, retireHouseholdVolunteer } from './householdEngine';
@@ -102,6 +103,7 @@ function log(world: WorldState, village: MortalSettlement, row: Omit<SettlementR
   world.settlements.records.push(actual);
   world.settlements.records = world.settlements.records.slice(-96);
   if (actual.kind === 'relief') recordProbationRelief(world, actual);
+  else recordVillageCensusSettlement(world, actual);
   return { id: `evt-${rowId}`, tick: world.tick, year: world.year, month: world.month,
     title, description: row.description, actorIds: [row.actorId, row.cultivatorId].filter((id): id is string => Boolean(id)),
     locationId: village.locationId, category: 'diplomacy' };
@@ -139,6 +141,7 @@ export function resolveSettlementAction(world: WorldState, actor: Cultivator, de
     actor.id, '凡村赈济');
   }
   const sect = sponsor(world, actor)!;
+  openVillageCensusPeriod(world);
   const person = village.volunteers.find(({ id }) => id === option.targetVolunteerId)!;
   initializeHouseholds(world);
   const recruit = enlist(person, actor, village);
@@ -150,10 +153,12 @@ export function resolveSettlementAction(world: WorldState, actor: Cultivator, de
   recordHouseholdRecruitment(world, village, person, recruit);
   noteTerrainVisit(world, recruit);
   attachRecollectionAfterRecruitment(world, village, person.id, recruit);
-  return log(world, village, { kind: 'recruitment', actorId: actor.id, sectId: sect.id, volunteerId: person.id,
+  const receipt = log(world, village, { kind: 'recruitment', actorId: actor.id, sectId: sect.id, volunteerId: person.id,
     cultivatorId: recruit.id, people: 1, stones: SETTLEMENT_RECRUIT_STIPEND, herbs: 0,
     description: `${village.name}成年志愿者${person.name}自愿加入${sect.name}，坊籍减一；宗门发放${SETTLEMENT_RECRUIT_STIPEND}灵石安置费。` },
   person.id, '凡人自愿入门');
+  closeVillageCensusPeriod(world);
+  return receipt;
 }
 
 
@@ -221,16 +226,20 @@ export function advanceSettlements(world: WorldState): WorldEvent[] {
   const state = world.settlements;
   if (state.lastAdvancedTick !== undefined && world.tick <= state.lastAdvancedTick) return [];
   state.lastAdvancedTick = world.tick;
+  openVillageCensusPeriod(world);
   initializeHouseholds(world);
   const events: WorldEvent[] = [];
   const villages = state.villages.filter(({ locationId }) => world.locations.some(({ id }) => id === locationId)).sort(byId);
   for (const village of villages) {
     const matured = maturingReincarnationCases(world, village);
-    village.juvenileCohorts = village.juvenileCohorts.filter(({ bornTick }) => {
-      if (world.tick - bornTick < MORTAL_MATURITY_TICKS) return true;
-      matureHouseholdBirth(world, village, bornTick);
+    const removedCohorts: MortalSettlement['juvenileCohorts'] = [];
+    village.juvenileCohorts = village.juvenileCohorts.filter((cohort) => {
+      if (world.tick - cohort.bornTick < MORTAL_MATURITY_TICKS) return true;
+      matureHouseholdBirth(world, village, cohort.bornTick);
+      removedCohorts.push(cohort);
       return false;
     });
+    if (removedCohorts.length) recordVillageCensusMaturation(world, village, removedCohorts);
     const location = world.locations.find(({ id }) => id === village.locationId)!;
     const tile = terrainTileAt(world, location.x, location.y);
     const hazard = tile && world.mapHazards.filter((item) =>
@@ -254,7 +263,10 @@ export function advanceSettlements(world: WorldState): WorldEvent[] {
     const growth = annualCohort(world, village, Boolean(hazard), matured);
     if (growth) events.push(growth);
   }
-  if (world.tick % 3 !== 0) return events;
+  if (world.tick % 3 !== 0) {
+    closeVillageCensusPeriod(world);
+    return events;
+  }
   // A given village can send or receive once in a migration round. Population is transferred, never minted.
   const involved = new Set<string>();
   for (const origin of villages) {
@@ -274,5 +286,6 @@ export function advanceSettlements(world: WorldState): WorldEvent[] {
     events.push(log(world, origin, { kind: 'migration', targetSettlementId: destination.id, people, stones: 0, herbs: 0,
       description: `${people}名乡民从${origin.name}迁至压力更低、仍有余位的村落。` }, destination.id, '凡人迁居'));
   }
+  closeVillageCensusPeriod(world);
   return events;
 }

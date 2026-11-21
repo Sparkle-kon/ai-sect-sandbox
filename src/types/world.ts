@@ -105,6 +105,7 @@ export type ActionType =
   | 'GATHER_HERBS'
   | 'BREW_PILL'
   | 'USE_PILL'
+  | 'VILLAGE_CENSUS'
   | 'PROBATION'
   | 'WORKSHOP'
   | 'FORGE_ARTIFACT'
@@ -2054,7 +2055,40 @@ export interface ProbationCase {
 }
 export interface ProbationState { expulsions: ProbationExpulsion[]; cases: ProbationCase[]; nextId: number }
 
+export interface VillageCensusCount {
+  villageId: string;
+  population: number;
+  juveniles: number;
+}
+export interface VillageCensusMovement {
+  id: string;
+  kind: 'birth' | 'maturation' | 'death' | 'migration' | 'enrollment';
+  villageId: string;
+  people: number;
+  targetVillageId?: string;
+  volunteerId?: string;
+  cultivatorId?: string;
+  bornTick?: number;
+}
+export interface VillageCensusObservation {
+  villageId: string;
+  observerId: string;
+  count: VillageCensusCount;
+  sample?: { householdId: string; adults: number; juveniles: number; namedResidents: number };
+}
+export interface VillageCensusPeriod {
+  tick: number;
+  year: number;
+  month: number;
+  opening: VillageCensusCount[];
+  closing?: VillageCensusCount[];
+  movements: VillageCensusMovement[];
+  observations: VillageCensusObservation[];
+}
+export interface VillageCensusesState { periods: VillageCensusPeriod[] }
+
 export interface WorldState {
+  villageCensuses: VillageCensusesState;
   probation: ProbationState;
   workshops: WorkshopState;
   resourceFlow: ResourceFlowState;

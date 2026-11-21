@@ -1,3 +1,4 @@
+import { availableVillageCensusActions } from './villageCensusEngine';
 import { availableRoadActions } from './roadEngine';
 import { availableProbationActions, probationReliefTargets } from './probationEngine';
 import { availableRelicExhibitActions } from './relicExhibitEngine';
@@ -185,6 +186,12 @@ export function computeHeuristicDecision(
       (mayOfferExhibit ? choices.find(({ exhibitMove }) => exhibitMove === 'offer') : undefined);
     if (display) return { ...display, chosenAction: 'RELIC_EXHIBIT', innerMonologue: '公展只移交有实据的原件，限期归还，不借展改换产权。' };
   }
+  if (world.tick >= 30 && (world.tick + cultivator.id.charCodeAt(cultivator.id.length - 1)) % 17 === 3 &&
+      (cultivator.personality === '刚正' || cultivator.personality === '逍遥')) {
+    const census = availableVillageCensusActions(cultivator, world)[0];
+    if (census) return { ...census, chosenAction: 'VILLAGE_CENSUS', innerMonologue: '核点实际坊籍，抽到的家户已包含在到场实数。' };
+  }
+
   const workshopState = world.workshops.orders;
   const mayCommission = world.tick >= 28 && (world.tick + cultivator.id.charCodeAt(cultivator.id.length - 1)) % 13 === 6;
   if (mayCommission || workshopState.some((order) => (order.status === 'offered' || order.status === 'active') && order.makerId === cultivator.id)) {
@@ -727,6 +734,7 @@ export async function queryCultivatorLLMDecision(
   const estateOptions = availableEstateActions(cultivator, world);
   const doctrineOptions = availableDoctrineActions(cultivator, world);
   const relocationOptions = availableRelocationActions(cultivator, world);
+  const censusOptions = availableVillageCensusActions(cultivator, world);
   const roadOptions = availableRoadActions(cultivator, world);
   const probationOptions = availableProbationActions(cultivator, world);
   const exhibitOptions = availableRelicExhibitActions(cultivator, world);
@@ -777,6 +785,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 天机悬赏榜：${JSON.stringify(world.bounties.filter((item) => item.status === 'open').map(({id,targetCultivatorId,reward,reason}) => ({id,targetCultivatorId,reward,reason})))}；可接的追缉：${JSON.stringify(availableBountyHunts(cultivator, world))}
 - 天下公示的大会与秘境：${JSON.stringify(world.occasions.filter((item) => item.status === 'registration' || item.status === 'running').map(({id,title,kind,locationId,status,registrationClosesTick}) => ({id,title,kind,locationId,status,registrationClosesTick})))}；可报名项目：${JSON.stringify(availableOccasionJoins(cultivator, world))}
 - 本宗邦交：${JSON.stringify(world.diplomacy.filter((relation) => relation.sectAId === cultivator.sectId || relation.sectBId === cultivator.sectId))}；公示的外事权限：${JSON.stringify(availableDiplomacyActions(cultivator, world))}
+- 坊籍核点必须本人在场，只可复制已列村落：${JSON.stringify(censusOptions)}
 - 驿路选项要求实地维修和真实资源；巡礼只有实际列出的付费路才可选，普通路线不另收路费：${JSON.stringify(roadOptions)}
 - 赎责见习必须复制已列动作；赈济另走真实 DELIVER_RELIEF，复籍不抹去原处分：${JSON.stringify(probationOptions)}
 - 古器陈列只能由真实双方当面应允；复制许可参数，不改写原件持有史：${JSON.stringify(exhibitOptions)}
@@ -937,6 +946,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'RELIC_EXHIBIT',
             'PROBATION',
             'ROAD',
+            'VILLAGE_CENSUS',
           ];
           const chosenAction = parsed?.chosenAction;
           if (!chosenAction || !validActions.includes(chosenAction)) return undefined;
@@ -1105,6 +1115,10 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             item.targetWitnessClaimId === parsed.targetWitnessClaimId && item.targetCultivatorId === parsed.targetCultivatorId);
           if (isWitness && !legalWitness) return undefined;
 
+          const legalCensus = chosenAction === 'VILLAGE_CENSUS' ? censusOptions.find((item) =>
+            item.targetSettlementId === parsed.targetSettlementId) : undefined;
+          if (chosenAction === 'VILLAGE_CENSUS' && (!legalCensus || parsed.targetLocationId !== undefined ||
+              parsed.targetCultivatorId !== undefined || parsed.targetVolunteerId !== undefined || parsed.targetSectId !== undefined)) return undefined;
           const isSettlement = chosenAction === 'RECRUIT_SETTLER' || chosenAction === 'DELIVER_RELIEF';
           const legalSettlement = isSettlement && settlementOptions.find((item) => item.action === chosenAction &&
             item.targetSettlementId === parsed.targetSettlementId && item.targetVolunteerId === parsed.targetVolunteerId);
@@ -1273,7 +1287,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             targetEstateId: legalEstate ? legalEstate.targetEstateId : undefined,
             targetWitnessEventId: legalWitness ? legalWitness.targetWitnessEventId : undefined,
             targetWitnessClaimId: legalWitness ? legalWitness.targetWitnessClaimId : undefined,
-            targetSettlementId: legalWork?.targetSettlementId ?? (legalSettlement ? legalSettlement.targetSettlementId : undefined),
+            targetSettlementId: legalCensus?.targetSettlementId ?? legalWork?.targetSettlementId ?? (legalSettlement ? legalSettlement.targetSettlementId : undefined),
             targetVolunteerId: legalSettlement ? legalSettlement.targetVolunteerId : undefined,
             marketGood: legalMarket && legalMarket.action !== 'CANCEL_MARKET_ORDER' ? legalMarket.marketGood : undefined,
             marketQuantity: legalMarket && legalMarket.action !== 'CANCEL_MARKET_ORDER' ? legalMarket.marketQuantity : undefined,

@@ -1,3 +1,4 @@
+import { closeVillageCensusPeriod, resolveVillageCensusAction } from './villageCensusEngine';
 import { advanceRoads, resolveRoadAction } from './roadEngine';
 import { advanceProbation, resolveProbationAction } from './probationEngine';
 import { advanceRelicExhibits, resolveRelicExhibitAction } from './relicExhibitEngine';
@@ -260,6 +261,8 @@ export function applyCultivatorBrainDecision(
       return resolveHabitatAction(world, cultivator, decision);
     case 'CHRONICLE_ERRATA':
       return resolveChronicleErrataAction(world, cultivator, decision);
+    case 'VILLAGE_CENSUS':
+      return resolveVillageCensusAction(world, cultivator, decision);
     case 'ROAD':
       return resolveRoadAction(world, cultivator, decision);
     case 'PILGRIMAGE':
@@ -854,6 +857,7 @@ export function advanceWorldTick(
     settleAnnualCouncilOffline(nextState);
     settleChronicleOffline(nextState);
   }
+  closeVillageCensusPeriod(nextState);
   compactColdHistory(nextState);
   if (nextState.watchlists.watches.length) {
     if (traceOptions?.onWatchBatch) traceOptions.onWatchBatch(newEvents);

@@ -1,3 +1,4 @@
+import { createVillageCensusesState, VILLAGE_CENSUS_PERIOD_LIMIT } from './villageCensusEngine';
 import { createRoadState, ROAD_CONDITION_MAX, ROAD_FARE, ROAD_PAID_STRIDE, ROAD_PATH_POINT_LIMIT, ROAD_PATH_TILE_LIMIT } from './roadEngine';
 import { createProbationState, PROBATION_REQUEST_TICKS, PROBATION_REQUIRED_RELIEF, PROBATION_REQUIRED_REVIEWS, PROBATION_SERVICE_TICKS } from './probationEngine';
 import { createRelicExhibitState, RELIC_EXHIBIT_DURATION, RELIC_EXHIBIT_OFFER_TICKS } from './relicExhibitEngine';
@@ -105,7 +106,7 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP RELIC_EXHIBIT PROBATION ROAD REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const flowGood = one('stone','jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
@@ -181,6 +182,8 @@ const noteTarget: Validator = (value, path) => {
 };
 const facilityLevels = structure({qi_array:num(0,3,true),alchemy_hall:num(0,3,true),scripture_pavilion:num(0,3,true),defense_array:num(0,3,true),spirit_mine:num(0,3,true)});
 const terrainBiome = one('灵山','毒沼','剑冢','荒漠','魔渊','坊市');
+const censusNumber = num(0,Number.MAX_SAFE_INTEGER,true);
+const censusCount = structure({villageId:id,population:censusNumber,juveniles:censusNumber});
 const locationKind = one('sect_hq','spirit_vein','secret_realm','market','abyss');
 
 const shape = structure({
@@ -258,6 +261,15 @@ const shape = structure({
       attestations:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,tick,verdict:one('supports','contradicts')})),
       appeal:optional(structure({tick,actorId:id,verdict:one('upheld','rejected'),reason:text})),settledTick:otick,
       reputationSectId:oid,reputationPenalty:percentage,reputationRestored:percentage,reason:otext}))}),
+  villageCensuses:structure({periods:arr(VILLAGE_CENSUS_PERIOD_LIMIT,structure({
+    tick,year:tick,month,opening:arr(SAVE_COLLECTION_LIMIT,censusCount),closing:optional(arr(SAVE_COLLECTION_LIMIT,censusCount)),
+    movements:arr(SAVE_COLLECTION_LIMIT,structure({
+      id,kind:one('birth','maturation','death','migration','enrollment'),villageId:id,targetVillageId:oid,people:censusNumber,
+      volunteerId:oid,cultivatorId:oid,bornTick:otick
+    })),
+    observations:arr(SAVE_COLLECTION_LIMIT,structure({villageId:id,observerId:id,count:censusCount,
+      sample:optional(structure({householdId:id,adults:censusNumber,juveniles:censusNumber,namedResidents:censusNumber}))}))
+  }))}),
   roads:structure({nextId:num(1,100_000_000,true),lastAdvancedTick:otick,links:arr(SAVE_COLLECTION_LIMIT,structure({
     id,sectId:id,anchorSiteId:id,otherSiteId:id,path:arr(ROAD_PATH_POINT_LIMIT,structure({x:num(0,1000),y:num(0,600)})),
     condition:num(0,ROAD_CONDITION_MAX,true),openedTick:tick,lastMaintainedTick:otick,lastMaintainedBy:oid,lastPatrolledTick:otick,
@@ -524,6 +536,7 @@ function verifyWorld(value: unknown): WorldState {
       ...(!Object.hasOwn(value, 'mentorship') ? { mentorship: { offers: [], lineage: [], budgets: [] } } : {}),
       ...(!Object.hasOwn(value, 'decisionTrace') ? { decisionTrace: { records: [] } } : {}),
       ...(!Object.hasOwn(value, 'coldHistory') ? { coldHistory: createColdHistoryState() } : {}),
+      ...(!Object.hasOwn(value, 'villageCensuses') ? { villageCensuses: createVillageCensusesState() } : {}),
       ...(!Object.hasOwn(value, 'roads') ? { roads: createRoadState() } : {}),
       ...(!Object.hasOwn(value, 'probation') ? { probation: createProbationState() } : {}),
       ...(!Object.hasOwn(value, 'relicExhibits') ? { relicExhibits: createRelicExhibitState() } : {}),
@@ -586,6 +599,50 @@ function verifyWorld(value: unknown): WorldState {
         (cell.lastWorkedTick === undefined) !== (cell.lastWorkedBy === undefined) ||
         (cell.lastWorkedBy !== undefined && !actor.has(cell.lastWorkedBy)) ||
         (cell.workCount > 0 && cell.lastWorkedTick === undefined)) fail('terrainSuccession.cells.references');
+  }
+  let lastCensusTick = -1;
+  const censusSources = new Map(w.settlements.records.map((row) => [row.id, row]));
+  const currentCensusVillages = new Set(w.settlements.villages.map(({ id }) => id));
+  const censusReceipts = new Set<string>();
+  for (const period of w.villageCensuses.periods) {
+    if (period.tick <= lastCensusTick || period.tick > w.tick || (period.tick === w.tick &&
+        (period.year !== w.year || period.month !== w.month))) fail('villageCensuses.periods.window');
+    lastCensusTick = period.tick;
+    const openingIds = unique(period.opening, ({ villageId }) => villageId, 'villageCensuses.opening.village');
+    const checkCensusCount = ({ villageId, population, juveniles }: typeof period.opening[number]) => {
+      if (!currentCensusVillages.has(villageId) || juveniles > population) fail('villageCensuses.count.references');
+    };
+    period.opening.forEach(checkCensusCount);
+    if (period.closing) {
+      unique(period.closing, ({ villageId }) => villageId, 'villageCensuses.closing.village');
+      period.closing.forEach(checkCensusCount);
+    }
+    const movementSource = { birth:'growth', death:'disaster', migration:'migration', enrollment:'recruitment' } as const;
+    for (const row of period.movements) {
+      const existing = censusSources.get(row.id);
+      if (censusReceipts.has(row.id) || !openingIds.has(row.villageId) || row.people < 1 ||
+          (row.kind === 'migration' ? !row.targetVillageId || row.targetVillageId === row.villageId || !openingIds.has(row.targetVillageId)
+            : row.targetVillageId !== undefined) ||
+          (row.kind === 'enrollment' ? row.people !== 1 || !row.volunteerId || !row.cultivatorId ||
+            row.cultivatorId !== `recruit-${row.volunteerId}` || !actor.has(row.cultivatorId)
+            : row.volunteerId !== undefined || row.cultivatorId !== undefined) ||
+          (row.kind === 'maturation' ? row.bornTick === undefined || period.tick - row.bornTick < MORTAL_MATURITY_TICKS ||
+            row.id !== `mature-${period.tick}-${row.villageId}-${row.bornTick}`
+            : row.kind === 'birth' ? row.bornTick !== period.tick : row.bornTick !== undefined) ||
+          (existing && (row.kind === 'maturation' || existing.kind !== movementSource[row.kind] ||
+            existing.tick !== period.tick || existing.settlementId !== row.villageId || existing.targetSettlementId !== row.targetVillageId ||
+            existing.people !== row.people || existing.volunteerId !== row.volunteerId || existing.cultivatorId !== row.cultivatorId)))
+        fail('villageCensuses.movements.references');
+      censusReceipts.add(row.id);
+    }
+    unique(period.observations, ({ villageId }) => villageId, 'villageCensuses.observations.village');
+    for (const local of period.observations) {
+      checkCensusCount(local.count);
+      if (local.count.villageId !== local.villageId || !openingIds.has(local.villageId) || !actor.has(local.observerId) ||
+          (local.sample && (local.sample.juveniles > local.count.juveniles ||
+            local.sample.adults + local.sample.namedResidents > local.count.population - local.count.juveniles)))
+        fail('villageCensuses.observations.references');
+    }
   }
   if ((w.roads.lastAdvancedTick ?? 0) > w.tick) fail('roads.lastAdvancedTick');
   unique(w.roads.links, ({ id }) => id, 'roads.links.id');

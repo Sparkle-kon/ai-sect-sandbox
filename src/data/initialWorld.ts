@@ -1,3 +1,4 @@
+import { createVillageCensusesState } from '../engine/villageCensusEngine';
 import { createRoadState } from '../engine/roadEngine';
 import { createProbationState } from '../engine/probationEngine';
 import { createRelicExhibitState } from '../engine/relicExhibitEngine';
@@ -288,6 +289,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     relicExhibits: createRelicExhibitState(),
     probation: createProbationState(),
     roads: createRoadState(),
+    villageCensuses: createVillageCensusesState(),
     witnesses: createWitnessState(),
     estates: createEstateState(),
     decisionTrace: createDecisionTraceState(),

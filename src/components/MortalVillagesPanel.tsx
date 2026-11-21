@@ -7,6 +7,7 @@ import type { Cultivator, WorldState } from '../types/world';
 import { createTerrainMapView } from './terrainMapView';
 import { VillageWorksPanel } from './VillageWorksPanel';
 import { HouseholdRegisterPanel } from './HouseholdRegisterPanel';
+import { CensusPanel } from './CensusPanel';
 
 type RecordEntry = WorldState['settlements']['records'][number];
 const KIND_LABELS: Record<RecordEntry['kind'], string> = {
@@ -28,7 +29,7 @@ export function MortalVillagesPanel({ world, cultivator }: { world: WorldState; 
   const options = cultivator?.alive && world.settlements ? availableSettlementActions(cultivator, world) : [];
   const people = new Map(world.cultivators.map(({ id, name }) => [id, name]));
   const sects = new Map(world.sects.map(({ id, name }) => [id, name]));
-  const knownVillages = new Map(villages.map(({ id, name }) => [id, name]));
+  const observedVillageNames = new Map(villages.filter(({ id }) => visible.has(id)).map(({ id, name }) => [id, name]));
 
   return (
     <section className="min-w-0 space-y-2 rounded-xl border border-emerald-400/25 bg-slate-900/70 p-3 text-slate-100 sm:p-4" aria-label="凡人村镇与赈济">
@@ -38,7 +39,7 @@ export function MortalVillagesPanel({ world, cultivator }: { world: WorldState; 
           {cultivator ? `${cultivator.name}的已知村镇 · 当前观察 ${visible.size} 处` : '选择修士后查看其已知村镇。'}
         </p>
         <p className="text-xs text-slate-400">
-          此处只查看。可招募仅指当前满足条件的成年自愿者，不代表必定加入。
+          此处只查看。可招募仅指当前满足条件的成年自愿者，不代表必定加入。村名后的斜线表示实有人口／本村承载，不是修士人数或世界人口上限。
         </p>
       </header>
       {villages.length === 0 ? <p className="text-xs text-slate-400">{cultivator ? '未探索到村镇。' : '未选中修士，无地方观察。'}</p> : (
@@ -52,7 +53,7 @@ export function MortalVillagesPanel({ world, cultivator }: { world: WorldState; 
             const eligible = village.volunteers.filter(({ id, enlistedCultivatorId }) => eligibleIds.has(id) && !enlistedCultivatorId);
             const reliefAvailable = observed && options.some(({ action, targetSettlementId }) =>
               action === 'DELIVER_RELIEF' && targetSettlementId === village.id);
-            const ledger = observed ? (world.settlements?.records ?? []).filter(({ settlementId }) => settlementId === village.id)
+            const ledger = observed ? (world.settlements?.records ?? []).filter(({ settlementId, tick }) => settlementId === village.id && tick <= world.tick)
               .sort((a, b) => b.tick - a.tick).slice(0, 10) : [];
             return (
               <details key={village.id} className="min-w-0 rounded border border-slate-800 bg-slate-950/60 p-2">
@@ -67,6 +68,7 @@ export function MortalVillagesPanel({ world, cultivator }: { world: WorldState; 
                       {village.lastReliefTick !== undefined ? ` · 最近赈济 Tick #${village.lastReliefTick}` : ''}
                     </p>
                     {census && householdView && cultivator && <HouseholdRegisterPanel world={world} census={census} view={householdView} cultivator={cultivator} />}
+                    {cultivator && <CensusPanel world={world} cultivator={cultivator} villageId={village.id} />}
                     {worksView.length > 0 && <VillageWorksPanel world={world} village={village} projects={worksView} />}
                     <div className="space-y-1 border-t border-slate-800 pt-2">
                       <h4 className="font-semibold text-emerald-100">自愿入门 · 当前可招募 {eligible.length} 人</h4>
@@ -91,7 +93,7 @@ export function MortalVillagesPanel({ world, cultivator }: { world: WorldState; 
                           {ledger.map((entry) => (
                             <li key={entry.id} className="break-words rounded bg-slate-900/80 p-1.5">
                               <p>Tick #{entry.tick} · {KIND_LABELS[entry.kind]}
-                                {entry.targetSettlementId ? ` → ${knownVillages.get(entry.targetSettlementId) ?? '未观测目的地'}` : ''}
+                                {entry.targetSettlementId ? ` → ${observedVillageNames.get(entry.targetSettlementId) ?? '未观测目的地'}` : ''}
                                 {entry.sectId && sects.has(entry.sectId) ? ` · 宗门 ${sects.get(entry.sectId)}` : ''}
                                 {entry.actorId && people.has(entry.actorId) ? ` · 经办 ${people.get(entry.actorId)}` : ''}
                               </p>

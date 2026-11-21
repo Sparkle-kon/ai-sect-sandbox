@@ -87,6 +87,19 @@ describe('mortal settlements presentation', () => {
     expect(html).not.toContain('不可发现的村名');
   });
 
+  it('does not connect migration receipts to remembered offscreen villages or include future records', () => {
+    const { world, observed, unobserved, markup } = fixture();
+    world.settlements.records.find(({ id }) => id === 'move')!.targetSettlementId = unobserved.id;
+    world.settlements.records.push({ id: 'future-migration', tick: world.tick + 1, kind: 'migration',
+      settlementId: observed.id, targetSettlementId: unobserved.id, people: 17, stones: 0, herbs: 0, description: '' });
+    const html = markup();
+    expect(html).toContain('记得地名的村 · 当前未观测');
+    expect(html).toContain('迁徙 → 未观测目的地');
+    expect(html).not.toContain('迁徙 → 记得地名的村');
+    expect(html).not.toContain('迁出 17 人');
+    expect(html).toContain('不是修士人数或世界人口上限');
+  });
+
   it('hides current population and ledger for remembered offscreen sites or no viewing actor', () => {
     const { world, viewer, markup } = fixture();
     const html = markup();
