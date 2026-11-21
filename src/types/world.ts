@@ -56,6 +56,9 @@ export type ActionType =
   | 'PURSUE_SCHEME'
   | 'AUTHOR_TECHNIQUE'
   | 'STUDY_TECHNIQUE'
+  | 'TEACH'
+  | 'ACCEPT_TUITION'
+  | 'DECLINE_TUITION'
   | 'GATHER_HERBS'
   | 'BREW_PILL'
   | 'USE_PILL'
@@ -314,6 +317,7 @@ export interface LLMDecisionPayload {
   spokenLine?: string;
   rumorIntent?: 'FABRICATE' | 'EXAGGERATE';
   proposedScheme?: SchemeKind;
+  targetTuitionId?: string;
   targetTechniqueId?: string;
   targetHerbId?: HerbId;
   targetPillId?: PillId;
@@ -584,7 +588,36 @@ export interface WorldRandomState {
   state: number;
 }
 
+export interface TuitionOffer {
+  id: string;
+  mentorId: string;
+  studentId: string;
+  technique: Technique;
+  createdTick: number;
+  expiresTick: number;
+  status: 'pending' | 'accepted' | 'declined' | 'expired';
+  resolvedTick?: number;
+  outcome?: string;
+}
+export interface MentorshipLineage {
+  mentorId: string;
+  studentId: string;
+  technique: Technique;
+  formedTick: number;
+  lastLessonTick: number;
+  lessons: number;
+  flaw: number;
+}
+export interface TeachingBudget { mentorId: string; tick: number; spent: number }
+export interface MentorshipState {
+  offers: TuitionOffer[];
+  lineage: MentorshipLineage[];
+  budgets: TeachingBudget[];
+  lastMaintainedTick?: number;
+}
+
 export interface WorldState {
+  mentorship: MentorshipState;
   random: WorldRandomState;
   playerAvatar: PlayerAvatarState;
   chronicleArchive: ChronicleArchive;

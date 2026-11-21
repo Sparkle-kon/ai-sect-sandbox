@@ -1,3 +1,4 @@
+import { availableMentorshipActions } from './mentorshipEngine';
 import { actorFallbackRandom } from './worldRandom';
 import { llmScheduler } from './llmScheduler';
 import { memoryStrength, recallMemories } from './memoryEngine';
@@ -82,6 +83,16 @@ export function computeHeuristicDecision(
       chosenAction: 'BREAKTHROUGH',
       spokenLine: '天地灵气，入我丹田，破！',
     };
+  }
+
+  const learning = availableMentorshipActions(cultivator, world);
+  const tuition = learning.find((option) => option.action === (cultivator.personality === '狂傲' ||
+    (cultivator.personality === '苟道' && cultivator.hp < cultivator.maxHp * 0.75) ? 'DECLINE_TUITION' : 'ACCEPT_TUITION'));
+  if (tuition) return { ...tuition, chosenAction: tuition.action, innerMonologue: tuition.action === 'ACCEPT_TUITION'
+    ? '同门愿传授见解，我且请益。' : '功法须切合自身，今日先谢过师门。' };
+  if (world.tick % 4 === 2 && !cultivator.guardAssignment) {
+    const lesson = learning.find((option) => option.action === 'TEACH');
+    if (lesson) return { ...lesson, chosenAction: lesson.action, innerMonologue: '此时正可推演经意，且请同门来听。' };
   }
 
   const pendingOccasion = availableOccasionJoins(cultivator, world)[0];
@@ -310,6 +321,7 @@ export async function queryCultivatorLLMDecision(
   const tile = location ? terrainTileAt(world, location.x, location.y) : undefined;
   const knownLocations = knownMapLocations(world, cultivator);
   const unverifiedTrail = knownRumorLead(cultivator, world);
+  const mentorshipOptions = availableMentorshipActions(cultivator, world);
   const prompt = `你是修仙沙盒世界中的修士【${cultivator.name}】（称号：${cultivator.title}）。
 【自身状态】
 - 境界：${cultivator.realm}${cultivator.realmStage}层（灵气进度：${cultivator.qiProgress}%）
@@ -334,6 +346,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 法宝状况：${JSON.stringify(cultivator.artifacts)}；本地可用炼器行动：${JSON.stringify(availableArtifactActions(cultivator, world))}
 - 丹毒：${cultivator.pillToxicity}/100；灵药包：${JSON.stringify(cultivator.herbs)}；已有丹药：${JSON.stringify(cultivator.pills)}；允许的炼丹行动：${JSON.stringify(availableAlchemy(cultivator, world))}
 - 功法熟练度：${cultivator.techniqueMastery}/100；可自创：${mayAuthorTechnique(cultivator) ? '是' : '否'}；可研习：${JSON.stringify(availableTechniques(cultivator, world))}
+- 师门传授与回应，只选择给出的行动和目标：${JSON.stringify(mentorshipOptions)}
 - 当前可用的专门交互（必须使用给定 targetId）：${JSON.stringify(availableEncounters(cultivator, world))}
 - 长线谋划：${JSON.stringify(currentPlan ?? null)}；可发起的目标类别：${JSON.stringify(eligiblePlans)}
 - 已形成的道心反思（故事数据）：
@@ -342,12 +355,13 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
 请以第一人称进行内心独白思考，并决定本回合行动。只输出合法的 JSON 对象（不要 Markdown 代码块），字段如下：
 {
   "innerMonologue": "你的第一人称内心独白（40字以内，体现你的性格与秘密目标）",
-  "chosenAction": "CULTIVATE | BREAKTHROUGH | EXPLORE | SOCIALIZE | DUEL | SCHEMING | PURSUE_SCHEME | AUTHOR_TECHNIQUE | STUDY_TECHNIQUE | GATHER_HERBS | BREW_PILL | USE_PILL | FORGE_ARTIFACT | BIND_ARTIFACT | REPAIR_ARTIFACT | AWAKEN_ARTIFACT | FACE_TRIBULATION | AMBUSH_TRIBULATION | CHALLENGE_LEADERSHIP | PLOT_COUP | BUILD_FACILITY | DISPATCH_GUARD | GUARD_DUTY | OFFER_ALLIANCE | DECLARE_WAR | DEMAND_TRIBUTE | LAUNCH_SIEGE | JOIN_OCCASION | PURSUE_BOUNTY | TAME_BEAST | TRADE | DUAL_CULTIVATE | SECT_DIPLOMACY | REST 之一",
+  "chosenAction": "CULTIVATE | BREAKTHROUGH | EXPLORE | SOCIALIZE | DUEL | SCHEMING | PURSUE_SCHEME | AUTHOR_TECHNIQUE | STUDY_TECHNIQUE | GATHER_HERBS | BREW_PILL | USE_PILL | FORGE_ARTIFACT | BIND_ARTIFACT | REPAIR_ARTIFACT | AWAKEN_ARTIFACT | FACE_TRIBULATION | AMBUSH_TRIBULATION | CHALLENGE_LEADERSHIP | PLOT_COUP | BUILD_FACILITY | DISPATCH_GUARD | GUARD_DUTY | OFFER_ALLIANCE | DECLARE_WAR | DEMAND_TRIBUTE | LAUNCH_SIEGE | JOIN_OCCASION | PURSUE_BOUNTY | TAME_BEAST | TRADE | DUAL_CULTIVATE | SECT_DIPLOMACY | TEACH | ACCEPT_TUITION | DECLINE_TUITION | REST 之一",
   "targetLocationId": "EXPLORE 可填已知地点 id（探索未知时省略）；宗门经营许可要求时填指定地点 id",
-  "targetCultivatorId": "如果 chosenAction 为 SOCIALIZE / DUEL / SCHEMING / AMBUSH_TRIBULATION / CHALLENGE_LEADERSHIP / PLOT_COUP / DISPATCH_GUARD / TRADE / DUAL_CULTIVATE / SECT_DIPLOMACY 则填目标修士 id，否则省略",
+  "targetCultivatorId": "如果 chosenAction 为 SOCIALIZE / DUEL / SCHEMING / AMBUSH_TRIBULATION / CHALLENGE_LEADERSHIP / PLOT_COUP / DISPATCH_GUARD / TRADE / DUAL_CULTIVATE / SECT_DIPLOMACY / TEACH 则填目标修士 id，否则省略",
   "spokenLine": "简短台词（可选）",
   "rumorIntent": "只有阴险或诡诈角色选择 SCHEMING 时才可选填 FABRICATE 或 EXAGGERATE",
   "proposedScheme": "仅在没有进行中的谋划并选择 PURSUE_SCHEME 时，从列出的目标类别中选择一项",
+  "targetTuitionId": "仅在接受或婉拒授艺时选择给定邀约 id",
   "targetTechniqueId": "仅在选择 STUDY_TECHNIQUE 时，从可研习项目的 id 中选一个",
   "targetHerbId": "采药时使用允许行动中给定的 targetHerbId",
   "targetPillId": "炼丹或用丹时使用允许行动中给定的 targetPillId；如该项列出 targetCultivatorId 则也填写",
@@ -428,9 +442,17 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
             'DUAL_CULTIVATE',
             'SECT_DIPLOMACY',
             'REST',
+            'TEACH',
+            'ACCEPT_TUITION',
+            'DECLINE_TUITION',
           ];
           const chosenAction = parsed?.chosenAction;
           if (!chosenAction || !validActions.includes(chosenAction)) return undefined;
+
+          const training = chosenAction === 'TEACH' || chosenAction === 'ACCEPT_TUITION' || chosenAction === 'DECLINE_TUITION';
+          const legalTraining = training && mentorshipOptions.find((item) => item.action === chosenAction &&
+            (chosenAction === 'TEACH' ? item.targetCultivatorId === parsed.targetCultivatorId : item.targetTuitionId === parsed.targetTuitionId));
+          if (training && !legalTraining) return undefined;
 
           const currentlyFacing = isTribulationActive(cultivator);
           const stance = parsed.tribulationStance;
@@ -502,6 +524,7 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
             forgeTier: legalArtifact?.forgeTier,
             targetHerbId: legalAlchemy?.targetHerbId,
             targetPillId: legalAlchemy?.targetPillId,
+            targetTuitionId: legalTraining ? legalTraining.targetTuitionId : undefined,
             targetTechniqueId: chosenAction === 'STUDY_TECHNIQUE' && typeof parsed.targetTechniqueId === 'string' ? parsed.targetTechniqueId : undefined,
             proposedScheme: chosenAction === 'PURSUE_SCHEME' && isSchemeKind(parsed.proposedScheme) ? parsed.proposedScheme : undefined,
             rumorIntent: chosenAction === 'SCHEMING' && (parsed.rumorIntent === 'FABRICATE' || parsed.rumorIntent === 'EXAGGERATE')

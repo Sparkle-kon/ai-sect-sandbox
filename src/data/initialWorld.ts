@@ -1,3 +1,4 @@
+import { createMentorshipState } from '../engine/mentorshipEngine';
 import { createWorldRandom, DEFAULT_WORLD_SEED } from '../engine/worldRandom';
 import { createPlayerAvatarState } from '../engine/avatarEngine';
 import { archiveChronicleEvents, createChronicleArchive } from '../engine/novelGenerator';
@@ -209,6 +210,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED): WorldState {
     ];
   const world: WorldState = {
     random,
+    mentorship: createMentorshipState(),
     tick: 1,
     interventionSequence: 0,
     year: 1001,

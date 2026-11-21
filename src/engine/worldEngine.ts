@@ -1,3 +1,4 @@
+import { maintainMentorship, mentorshipTechniqueMultiplier, resolveMentorshipAction } from './mentorshipEngine';
 import { worldRandom } from './worldRandom';
 import { consumeAvatarOrder, maintainPlayerAvatar } from './avatarEngine';
 import { archiveChronicleEvents } from './novelGenerator';
@@ -159,6 +160,10 @@ export function applyCultivatorBrainDecision(
     case 'BREW_PILL':
     case 'USE_PILL':
       return resolveAlchemy(world, cultivator, decision, rng);
+    case 'TEACH':
+    case 'ACCEPT_TUITION':
+    case 'DECLINE_TUITION':
+      return resolveMentorshipAction(world, cultivator, decision, rng);
     case 'AUTHOR_TECHNIQUE':
       return authorTechnique(cultivator, world);
     case 'STUDY_TECHNIQUE':
@@ -179,7 +184,7 @@ export function applyCultivatorBrainDecision(
         (target, amount) => adjustRelationship(world, cultivator.id, target.id, amount,
           cultivator.sectId === target.sectId ? '同门' : '竞争'));
     case 'CULTIVATE': {
-      const gain = Math.round((8 + rng() * 10) * qiFactor * cultivationMultiplier(cultivator, location) * masteryMultiplier(cultivator) * sectQiBonus(world, cultivator));
+      const gain = Math.round((8 + rng() * 10) * qiFactor * cultivationMultiplier(cultivator, location) * masteryMultiplier(cultivator) * mentorshipTechniqueMultiplier(world, cultivator) * sectQiBonus(world, cultivator));
       cultivator.qiProgress = clamp(cultivator.qiProgress + gain, 0, 100);
       gainMastery(cultivator, 3);
       cultivator.hp = clamp(
@@ -537,6 +542,7 @@ export function advanceWorldTick(
   }
 
   maintainPlayerAvatar(nextState);
+  maintainMentorship(nextState);
   const avatarOrder = consumeAvatarOrder(nextState);
   maintainAlchemy(nextState);
   maintainSectEconomy(nextState);

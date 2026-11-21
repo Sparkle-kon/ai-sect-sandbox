@@ -56,7 +56,7 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const pills = structure({foundation:count,golden:count,barrier:count,heart_poison:count});
 const technique = structure({id:oid,authorId:oid,createdTick:otick,name:id,spiritRoot:spirit});
@@ -125,6 +125,11 @@ const shape = structure({
     status:one('passed','rejected','stale'),outcome:text})),
   chronicleArchive:structure({anchors:arr(384,anchor),chapters:arr(24,structure({id,chapterNumber:tick,startTick:tick,endTick:tick,title:text,
     anchors:arr(18,anchor),biographies:arr(8,structure({actorId:id,name:id,realm,sectName:otext,anchorIds:ids})),body:strings(25_000),source}))}),
+  mentorship:structure({
+    offers:arr(240,structure({id,mentorId:id,studentId:id,technique,createdTick:tick,expiresTick:tick,
+      status:one('pending','accepted','declined','expired'),resolvedTick:otick,outcome:otext})),
+    lineage:arr(600,structure({mentorId:id,studentId:id,technique,formedTick:tick,lastLessonTick:tick,lessons:count,flaw:percentage})),
+    budgets:arr(500,structure({mentorId:id,tick,spent:num(0,2,true)})),lastMaintainedTick:otick}),
   playerAvatar:structure({possessedId:oid,possessionUntilTick:otick,switchAvailableTick:tick,essence:percentage,lastRefreshTick:tick,
     pendingOrder:optional(structure({actorId:id,action:one('REST','CULTIVATE'),queuedTick:tick})),
     transcript:arr(72,structure({id,tick,mode,intent,targetCultivatorId:id,message:text,actorId:oid,reply:text,
@@ -137,8 +142,11 @@ function unique<T>(items: T[], key: (item: T) => string, path: string): Set<stri
   return keys;
 }
 function verifyWorld(value: unknown): WorldState {
-  shape(value, 'world');
-  const w = value as WorldState;
+  const candidate = value !== null && typeof value === 'object' && !Array.isArray(value) && !Object.hasOwn(value, 'mentorship')
+    ? { ...value, mentorship: { offers: [], lineage: [], budgets: [] } } : value;
+  shape(candidate, 'world');
+  const w = candidate as WorldState;
+  if (!w.cultivators.length || !w.locations.length) fail('world.minimum_entities');
   const actor = unique(w.cultivators, (item) => item.id, 'cultivators.id');
   const sector = unique(w.sects, (item) => item.id, 'sects.id');
   const locations = unique(w.locations, (item) => item.id, 'locations.id');
@@ -175,6 +183,23 @@ function verifyWorld(value: unknown): WorldState {
   if ((w.playerAvatar.possessedId && !actor.has(w.playerAvatar.possessedId)) ||
       (w.playerAvatar.pendingOrder && w.playerAvatar.pendingOrder.actorId !== w.playerAvatar.possessedId) ||
       w.playerAvatar.transcript.some((entry) => !actor.has(entry.targetCultivatorId) || (entry.actorId && !actor.has(entry.actorId)))) fail('playerAvatar.references');
+  unique(w.mentorship.offers, ({ id }) => id, 'mentorship.offers.id');
+  for (const record of [...w.mentorship.offers, ...w.mentorship.lineage]) {
+    if (!actor.has(record.mentorId) || !actor.has(record.studentId) || record.mentorId === record.studentId) fail('mentorship.references');
+  }
+  if (w.mentorship.budgets.some(({ mentorId }) => !actor.has(mentorId))) fail('mentorship.budgets.references');
+  unique(w.mentorship.budgets, ({ mentorId, tick }) => `${mentorId}:${tick}`, 'mentorship.budgets.key');
+  unique(w.mentorship.lineage, ({ studentId }) => studentId, 'mentorship.lineage.student');
+  const parents = new Map(w.mentorship.lineage.map(({ studentId, mentorId }) => [studentId, mentorId]));
+  for (const student of parents.keys()) {
+    const visited = new Set<string>();
+    let cursor: string | undefined = student;
+    while (cursor) {
+      if (visited.has(cursor)) fail('mentorship.lineage.cycle');
+      visited.add(cursor);
+      cursor = parents.get(cursor);
+    }
+  }
   for (const council of w.councils) if (!sector.has(council.sectId) || council.voterIds.some((id) => !actor.has(id))) fail('councils.references');
   return w;
 }

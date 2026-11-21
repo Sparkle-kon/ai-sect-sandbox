@@ -32,6 +32,7 @@ import { WorldStoragePanel } from './components/WorldStoragePanel';
 import { isWorldSeed } from './engine/worldRandom';
 import { TimelinePanel } from './components/TimelinePanel';
 import { AnalyticsModal } from './components/AnalyticsModal';
+import { MentorshipPanel } from './components/MentorshipPanel';
 import { createTimeline, forkTimeline, readTimelineHead, readTimelineSnapshot, recordTimelineWorld, selectTimelineBranch } from './engine/timelineEngine';
 import type { WorldTimeline } from './engine/timelineEngine';
 import { activeAvatar, possessAvatar, queueAvatarOrder } from './engine/avatarEngine';
@@ -409,6 +410,7 @@ export const App: React.FC = () => {
             cultivator={selectedCultivator}
             onSelectCultivator={setSelectedCultivatorId}
           />
+          <MentorshipPanel world={visibleWorld} cultivator={selectedCultivator} />
           {!preview && <WorldStoragePanel world={world} busy={isStepping} onRestore={replaceWorld} onNewWorld={newWorldFromSeed} />}
           <RelationshipGraph
             world={visibleWorld}
