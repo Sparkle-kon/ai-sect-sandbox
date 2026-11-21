@@ -1,3 +1,4 @@
+import { activeRelocationForSect } from './relocationEngine';
 import type { ActionType, Cultivator, FacilityKind, LLMDecisionPayload, LocationNode, Sect, WorldEvent, WorldState } from '../types/world';
 import { rewardContribution } from './sectPoliticsEngine';
 
@@ -43,7 +44,7 @@ export function availableSectEconomyActions(actor: Cultivator, world: WorldState
   if (!sect || !actor.alive || actor.hp <= 0) return [];
   const options: SectEconomyOption[] = [];
   if (isGuardAssignmentActive(actor, world)) options.push({ action: 'GUARD_DUTY', targetLocationId: actor.guardAssignment?.locationId });
-  if (sect.leaderId !== actor.id || actor.locationId !== sect.headquartersId) return options;
+  if (activeRelocationForSect(world, sect.id) || sect.leaderId !== actor.id || actor.locationId !== sect.headquartersId) return options;
   const hq = world.locations.find(({ id }) => id === sect.headquartersId);
   if (!hq || (hq.ownerSectId && hq.ownerSectId !== sect.id)) return options;
   for (const kind of KINDS) {
@@ -111,6 +112,10 @@ export function maintainSectEconomy(world: WorldState): void {
   }
   for (const sect of world.sects) {
     if (sect.monthlyEconomy?.tick === world.tick) continue;
+    if (activeRelocationForSect(world, sect.id)) {
+      sect.monthlyEconomy = { tick: world.tick, taxes: 0, mining: 0, upkeep: 0, net: 0 };
+      continue;
+    }
     const hq = world.locations.find(({ id }) => id === sect.headquartersId);
     const controlsHq = hq && (!hq.ownerSectId || hq.ownerSectId === sect.id);
     const holdings = world.locations.filter(({ ownerSectId }) => ownerSectId === sect.id);
@@ -135,7 +140,7 @@ export function maintainSectEconomy(world: WorldState): void {
 export function sectQiBonus(world: WorldState, actor: Cultivator): number {
   const sect = world.sects.find(({ id }) => id === actor.sectId);
   const hq = world.locations.find(({ id }) => id === actor.locationId);
-  return sect && hq && actor.alive && hq.id === sect.headquartersId && (!hq.ownerSectId || hq.ownerSectId === sect.id)
+  return sect && !activeRelocationForSect(world, sect.id) && hq && actor.alive && hq.id === sect.headquartersId && (!hq.ownerSectId || hq.ownerSectId === sect.id)
     ? 1 + sect.facilities.qi_array * .09 : 1;
 }
 

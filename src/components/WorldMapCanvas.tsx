@@ -13,6 +13,7 @@ import { isOpenOccasion, OCCASION_KIND, OCCASION_STATUS } from './WorldOccasions
 import { BOUNTY_STATUS, relevantBounty } from './BountyBoard';
 import { BIOME_PALETTE, createTerrainMapView, mapActorPositions } from './terrainMapView';
 import { drawTerrain } from './terrainMapDraw';
+import { drawMapConvoys, mapTransitActorIds, visibleMapConvoys } from './mapConvoyView';
 import { buildMapPresentation, MAP_EFFECT_LABELS, MOTION_MS } from './mapPresentationView';
 import { drawFlights, drawMapEffects } from './mapPresentationDraw';
 import { centerCamera, clientToMapViewport, closestViewportTarget, DEFAULT_CAMERA, MAP_HEIGHT, MAP_WIDTH, MAX_ZOOM, panCamera, screenToMap, viewportPixelDistance, zoomCamera } from './mapCamera';
@@ -78,10 +79,15 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const [tileDetailsOpen, setTileDetailsOpen] = useState(false);
   const selected = world.cultivators.find((c) => c.id === selectedCultivatorId);
   const mapView = useMemo(() => createTerrainMapView(world, selected, fog), [world, selected, fog]);
-  const { seenLocations, liveActors, isCurrentLocation } = mapView;
+  const { seenLocations, isCurrentLocation } = mapView;
+  const liveActors = useMemo(() => {
+    const travellers = mapTransitActorIds(world);
+    return travellers.size ? mapView.liveActors.filter(({ id }) => !travellers.has(id)) : mapView.liveActors;
+  }, [world, mapView]);
   const weatherAtVisibleSites = useMemo(() => new Map(seenLocations
     .filter(({ id }) => isCurrentLocation(id))
     .map((site) => [site.id, localQiWeather(world, site)])), [world, seenLocations, isCurrentLocation]);
+  const convoys = useMemo(() => visibleMapConvoys(world, mapView), [world, mapView]);
   const hazards = useMemo(() => getVisibleHazards(world, mapView), [world, mapView]);
   const beastsByLocation = useMemo(() => visibleBeastsByLocation(world, mapView), [world, mapView]);
   const armedBrush = !fog && onBrushStroke && brush !== 'browse' ? brush : undefined;
@@ -193,6 +199,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       // 2. Terrain, spirit qi overlay and sect boundaries.
       drawTerrain(ctx, world, mapView.tileState, heat, phase);
       drawHazards(ctx, hazards);
+      drawMapConvoys(ctx, convoys, camera.zoom);
 
       // 3. Draw Spirit Vein connection lines between locations
       ctx.strokeStyle = 'rgba(56, 189, 248, 0.12)';
@@ -454,7 +461,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener('change', stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, hazards, beastsByLocation, weatherAtVisibleSites, armedBrush, preview, compact]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, hazards, convoys, beastsByLocation, weatherAtVisibleSites, armedBrush, preview, compact]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -782,6 +789,17 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           </ul>
         </details>
       )}
+      {convoys.length > 0 && <details className="border-t border-slate-800/80 bg-slate-900/40 px-3 py-2 text-xs text-slate-300">
+        <summary className="flex min-h-11 cursor-pointer items-center">当前可见迁移车队 · {convoys.length} 支</summary>
+        <ul className="max-h-40 space-y-1 overflow-y-auto">
+          {convoys.map((convoy) => <li key={convoy.id}>
+            <button type="button" className="min-h-11 rounded border border-slate-700 px-2 text-left"
+              onClick={() => { manualCamera(focusMapPoint(cameraRef.current, convoy.marker)); setFocusMessage(`地图已定位：${convoy.sectName}迁移车队`); }}>
+              {convoy.sectName}迁移车队 · 第 {convoy.row} 行，第 {convoy.col} 列
+            </button>
+          </li>)}
+        </ul>
+      </details>}
       {hazards.length > 0 && (
         <details className="border-t border-slate-800/80 bg-slate-900/40 px-4 py-2 text-[11px] text-slate-300">
           <summary className="cursor-pointer">当前可见灾害 · {hazards.length} 处</summary>

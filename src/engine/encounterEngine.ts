@@ -1,3 +1,4 @@
+import { activeRelocationForActor } from './relocationEngine';
 import type { Cultivator, LLMDecisionPayload, WorldEvent, WorldState } from '../types/world';
 import { scriptedDialogue } from './dialogueEngine';
 import { recordMemory } from './memoryEngine';
@@ -8,9 +9,10 @@ type EncounterAction = 'TRADE' | 'DUAL_CULTIVATE' | 'SECT_DIPLOMACY';
 export const ARTIFACT_TRADE_PRICE = 120;
 
 export function availableEncounters(actor: Cultivator, world: WorldState) {
+  if (activeRelocationForActor(world, actor)) return [];
   const location = world.locations.find((place) => place.id === actor.locationId);
   return world.cultivators.filter((other) => other.alive && other.id !== actor.id &&
-    other.locationId === actor.locationId).flatMap((other) => {
+    other.locationId === actor.locationId && !activeRelocationForActor(world, other)).flatMap((other) => {
     const edge = world.relationships.find((item) =>
       (item.fromId === actor.id && item.toId === other.id) || (item.toId === actor.id && item.fromId === other.id));
     const affinity = edge?.affinity ?? 0;

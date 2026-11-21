@@ -1,3 +1,4 @@
+import { createRelocationState } from './relocationEngine';
 import { isWorldgenProfileId } from './worldgenProfiles';
 import { createDoctrineState } from './doctrineEngine';
 import { createSettlementState } from './settlementEngine';
@@ -64,7 +65,7 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const marketQty = num(1,12,true), marketPrice = num(1,500,true);
@@ -87,12 +88,15 @@ const proposal: Validator = (value, path) => {
   fail(path);
 };
 
+const facilityLevels = structure({qi_array:num(0,3,true),alchemy_hall:num(0,3,true),scripture_pavilion:num(0,3,true),defense_array:num(0,3,true),spirit_mine:num(0,3,true)});
+const locationKind = one('sect_hq','spirit_vein','secret_realm','market','abyss');
+
 const shape = structure({
   tick, interventionSequence:tick, year:tick, month,
   random:structure({algorithm:one('mulberry32-v1'),seed:unsigned32,state:unsigned32}),
   sects:arr(48,structure({id,name:id,alignment:one('正道','魔道','中立'),color:strings(80),doctrine:text,reputation:num(-1_000_000,1_000_000),spiritStones:wealth,headquartersId:id,
     pavilion:arr(350,technique),leaderId:oid, arrayHp:wealth,arrayMaxHp:wealth,
-    facilities:structure({qi_array:num(0,3,true),alchemy_hall:num(0,3,true),scripture_pavilion:num(0,3,true),defense_array:num(0,3,true),spirit_mine:num(0,3,true)}),
+    facilities:facilityLevels,
     succession:optional(structure({tick,method:one('election','challenge','coup'),previousLeaderId:oid,leaderId:id,supporterIds:ids})),
     monthlyEconomy:optional(structure({tick,taxes:wealth,mining:wealth,upkeep:wealth,net:num(-1_000_000_000,1_000_000_000)}))})),
   locations:arr(1200,structure({id,name:id,x:num(0,1000),y:num(0,600),type:one('sect_hq','spirit_vein','secret_realm','market','abyss'),spiritRoot:spirit,
@@ -155,6 +159,14 @@ const shape = structure({
       attestations:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,tick,verdict:one('supports','contradicts')})),
       appeal:optional(structure({tick,actorId:id,verdict:one('upheld','rejected'),reason:text})),settledTick:otick,
       reputationSectId:oid,reputationPenalty:percentage,reputationRestored:percentage,reason:otext}))}),
+  relocations:structure({nextId:num(1,100_000_000,true),
+    plans:arr(SAVE_COLLECTION_LIMIT,structure({id,sectId:id,originId:id,destinationId:id,status:one('voting','in_transit','settled','aborted'),
+      openedTick:tick,deadlineTick:tick,proposerId:id,voterIds:ids,votes:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,tick,approve:bool})),
+      garrisonIds:ids,path:arr(6402,structure({x:num(0,1000),y:num(0,600)})),pathIndex:num(0,6402,true),
+      stoneCost:doctrineAmount,earthCost:count,custody:structure({stones:wealth,pavilion:arr(350,technique)}),spent:bool,
+      departedTick:otick,settledTick:otick,lastAdvancedTick:otick,reason:otext})),
+    abandonedSites:arr(SAVE_COLLECTION_LIMIT,structure({id,planId:id,sectId:id,originId:id,destinationId:id,tick,
+      originalType:locationKind,facilities:facilityLevels,arrayHp:wealth,arrayMaxHp:wealth}))}),
   worldgen:optional(structure({algorithm:one(1),profileId:one('classic','spirit-bloom','fractured-frontier'),
     seed:unsigned32,birthTick:one(1),resources:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,locationId:id,pathSteps:num(0,6402,true)}))})),
   doctrines:structure({nextId:num(1,100_000_000,true),
@@ -216,6 +228,7 @@ function verifyWorld(value: unknown): WorldState {
     ? { ...value,
       ...(!Object.hasOwn(value, 'mentorship') ? { mentorship: { offers: [], lineage: [], budgets: [] } } : {}),
       ...(!Object.hasOwn(value, 'decisionTrace') ? { decisionTrace: { records: [] } } : {}),
+      ...(!Object.hasOwn(value, 'relocations') ? { relocations: createRelocationState() } : {}),
       ...(!Object.hasOwn(value, 'doctrines') ? { doctrines: createDoctrineState() } : {}),
       ...(!Object.hasOwn(value, 'estates') ? { estates: { entries: [] } } : {}),
       ...(!Object.hasOwn(value, 'witnesses') ? { witnesses: { facts: [], claims: [], nextId: 1 } } : {}),
@@ -318,6 +331,32 @@ function verifyWorld(value: unknown): WorldState {
     for (const person of w.cultivators) for (const rumor of person.rumors) {
       if (historicalPrivate.has(rumor.id)) rumor.witnessScope = 'participants';
     }
+  }
+  unique(w.relocations.plans, ({ id }) => id, 'relocations.plans.id');
+  unique(w.relocations.abandonedSites, ({ id }) => id, 'relocations.abandonedSites.id');
+  const openRelocations = w.relocations.plans.filter(({ status }) => status === 'voting' || status === 'in_transit');
+  unique(openRelocations, ({ sectId }) => sectId, 'relocations.active.sect');
+  unique(openRelocations, ({ destinationId }) => destinationId, 'relocations.active.destination');
+  for (const plan of w.relocations.plans) {
+    const voterIds = unique(plan.voterIds, (id) => id, 'relocations.plans.voters');
+    unique(plan.votes, ({ actorId }) => actorId, 'relocations.plans.votes');
+    unique(plan.garrisonIds, (id) => id, 'relocations.plans.garrison');
+    if (!sector.has(plan.sectId) || !locations.has(plan.originId) || !locations.has(plan.destinationId) || plan.originId === plan.destinationId ||
+        !voterIds.has(plan.proposerId) || plan.voterIds.some((id) => !actor.has(id)) || plan.garrisonIds.some((id) => !actor.has(id)) ||
+        plan.path.length < 2 || plan.pathIndex >= plan.path.length || plan.openedTick > w.tick || plan.deadlineTick <= plan.openedTick ||
+        plan.votes.some((vote) => !voterIds.has(vote.actorId) || vote.tick < plan.openedTick || vote.tick > w.tick || vote.tick > plan.deadlineTick) ||
+        (plan.departedTick !== undefined && (plan.departedTick < plan.openedTick || plan.departedTick > w.tick)) ||
+        (plan.lastAdvancedTick !== undefined && (plan.lastAdvancedTick < (plan.departedTick ?? plan.openedTick) || plan.lastAdvancedTick > w.tick)) ||
+        (plan.settledTick !== undefined && (plan.settledTick < (plan.departedTick ?? plan.openedTick) || plan.settledTick > w.tick)) ||
+        ((plan.status === 'settled' || plan.status === 'aborted') !== (plan.settledTick !== undefined)) ||
+        plan.spent !== (plan.departedTick !== undefined) ||
+        (plan.status === 'voting' && plan.spent) || ((plan.status === 'in_transit' || plan.status === 'settled') && !plan.spent) ||
+        (plan.status === 'settled' && plan.pathIndex !== plan.path.length - 1) ||
+        (plan.status !== 'in_transit' && (plan.custody.stones !== 0 || plan.custody.pavilion.length > 0))) fail('relocations.plans.references');
+  }
+  for (const row of w.relocations.abandonedSites) {
+    if (!sector.has(row.sectId) || !locations.has(row.originId) || !locations.has(row.destinationId) ||
+        row.originId === row.destinationId || row.tick > w.tick || row.arrayHp > row.arrayMaxHp) fail('relocations.abandonedSites.references');
   }
   const doctrineSchoolById = new Map(w.doctrines.schools.map((school) => [school.id, school]));
   unique(w.doctrines.schools, ({ id }) => id, 'doctrines.schools.id');

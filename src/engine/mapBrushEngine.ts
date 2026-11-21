@@ -1,3 +1,4 @@
+import { activeRelocationForActor } from './relocationEngine';
 import { advanceEstates } from './estateEngine';
 import { archiveChronicleEvents } from './novelGenerator';
 import type { Cultivator, GodBrushKind, LocationNode, MapHazard, MapPoint, MapTile, WorldEvent, WorldState } from '../types/world';
@@ -17,7 +18,12 @@ const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(ma
 
 function peopleAtTile(world: WorldState, tileId: string): Cultivator[] {
   const matching = new Set(world.locations.filter((site) => terrainTileAt(world, site.x, site.y)?.id === tileId).map(({ id }) => id));
-  return world.cultivators.filter((person) => person.alive && person.hp > 0 && matching.has(person.locationId));
+  return world.cultivators.filter((person) => {
+    if (!person.alive || person.hp <= 0) return false;
+    const convoy = activeRelocationForActor(world, person);
+    const checkpoint = convoy?.path[convoy.pathIndex];
+    return checkpoint ? terrainTileAt(world, checkpoint.x, checkpoint.y)?.id === tileId : matching.has(person.locationId);
+  });
 }
 
 function hurt(world: WorldState, people: Cultivator[], amount: (person: Cultivator) => number,

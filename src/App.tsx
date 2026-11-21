@@ -15,11 +15,8 @@ import { applyMapBrush } from './engine/mapBrushEngine';
 import { GodBrushKind, LLMConfig, LLMDecisionPayload, MapPoint, WorldState } from './types/world';
 import { SandboxWorkspace, WorkspaceSections } from './components/SandboxWorkspace';
 import type { WorkspaceId } from './components/SandboxWorkspace';
-import { ActorRoster } from './components/ActorRoster';
 import { WorldOccasionsPanel } from './components/WorldOccasionsPanel';
 import { WorldMapCanvas } from './components/WorldMapCanvas';
-import { RelationshipGraph } from './components/RelationshipGraph';
-import { GodConsole } from './components/GodConsole';
 import { AgentInspector } from './components/AgentInspector';
 import { ChronicleFeed } from './components/ChronicleFeed';
 import { BountyBoard } from './components/BountyBoard';
@@ -43,6 +40,10 @@ const AttestationPanel = React.lazy(async () => ({ default: (await import('./com
 const OathContractsPanel = React.lazy(async () => ({ default: (await import('./components/OathContractsPanel')).OathContractsPanel }));
 const MentorshipPanel = React.lazy(async () => ({ default: (await import('./components/MentorshipPanel')).MentorshipPanel }));
 const TimelinePanel = React.lazy(async () => ({ default: (await import('./components/TimelinePanel')).TimelinePanel }));
+const ActorRoster = React.lazy(async () => ({ default: (await import('./components/ActorRoster')).ActorRoster }));
+const RelationshipGraph = React.lazy(async () => ({ default: (await import('./components/RelationshipGraph')).RelationshipGraph }));
+const GodConsole = React.lazy(async () => ({ default: (await import('./components/GodConsole')).GodConsole }));
+const SectRelocationPanel = React.lazy(async () => ({ default: (await import('./components/SectRelocationPanel')).SectRelocationPanel }));
 const SectDoctrinePanel = React.lazy(async () => ({ default: (await import('./components/SectDoctrinePanel')).SectDoctrinePanel }));
 const ChronicleLibraryPanel = React.lazy(async () => ({ default: (await import('./components/ChronicleLibraryPanel')).ChronicleLibraryPanel }));
 const WeatherAtlasPanel = React.lazy(async () => ({ default: (await import('./components/WeatherAtlasPanel')).WeatherAtlasPanel }));
@@ -395,14 +396,14 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
           </aside>
         </div>,
         people: <div className="grid min-w-0 items-start gap-3 md:grid-cols-[17rem_minmax(0,1fr)]">
-          <ActorRoster world={visibleWorld} selected={selectedCultivator} onSelect={setSelectedCultivatorId} />
+          <React.Suspense fallback={<p role="status">载入修士名册…</p>}><ActorRoster world={visibleWorld} selected={selectedCultivator} onSelect={setSelectedCultivatorId} /></React.Suspense>
           <WorkspaceSections label={`${selectedCultivator?.name ?? '修士'} · 人物档案`} initialOpen={opened('people', 'profile')} sections={[
             { id: 'profile', label: '人物概况', content: inspect('profile') },
             { id: 'cultivation', label: '修为、法宝与丹药', content: inspect('cultivation') },
             { id: 'mind', label: '心声、记忆与流言', content: inspect('mind') },
             { id: 'relationships', label: '关系与师承', content: <div className="space-y-2.5">
               <React.Suspense fallback={<p role="status">载入师承记录…</p>}><MentorshipPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense>
-              <RelationshipGraph world={visibleWorld} selectedCultivatorId={activeActorId} onSelectCultivator={setSelectedCultivatorId} />
+              <React.Suspense fallback={<p role="status">载入关系图…</p>}><RelationshipGraph world={visibleWorld} selectedCultivatorId={activeActorId} onSelectCultivator={setSelectedCultivatorId} /></React.Suspense>
             </div> },
             { id: 'trace', label: '天机溯因与单回合复盘', content: <React.Suspense fallback={<p role="status">载入决策纪要…</p>}>
               <DecisionTracePanel world={visibleWorld} cultivator={selectedCultivator} busy={isStepping} historical={!!preview} onReplay={compareDecision} />
@@ -432,6 +433,9 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
           { id: 'doctrine', label: '道统与分合', content: <React.Suspense fallback={<p role="status">载入道统记录…</p>}>
             <SectDoctrinePanel world={visibleWorld} cultivator={selectedCultivator} />
           </React.Suspense> },
+          { id: 'relocation', label: '山门迁移与旧址', content: <React.Suspense fallback={<p role="status">载入迁移记录…</p>}>
+            <SectRelocationPanel world={visibleWorld} cultivator={selectedCultivator} />
+          </React.Suspense> },
           ...(preview ? [] : [{ id: 'council', label: '长老议事厅', content: <button type="button" disabled={isStepping} onClick={() => setCouncilOpen(true)}
             className={`${action} bg-violet-900/60 text-violet-100 hover:bg-violet-800`}>打开长老议事厅</button> }]),
         ]} />,
@@ -446,8 +450,8 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
           ...(preview ? [] : [
             { id: 'god', label: '天道干预与模型设置', content: <div className="space-y-2.5">
               <LlmTelemetryPanel scheduler={llmScheduler} configured={llmConfig.enabled} hasCredential={Boolean(llmConfig.apiKey.trim())} model={llmConfig.model || 'gpt-4o-mini'} />
-              <GodConsole world={world} selectedCultivatorId={activeActorId} llmConfig={llmConfig}
-                onUpdateLLMConfig={setLlmConfig} onIntervene={handleGodIntervene} />
+              <React.Suspense fallback={<p role="status">载入天道控制台…</p>}><GodConsole world={world} selectedCultivatorId={activeActorId} llmConfig={llmConfig}
+                onUpdateLLMConfig={setLlmConfig} onIntervene={handleGodIntervene} /></React.Suspense>
             </div> },
             { id: 'settings', label: '存档、世界种子与推演速度', content: <div className="space-y-2.5">
               <div className={`${panel} flex flex-wrap items-center gap-x-2 gap-y-1.5`}>

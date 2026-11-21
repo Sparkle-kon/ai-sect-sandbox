@@ -76,6 +76,7 @@ export type ActionType =
   | 'CLAIM_ESTATE'
   | 'HOLD_MEMORIAL'
   | 'DOCTRINE'
+  | 'RELOCATE'
   | 'GATHER_HERBS'
   | 'BREW_PILL'
   | 'USE_PILL'
@@ -354,6 +355,8 @@ export interface LLMDecisionPayload {
   doctrineTheme?: ReflectionTheme;
   targetDoctrineSchoolId?: string;
   targetDoctrineProposalId?: string;
+  relocationMove?: RelocationMove;
+  targetRelocationId?: string;
   targetTechniqueId?: string;
   targetHerbId?: HerbId;
   targetPillId?: PillId;
@@ -951,7 +954,50 @@ export interface WorldGeneration {
   birthTick: number;
   resources: Array<{ actorId: string; locationId: string; pathSteps: number }>;
 }
+export type RelocationMove = 'propose' | 'approve' | 'decline';
+export interface RelocationPlan {
+  id: string;
+  sectId: string;
+  originId: string;
+  destinationId: string;
+  status: 'voting' | 'in_transit' | 'settled' | 'aborted';
+  openedTick: number;
+  deadlineTick: number;
+  proposerId: string;
+  voterIds: string[];
+  votes: Array<{ actorId: string; tick: number; approve: boolean }>;
+  garrisonIds: string[];
+  path: MapPoint[];
+  pathIndex: number;
+  stoneCost: number;
+  earthCost: number;
+  custody: { stones: number; pavilion: Technique[] };
+  spent: boolean;
+  departedTick?: number;
+  settledTick?: number;
+  lastAdvancedTick?: number;
+  reason?: string;
+}
+export interface AbandonedHeadquarters {
+  id: string;
+  planId: string;
+  sectId: string;
+  originId: string;
+  destinationId: string;
+  tick: number;
+  originalType: LocationNode['type'];
+  facilities: Record<FacilityKind, number>;
+  arrayHp: number;
+  arrayMaxHp: number;
+}
+export interface RelocationState {
+  plans: RelocationPlan[];
+  abandonedSites: AbandonedHeadquarters[];
+  nextId: number;
+}
+
 export interface WorldState {
+  relocations: RelocationState;
   worldgen?: WorldGeneration;
   doctrines: DoctrineState;
   decisionTrace: DecisionTraceState;

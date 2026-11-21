@@ -1,3 +1,4 @@
+import { activeRelocationForActor, advanceRelocations, resolveRelocationAction } from './relocationEngine';
 import { advanceDoctrines, resolveDoctrineAction } from './doctrineEngine';
 import { legalTraceCandidates, recordDecisionTrace, rememberReplayDecision } from './decisionTraceEngine';
 import type { DecisionReplayTape } from './decisionTraceEngine';
@@ -178,6 +179,8 @@ export function applyCultivatorBrainDecision(
     case 'ATTEST_WITNESS':
     case 'CHALLENGE_WITNESS':
       return resolveWitnessAction(world, cultivator, decision);
+    case 'RELOCATE':
+      return resolveRelocationAction(world, cultivator, decision);
     case 'DOCTRINE':
       return resolveDoctrineAction(world, cultivator, decision);
     case 'RECRUIT_SETTLER':
@@ -365,7 +368,7 @@ export function applyCultivatorBrainDecision(
 
     case 'SOCIALIZE': {
       const target = world.cultivators.find((c) =>
-        c.alive && c.id !== cultivator.id && c.locationId === cultivator.locationId &&
+        c.alive && c.id !== cultivator.id && c.locationId === cultivator.locationId && !activeRelocationForActor(world, c) &&
         (decision.targetCultivatorId === undefined || c.id === decision.targetCultivatorId)
       );
       if (!target) return null;
@@ -402,7 +405,7 @@ export function applyCultivatorBrainDecision(
 
     case 'SCHEMING': {
       const target = world.cultivators.find((c) =>
-        c.alive && c.id !== cultivator.id && c.locationId === cultivator.locationId &&
+        c.alive && c.id !== cultivator.id && c.locationId === cultivator.locationId && !activeRelocationForActor(world, c) &&
         (decision.targetCultivatorId === undefined || c.id === decision.targetCultivatorId)
       );
       if (!target) return null;
@@ -453,7 +456,7 @@ export function applyCultivatorBrainDecision(
 
     case 'DUEL': {
       const defender = world.cultivators.find((c) =>
-        c.alive && c.id !== cultivator.id && c.locationId === cultivator.locationId &&
+        c.alive && c.id !== cultivator.id && c.locationId === cultivator.locationId && !activeRelocationForActor(world, c) &&
         (decision.targetCultivatorId === undefined || c.id === decision.targetCultivatorId)
       );
       if (!defender) return null;
@@ -594,7 +597,7 @@ export function advanceWorldTick(
   const avatarOrder = consumeAvatarOrder(nextState);
   maintainAlchemy(nextState);
   maintainSectEconomy(nextState);
-  const newEvents: WorldEvent[] = [...advanceMapHazards(nextState), ...advanceSettlements(nextState), ...advanceSpiritBeasts(nextState, rng)];
+  const newEvents: WorldEvent[] = [...advanceMapHazards(nextState), ...advanceRelocations(nextState), ...advanceSettlements(nextState), ...advanceSpiritBeasts(nextState, rng)];
   for (const event of newEvents) witnessEvent(nextState, event);
 
   for (const cultivator of [...nextState.cultivators]) {
@@ -623,6 +626,12 @@ export function advanceWorldTick(
         witnessEvent(nextState, death);
         continue;
       }
+    }
+
+    if (activeRelocationForActor(nextState, cultivator)) {
+      cultivator.currentAction = 'RELOCATE';
+      cultivator.innerMonologue = '山门迁徙尚在途中，须领护送之责。';
+      continue;
     }
 
     if (activeSiegeForActor(nextState, cultivator)) {
@@ -712,7 +721,7 @@ export function executeGodIntervention(
       loc.spiritQi = clamp(loc.spiritQi + 20, 10, 150);
 
       const luckyOnes = nextState.cultivators.filter(
-        (c) => c.alive && c.locationId === loc.id
+        (c) => c.alive && c.locationId === loc.id && !activeRelocationForActor(nextState, c)
       );
       for (const c of luckyOnes) {
         c.qiProgress = clamp(c.qiProgress + 30, 0, 100);

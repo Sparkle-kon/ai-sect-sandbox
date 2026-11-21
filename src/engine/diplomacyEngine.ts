@@ -1,3 +1,4 @@
+import { activeRelocationForActor, activeRelocationForSect } from './relocationEngine';
 import type { ActionType, Cultivator, LLMDecisionPayload, Sect, SectDiplomaticRelation, SectSiege, WorldEvent, WorldState } from '../types/world';
 
 type DiplomaticAction = Extract<ActionType, 'OFFER_ALLIANCE' | 'DECLARE_WAR' | 'DEMAND_TRIBUTE' | 'LAUNCH_SIEGE'>;
@@ -39,7 +40,7 @@ const isAlly = (world: WorldState, a: string, b: string) => a === b || sectRelat
 
 function forceCandidates(world: WorldState, attacker: Sect, defender: Sect, actor: Cultivator): Cultivator[] {
   const candidates = world.cultivators.filter((person) => live(person) && isAlly(world, attacker.id, person.sectId) &&
-    person.sectId !== defender.id && !isAlly(world, defender.id, person.sectId) && !activeSiegeForActor(world, person) &&
+    person.sectId !== defender.id && !isAlly(world, defender.id, person.sectId) && !activeRelocationForActor(world, person) && !activeSiegeForActor(world, person) &&
     !world.occasions.some((item) => (item.status === 'registration' || item.status === 'running') && item.participantIds.includes(person.id)) &&
     person.tribulation?.stage !== 'lightning' && person.tribulation?.stage !== 'heart_demon')
     .sort((a, b) => Number(b.id === actor.id) - Number(a.id === actor.id) || Number(b.sectId === attacker.id) - Number(a.sectId === attacker.id) ||
@@ -49,11 +50,11 @@ function forceCandidates(world: WorldState, attacker: Sect, defender: Sect, acto
 
 export function availableDiplomacyActions(actor: Cultivator, world: WorldState): DiplomaticOption[] {
   const own = world.sects.find(({ id }) => id === actor.sectId);
-  if (!own || !live(actor) || own.leaderId !== actor.id || actor.locationId !== own.headquartersId || activeSiegeForActor(world, actor)) return [];
+  if (!own || !live(actor) || own.leaderId !== actor.id || actor.locationId !== own.headquartersId || activeRelocationForSect(world, own.id) || activeSiegeForActor(world, actor)) return [];
   if (!world.locations.some((site) => site.id === own.headquartersId && (!site.ownerSectId || site.ownerSectId === own.id))) return [];
   const result: DiplomaticOption[] = [];
   for (const target of world.sects) {
-    if (target.id === own.id) continue;
+    if (target.id === own.id || activeRelocationForSect(world, target.id)) continue;
     const relation = sectRelation(world, own.id, target.id);
     const affinity = relation?.affinity ?? 0;
     const targetLeader = world.cultivators.find((person) => person.id === target.leaderId && person.sectId === target.id && live(person));
