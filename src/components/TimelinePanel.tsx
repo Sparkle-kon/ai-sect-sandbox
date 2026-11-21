@@ -5,6 +5,7 @@ import type { GodInterventionCommand } from '../engine/worldEngine';
 import type { WorldState } from '../types/world';
 import { FastForwardPanel } from './FastForwardPanel';
 import type { FastForwardControls } from './FastForwardPanel';
+import { BranchComparisonPanel } from './BranchComparisonPanel';
 
 type Intervention = 'SPAWN_TREASURE' | 'TRIBULATION_STRIKE' | 'DEMONIC_TIDE';
 const INTERVENTIONS: Record<Intervention, { title: string; target: 'location' | 'cultivator' | 'world' }> = {
@@ -45,12 +46,14 @@ export interface TimelinePanelProps {
   onFork: (sourceBranchId: string, tick: number, command: GodInterventionCommand) => void;
   notice?: string | null;
   fastForward?: FastForwardControls;
+  comparisonViewerId?: string;
+  comparisonScopeKey?: string;
 }
 
 const control = 'rounded border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-100 disabled:opacity-40';
 const button = 'rounded border border-violet-500/50 bg-violet-950/50 px-2 py-1.5 text-xs text-violet-100 disabled:opacity-40';
 
-export function TimelinePanel({ timeline, previewTick, busy, onPreview, onSelectBranch, onFork, notice, fastForward }: TimelinePanelProps) {
+export function TimelinePanel({ timeline, previewTick, busy, onPreview, onSelectBranch, onFork, notice, fastForward, comparisonViewerId, comparisonScopeKey }: TimelinePanelProps) {
   const [requestedBranch, setRequestedBranch] = useState<string>();
   const [intervention, setIntervention] = useState<Intervention>('SPAWN_TREASURE');
   const [target, setTarget] = useState<string>();
@@ -175,6 +178,7 @@ export function TimelinePanel({ timeline, previewTick, busy, onPreview, onSelect
           </div>
         </section>
       )}
+      <BranchComparisonPanel timeline={timeline} viewerId={comparisonViewerId} scopeKey={comparisonScopeKey} preferredTick={previewTick} />
       {fastForward && <FastForwardPanel controls={fastForward} timeline={timeline} branchLimit={!canFork} blocked={busy || previewTick !== null || !!pending} />}
       {notice && <p role="status" className="break-words text-xs text-violet-200">{notice}</p>}
     </section>
