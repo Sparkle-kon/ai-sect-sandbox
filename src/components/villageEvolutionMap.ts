@@ -1,15 +1,21 @@
-import { activeDanxiaMedicineEscort, danxiaMedicineActedThisTick } from '../engine/danxiaMedicineTerms';
 import { currentVisibleTileIds, knownMapLocations, terrainTileAt } from '../engine/terrainEngine';
-import { presentAtVillageGranary } from '../engine/villageGranaryEngine';
+import { projectVillageEvolution, villageEvolutionLocalSettlement } from '../engine/villageEvolutionEngine';
 import type { Cultivator, MapPoint, MapTile, WorldState } from '../types/world';
 import { MAP_HEIGHT, MAP_WIDTH } from './mapCamera';
+import { villageDisplayLabel } from './VillageEvolutionDetails';
+
+export function projectVillageMapLabels(world:WorldState, viewer?:Cultivator) {
+  return new Map(projectVillageEvolution(world,viewer).map(row=>[
+    row.siteId, {name:row.registeredName,stage:villageDisplayLabel(row)},
+  ]));
+}
 
 /** This legend describes only an already-used migration corridor, not present passability. */
 export const USED_MIGRATION_ROUTE_LEGEND = '虚线只标已实际行过的迁徙路段，不代表今日还能通行。';
 export type UsedMigrationSegment = readonly [MapPoint, MapPoint];
 
 export function projectUsedVillageMigrationSegments(world: WorldState, viewer?: Cultivator): UsedMigrationSegment[] {
-  const local = viewer && !activeDanxiaMedicineEscort(world, viewer) && !danxiaMedicineActedThisTick(world, viewer) && presentAtVillageGranary(world, viewer);
+  const local = viewer && villageEvolutionLocalSettlement(world, viewer);
   if (!local || !viewer) return [];
   const moves = world.villageEvolution.migrations
     .filter(row => row.tick <= world.tick && (row.fromSettlementId === local.id || row.toSettlementId === local.id)).slice(-4);

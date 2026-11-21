@@ -1,14 +1,14 @@
 import type { VillageEvolutionView } from '../engine/villageEvolutionEngine';
 
-type Reading = Pick<VillageEvolutionView, 'status' | 'currentLocal' | 'asOfTick' | 'lastSurvey' | 'hasActiveDuties' | 'population' | 'juveniles' | 'namedRemaining' | 'recentChanges' | 'knownMoves'>;
 type LocalObservation = {
   stock?: { roots: number; stones: number };
 };
 
-export function villageDisplayLabel(row: Pick<Reading, 'status' | 'recentChanges'> | undefined): string | undefined {
-  if (row?.status === 'town') return '集镇';
-  if (row?.status === 'ruin') return '旧址';
-  if (row?.status === 'village' && row.recentChanges.at(-1)?.reason === 'actual_return') return '复居';
+export function villageDisplayLabel(row: VillageEvolutionView | undefined): string | undefined {
+  if (!row?.currentLocal) return undefined;
+  if (row.status === 'town') return '集镇';
+  if (row.status === 'ruin') return '旧址';
+  if (row.status === 'village' && row.recentChanges.at(-1)?.reason === 'actual_return') return '复居';
   return undefined;
 }
 
@@ -19,18 +19,17 @@ const CHANGE_LABEL = {
 };
 
 export function VillageEvolutionDetails({ row, observed, local }: {
-  row?: Reading; observed: boolean; local?: LocalObservation;
+  row?: VillageEvolutionView; observed: boolean; local?: LocalObservation;
 }) {
-  if (!row || !(row.recentChanges.length || row.knownMoves.length || row.lastSurvey || local?.stock)) return null;
+  if (!observed || !row?.currentLocal || !(row.recentChanges.length || row.knownMoves.length || row.lastSurvey || local?.stock)) return null;
   const sample = row.lastSurvey;
-  const localNow = observed && row.currentLocal;
-  const stock = localNow ? local?.stock : undefined;
+  const stock = local?.stock;
   return <section aria-label="聚落沿革与迁徙实据" className="min-w-0 space-y-1.5 break-words border-t border-slate-800 pt-2 text-xs leading-relaxed text-slate-300">
     <h4 className="font-semibold text-emerald-100">聚落沿革</h4>
-    {(localNow || sample) && <p>{localNow ? '现住' : `第 ${row.asOfTick} 轮旧录：`} {row.population} 人，其中未成年 {row.juveniles} 人、留在坊籍的具名居民 {row.namedRemaining} 人。</p>}
+    <p>现住 {row.population} 人，其中未成年 {row.juveniles} 人、留在坊籍的具名居民 {row.namedRemaining} 人。</p>
     {sample && <p className="text-slate-400">第 {sample.tick} 轮查验：{sample.usableWell ? '水井可用' : '未见可用水井'} · 通路 {sample.passableCorridors} 条。</p>}
     {stock && <p className="text-slate-400">此处义仓实存：玄土根 {stock.roots} 株、灵石 {stock.stones} 枚。</p>}
-    {localNow && row.hasActiveDuties && <p className="text-slate-400">此处仍有记在原址的未了事务。</p>}
+    {row.hasActiveDuties && <p className="text-slate-400">此处仍有记在原址的未了事务。</p>}
     {row.recentChanges.length > 0 && <ul aria-label="聚落实变" className="space-y-0.5 text-slate-400">
       {row.recentChanges.slice(-4).reverse().map(({ tick, reason }) => <li key={`${tick}:${reason}`}>第 {tick} 轮 · {CHANGE_LABEL[reason]}</li>)}
     </ul>}

@@ -12,11 +12,11 @@ import { VILLAGE_EVOLUTION_LOW_STRESS, VILLAGE_EVOLUTION_MAX_ADULTS_PER_MOVE, VI
 
 export const createVillageEvolutionState=():VillageEvolutionState=>({villages:[],migrations:[]});
 
-const locallySettled=(world:WorldState,actor:Cultivator)=>
+export const villageEvolutionLocalSettlement=(world:WorldState,actor:Cultivator)=>
   !activeDanxiaMedicineEscort(world,actor)&&!danxiaMedicineActedThisTick(world,actor)?presentAtVillageGranary(world,actor):undefined;
 export function villageEvolutionLocalObserverIds(world:WorldState,settlementIds:ReadonlySet<string>):string[] {
   return world.cultivators.flatMap(actor=>{
-    const present=locallySettled(world,actor);
+    const present=villageEvolutionLocalSettlement(world,actor);
     return present&&settlementIds.has(present.id)?[actor.id]:[];
   });
 }
@@ -265,34 +265,38 @@ export function villageEvolutionPinnedSettlementIds(world:WorldState):Set<string
       ...(row.pendingDepopulationRecordId?[row.pendingDepopulationRecordId]:[])])]);
 }
 
-export interface VillageEvolutionView {
-  settlementId:string;siteId:string;registeredName:string;status:VillageEvolutionRecord['status'];currentLocal:boolean;asOfTick:number;population:number;
-  juveniles:number;namedRemaining:number;lastSurvey?:Pick<VillageEvolutionSample,'tick'|'usableWell'|'passableCorridors'>;hasActiveDuties?:boolean;recentChanges:Array<Pick<VillageEvolutionChange,'tick'|'from'|'to'|'reason'|'population'>>;
+interface VillageEvolutionIdentity {
+  settlementId:string;siteId:string;registeredName:string;
+}
+export interface VillageEvolutionLocalView extends VillageEvolutionIdentity {
+  currentLocal:true;status:VillageEvolutionRecord['status'];asOfTick:number;population:number;
+  juveniles:number;namedRemaining:number;lastSurvey?:Pick<VillageEvolutionSample,'tick'|'usableWell'|'passableCorridors'>;
+  hasActiveDuties:boolean;recentChanges:Array<Pick<VillageEvolutionChange,'tick'|'from'|'to'|'reason'|'population'>>;
   knownMoves:Array<{tick:number;people:number;counterpartName:string;direction:'arrivals'|'departures';leftJuveniles:number;leftNamed:number}>;
 }
+export type VillageEvolutionView=VillageEvolutionLocalView|(VillageEvolutionIdentity&{currentLocal:false});
 
-/** Geography-gated old identity and anonymous movement only. Never reveals household or cargo IDs. */
+/** Knowing the registered name permits lookup, not access to any newer civic state or history. */
 export function projectVillageEvolution(world:WorldState,viewer?:Cultivator,query?:string):VillageEvolutionView[] {
   if(!viewer||!world.cultivators.includes(viewer))return [];
   const known=new Set(knownMapLocations(world,viewer).map(site=>site.id));
   const visible=world.villageEvolution.villages.filter(row=>known.has(row.siteId));
   const visibleById=new Map(visible.map(row=>[row.settlementId,row]));
   const text=query?.trim().toLowerCase();
-  const current=locallySettled(world,viewer);
+  const current=villageEvolutionLocalSettlement(world,viewer);
   return visible.flatMap((row):VillageEvolutionView[]=>{
-    const village=world.settlements.villages.find(item=>item.id===row.settlementId);
+    const village=world.settlements.villages.find(item=>item.id===row.settlementId&&item.locationId===row.siteId);
     if(!village||text&&!row.registeredName.toLowerCase().includes(text)&&!village.name.toLowerCase().includes(text))return [];
-    const sample=row.samples.at(-1);
-    const currentLocal=current?.id===row.settlementId;
-    if(!currentLocal&&!sample)return [];
-    return [{settlementId:row.settlementId,siteId:row.siteId,registeredName:row.registeredName,status:row.status,
-      currentLocal,asOfTick:currentLocal?world.tick:sample!.tick,
-      population:currentLocal?village.population:sample!.population,
-      juveniles:currentLocal?minors(village):sample!.juveniles,namedRemaining:currentLocal?remaining(village):sample!.namedRemaining,
+    const identity={settlementId:row.settlementId,siteId:row.siteId,registeredName:row.registeredName};
+    if(current?.id!==row.settlementId)return [{...identity,currentLocal:false}];
+    const sample=row.samples.filter(survey=>survey.tick<=world.tick).at(-1);
+    return [{...identity,status:row.status,currentLocal:true,asOfTick:world.tick,
+      population:village.population,juveniles:minors(village),namedRemaining:remaining(village),
       ...(sample?{lastSurvey:{tick:sample.tick,usableWell:sample.usableWell,passableCorridors:sample.passableCorridors}}:{}),
-      ...(current?.id===row.settlementId?{hasActiveDuties:villageEvolutionHasActiveDuties(world,village)}:{}),
-      recentChanges:row.changes.slice(-4).map(({tick,from,to,reason,population})=>({tick,from,to,reason,population})),
+      hasActiveDuties:villageEvolutionHasActiveDuties(world,village),
+      recentChanges:row.changes.filter(change=>change.tick<=world.tick).slice(-4).map(({tick,from,to,reason,population})=>({tick,from,to,reason,population})),
       knownMoves:world.villageEvolution.migrations.flatMap(move=>{
+        if(move.tick>world.tick)return [];
         const outgoing=move.fromSettlementId===row.settlementId,incoming=move.toSettlementId===row.settlementId;
         const counterpart=outgoing?visibleById.get(move.toSettlementId):incoming?visibleById.get(move.fromSettlementId):undefined;
         return counterpart?[{tick:move.tick,people:move.people,counterpartName:counterpart.registeredName,

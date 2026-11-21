@@ -5,11 +5,11 @@ import { currentVisibleTileIds, terrainTileAt } from '../src/engine/terrainEngin
 import { projectVillageEvolution } from '../src/engine/villageEvolutionEngine';
 import { describe, expect, it } from 'vitest';
 import { VillageEvolutionDetails, villageDisplayLabel } from '../src/components/VillageEvolutionDetails';
-import type { VillageEvolutionView } from '../src/engine/villageEvolutionEngine';
+import type { VillageEvolutionLocalView } from '../src/engine/villageEvolutionEngine';
 
-const row: VillageEvolutionView = {
+const row: VillageEvolutionLocalView = {
   settlementId: 'private-old-register-key', siteId: 'private-map-key', registeredName: '梅圩',
-  status: 'village', currentLocal: true, asOfTick: 16, population: 13, juveniles: 3, namedRemaining: 4, recentChanges: [], knownMoves: [],
+  status: 'village', currentLocal: true, asOfTick: 16, population: 13, juveniles: 3, namedRemaining: 4, hasActiveDuties: false, recentChanges: [], knownMoves: [],
 };
 const ruin = { tick: 31, from: 'village', to: 'ruin', reason: 'depopulated', population: 0 } as const;
 const revival = { tick: 34, from: 'ruin', to: 'village', reason: 'actual_return', population: 13 } as const;
@@ -35,15 +35,10 @@ describe('quiet village evolution details', () => {
     expect(markup).not.toMatch(/private-.*-key|<button/);
   });
 
-  it('never displays unobserved occupancy/resources or invents an invisible counterpart', () => {
-    const markup = renderToStaticMarkup(<VillageEvolutionDetails observed={false} row={{
-      ...row, currentLocal: false, asOfTick: 34, lastSurvey: { tick: 34, usableWell: true, passableCorridors: 1 }, hasActiveDuties: true, recentChanges: [ruin, revival],
-    }} local={{ stock: { roots: 7, stones: 9 } }} />);
-    expect(markup).toContain('旧地名仍在');
-    expect(markup).toContain('旧址重新住了人');
-    expect(markup).toContain('第 34 轮旧录：');
-    expect(markup).toContain('第 34 轮查验：水井可用');
-    expect(markup).not.toMatch(/现住|义仓实存|未了事务|迁往|未知地名/);
+  it('does not expose dates or any place state from a known identity-only row', () => {
+    const known = {settlementId:row.settlementId,siteId:row.siteId,registeredName:row.registeredName,currentLocal:false as const};
+    expect(villageDisplayLabel(known)).toBeUndefined();
+    expect(renderToStaticMarkup(<VillageEvolutionDetails observed row={known} local={{ stock: { roots: 7, stones: 9 } }} />)).toBe('');
     expect(renderToStaticMarkup(<VillageEvolutionDetails observed={false} row={undefined} />)).toBe('');
   });
 });
@@ -79,6 +74,6 @@ it('keeps the true old registry name and opens a movement only after its far end
   expect(view()).not.toMatch(/尚未识得的溪尾|4 人从此处迁往/);
   viewer.exploredTileIds.push(terrainTileAt(world, otherSite.x, otherSite.y)!.id);
   expect(view()).toContain('4 人从此处迁往尚未识得的溪尾');
-  expect(view()).toContain('第 35 轮旧录：');
+  expect(view()).not.toMatch(/第 35 轮|旧录：/);
   expect(view()).not.toMatch(/never-in-dom|private-compact/);
 });

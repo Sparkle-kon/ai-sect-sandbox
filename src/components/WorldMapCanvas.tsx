@@ -1,9 +1,8 @@
 import {localDoctrineFoundingNotice} from '../engine/doctrineFoundingEngine';
 import {localDanxiaSeasonReviewSite} from '../engine/danxiaSeasonReviewEngine';
 import { VILLAGE_WORK_RULES, visibleVillageWorks } from '../engine/villageWorksEngine';
-import { projectVillageEvolution } from '../engine/villageEvolutionEngine';
-import { villageDisplayLabel } from './VillageEvolutionDetails';
-import { drawUsedVillageMigrationSegments, projectUsedVillageMigrationSegments, USED_MIGRATION_ROUTE_LEGEND } from './villageEvolutionMap';
+import { villageEvolutionLocalSettlement } from '../engine/villageEvolutionEngine';
+import { drawUsedVillageMigrationSegments, projectUsedVillageMigrationSegments, projectVillageMapLabels, USED_MIGRATION_ROUTE_LEGEND } from './villageEvolutionMap';
 import { householdCensus } from '../engine/householdEngine';
 import { visibleSharedCommonsMapSites } from './sharedCommonsMapView';
 import { visibleLeaseMapSites } from './leaseMapView';
@@ -224,12 +223,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   }, [world, selected]);
   const { seenLocations, isCurrentLocation } = mapView;
   // Turning off terrain fog does not create a civic observation.
-  const civicSight = useMemo(() => selected?.alive && selected.hp > 0 && world.cultivators.includes(selected)
-    ? currentVisibleTileIds(world, selected) : new Set<string>(), [world, selected]);
-  const observesVillage = (siteId: string) => civicSight.has(mapView.locationTile.get(siteId)?.id ?? '');
-  const villageMapLabels = useMemo(() => new Map(projectVillageEvolution(world, selected).map(row => [
-    row.siteId, { name: row.registeredName, stage: civicSight.has(mapView.locationTile.get(row.siteId)?.id ?? '') ? villageDisplayLabel(row) : undefined },
-  ])), [world, selected, civicSight, mapView.locationTile]);
+  const civicObservation = useMemo(() => selected && villageEvolutionLocalSettlement(world, selected), [world, selected]);
+  const villageMapLabels = useMemo(() => projectVillageMapLabels(world, selected), [world, selected]);
   const usedVillageSegments = useMemo(() => projectUsedVillageMigrationSegments(world, selected), [world, selected]);
   const territorySemantics = useMemo(() => projectMapTerritories(world,mapView.tileState), [world,mapView]);
   const locallyObservedWorkshopClosure = useMemo(() => {
@@ -697,7 +692,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           ctx.restore();
         }
         const localVillage = villagesAt.get(loc.id);
-        if (localVillage && observesVillage(loc.id)) {
+        if (localVillage && civicObservation?.locationId === loc.id) {
           ctx.save();
           ctx.font = 'bold 10px sans-serif';
           ctx.textAlign = 'center';
@@ -876,7 +871,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener('change', stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, observedSalvageSites, localGranary, villageMapLabels, civicSight, usedVillageSegments, furnaceShift, localPavilionDesk, localMemorial, localVillageFair, localStipend, localSeedCulture, localToolLoans, localAlignedWeather, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, observedSalvageSites, localGranary, villageMapLabels, civicObservation, usedVillageSegments, furnaceShift, localPavilionDesk, localMemorial, localVillageFair, localStipend, localSeedCulture, localToolLoans, localAlignedWeather, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1348,7 +1343,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
             const homeSect = headquarters.get(location.id);
             const localOccasions = occasionsByLocation.get(location.id) ?? [];
             const localCouncil = currentCouncils.get(homeSect?.id ?? '');
-            const localVillage = observesVillage(location.id) ? villagesAt.get(location.id) : undefined;
+            const localVillage = civicObservation?.locationId === location.id ? civicObservation : undefined;
             const localWeather = weatherAtVisibleSites.get(location.id);
             const localBeasts = beastsByLocation.get(location.id) ?? [];
             const habitatView = localHabitat.get(location.id);

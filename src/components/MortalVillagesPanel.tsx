@@ -1,7 +1,7 @@
 import { projectSeasonalHousing } from '../engine/seasonalHousingEngine';
 import { SeasonalHousingReceipts } from './SeasonalHousingReceipts';
 import {
-  availableSettlementActions, SETTLEMENT_RELIEF, SETTLEMENT_RECRUIT_STIPEND, visibleSettlements,
+  availableSettlementActions, SETTLEMENT_RELIEF, SETTLEMENT_RECRUIT_STIPEND,
 } from '../engine/settlementEngine';
 import { visibleVillageWorks } from '../engine/villageWorksEngine';
 import { visibleHouseholds } from '../engine/householdEngine';
@@ -13,7 +13,7 @@ import { CensusPanel } from './CensusPanel';
 import { VillageSupplyPanel } from './VillageSupplyPanel';
 import { VillageMemorialPanel } from './VillageMemorialPanel';
 import { VillageFairPanel } from './VillageFairPanel';
-import { projectVillageEvolution } from '../engine/villageEvolutionEngine';
+import { projectVillageEvolution, villageEvolutionLocalSettlement } from '../engine/villageEvolutionEngine';
 import { projectVillageGranary } from '../engine/villageGranaryEngine';
 import { VillageEvolutionDetails, villageDisplayLabel } from './VillageEvolutionDetails';
 
@@ -29,8 +29,8 @@ export function MortalVillagesPanel({ world, cultivator }: { world: WorldState; 
   const terrain = createTerrainMapView(world, cultivator, true);
   const knownLocations = new Set(terrain.seenLocations.map(({ id }) => id));
   const villages = (world.settlements?.villages ?? []).filter(({ locationId }) => knownLocations.has(locationId));
-  const visible = new Set(cultivator?.alive && world.settlements
-    ? visibleSettlements(world, cultivator).filter(({ locationId }) => terrain.isCurrentLocation(locationId)).map(({ id }) => id) : []);
+  const local = cultivator && villageEvolutionLocalSettlement(world, cultivator);
+  const visible = new Set(local ? [local.id] : []);
   const evolution = new Map(projectVillageEvolution(world, cultivator).map(row => [row.settlementId, row]));
   const nativeStock = projectVillageGranary(world, cultivator);
   const worksView = cultivator && visible.size > 0 ? visibleVillageWorks(world, cultivator) : [];
@@ -129,8 +129,7 @@ export function MortalVillagesPanel({ world, cultivator }: { world: WorldState; 
                     </div>
                   </div>
                 ) : <div className="mt-2 space-y-2 text-xs text-slate-400">
-                  <p>已知地名，但当前不在视野中，不显示实时人口、招募或账目。</p>
-                  {evolutionDetails}
+                  <p>已知地名，但本轮未在此地查验，不显示现况或地方实录。</p>
                   {cultivator && <SeasonalHousingReceipts rows={personalHousing.filter(row=>row.settlementId===village.id)} viewerId={cultivator.id} />}
                 </div>}
               </details>
