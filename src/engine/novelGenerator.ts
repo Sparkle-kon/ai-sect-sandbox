@@ -1,3 +1,4 @@
+import { compactColdHistory } from './coldHistoryEngine';
 import type { ChronicleAnchor, ChronicleArchive, ChronicleChapter, ChronicleChapterPlan, WorldEvent, WorldState } from '../types/world';
 
 export const CHRONICLE_INTERVAL = 12;
@@ -125,6 +126,7 @@ export function resolveChronicleChapter(world: WorldState, plan: ChronicleChapte
   const chapter: ChronicleChapter = titleSuffix && body ? { ...current, title: prefix + titleSuffix, body: `${body}\n\n公开史料索引（以上为文学演绎）\n${current.anchors.map((anchor) =>
       `第${anchor.tick}轮 · ${anchor.title}`).join('\n')}`, source: 'llm' } :
     { ...current, body: deterministicBody(current), source: 'utility' };
-  world.chronicleArchive.chapters = [chapter, ...world.chronicleArchive.chapters].slice(0, CHRONICLE_MAX_CHAPTERS);
+  world.chronicleArchive.chapters = [chapter, ...world.chronicleArchive.chapters];
+  compactColdHistory(world);
   return chapter;
 }

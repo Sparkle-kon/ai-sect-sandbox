@@ -1,3 +1,4 @@
+import { cloneWorldWithColdHistory, compactColdHistory } from './coldHistoryEngine';
 import { activeCourierForActor, advanceCouriers, courierActedThisTick, courierCheckpoint, reconcileCourierDeaths, resolveCourierAction } from './sealedCourierEngine';
 import { captureWatchDigests } from './watchlistEngine';
 import { advanceVillageWorks, resolveVillageWorksAction } from './villageWorksEngine';
@@ -669,7 +670,7 @@ export function advanceWorldTick(
     onActor?: (actorId: string, candidates: DecisionTraceCandidate[], applied: boolean) => void;
   }
 ): WorldState {
-  const nextState: WorldState = structuredClone(prevState);
+  const nextState: WorldState = cloneWorldWithColdHistory(prevState);
   const rng = injectedRandom ?? worldRandom(nextState);
   nextState.tick += 1;
   if (nextState.month >= 12) {
@@ -825,6 +826,7 @@ export function advanceWorldTick(
     settleAnnualCouncilOffline(nextState);
     settleChronicleOffline(nextState);
   }
+  compactColdHistory(nextState);
   if (nextState.watchlists.watches.length) {
     if (traceOptions?.onWatchBatch) traceOptions.onWatchBatch(newEvents);
     else {
@@ -847,7 +849,7 @@ export function executeGodIntervention(
   prevState: WorldState,
   cmd: GodInterventionCommand
 ): WorldState {
-  const nextState: WorldState = structuredClone(prevState);
+  const nextState: WorldState = cloneWorldWithColdHistory(prevState);
 
   switch (cmd.type) {
     case 'SPAWN_TREASURE': {

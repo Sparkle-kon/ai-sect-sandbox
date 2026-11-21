@@ -6,6 +6,7 @@ import type { ChronicleChapter } from '../src/types/world';
 
 const fixture = () => {
   const world = createInitialWorld();
+  world.tick = 24;
   const [subject, unrelated] = world.cultivators;
   subject.innerMonologue = '不能公开的内心独白';
   world.events = [{
@@ -24,7 +25,7 @@ const fixture = () => {
   world.chronicleArchive = {
     anchors: [],
     chapters: [
-      { ...chapter, id: 'chapter-1', chapterNumber: 1, title: '第一章：松下访友', endTick: 18, startTick: 1, body: '此为旧章。', source: 'utility' },
+      { ...chapter, id: 'chapter-1', chapterNumber: 1, title: '第一章：松下访友', endTick: 18, startTick: 1, body: '此为旧章。', source: 'utility', anchors: [], biographies: [] },
       chapter,
     ],
   };

@@ -12,7 +12,8 @@
     "test:watch": "vitest",
     "verify": "npm run typecheck && npm run test && npm run build",
     "balance": "vite-node scripts/simulationBalance.ts",
-    "map:benchmark": "vite-node scripts/mapRosterBenchmark.ts"
+    "map:benchmark": "vite-node scripts/mapRosterBenchmark.ts",
+    "history:benchmark": "node --expose-gc ./node_modules/vite-node/vite-node.mjs scripts/historyBudgetBenchmark.ts"
   },
   "dependencies": {
     "lucide-react": "^0.460.0",

@@ -1,7 +1,9 @@
 import { useId, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
+import { publicChronicleChapters } from '../engine/coldHistoryEngine';
 import type { ChronicleChapter, Cultivator, WorldState } from '../types/world';
 import { DialogueTranscript } from './DialogueTranscript';
+import { ColdChronicleShelf } from './ColdChronicleShelf';
 import { ChronicleErrataPanel } from './ChronicleErrataPanel';
 
 const PAGES = ['chapter', 'biography'] as const;
@@ -63,7 +65,8 @@ export function ChronicleLibraryPanel({ world, cultivator }: { world: WorldState
   const [requestedChapter, setRequestedChapter] = useState<string>();
   const paneId = useId();
   const tabs = useRef<Partial<Record<Page, HTMLButtonElement | null>>>({});
-  const chapters = [...(world.chronicleArchive?.chapters ?? [])].sort((a, b) => b.endTick - a.endTick);
+  const recentIds = new Set((world.chronicleArchive?.chapters ?? []).map(({ id }) => id));
+  const chapters = publicChronicleChapters(world).filter(({ id }) => recentIds.has(id));
   const chapter = chapters.find(({ id }) => id === requestedChapter) ?? chapters[0];
 
   const moveTab = (event: KeyboardEvent<HTMLButtonElement>) => {
@@ -85,7 +88,7 @@ export function ChronicleLibraryPanel({ world, cultivator }: { world: WorldState
       </header>
       {chapters.length > 0 && (
         <label className="grid gap-1 text-xs text-slate-300">
-          章目
+          近期章目
           <select
             className="min-w-0 max-w-full rounded border border-slate-700 bg-slate-950 px-2 py-1.5 text-slate-100"
             value={chapter?.id ?? ''}
@@ -137,6 +140,7 @@ export function ChronicleLibraryPanel({ world, cultivator }: { world: WorldState
         </div>
       ))}
       <ChronicleErrataPanel world={world} chapter={chapter} cultivator={cultivator} />
+      <ColdChronicleShelf world={world} readChapter={(older) => <ChapterArchive chapter={older} />} />
     </section>
   );
 }

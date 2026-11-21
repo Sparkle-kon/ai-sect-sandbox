@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { COLD_HISTORY_MIN_HOT_CHAPTERS, publicChronicleChapters } from '../src/engine/coldHistoryEngine';
 import { createInitialWorld } from '../src/data/initialWorld';
 import { archiveChronicleEvents, availableChronicleChapter, createChronicleArchive, resolveChronicleChapter } from '../src/engine/novelGenerator';
 import type { WorldEvent } from '../src/types/world';
@@ -84,11 +85,16 @@ describe('public literary chronicle archive', () => {
       const plan = availableChronicleChapter(world);
       if (plan) resolveChronicleChapter(world, plan);
     }
-    const { anchors, chapters } = world.chronicleArchive;
+    const { anchors, chapters: recent } = world.chronicleArchive;
+    const chapters = publicChronicleChapters(world);
     expect(anchors).toHaveLength(48);
-    expect(chapters).toHaveLength(24);
+    expect(recent).toHaveLength(COLD_HISTORY_MIN_HOT_CHAPTERS);
+    expect(world.coldHistory.chapters).toHaveLength(20);
+    expect(world.coldHistory.droppedChapters).toBe(0);
+    expect(chapters).toHaveLength(26);
     expect(chapters.every((chapter, i) => i === 0 || chapter.endTick < chapters[i - 1].startTick)).toBe(true);
     expect(chapters[0].endTick).toBe(312);
     expect(chapters[0].chapterNumber).toBe(26);
+    expect(chapters.at(-1)?.chapterNumber).toBe(1);
   });
 });

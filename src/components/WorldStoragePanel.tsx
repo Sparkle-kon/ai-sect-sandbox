@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { WorldgenProfileId, WorldState } from '../types/world';
 import {
-  decodeWorldSave, encodeWorldSave, WORLD_SAVE_MAX_BYTES, WORLD_SAVE_MAX_SLOTS, worldSaveStore,
+  decodeWorldSave, encodeWorldSave, worldSaveByteCount, WORLD_SAVE_MAX_BYTES, WORLD_SAVE_MAX_SLOTS, worldSaveStore,
 } from '../engine/storageEngine';
 import type { SaveSlotSummary } from '../engine/storageEngine';
 import { isWorldgenProfileId, WORLDGEN_PROFILES } from '../engine/worldgenProfiles';
@@ -71,6 +71,7 @@ export function WorldStoragePanel({ world, busy, onRestore, onNewWorld, store = 
   const [profileDraft, setProfileDraft] = useState<WorldgenProfileId>();
   const [confirmation, setConfirmation] = useState<Confirmation>();
   const [status, setStatus] = useState('');
+  const [sizeInspection, setSizeInspection] = useState<{ world: WorldState; bytes: number | null }>();
   const [working, setWorking] = useState(false);
   const inFlight = useRef(false);
   const oldDownload = useRef<string>();
@@ -164,6 +165,14 @@ export function WorldStoragePanel({ world, busy, onRestore, onNewWorld, store = 
     });
   };
 
+  useEffect(() => { setSizeInspection(undefined); }, [world]);
+
+  const inspectSize = () => {
+    if (blocked) return;
+    try { setSizeInspection({ world, bytes: worldSaveByteCount(world) }); }
+    catch { setSizeInspection({ world, bytes: null }); }
+  };
+
   const exportFile = () => {
     if (blocked) return;
     void work(async () => {
@@ -235,6 +244,7 @@ export function WorldStoragePanel({ world, busy, onRestore, onNewWorld, store = 
         <p className="text-xs leading-relaxed text-amber-200">存档与导出的 JSON 可能包含私密游戏对话。不会导出应用中的模型服务凭证或配置，但聊天原文会保留，请勿在对话中写入密钥；分享前请检查。</p>
         <div className="flex flex-wrap items-end gap-2">
           <button type="button" className={button} onClick={exportFile}>导出当前世界 JSON</button>
+          <button type="button" className={`${button} min-h-11`} onClick={inspectSize}>测量当前存档大小</button>
           <label className="grid min-w-0 gap-1 text-xs text-slate-300">
             选择导入文件（最大 {fileLimitMb} MiB）
             <input type="file" accept=".json,application/json" className={`${field} max-w-full`} onChange={(event) => {
@@ -248,6 +258,11 @@ export function WorldStoragePanel({ world, busy, onRestore, onNewWorld, store = 
             }} />
           </label>
         </div>
+        <p className="text-xs text-slate-400">测量的是导出 JSON 的 UTF-8 字节数，不下载文件，也不是浏览器内存占用。</p>
+        {sizeInspection?.world === world && <p className="text-xs text-sky-100" role="status">
+          {sizeInspection.bytes === null ? '当前存档大小暂不可测。' :
+            `Tick #${world.tick} · ${sizeInspection.bytes.toLocaleString('zh-CN')} 字节${sizeInspection.bytes > WORLD_SAVE_MAX_BYTES ? '，超过单个 JSON 文件上限' : ''}。`}
+        </p>}
       </fieldset>
       <fieldset disabled={blocked} className="min-w-0 space-y-2 rounded border border-slate-800 p-2">
         <legend className="px-1 text-xs font-semibold text-slate-200">建立新世界</legend>

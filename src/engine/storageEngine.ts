@@ -1,3 +1,4 @@
+import { COLD_HISTORY_MIN_AGE_TICKS, createColdHistoryState, freezeColdHistory } from './coldHistoryEngine';
 import { COURIER_OFFER_TICKS, COURIER_ROUTE_TICKS, COURIER_SERVICE_FEE, createSealedCourierState } from './sealedCourierEngine';
 import { createWatchlistState, WATCHLIST_BUCKET_MAX_COUNT, WATCHLIST_MAX_DIGESTS,
   WATCHLIST_MAX_LABEL_CHARS, WATCHLIST_MAX_WATCHES } from './watchlistEngine';
@@ -113,6 +114,8 @@ const dialogue = structure({kind:one('combat','trade','dual_cultivation','sect_d
   turns:arr(24,structure({speakerId:id,speakerName:id,text}))});
 const publicFact = {id,tick,year:tick,month,title:text,description:text,category:eventCategory,actorIds:ids,locationId:oid,dialogue:optional(dialogue)};
 const anchor = structure(publicFact);
+const chronicleChapter = structure({id,chapterNumber:tick,startTick:tick,endTick:tick,title:text,
+  anchors:arr(18,anchor),biographies:arr(8,structure({actorId:id,name:id,realm,sectName:otext,anchorIds:ids})),body:strings(25_000),source});
 const scenarioObjective: Validator = (value, path) => {
   const kind = (value as {kind?:unknown} | null)?.kind;
   if (kind === 'cultivator_survives') return structure({kind:one(kind),actorId:id})(value,path);
@@ -214,8 +217,8 @@ const shape = structure({
     rounds:arr(2,structure({round:one(1,2),turns:arr(5,structure({voterId:id,text,source}))})),
     ballots:arr(5,structure({voterId:id,vote,reason:text,source})),tally:structure({support:count,oppose:count,abstain:count,required:count}),
     status:one('passed','rejected','stale'),outcome:text})),
-  chronicleArchive:structure({anchors:arr(384,anchor),chapters:arr(24,structure({id,chapterNumber:tick,startTick:tick,endTick:tick,title:text,
-    anchors:arr(18,anchor),biographies:arr(8,structure({actorId:id,name:id,realm,sectName:otext,anchorIds:ids})),body:strings(25_000),source}))}),
+  chronicleArchive:structure({anchors:arr(384,anchor),chapters:arr(SAVE_COLLECTION_LIMIT,chronicleChapter)}),
+  coldHistory:structure({chapters:arr(SAVE_COLLECTION_LIMIT,chronicleChapter),droppedChapters:tick}),
   decisionTrace:structure({records:arr(100,structure({id,actorId:id,tick,source:one('model','utility','avatar'),applied:bool,
     chosenAction:one('REST','CULTIVATE','BREAKTHROUGH','SOCIALIZE','EXPLORE','FACE_TRIBULATION','redacted'),chosenCandidateId:oid,
     candidates:arr(48,structure({id,action:one('REST','CULTIVATE','BREAKTHROUGH','SOCIALIZE','EXPLORE','FACE_TRIBULATION'),
@@ -438,6 +441,7 @@ function verifyWorld(value: unknown): WorldState {
     ? { ...value,
       ...(!Object.hasOwn(value, 'mentorship') ? { mentorship: { offers: [], lineage: [], budgets: [] } } : {}),
       ...(!Object.hasOwn(value, 'decisionTrace') ? { decisionTrace: { records: [] } } : {}),
+      ...(!Object.hasOwn(value, 'coldHistory') ? { coldHistory: createColdHistoryState() } : {}),
       ...(!Object.hasOwn(value, 'couriers') ? { couriers: createSealedCourierState() } : {}),
       ...(!Object.hasOwn(value, 'watchlists') ? { watchlists: createWatchlistState() } : {}),
       ...(!Object.hasOwn(value, 'villageWorks') ? { villageWorks: createVillageWorksState() } : {}),
@@ -1625,6 +1629,20 @@ function verifyWorld(value: unknown): WorldState {
     }
   }
   for (const council of w.councils) if (!sector.has(council.sectId) || council.voterIds.some((id) => !actor.has(id))) fail('councils.references');
+  const chapters = [...w.chronicleArchive.chapters, ...w.coldHistory.chapters];
+  unique(chapters, ({ id }) => id, 'coldHistory.chapters.id');
+  unique(chapters, ({ chapterNumber }) => String(chapterNumber), 'coldHistory.chapters.number');
+  const latestHot = w.chronicleArchive.chapters.reduce((latest, { chapterNumber }) => Math.max(latest, chapterNumber), 0);
+  if (w.coldHistory.chapters.some((row) => row.endTick > w.tick - COLD_HISTORY_MIN_AGE_TICKS || row.chapterNumber >= latestHot)) {
+    fail('coldHistory.chapters.age');
+  }
+  for (const chapter of chapters) {
+    const anchors = unique(chapter.anchors, ({ id }) => id, 'coldHistory.chapters.anchor');
+    if (chapter.chapterNumber < 1 || chapter.startTick < 1 || chapter.startTick > chapter.endTick || chapter.endTick > w.tick ||
+        chapter.anchors.some(({ tick: at }) => at < chapter.startTick || at > chapter.endTick) ||
+        chapter.biographies.some((entry) => entry.anchorIds.some((id) => !anchors.has(id)))) fail('coldHistory.chapters.references');
+  }
+  w.coldHistory = freezeColdHistory(w.coldHistory);
   return w;
 }
 
@@ -1634,10 +1652,18 @@ function checkSize(text: string): void {
   }
 }
 
-export function encodeWorldSave(world: WorldState): string {
-  let raw: string;
-  try { raw = JSON.stringify({ format: FORMAT, version: VERSION, world }); }
+function serializeWorldSave(world: WorldState): string {
+  try { return JSON.stringify({ format: FORMAT, version: VERSION, world }); }
   catch { throw new WorldSaveError('json', '当前世界不能序列化为 JSON。'); }
+}
+
+/** Exact UTF-8 export envelope size, separate from in-memory objects and independent of the file acceptance limit. */
+export function worldSaveByteCount(world: WorldState): number {
+  return new TextEncoder().encode(serializeWorldSave(world)).byteLength;
+}
+
+export function encodeWorldSave(world: WorldState): string {
+  const raw = serializeWorldSave(world);
   checkSize(raw);
   decodeWorldSave(raw);
   return raw;

@@ -1,3 +1,4 @@
+import { publicChronicleChapters } from '../engine/coldHistoryEngine';
 import { useEffect, useRef, useState } from 'react';
 import {
   ANNOTATION_MAX_NOTE_CHARS, availableAnnotationTargets, bookmarkableEvent, bookmarkLocation, visibleBookmarks, visibleMapAnnotations,
@@ -24,7 +25,7 @@ export function availableBookmarkEvents(world: WorldState) {
   const ids = new Set([
     ...world.events.map(({ id }) => id),
     ...world.chronicleArchive.anchors.map(({ id }) => id),
-    ...world.chronicleArchive.chapters.flatMap(({ anchors }) => anchors.map(({ id }) => id)),
+    ...publicChronicleChapters(world).flatMap(({ anchors }) => anchors.map(({ id }) => id)),
   ]);
   return [...ids].flatMap((id) => {
     const event = bookmarkableEvent(world, id);

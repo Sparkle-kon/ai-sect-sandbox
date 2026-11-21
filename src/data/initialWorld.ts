@@ -1,3 +1,4 @@
+import { createColdHistoryState } from '../engine/coldHistoryEngine';
 import { createSealedCourierState } from '../engine/sealedCourierEngine';
 import { createWatchlistState } from '../engine/watchlistEngine';
 import { createVillageWorksState } from '../engine/villageWorksEngine';
@@ -270,6 +271,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     villageWorks: createVillageWorksState(),
     watchlists: createWatchlistState(),
     couriers: createSealedCourierState(),
+    coldHistory: createColdHistoryState(),
     witnesses: createWitnessState(),
     estates: createEstateState(),
     decisionTrace: createDecisionTraceState(),

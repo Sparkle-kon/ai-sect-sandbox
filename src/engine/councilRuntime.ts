@@ -1,3 +1,4 @@
+import { cloneWorldWithColdHistory } from './coldHistoryEngine';
 import type { CouncilPlan, LLMConfig, WorldState } from '../types/world';
 import { annualCouncilPlans, resolveCouncil } from './councilEngine';
 import { collectCouncilBallots } from './councilModel';
@@ -9,7 +10,7 @@ export function selectAnnualCouncil(world: WorldState): CouncilPlan | undefined 
 
 export async function settleCouncilSnapshot(world: WorldState, plan: CouncilPlan, config: LLMConfig): Promise<WorldState> {
   const replacements = await collectCouncilBallots(world, plan, config);
-  const next = structuredClone(world);
+  const next = cloneWorldWithColdHistory(world);
   return resolveCouncil(next, plan, replacements) ? next : world;
 }
 

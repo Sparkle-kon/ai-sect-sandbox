@@ -1,3 +1,4 @@
+import { cloneWorldWithColdHistory } from './coldHistoryEngine';
 import { courierCheckpoint } from './sealedCourierEngine';
 import { activePilgrimageForActor, pilgrimageCheckpoint } from './pilgrimageEngine';
 import { sameGeneratedWorld } from './worldIdentity';
@@ -104,7 +105,7 @@ const runtimeTapes = new WeakMap<DecisionReplayTape, { base: WorldState; decisio
 
 export function createDecisionReplayTape(base: WorldState, councilMode: ReplayCouncilMode): DecisionReplayTape {
   const token = Object.freeze({ baseTick: base.tick, councilMode });
-  runtimeTapes.set(token, { base: structuredClone(base), decisions: new Map(), draws: new Map() });
+  runtimeTapes.set(token, { base: cloneWorldWithColdHistory(base), decisions: new Map(), draws: new Map() });
   return token;
 }
 

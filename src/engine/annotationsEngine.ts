@@ -1,3 +1,4 @@
+import { publicChronicleChapters } from './coldHistoryEngine';
 import type { AnnotationBookmark, AnnotationState, LocationNode, MapAnnotation, MapPoint, MapTile, WorldState } from '../types/world';
 import { currentVisibleTileIds, knownMapLocations, terrainTileAt } from './terrainEngine';
 
@@ -43,7 +44,7 @@ export function bookmarkableEvent(world: WorldState, eventId: string): Annotatio
   if (!eventId || privateOrFutureDuplicate(world, eventId)) return undefined;
   const canonical = world.events.find(({ id, tick }) => id === eventId && tick <= world.tick) ??
     world.chronicleArchive.anchors.find(({ id, tick }) => id === eventId && tick <= world.tick) ??
-    world.chronicleArchive.chapters.filter((row) => row.endTick <= world.tick)
+    publicChronicleChapters(world).filter((row) => row.endTick <= world.tick)
       .flatMap((row) => row.anchors.filter(({ tick }) => tick >= row.startTick && tick <= row.endTick))
       .find(({ id, tick }) => id === eventId && tick <= world.tick);
   if (!canonical) return undefined;

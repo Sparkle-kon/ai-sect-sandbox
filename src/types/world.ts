@@ -1754,7 +1754,13 @@ export interface SealedDispatch {
 }
 export interface SealedCourierState { dispatches: SealedDispatch[]; nextId: number }
 
+export interface ColdHistoryState {
+  readonly chapters: readonly ChronicleChapter[];
+  readonly droppedChapters: number;
+}
+
 export interface WorldState {
+  coldHistory: ColdHistoryState;
   couriers: SealedCourierState;
   watchlists: WatchlistState;
   villageWorks: VillageWorksState;

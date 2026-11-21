@@ -1,3 +1,4 @@
+import { cloneWorldWithColdHistory } from './coldHistoryEngine';
 import { sameGeneratedWorld } from './worldIdentity';
 import type { WorldState } from '../types/world';
 import { executeGodIntervention } from './worldEngine';
@@ -35,7 +36,7 @@ function freezeTree<T extends object>(value: T): T {
   }
   return value;
 }
-const saveSnapshot = (world: WorldState): TimelineSnapshot => Object.freeze({ tick: world.tick, world: freezeTree(structuredClone(world)) });
+const saveSnapshot = (world: WorldState): TimelineSnapshot => Object.freeze({ tick: world.tick, world: freezeTree(cloneWorldWithColdHistory(world)) });
 const branchOf = (timeline: WorldTimeline, branchId = timeline.activeBranchId) => timeline.branches.find(({ id }) => id === branchId);
 const immutableBranch = (branch: Omit<TimelineBranch, 'snapshots'>, snapshots: readonly TimelineSnapshot[]): TimelineBranch =>
   Object.freeze({ ...branch, snapshots: Object.freeze([...snapshots]) });
@@ -63,12 +64,12 @@ export function selectTimelineBranch(timeline: WorldTimeline, branchId: string):
 
 export function readTimelineSnapshot(timeline: WorldTimeline, tick: number, branchId = timeline.activeBranchId): WorldState | undefined {
   const snapshot = branchOf(timeline, branchId)?.snapshots.find((entry) => entry.tick === tick);
-  return snapshot ? structuredClone(snapshot.world) : undefined;
+  return snapshot ? cloneWorldWithColdHistory(snapshot.world) : undefined;
 }
 
 export function readTimelineHead(timeline: WorldTimeline, branchId = timeline.activeBranchId): WorldState | undefined {
   const head = branchOf(timeline, branchId)?.snapshots.at(-1);
-  return head ? structuredClone(head.world) : undefined;
+  return head ? cloneWorldWithColdHistory(head.world) : undefined;
 }
 
 const cut = (value: string, limit: number) => value.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, limit);

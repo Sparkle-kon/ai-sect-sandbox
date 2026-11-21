@@ -1,3 +1,4 @@
+import { cloneWorldWithColdHistory } from './coldHistoryEngine';
 import { courierCheckpoint, reconcileCourierDeaths } from './sealedCourierEngine';
 import { advanceHouseholds } from './householdEngine';
 import { advancePilgrimages, pilgrimageCheckpoint } from './pilgrimageEngine';
@@ -87,7 +88,7 @@ export function applyMapBrush(prev: WorldState, kind: GodBrushKind, points: MapP
     if (selected.size >= BRUSH_CELL_LIMIT) break;
   }
   if (!selected.size) return prev;
-  const world = structuredClone(prev);
+  const world = cloneWorldWithColdHistory(prev);
   const sequence = ++world.interventionSequence;
   const brushEvents: WorldEvent[] = [];
   for (const tile of world.terrain.tiles) {
