@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import type { WorldgenProfileId, WorldState } from '../types/world';
 import {
-  decodeWorldSave, encodeWorldSave, WORLD_SAVE_MAX_BYTES, WORLD_SAVE_MAX_SLOTS, worldSaveStore,
+  decodeWorldSave, encodeWorldSave, decodeEraWorldSave, encodeEraWorldSave, WORLD_SAVE_MAX_BYTES, WORLD_SAVE_MAX_SLOTS, worldSaveStore,
 } from '../engine/storageEngine';
 import type {
   SaveBranchSource, SavePointInfo, SaveResumeAddress, SaveResumePairReview, SaveSlotInspection, SaveSlotSummary,
 } from '../engine/storageEngine';
 import { SaveResumeComparison } from './SaveResumeComparison';
+import { EraCheckpointControls, EraCheckpointSummary, type EraCheckpointFileChoice } from './EraCheckpointControls';
+import { prepareEraCheckpoint, verifyEraCheckpoint, type PreparedEraCheckpoint, type VerifiedEraCheckpoint } from '../engine/eraCheckpointEngine';
+
 import { measureSaveCapacity, prepareArchiveOptimization, type NarrativeArchivePlan, type SaveCapacityReport } from '../engine/saveCapacityEngine';
 import {
   buildConfirmedShareSave, inspectShareSavePrivacy, prepareShareSavePrivacy,
@@ -14,6 +17,11 @@ import {
 } from '../engine/shareSavePrivacy';
 import type { WorldTimeline } from '../engine/timelineEngine';
 import { isWorldgenProfileId, WORLDGEN_PROFILES } from '../engine/worldgenProfiles';
+
+declare const __SECT_UTILITY_RULE_VERSION__: string;
+const eraEngineVersion = typeof __SECT_UTILITY_RULE_VERSION__==='string' ? __SECT_UTILITY_RULE_VERSION__ : undefined;
+const eraCodec = {encode:encodeEraWorldSave,decode:decodeEraWorldSave};
+
 
 type Storage = Pick<typeof worldSaveStore, 'list' | 'inspect' | 'loadSelected' | 'save' | 'delete' | 'capabilities'> &
   Partial<Pick<typeof worldSaveStore, 'reviewResumePair' | 'loadReviewedResume'>>;
@@ -26,6 +34,7 @@ type Confirmation =
   | { kind: 'restore'; info: SavePointInfo }
   | { kind: 'restore_compare'; review: SaveResumePairReview; side: ResumeSide }
   | { kind: 'import'; world: WorldState }
+  | { kind: 'import_era'; checkpoint: VerifiedEraCheckpoint; timeline?: WorldTimeline }
   | { kind: 'new'; seed: number; profileId: WorldgenProfileId; expected: WorldState };
 type Staged = { action: Confirmation; stamp: ContextStamp; store: Storage };
 type SnapshotReview<T> = { result: T; stamp: ContextStamp; timeline?: WorldTimeline };
@@ -34,6 +43,8 @@ export interface WorldStoragePanelProps {
   world: WorldState;
   busy: boolean;
   readOnly?: boolean;
+  eraBlocked?: boolean;
+  canUseEraContext?: (world: WorldState, version: number) => boolean;
   sourceBranch?: SaveBranchSource;
   contextVersion?: number;
   canUseContext?: (world: WorldState, version: number) => boolean;
@@ -99,12 +110,13 @@ export function describeConfirmation(action: Confirmation): string {
       const slot = defaultSlots.find(({ id }) => id === selection.slotId)?.label ?? selection.slotId;
       return `续起 ${slot} 的${pointLabel(selection.point)}「${summary.label}」 · ${branchName(selection.sourceBranch)} · Tick #${summary.tick}？会重新核验两处。未保存的当前进度将被替换，两处原候选不改动。`;
     }
+    case 'import_era': return `载入已核验的仙历 ${action.checkpoint.manifest.year} 年 ${action.checkpoint.manifest.month} 月检查点？当前未保存进度会被替换，不会覆盖任何槽，也不会合并人物或物品。`;
     case 'import': return `载入已校验文件中的种子 ${action.world.random.seed}、${profileName(action.world.worldgen?.profileId)}、Tick #${action.world.tick}？未保存的当前进度将被替换。`;
     case 'new': return `建立种子 ${action.seed} 的${profileName(action.profileId)}世界？未保存的当前进度将被替换。`;
   }
 }
 
-export function WorldStoragePanel({ world, busy, readOnly = false, sourceBranch, contextVersion = 0, canUseContext, timeline,
+export function WorldStoragePanel({ world, busy, readOnly = false, eraBlocked = false, canUseEraContext, sourceBranch, contextVersion = 0, canUseContext, timeline,
   onArchiveNarrative, onRestore, onNewWorld, store = worldSaveStore }: WorldStoragePanelProps) {
   const [slots, setSlots] = useState<SaveSlotSummary[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -125,6 +137,11 @@ export function WorldStoragePanel({ world, busy, readOnly = false, sourceBranch,
   const [shareReview, setShareReview] = useState<SnapshotReview<ShareSavePrivacyReview>>();
   const [archiveReview, setArchiveReview] = useState<SnapshotReview<NarrativeArchivePlan>>();
   const [working, setWorking] = useState(false);
+  const [eraPrepared, setEraPrepared] = useState<SnapshotReview<PreparedEraCheckpoint> & {store:Storage}>();
+  const [eraSelected, setEraSelected] = useState<EraCheckpointFileChoice>();
+  const [eraPending, setEraPending] = useState(false);
+  const eraOperation = useRef<AbortController>();
+
   const inFlight = useRef(false);
   const mounted = useRef(true);
   const oldDownload = useRef<string>();
@@ -137,8 +154,8 @@ export function WorldStoragePanel({ world, busy, readOnly = false, sourceBranch,
   const profile = WORLDGEN_PROFILES[profileId];
   const longestBirthPath = generation?.resources.reduce((limit, item) => Math.max(limit, item.pathSteps), 0) ?? 0;
   const context = { world, version: contextVersion, branchId: sourceBranch?.branchId, timelineId: sourceBranch?.timelineId };
-  const observed = useRef({ ...context, store, slotId, busy, readOnly, timeline });
-  observed.current = { ...context, store, slotId, busy, readOnly, timeline };
+  const observed = useRef({ ...context, store, slotId, busy, readOnly, timeline, eraBlocked });
+  observed.current = { ...context, store, slotId, busy, readOnly, timeline, eraBlocked };
   const confirmation = staged && staged.store === store && sameStorageContext(staged.stamp, context) ? staged : undefined;
   const paired = resumeReview && resumeReview.store === store && resumeReview.revision === resumeRevision.current &&
     sameStorageContext(resumeReview.stamp, context) ? resumeReview.result : undefined;
@@ -148,6 +165,10 @@ export function WorldStoragePanel({ world, busy, readOnly = false, sourceBranch,
   const currentPreflight = sameStorageReview(preflight, context, timeline) ? preflight : undefined;
   const currentShareReview = sameStorageReview(shareReview, context, timeline) ? shareReview : undefined;
   const currentArchive = sameStorageReview(archiveReview, context, timeline) ? archiveReview : undefined;
+  const currentEraPrepared = eraPrepared?.store===store && sameStorageReview(eraPrepared,context,timeline) ? eraPrepared : undefined;
+  const currentEraImport = confirmation?.action.kind==='import_era' && confirmation.action.timeline===timeline &&
+    !eraBlocked ? confirmation.action.checkpoint : undefined;
+
   const writeAllowed = loaded && capabilities?.writable === true && !readOnly;
   const stillHere = (stamp: ContextStamp) => mounted.current && observed.current.store === store && sameStorageContext(stamp, observed.current);
   const authority = (stamp: ContextStamp) => stillHere(stamp) && !observed.current.busy && !observed.current.readOnly &&
@@ -179,6 +200,7 @@ export function WorldStoragePanel({ world, busy, readOnly = false, sourceBranch,
     mounted.current = true;
     return () => {
       mounted.current = false;
+      eraOperation.current?.abort();
       if (oldDownload.current) URL.revokeObjectURL(oldDownload.current);
     };
   }, []);
@@ -291,6 +313,12 @@ export function WorldStoragePanel({ world, busy, readOnly = false, sourceBranch,
         incoming = await store.loadSelected(action.info.selection);
         verifiedSource = action.info.selection.sourceBranch;
       } else if (action.kind === 'import') incoming = action.world;
+      else if (action.kind === 'import_era') {
+        if (observed.current.eraBlocked || observed.current.timeline !== action.timeline || !(canUseEraContext?.(stamp.world,stamp.version)??true)) {
+          setStatus('检查点核验已与当前上下文不符；原世界未改变。');return;
+        }
+        incoming = action.checkpoint.world;
+      }
       else if (action.kind === 'restore_compare') {
         setResumeReview(undefined);
         const candidate = action.review[action.side];
@@ -329,6 +357,7 @@ export function WorldStoragePanel({ world, busy, readOnly = false, sourceBranch,
       }
       setStatus(action.kind === 'new' ? `已创建种子 ${action.seed}、${profileName(action.profileId)}谱系的世界。`
         : action.kind === 'restore' ? `已载入${pointLabel(action.info.selection.point)}。存档槽未更改。`
+        : action.kind==='import_era' ? '整套年代检查点已载入为独立世界；原存档槽未更改。'
         : '已从 JSON 文件载入世界。');
     });
   };
@@ -338,6 +367,68 @@ export function WorldStoragePanel({ world, busy, readOnly = false, sourceBranch,
     if (shareReview && !currentShareReview) setShareReview(undefined);
     if (archiveReview && !currentArchive) setArchiveReview(undefined);
   }, [preflight, currentPreflight, shareReview, currentShareReview, archiveReview, currentArchive]);
+
+  useEffect(() => {
+    if (eraPrepared && !currentEraPrepared) { setEraPrepared(undefined); setEraSelected(undefined); }
+  }, [eraPrepared,currentEraPrepared]);
+  useEffect(() => () => { eraOperation.current?.abort(); },
+    [world,contextVersion,sourceBranch?.branchId,sourceBranch?.timelineId,timeline,store,eraBlocked]);
+
+  const runEraOperation = (task: (controller:AbortController,stamp:ContextStamp)=>Promise<void>) => {
+    if (blocked || eraBlocked || inFlight.current || !authority(context) || !(canUseEraContext?.(context.world,context.version)??true)) return;
+    const stamp=context,controller=new AbortController();
+    const stillEra = () => authority(stamp) && observed.current.timeline===timeline && !observed.current.eraBlocked &&
+      (canUseEraContext?.(stamp.world,stamp.version)??true);
+    eraOperation.current=controller;
+    setEraPending(true);
+    void work(async () => {
+      try { await task(controller,stamp); }
+      catch (error) {
+        if (controller.signal.aborted) {
+          if (stillEra()) setStatus('已取消年代检查点操作。当前世界和存档未改变。');
+          return;
+        }
+        if (stillEra()) throw error;
+      } finally {
+        if (eraOperation.current===controller) {
+          eraOperation.current=undefined;
+          if (mounted.current) setEraPending(false);
+        }
+      }
+    });
+  };
+  const prepareEra = () => {
+    if (!eraEngineVersion || !sourceBranch) return;
+    const engineRuleVersion=eraEngineVersion,startSource={...sourceBranch};
+    runEraOperation(async ({signal},stamp) => {
+      const result=await prepareEraCheckpoint(stamp.world,startSource,eraCodec,{engineRuleVersion,signal});
+      if (signal.aborted || !authority(stamp) || observed.current.timeline!==timeline || observed.current.eraBlocked ||
+        !(canUseEraContext?.(stamp.world,stamp.version)??true)) return;
+      setEraPrepared({stamp,timeline,store,result});setEraSelected('manifest');
+      setStatus('年代清单和分块已核验。请逐个下载。');
+    });
+  };
+  const selectEraFiles = (files:File[]) => {
+    runEraOperation(async ({signal},stamp) => {
+      const manifests=files.filter(({name})=>name.toLowerCase().endsWith('.era'));
+      const parts=files.filter(({name})=>/\.(?:era-part|json)$/i.test(name));
+      if (manifests.length!==1 || manifests.length+parts.length!==files.length)
+        throw new Error('请选择一份 .era 清单及它对应的全部分块，不混入其他文件。');
+      const checkpoint=await verifyEraCheckpoint(manifests[0],parts,eraCodec,{signal});
+      if (signal.aborted || !authority(stamp) || observed.current.timeline!==timeline || observed.current.eraBlocked ||
+        !(canUseEraContext?.(stamp.world,stamp.version)??true)) return;
+      setStaged({action:{kind:'import_era',checkpoint,timeline},stamp,store});
+      setStatus('整套检查点已核验，尚未载入。');
+    });
+  };
+  const downloadEra = (choice:EraCheckpointFileChoice) => {
+    if (blocked || eraBlocked || !currentEraPrepared || !authority(context) || !(canUseEraContext?.(context.world,context.version)??true)) return;
+    const bundle=currentEraPrepared.result;
+    const output=choice==='manifest'?bundle.manifestFile:bundle.parts[choice];
+    if(!output)return;
+    const type=output.name.endsWith('.era-part')?'application/octet-stream':'application/json';
+    downloadBlob(new Blob([output.bytes.slice().buffer],{type}),output.name);
+  };
 
   const inspectCapacity = () => {
     if (blocked || inFlight.current || !stillHere(context)) return;
@@ -351,6 +442,9 @@ export function WorldStoragePanel({ world, busy, readOnly = false, sourceBranch,
   const downloadJson = (payload: string, filename: string, reviewedBytes?: number) => {
     const blob = new Blob([payload], { type: 'application/json' });
     if (reviewedBytes !== undefined && blob.size !== reviewedBytes) throw new Error('JSON 大小已变化，未下载。请重新预检。');
+    downloadBlob(blob,filename);
+  };
+  const downloadBlob = (blob:Blob,filename:string) => {
     if (oldDownload.current) URL.revokeObjectURL(oldDownload.current);
     const url = URL.createObjectURL(blob);
     oldDownload.current = url;
@@ -545,6 +639,11 @@ export function WorldStoragePanel({ world, busy, readOnly = false, sourceBranch,
             onCancel={() => setArchiveReview(undefined)} />}
         </div>}
       </fieldset>
+      <EraCheckpointControls disabled={blocked||eraBlocked} readOnly={readOnly}
+        canPrepare={Boolean(eraEngineVersion&&sourceBranch&&!readOnly)} prepared={currentEraPrepared?.result.manifest}
+        working={eraPending} onCancelWork={()=>eraOperation.current?.abort()}
+        selectedFile={eraSelected} onPrepare={prepareEra} onSelectFile={setEraSelected}
+        onDownload={downloadEra} onFiles={selectEraFiles} />
       <fieldset disabled={blocked || readOnly} className="min-w-0 space-y-2 rounded border border-slate-800 p-2">
         <legend className="px-1 text-xs font-semibold text-slate-200">建立新世界</legend>
         <form className="grid min-w-0 gap-2" onSubmit={(event) => {
@@ -572,9 +671,12 @@ export function WorldStoragePanel({ world, busy, readOnly = false, sourceBranch,
       </fieldset>
       {confirmation && (
         <section aria-label="确认存档操作" className="space-y-2 rounded border border-amber-500/60 bg-amber-950/50 p-2 text-xs text-amber-100">
+          {currentEraImport && <EraCheckpointSummary manifest={currentEraImport.manifest} mode="restore" />}
+          {currentEraImport && eraEngineVersion && currentEraImport.manifest.engineRuleVersion!==eraEngineVersion &&
+            <p>文件的打包规则版本和本机不同。已通过当前存档校验，不代表历史推演可按当前规则复现。</p>}
           <p>{describeConfirmation(confirmation.action)}</p>
           <div className="flex flex-wrap gap-1.5">
-            <button type="button" className={confirmButton} disabled={busy || readOnly || working} onClick={confirm}>确认执行</button>
+            <button type="button" className={confirmButton} disabled={busy || readOnly || working || confirmation.action.kind==='import_era' && !currentEraImport} onClick={confirm}>确认执行</button>
             <button type="button" className={button} disabled={working} onClick={() => setStaged(undefined)}>取消</button>
           </div>
         </section>

@@ -104,6 +104,7 @@ import { OATH_TERMS } from './oathEngine';
 import type { WorldgenProfileId, WorldState } from '../types/world';
 
 export const WORLD_SAVE_MAX_BYTES = 8 * 1024 * 1024;
+export const ERA_WORLD_SAVE_MAX_BYTES = 32 * 1024 * 1024;
 export const WORLD_SAVE_MAX_SLOTS = 12;
 const FORMAT = 'ai-sect-sandbox';
 const VERSION = 1;
@@ -2872,9 +2873,9 @@ function verifyWorld(value: unknown): WorldState {
   return w;
 }
 
-function checkSize(text: string): void {
-  if (text.length > WORLD_SAVE_MAX_BYTES || new TextEncoder().encode(text).byteLength > WORLD_SAVE_MAX_BYTES) {
-    throw new WorldSaveError('size', '存档超过 8 MiB。');
+function checkSize(text: string, ceiling = WORLD_SAVE_MAX_BYTES, notice = '存档超过 8 MiB。'): void {
+  if (text.length > ceiling || new TextEncoder().encode(text).byteLength > ceiling) {
+    throw new WorldSaveError('size', notice);
   }
 }
 
@@ -2896,8 +2897,23 @@ export function encodeWorldSave(world: WorldState): string {
 }
 
 export function decodeWorldSave(text: string): WorldState {
+  return decodeBoundedWorldEnvelope(text, WORLD_SAVE_MAX_BYTES, '存档超过 8 MiB。');
+}
+
+/** For verified era checkpoint chunks only; ordinary JSON export, file reads and slots still use 8 MiB. */
+export function decodeEraWorldSave(text: string): WorldState {
+  return decodeBoundedWorldEnvelope(text, ERA_WORLD_SAVE_MAX_BYTES, '年代分卷总内容超过 32 MiB。');
+}
+
+export function encodeEraWorldSave(world: WorldState): string {
+  const raw = serializeWorldSave(world);
+  decodeEraWorldSave(raw);
+  return raw;
+}
+
+function decodeBoundedWorldEnvelope(text: string, ceiling: number, notice: string): WorldState {
   if (typeof text !== 'string') throw new WorldSaveError('json', '存档必须是 JSON 文本。');
-  checkSize(text);
+  checkSize(text, ceiling, notice);
   let payload: unknown;
   try { payload = JSON.parse(text); } catch { throw new WorldSaveError('json', '存档不是有效的 JSON。'); }
   const envelope = payload as { format?:unknown; version?:unknown; world?:unknown } | null;

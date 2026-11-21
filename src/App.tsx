@@ -1072,7 +1072,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
                   <RotateCcw aria-hidden="true" className="h-4 w-4" />重置修仙纪元</button>
               </div>
               <React.Suspense fallback={<p role="status">载入存档管理…</p>}>
-                <WorldStoragePanel world={world} busy={isStepping} contextVersion={saveContextVersion.current}
+                <WorldStoragePanel world={world} busy={isStepping} eraBlocked={fastForwardLocked || isRunning} canUseEraContext={(candidate,version)=>!fastForwardRun.current && canUseSaveContext(candidate,version)} contextVersion={saveContextVersion.current}
                   canUseContext={canUseSaveContext} sourceBranch={sourceBranch} timeline={timeline}
                   onArchiveNarrative={archiveCurrentNarrative} onRestore={replaceWorld} onNewWorld={newWorldFromSeed} />
               </React.Suspense>
