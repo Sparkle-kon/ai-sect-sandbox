@@ -53,6 +53,7 @@ const WorldMapCanvas = React.lazy(async () => ({ default: (await import('./compo
 const AttestationPanel = React.lazy(async () => ({ default: (await import('./components/AttestationPanel')).AttestationPanel }));
 const OathContractsPanel = React.lazy(async () => ({ default: (await import('./components/OathContractsPanel')).OathContractsPanel }));
 const MentorshipPanel = React.lazy(async () => ({ default: (await import('./components/MentorshipPanel')).MentorshipPanel }));
+const ApprenticeCohortPanel = React.lazy(async () => ({ default: (await import('./components/ApprenticeCohortPanel')).ApprenticeCohortPanel }));
 const SparringPanel = React.lazy(async () => ({ default: (await import('./components/SparringPanel')).SparringPanel }));
 const WatchlistsPanel = React.lazy(async () => ({ default: (await import('./components/WatchlistsPanel')).WatchlistsPanel }));
 const TimelinePanel = React.lazy(async () => ({ default: (await import('./components/TimelinePanel')).TimelinePanel }));
@@ -98,6 +99,7 @@ const chronicleWorkspace = { site: 'map', actor: 'people', sect: 'sect' } as con
 const chronicleFeedFact = (entry: WorldEvent) => !entry.id.startsWith('evt-sealed-dispatch-') &&
   !(entry.witnessScope === 'participants' && (entry.id.startsWith('evt-sparring-') || entry.id.startsWith('evt-expedition-rescue-') ||
     entry.id.startsWith('evt-short-shift-') || entry.id.startsWith('evt-boundary-relief-') ||
+    entry.id.startsWith('evt-apprentice-cohort-') ||
     /^evt-pilgrimage-[1-9]\d*-(?:camp(?:-expiry|-interruption)?|dismantled|resumed)-\d+$/.test(entry.id)));
 type FastForwardPhase = 'idle' | 'running' | 'pausing' | 'paused' | 'staging' | 'ready' | 'error';
 type FastForwardViewState = { phase: FastForwardPhase; progress?: FastForwardProgress; notice?: string };
@@ -760,6 +762,9 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
             { id: 'mind', label: '心声、记忆与流言', content: inspect('mind') },
             { id: 'relationships', label: '关系与师承', content: <div className="space-y-2.5">
               <React.Suspense fallback={<p role="status">载入师承记录…</p>}><MentorshipPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense>
+              {activeActorId && visibleWorld.apprenticeCohorts.cohorts.some(({ mentorId, seats }) =>
+                mentorId === activeActorId || seats.some(({ studentId }) => studentId === activeActorId)) &&
+                <React.Suspense fallback={null}><ApprenticeCohortPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense>}
               {activeActorId && visibleWorld.sparring.agreements.some(({ proposerId, partnerId }) =>
                 proposerId === activeActorId || partnerId === activeActorId) &&
                 <React.Suspense fallback={<p role="status">载入切磋凭证…</p>}><SparringPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense>}

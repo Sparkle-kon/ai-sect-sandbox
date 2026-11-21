@@ -1,4 +1,5 @@
 import { cloneWorldWithColdHistory } from './coldHistoryEngine';
+import { COHORT_MAX_INVITEES } from './apprenticeCohortEngine';
 import { courierCheckpoint } from './sealedCourierEngine';
 import { activePilgrimageForActor, pilgrimageCheckpoint } from './pilgrimageEngine';
 import { sameGeneratedWorld } from './worldIdentity';
@@ -114,7 +115,7 @@ const MECHANICAL_FIELDS = [
   'marketQuantity', 'marketLimitPrice', 'targetMarketOrderId', 'targetSettlementId', 'targetVolunteerId', 'targetWitnessEventId',
   'targetWitnessClaimId', 'targetEstateId', 'targetTechniqueId', 'targetHerbId', 'targetPillId', 'targetArtifactId', 'forgeTier',
   'tribulationStance', 'facilityKind', 'targetSectId', 'targetOccasionId', 'targetBountyId', 'targetBeastId',
-  'targetScoreId', 'observatoryMove', 'targetObservatoryTick', 'arbitrationMove', 'targetTenderTick', 'roadMove', 'targetRoadId', 'probationMove', 'targetProbationId', 'targetExpulsionId', 'probationFirstVillageId', 'probationSecondVillageId', 'probationVote', 'exhibitMove', 'targetRelicExhibitId', 'workshopMove', 'furnaceMove', 'targetFurnaceReservationId', 'sparringMove', 'targetSparringId', 'sparringRounds', 'rescueMove', 'targetExpeditionRescueId', 'shortShiftMove', 'targetShortShiftId', 'boundaryReliefMove', 'targetBoundaryReliefId', 'targetWorkshopId', 'workshopTier', 'workshopQuantity', 'workshopQualityFloor', 'targetTerrainTileId', 'commonsMove', 'targetCommonsId', 'targetCommonsThirdSectId', 'serviceMove', 'courierMove', 'targetCourierId', 'dispatchCue', 'targetDispatchId', 'targetDispatchSourceId', 'villageWorkKind', 'guardianMove', 'targetGuardianshipId', 'leaseMove', 'targetTerritorialLeaseId', 'formationMove', 'targetFormationLinkId', 'infirmaryMove', 'targetInfirmaryCaseId', 'habitatMove', 'targetBeastReleaseId', 'chronicleErrataMove', 'targetChronicleSourceId', 'chronicleReliefReading', 'pilgrimageMove', 'targetPilgrimageId', 'targetPilgrimageNextStopId', 'creditMove', 'targetCreditId', 'sanctuaryMove', 'targetSanctuaryId', 'researchMove', 'researchTopic', 'targetResearchId', 'researchWithdrawReason', 'ceasefireMove', 'targetCeasefireId', 'escortMove', 'targetShipmentId', 'targetEscortId', 'targetHazardId', 'seasonMove', 'editionMove', 'targetScriptureOriginalId', 'targetScriptureEditionId', 'relicMove', 'targetRelicFragmentId', 'targetRelicSetId', 'recollectionMove', 'relocationMove', 'targetRelocationId', 'doctrineMove', 'doctrineTheme', 'targetDoctrineSchoolId', 'targetDoctrineProposalId',
+  'targetScoreId', 'observatoryMove', 'targetObservatoryTick', 'arbitrationMove', 'targetTenderTick', 'roadMove', 'targetRoadId', 'probationMove', 'targetProbationId', 'targetExpulsionId', 'probationFirstVillageId', 'probationSecondVillageId', 'probationVote', 'exhibitMove', 'targetRelicExhibitId', 'workshopMove', 'furnaceMove', 'targetFurnaceReservationId', 'sparringMove', 'targetSparringId', 'sparringRounds', 'rescueMove', 'targetExpeditionRescueId', 'shortShiftMove', 'targetShortShiftId', 'boundaryReliefMove', 'targetBoundaryReliefId', 'cohortMove', 'targetCohortId', 'targetWorkshopId', 'workshopTier', 'workshopQuantity', 'workshopQualityFloor', 'targetTerrainTileId', 'commonsMove', 'targetCommonsId', 'targetCommonsThirdSectId', 'serviceMove', 'courierMove', 'targetCourierId', 'dispatchCue', 'targetDispatchId', 'targetDispatchSourceId', 'villageWorkKind', 'guardianMove', 'targetGuardianshipId', 'leaseMove', 'targetTerritorialLeaseId', 'formationMove', 'targetFormationLinkId', 'infirmaryMove', 'targetInfirmaryCaseId', 'habitatMove', 'targetBeastReleaseId', 'chronicleErrataMove', 'targetChronicleSourceId', 'chronicleReliefReading', 'pilgrimageMove', 'targetPilgrimageId', 'targetPilgrimageNextStopId', 'creditMove', 'targetCreditId', 'sanctuaryMove', 'targetSanctuaryId', 'researchMove', 'researchTopic', 'targetResearchId', 'researchWithdrawReason', 'ceasefireMove', 'targetCeasefireId', 'escortMove', 'targetShipmentId', 'targetEscortId', 'targetHazardId', 'seasonMove', 'editionMove', 'targetScriptureOriginalId', 'targetScriptureEditionId', 'relicMove', 'targetRelicFragmentId', 'targetRelicSetId', 'recollectionMove', 'relocationMove', 'targetRelocationId', 'doctrineMove', 'doctrineTheme', 'targetDoctrineSchoolId', 'targetDoctrineProposalId',
 ] as const satisfies readonly (keyof LLMDecisionPayload)[];
 
 export function rememberReplayDecision(tape: DecisionReplayTape, actorId: string, decision: LLMDecisionPayload, rngDraws = 0): void {
@@ -124,7 +125,13 @@ export function rememberReplayDecision(tape: DecisionReplayTape, actorId: string
     const value = decision[key];
     return typeof value === 'string' || typeof value === 'number' ? [[key, value]] : [];
   }));
-  state.decisions.set(actorId, { ...details, chosenAction: decision.chosenAction, innerMonologue: '' });
+  const ids = decision.cohortInviteeIds;
+  // Only the mechanical offer attribute is retained, never a model's raw array or prose.
+  const cohortInviteeIds = decision.chosenAction === 'APPRENTICE_COHORT' && decision.cohortMove === 'offer' &&
+    Array.isArray(ids) && ids.length >= 2 && ids.length <= COHORT_MAX_INVITEES && Array.from(ids).every((id) => typeof id === 'string' && id.length > 0) &&
+    new Set(ids).size === ids.length ? ids.slice() : undefined;
+  state.decisions.set(actorId, { ...details, chosenAction: decision.chosenAction, innerMonologue: '',
+    ...(cohortInviteeIds ? { cohortInviteeIds } : {}) });
   state.draws.set(actorId, Number.isSafeInteger(rngDraws) && rngDraws > 0 ? Math.min(rngDraws, 512) : 0);
 }
 
@@ -172,7 +179,9 @@ export function replayOneTurn(tape: DecisionReplayTape, baseline: WorldState, tr
     return { ok: false, reason: '回放记录与该分支的原决定不一致。' };
   }
 
-  const copyDecisions = () => Object.fromEntries([...privateState.decisions].map(([id, decision]) => [id, { ...decision }]));
+  const copyDecisions = () => Object.fromEntries([...privateState.decisions].map(([id, decision]) => [id, { ...decision,
+    ...(decision.cohortInviteeIds ? { cohortInviteeIds: decision.cohortInviteeIds.slice() } : {}),
+  }]));
   const draws = Object.freeze(Object.fromEntries(privateState.draws));
   const decisions = copyDecisions();
   decisions[actor.id] = {

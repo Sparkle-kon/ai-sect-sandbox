@@ -116,6 +116,7 @@ export type ActionType =
   | 'EXPEDITION_RESCUE'
   | 'SHORT_SHIFT'
   | 'BOUNDARY_RELIEF'
+  | 'APPRENTICE_COHORT'
   | 'FORGE_ARTIFACT'
   | 'BIND_ARTIFACT'
   | 'REPAIR_ARTIFACT'
@@ -503,6 +504,9 @@ export interface LLMDecisionPayload {
   targetShortShiftId?: string;
   boundaryReliefMove?: BoundaryReliefMove;
   targetBoundaryReliefId?: string;
+  cohortMove?: ApprenticeCohortMove;
+  cohortInviteeIds?: string[];
+  targetCohortId?: string;
   targetWorkshopId?: string;
   workshopTier?: WorkshopTier;
   workshopQuantity?: 1 | 2;
@@ -2290,6 +2294,46 @@ export interface BoundaryRelief {
 }
 export interface BoundaryReliefState { cases: BoundaryRelief[]; nextId: number }
 
+export type ApprenticeCohortMove = 'offer' | 'accept' | 'leave' | 'teach' | 'attend' | 'cancel';
+export interface ApprenticeCohortSeat {
+  studentId: string;
+  status: 'invited' | 'accepted' | 'left' | 'missed' | 'attended';
+  acceptedTick?: number;
+  readyTick?: number;
+  leftTick?: number;
+  attendedTick?: number;
+  masteryGained?: number;
+}
+export interface ApprenticeCohort {
+  id: string;
+  mentorId: string;
+  sectId: string;
+  siteId: string;
+  techniqueId: string;
+  openedTick: number;
+  lessonTick: number;
+  status: 'offered' | 'held' | 'cancelled' | 'expired';
+  seats: ApprenticeCohortSeat[];
+  teachingTick?: number;
+  closedTick?: number;
+  instructionSpent?: 1;
+  reason?: 'mentor_cancelled' | 'mentor_unavailable' | 'no_confirmed_attendance' | 'missed_lesson' | 'no_budget';
+}
+export interface ApprenticeGraduation {
+  cohortId: string;
+  studentId: string;
+  mentorId: string;
+  techniqueId: string;
+  tick: number;
+  masteryBefore: number;
+  masteryAfter: number;
+}
+export interface ApprenticeCohortState {
+  cohorts: ApprenticeCohort[];
+  graduations: ApprenticeGraduation[];
+  nextId: number;
+}
+
 export type ProbationMove = 'request' | 'admit' | 'review' | 'withdraw' | 'restore';
 export type ProbationVote = 'support' | 'oppose';
 export type ProbationStatus = 'requested' | 'active' | 'ready' | 'reinstated' | 'withdrawn' | 'rejected' | 'expired';
@@ -2393,6 +2437,7 @@ export interface WorldState {
   expeditionRescues: ExpeditionRescueState;
   shortShifts: ShortShiftState;
   boundaryReliefs: BoundaryReliefState;
+  apprenticeCohorts: ApprenticeCohortState;
   resourceFlow: ResourceFlowState;
   roads: RoadState;
   sharedCommons: SharedCommonsState;

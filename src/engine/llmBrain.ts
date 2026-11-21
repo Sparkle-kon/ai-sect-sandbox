@@ -43,6 +43,7 @@ import { availableMarketActions, marketClosureReason } from './marketEngine';
 import { localQiWeather, weatherTravelFriction } from './weatherEngine';
 import { availableOathActions } from './oathEngine';
 import { availableMentorshipActions } from './mentorshipEngine';
+import { availableApprenticeCohortActions } from './apprenticeCohortEngine';
 import { actorFallbackRandom } from './worldRandom';
 import { llmScheduler } from './llmScheduler';
 import { memoryStrength, recallMemories } from './memoryEngine';
@@ -233,6 +234,21 @@ export function computeHeuristicDecision(
     ? availableShortShiftActions(cultivator, world) : [];
   const acceptedWork = shiftChoices.find(({ shortShiftMove }) => shortShiftMove === 'work');
   if (acceptedWork) return { ...acceptedWork, chosenAction: 'SHORT_SHIFT', innerMonologue: '按自己应允的短聘到场做值，不改变宗籍。' };
+  const committedCohort = world.apprenticeCohorts.cohorts.some((row) => row.status === 'offered' &&
+    (row.mentorId === cultivator.id || row.seats.some(({ studentId, status }) =>
+      studentId === cultivator.id && (status === 'invited' || status === 'accepted'))));
+  if (committedCohort) {
+    const lessons = availableApprenticeCohortActions(cultivator, world);
+    const canTrain = cultivator.hp >= cultivator.maxHp * .45;
+    const lesson = canTrain ? lessons.find(({ cohortMove }) => cohortMove === 'teach' || cohortMove === 'attend') : undefined;
+    if (lesson) return { ...lesson, chosenAction: lesson.action, innerMonologue: lesson.cohortMove === 'teach'
+      ? '按期在场传法，实耗本轮教学时段，不自定出师结果。' : '今日实际到场共练，不把一次出席当作已经出师。' };
+    const consent = cultivator.hp >= cultivator.maxHp * .75 &&
+      cultivator.personality !== '嗜血' ? lessons.find(({ cohortMove }) => cohortMove === 'accept') : undefined;
+    if (consent) return { ...consent, chosenAction: consent.action, innerMonologue: '此法与我正在练的原本一致，我自愿参加一课。' };
+    const leave = !canTrain ? lessons.find(({ cohortMove }) => cohortMove === 'leave') : undefined;
+    if (leave) return { ...leave, chosenAction: leave.action, innerMonologue: '伤势不宜练习，先按约自愿退出。' };
+  }
   const observe = surveyOptions.find(({ observatoryMove }) => observatoryMove === 'relay') ??
     (mayFundWeather ? surveyOptions.find(({ observatoryMove }) => observatoryMove === 'fund') : undefined);
   if (observe) return { ...observe, chosenAction: 'FIELD_OBSERVATORY', innerMonologue: '只记录到场实测；推测另记，转给同伴的仍是当时旧读数。' };
@@ -784,6 +800,13 @@ export function computeHeuristicDecision(
     if (offer) return { ...offer, chosenAction: offer.action, innerMonologue: '只请现有候任同门自行应允；守位实到才能移交。' };
   }
 
+  if (world.tick >= 36 && (world.tick + cultivator.id.charCodeAt(cultivator.id.length - 1)) % 31 === 9 &&
+      cultivator.techniqueMastery >= 55 && cultivator.technique.id &&
+      (cultivator.personality === '刚正' || cultivator.personality === '逍遥')) {
+    const lesson = availableApprenticeCohortActions(cultivator, world).find(({ cohortMove }) => cohortMove === 'offer');
+    if (lesson) return { ...lesson, chosenAction: lesson.action, innerMonologue: '以在场实习同本功法的修士邀一小班；各人自行应允。' };
+  }
+
   // 5. Socialize; trust in fellowship makes seeking a partner more attractive.
   const fellowship = cultivator.reflections.some(
     (entry) => entry.kind === 'belief' && entry.theme === 'community' && entry.intensity >= 6
@@ -903,6 +926,7 @@ export async function requestCultivatorLLMDecision(
   const knownLocations = knownMapLocations(world, cultivator);
   const unverifiedTrail = knownRumorLead(cultivator, world);
   const mentorshipOptions = availableMentorshipActions(cultivator, world);
+  const cohortOptions = availableApprenticeCohortActions(cultivator, world, requestTick);
   const arbitrationOptions = availableOathArbitrationActions(cultivator, world);
   const oathOptions = availableOathActions(cultivator, world);
   const marketOptions = availableMarketActions(cultivator, world);
@@ -976,6 +1000,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 赛季复核只选真实可核验收据；提交不会改写原榜：${JSON.stringify(honorReviewOptions)}
 - 临时观象只复制实际地点的 fund、到期 measure 或带原日期 relay；只能记录实测，不能填写强度：${JSON.stringify(observatoryOptions)}
 - 巡界换防只复制当前获准选项；offer 必须用已列真实哨位和候任修士，accept、decline、withdraw 只用换防编号。不可填写路线、灵气、地权、岗哨覆盖或其他守卫：${JSON.stringify(boundaryReliefOptions)}
+- 合班传法只用真正可执行的 offer、accept、leave、teach、attend 或 cancel。offer 原样复制功法编号与完整有序的受邀名单，其余只用班号；出席、功法熟练度与出师由实练凭据核验，不许填写这些结果：${JSON.stringify(cohortOptions)}
 - 跨宗短聘只复制现场许可的 offer、accept、decline、withdraw 或 work；offer 用已列的目标修士和真实观象日期，其他只用该短聘编号。不能填写报酬、地点、天气或宗籍：${JSON.stringify(shortShiftOptions)}
 - 坊籍核点必须本人在场，只可复制已列村落：${JSON.stringify(censusOptions)}
 - 驿路选项要求实地维修和真实资源；巡礼只有实际列出的付费路才可选，普通路线不另收路费：${JSON.stringify(roadOptions)}
@@ -1149,6 +1174,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'EXPEDITION_RESCUE',
             'SHORT_SHIFT',
             'BOUNDARY_RELIEF',
+            'APPRENTICE_COHORT',
             'RELIC_EXHIBIT',
             'PROBATION',
             'ROAD',
@@ -1198,6 +1224,14 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             item.targetCultivatorId === parsed.targetCultivatorId && item.targetBoundaryReliefId === parsed.targetBoundaryReliefId) : undefined;
           if (chosenAction === 'BOUNDARY_RELIEF' && (!legalBoundaryRelief || Object.keys(parsed).some((field) =>
             !['chosenAction', 'innerMonologue', 'spokenLine', 'boundaryReliefMove', 'targetLocationId', 'targetCultivatorId', 'targetBoundaryReliefId'].includes(field)))) return undefined;
+          const invitees = parsed.cohortInviteeIds;
+          const legalCohort = chosenAction === 'APPRENTICE_COHORT' ? cohortOptions.find((item) =>
+            item.cohortMove === parsed.cohortMove && item.targetTechniqueId === parsed.targetTechniqueId &&
+            item.targetCohortId === parsed.targetCohortId && (item.cohortInviteeIds === undefined ? invitees === undefined :
+              Array.isArray(invitees) && invitees.length === item.cohortInviteeIds.length &&
+              item.cohortInviteeIds.every((id, index) => id === invitees[index]))) : undefined;
+          if (chosenAction === 'APPRENTICE_COHORT' && (!legalCohort || Object.keys(parsed).some((field) =>
+            !['chosenAction', 'innerMonologue', 'spokenLine', 'cohortMove', 'targetTechniqueId', 'targetCohortId', 'cohortInviteeIds'].includes(field)))) return undefined;
           const legalShortShift = chosenAction === 'SHORT_SHIFT' ? shortShiftOptions.find((item) =>
             item.shortShiftMove === parsed.shortShiftMove && item.targetCultivatorId === parsed.targetCultivatorId &&
             item.targetObservatoryTick === parsed.targetObservatoryTick && item.targetShortShiftId === parsed.targetShortShiftId) : undefined;
@@ -1564,7 +1598,11 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             targetTenderTick: legalArbitration?.targetTenderTick,
             oathTerm: legalOath ? legalOath.oathTerm : undefined,
             targetTuitionId: legalTraining ? legalTraining.targetTuitionId : undefined,
-            targetTechniqueId: chosenAction === 'STUDY_TECHNIQUE' && typeof parsed.targetTechniqueId === 'string' ? parsed.targetTechniqueId : undefined,
+            targetTechniqueId: legalCohort?.targetTechniqueId ??
+              (chosenAction === 'STUDY_TECHNIQUE' && typeof parsed.targetTechniqueId === 'string' ? parsed.targetTechniqueId : undefined),
+            cohortMove: legalCohort?.cohortMove,
+            targetCohortId: legalCohort?.targetCohortId,
+            cohortInviteeIds: legalCohort?.cohortInviteeIds?.slice(),
             proposedScheme: chosenAction === 'PURSUE_SCHEME' && isSchemeKind(parsed.proposedScheme) ? parsed.proposedScheme : undefined,
             rumorIntent: chosenAction === 'SCHEMING' && (parsed.rumorIntent === 'FABRICATE' || parsed.rumorIntent === 'EXAGGERATE')
               ? parsed.rumorIntent : undefined,

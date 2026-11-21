@@ -12,6 +12,7 @@ import { createSparringState } from '../engine/sparringEngine';
 import { createExpeditionRescueState } from '../engine/expeditionRescueEngine';
 import { createShortShiftState } from '../engine/shortShiftEngine';
 import { createBoundaryReliefState } from '../engine/boundaryReliefEngine';
+import { createApprenticeCohortState } from '../engine/apprenticeCohortEngine';
 import { createTerrainSuccessionState } from '../engine/terrainSuccessionEngine';
 import { createResourceFlowState } from '../engine/resourceFlowEngine';
 import { createSharedCommonsState } from '../engine/sharedCommonsEngine';
@@ -301,6 +302,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     expeditionRescues: createExpeditionRescueState(),
     shortShifts: createShortShiftState(),
     boundaryReliefs: createBoundaryReliefState(),
+    apprenticeCohorts: createApprenticeCohortState(),
     relicExhibits: createRelicExhibitState(),
     probation: createProbationState(),
     roads: createRoadState(),

@@ -3,6 +3,7 @@ import { SPARRING_ACTIVE_TICKS, SPARRING_OFFER_TICKS } from './sparringEngine';
 import { EXPEDITION_RESCUE_OFFER_TICKS, EXPEDITION_RESCUE_STRIDE } from './expeditionRescueEngine';
 import { terrainTileAt } from './terrainEngine';
 import { OBSERVATORY_LEAD_TICKS } from './fieldObservatoryEngine';
+import { COHORT_GRADUATION_MASTERY, COHORT_LESSON_DELAY } from './apprenticeCohortEngine';
 import { SHORT_SHIFT_OFFER_TICKS, SHORT_SHIFT_WAGE } from './shortShiftEngine';
 import { BOUNDARY_RELIEF_LATE_GRACE_TICKS, BOUNDARY_RELIEF_OFFER_TICKS, BOUNDARY_RELIEF_QI_PER_TILE, BOUNDARY_RELIEF_STRIDE } from './boundaryReliefEngine';
 
@@ -271,5 +272,78 @@ export function validateBoundaryReliefRelationships(world: WorldState, actors: R
       const previous = tiles[index - 1];
       return !tile || (index > 0 && (!previous || Math.abs(tile.col - previous.col) + Math.abs(tile.row - previous.row) !== 1));
     })) fail('boundaryReliefs.cases.path_steps');
+  }
+}
+
+export function validateApprenticeCohortRelationships(world: WorldState, actors: ReadonlySet<string>,
+  sects: ReadonlySet<string>, locations: ReadonlySet<string>, fail: (path: string) => never): void {
+  const state = world.apprenticeCohorts;
+  if (!state.cohorts.length && !state.graduations.length) return;
+  const originals = new Map(world.scriptures.originals.map((row) => [row.id, row]));
+  const cohorts = new Map(state.cohorts.map((row) => [row.id, row]));
+  const teachingOnce = new Set<string>();
+  const openMentors = new Set<string>();
+  const actualSeats = new Set<string>();
+  if (cohorts.size !== state.cohorts.length) fail('apprenticeCohorts.cohorts.unique');
+  for (const row of state.cohorts) {
+    const serial = Number(row.id.match(/^apprentice-cohort-([1-9][0-9]*)$/)?.[1]);
+    const original = originals.get(row.techniqueId);
+    const open = row.status === 'offered';
+    if (!Number.isSafeInteger(serial) || serial >= state.nextId || !actors.has(row.mentorId) || !sects.has(row.sectId) ||
+        !original || original.firstSeenTick > row.openedTick || (open && !locations.has(row.siteId)) ||
+        row.openedTick > world.tick || row.lessonTick !== row.openedTick + COHORT_LESSON_DELAY ||
+        row.seats.length < 2 || new Set(row.seats.map(({ studentId }) => studentId)).size !== row.seats.length ||
+        (open !== (row.closedTick === undefined)) || (open && (world.tick > row.lessonTick || row.reason !== undefined)) ||
+        (row.closedTick !== undefined && (row.closedTick < row.openedTick || row.closedTick > world.tick)) ||
+        (row.status === 'expired' && (row.closedTick ?? 0) < row.lessonTick) ||
+        (row.teachingTick !== undefined && (row.teachingTick !== row.lessonTick || row.teachingTick > (row.closedTick ?? world.tick))) ||
+        ((row.status === 'held') !== (row.instructionSpent === 1)) ||
+        (row.status === 'held' && (row.teachingTick !== row.lessonTick || row.closedTick !== row.lessonTick || row.reason !== undefined ||
+          !row.seats.some(({ status }) => status === 'attended'))) ||
+        ((row.status === 'cancelled' || row.status === 'expired') && row.reason === undefined))
+      fail('apprenticeCohorts.cohorts.source');
+    if (open) {
+      if (openMentors.has(row.mentorId)) fail('apprenticeCohorts.cohorts.openMentor');
+      openMentors.add(row.mentorId);
+    }
+    if (row.status === 'held') {
+      const key = JSON.stringify([row.mentorId, row.lessonTick]);
+      if (teachingOnce.has(key)) fail('apprenticeCohorts.cohorts.teacherTurn');
+      teachingOnce.add(key);
+    }
+    for (const seat of row.seats) {
+      const { studentId, acceptedTick: accepted, leftTick: left, attendedTick: attended, readyTick: ready } = seat;
+      if (studentId === row.mentorId || !actors.has(studentId) ||
+          (accepted !== undefined && (accepted <= row.openedTick || accepted >= row.lessonTick || accepted > world.tick)) ||
+          (ready !== undefined && (accepted === undefined || ready !== row.lessonTick || ready > world.tick)) ||
+          (left !== undefined && (left <= row.openedTick || left > world.tick ||
+            (accepted !== undefined && left < accepted) || (attended !== undefined && left <= attended))) ||
+          (seat.status === 'invited' && accepted !== undefined) ||
+          (seat.status === 'accepted' && (accepted === undefined || !open)) ||
+          (seat.status === 'left' && left === undefined) ||
+          ((seat.status === 'attended') !== (attended !== undefined && seat.masteryGained !== undefined)) ||
+          (seat.status === 'attended' && (accepted === undefined || attended !== row.lessonTick || row.status !== 'held')) ||
+          (seat.status !== 'attended' && (attended !== undefined || seat.masteryGained !== undefined)))
+        fail('apprenticeCohorts.seats.source');
+      if (seat.status === 'attended') {
+        const key = JSON.stringify([studentId, row.lessonTick]);
+        if (actualSeats.has(key)) fail('apprenticeCohorts.seats.studentTurn');
+        actualSeats.add(key);
+      }
+    }
+  }
+  const graduations = new Set<string>();
+  for (const receipt of state.graduations) {
+    const key = JSON.stringify([receipt.studentId, receipt.techniqueId]);
+    const source = cohorts.get(receipt.cohortId);
+    const seat = source?.seats.find(({ studentId }) => studentId === receipt.studentId);
+    if (graduations.has(key) || source?.status !== 'held' || source.techniqueId !== receipt.techniqueId ||
+        source.mentorId !== receipt.mentorId || seat?.status !== 'attended' ||
+        receipt.tick <= (seat.attendedTick ?? Infinity) || receipt.tick > world.tick ||
+        (seat.leftTick !== undefined && seat.leftTick <= receipt.tick) ||
+        receipt.masteryAfter < COHORT_GRADUATION_MASTERY || receipt.masteryAfter <= receipt.masteryBefore ||
+        receipt.masteryAfter > receipt.masteryBefore + 3 + 1e-8)
+      fail('apprenticeCohorts.graduations.source');
+    graduations.add(key);
   }
 }

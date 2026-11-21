@@ -18,9 +18,23 @@ export interface MentorshipOption {
 
 export function createMentorshipState(): MentorshipState { return { offers: [], lineage: [], budgets: [] }; }
 
-export function mentorshipBudgetRemaining(actor: Cultivator, world: WorldState): number {
-  const used = world.mentorship.budgets.find((entry) => entry.mentorId === actor.id && entry.tick === world.tick)?.spent ?? 0;
+export function mentorshipBudgetRemaining(actor: Cultivator, world: WorldState, executionTick = world.tick): number {
+  if (executionTick !== world.tick && executionTick !== world.tick + 1) return 0;
+  const used = world.mentorship.budgets.find((entry) => entry.mentorId === actor.id && entry.tick === executionTick)?.spent ?? 0;
   return Math.max(0, MENTOR_MONTHLY_BUDGET - used);
+}
+
+/** One actual teaching slot in the same canonical mentor/turn budget, shared by individual and cohort instruction. */
+export function spendMentorshipBudget(world: WorldState, mentor: Cultivator): boolean {
+  if (!live(mentor) || !world.cultivators.includes(mentor)) return false;
+  const budget = world.mentorship.budgets.find((entry) => entry.mentorId === mentor.id && entry.tick === world.tick);
+  if (budget) {
+    if (budget.spent >= MENTOR_MONTHLY_BUDGET) return false;
+    budget.spent++;
+  } else {
+    world.mentorship.budgets.push({ mentorId: mentor.id, tick: world.tick, spent: 1 });
+  }
+  return true;
 }
 
 function wouldCycle(world: WorldState, mentorId: string, studentId: string): boolean {
@@ -83,9 +97,7 @@ export function resolveMentorshipAction(world: WorldState, actor: Cultivator, de
   const state = world.mentorship;
   if (option.action === 'TEACH') {
     const student = world.cultivators.find(({ id }) => id === option.targetCultivatorId)!;
-    let budget = state.budgets.find((entry) => entry.mentorId === actor.id && entry.tick === world.tick);
-    if (!budget) { budget = { mentorId: actor.id, tick: world.tick, spent: 0 }; state.budgets.push(budget); }
-    budget.spent++;
+    if (!spendMentorshipBudget(world, actor)) return null;
     const offer: TuitionOffer = { id: `tuition-${world.tick}-${actor.id}-${student.id}`, mentorId: actor.id, studentId: student.id,
       technique: { ...actor.technique }, createdTick: world.tick, expiresTick: world.tick + OFFER_LIFETIME, status: 'pending' };
     state.offers.unshift(offer);
