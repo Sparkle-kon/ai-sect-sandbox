@@ -1,3 +1,5 @@
+import { advanceReincarnation, resolveRecollectionAction } from './reincarnationEngine';
+import { recordNewDeathsForReincarnation } from './reincarnationRuntime';
 import { activeRelocationForActor, advanceRelocations, resolveRelocationAction } from './relocationEngine';
 import { advanceDoctrines, resolveDoctrineAction } from './doctrineEngine';
 import { legalTraceCandidates, recordDecisionTrace, rememberReplayDecision } from './decisionTraceEngine';
@@ -179,6 +181,8 @@ export function applyCultivatorBrainDecision(
     case 'ATTEST_WITNESS':
     case 'CHALLENGE_WITNESS':
       return resolveWitnessAction(world, cultivator, decision);
+    case 'RECOLLECT':
+      return resolveRecollectionAction(world, cultivator, decision);
     case 'RELOCATE':
       return resolveRelocationAction(world, cultivator, decision);
     case 'DOCTRINE':
@@ -692,6 +696,8 @@ export function advanceWorldTick(
   for (const actor of nextState.cultivators) if (actor.alive) noteTerrainVisit(nextState, actor);
   maintainPlayerAvatar(nextState);
   spreadRumors(nextState);
+  advanceReincarnation(nextState);
+  recordNewDeathsForReincarnation(prevState, nextState, newEvents);
   archiveChronicleEvents(nextState, newEvents);
   nextState.events = [...newEvents, ...nextState.events].slice(0, 120);
   if (councilMode === 'utility') {
@@ -845,6 +851,7 @@ export function executeGodIntervention(
   const head = nextState.events[0];
   if (head && head.id !== prevState.events[0]?.id) {
     witnessEvent(nextState, head);
+    recordNewDeathsForReincarnation(prevState, nextState, [head]);
     archiveChronicleEvents(nextState, [head]);
     nextState.events = nextState.events.slice(0, 120);
     nextState.mapPresentation = deriveMapPresentation(prevState, nextState, [head]);

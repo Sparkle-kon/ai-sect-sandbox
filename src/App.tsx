@@ -18,10 +18,8 @@ import type { WorkspaceId } from './components/SandboxWorkspace';
 import { WorldOccasionsPanel } from './components/WorldOccasionsPanel';
 import { WorldMapCanvas } from './components/WorldMapCanvas';
 import { AgentInspector } from './components/AgentInspector';
-import { ChronicleFeed } from './components/ChronicleFeed';
 import { BountyBoard } from './components/BountyBoard';
 import { SectCouncilModal } from './components/SectCouncilModal';
-import { LlmTelemetryPanel } from './components/LlmTelemetryPanel';
 import { llmScheduler } from './engine/llmScheduler';
 import { settleChronicleOnline } from './engine/chronicleRuntime';
 import { availableCouncilPlans } from './engine/councilEngine';
@@ -45,6 +43,8 @@ const RelationshipGraph = React.lazy(async () => ({ default: (await import('./co
 const GodConsole = React.lazy(async () => ({ default: (await import('./components/GodConsole')).GodConsole }));
 const SectRelocationPanel = React.lazy(async () => ({ default: (await import('./components/SectRelocationPanel')).SectRelocationPanel }));
 const SectDoctrinePanel = React.lazy(async () => ({ default: (await import('./components/SectDoctrinePanel')).SectDoctrinePanel }));
+const LlmTelemetryPanel = React.lazy(async () => ({ default: (await import('./components/LlmTelemetryPanel')).LlmTelemetryPanel }));
+const ChronicleFeed = React.lazy(async () => ({ default: (await import('./components/ChronicleFeed')).ChronicleFeed }));
 const ChronicleLibraryPanel = React.lazy(async () => ({ default: (await import('./components/ChronicleLibraryPanel')).ChronicleLibraryPanel }));
 const WeatherAtlasPanel = React.lazy(async () => ({ default: (await import('./components/WeatherAtlasPanel')).WeatherAtlasPanel }));
 const MarketCaravansPanel = React.lazy(async () => ({ default: (await import('./components/MarketCaravansPanel')).MarketCaravansPanel }));
@@ -416,7 +416,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
           ]} />
         </div>,
         chronicle: <WorkspaceSections label="纪事与历史" initialOpen={opened('chronicle', 'feed')} sections={[
-          { id: 'feed', label: '当世纪事', content: <ChronicleFeed events={visibleWorld.events} /> },
+          { id: 'feed', label: '当世纪事', content: <React.Suspense fallback={<p role="status">载入当世纪事…</p>}><ChronicleFeed events={visibleWorld.events} /></React.Suspense> },
           { id: 'library', label: '藏书阁与史书', content: <React.Suspense fallback={<p role="status">载入藏书阁…</p>}><ChronicleLibraryPanel world={visibleWorld} /></React.Suspense> },
           { id: 'timeline', label: '原始时间线与分支', content: <React.Suspense fallback={<p role="status">载入时间线…</p>}>
             <TimelinePanel timeline={timeline} previewTick={preview?.tick ?? null} busy={isStepping}
@@ -449,7 +449,8 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
             className={`${action} bg-sky-900/60 text-sky-100 hover:bg-sky-800`}><BarChart3 aria-hidden="true" className="h-4 w-4" />打开天道观测</button> },
           ...(preview ? [] : [
             { id: 'god', label: '天道干预与模型设置', content: <div className="space-y-2.5">
-              <LlmTelemetryPanel scheduler={llmScheduler} configured={llmConfig.enabled} hasCredential={Boolean(llmConfig.apiKey.trim())} model={llmConfig.model || 'gpt-4o-mini'} />
+              <React.Suspense fallback={<p role="status">载入模型状态…</p>}><LlmTelemetryPanel scheduler={llmScheduler}
+                configured={llmConfig.enabled} hasCredential={Boolean(llmConfig.apiKey.trim())} model={llmConfig.model || 'gpt-4o-mini'} /></React.Suspense>
               <React.Suspense fallback={<p role="status">载入天道控制台…</p>}><GodConsole world={world} selectedCultivatorId={activeActorId} llmConfig={llmConfig}
                 onUpdateLLMConfig={setLlmConfig} onIntervene={handleGodIntervene} /></React.Suspense>
             </div> },

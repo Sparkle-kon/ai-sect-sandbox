@@ -1,3 +1,4 @@
+import { createReincarnationState, MORTAL_MATURITY_TICKS } from './reincarnationEngine';
 import { createRelocationState } from './relocationEngine';
 import { isWorldgenProfileId } from './worldgenProfiles';
 import { createDoctrineState } from './doctrineEngine';
@@ -65,7 +66,7 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const marketQty = num(1,12,true), marketPrice = num(1,500,true);
@@ -159,6 +160,12 @@ const shape = structure({
       attestations:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,tick,verdict:one('supports','contradicts')})),
       appeal:optional(structure({tick,actorId:id,verdict:one('upheld','rejected'),reason:text})),settledTick:otick,
       reputationSectId:oid,reputationPenalty:percentage,reputationRestored:percentage,reason:otext}))}),
+  reincarnation:structure({
+    cases:arr(SAVE_COLLECTION_LIMIT,structure({id,deceasedId:id,deathEventId:id,deathTick:tick,expiresTick:tick,
+      status:one('awaiting_birth','reserved','volunteer','recruited','expired'),settlementId:oid,birthTick:otick,
+      birthSlot:optional(count),maturesTick:otick,volunteerId:oid,newActorId:oid,resolvedTick:otick})),
+    echoes:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,theme:doctrineTheme,confidence:one('faint','uncertain'),
+      receivedTick:tick,status:one('unconsidered','considered','dismissed'),resolvedTick:otick}))}),
   relocations:structure({nextId:num(1,100_000_000,true),
     plans:arr(SAVE_COLLECTION_LIMIT,structure({id,sectId:id,originId:id,destinationId:id,status:one('voting','in_transit','settled','aborted'),
       openedTick:tick,deadlineTick:tick,proposerId:id,voterIds:ids,votes:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,tick,approve:bool})),
@@ -228,6 +235,7 @@ function verifyWorld(value: unknown): WorldState {
     ? { ...value,
       ...(!Object.hasOwn(value, 'mentorship') ? { mentorship: { offers: [], lineage: [], budgets: [] } } : {}),
       ...(!Object.hasOwn(value, 'decisionTrace') ? { decisionTrace: { records: [] } } : {}),
+      ...(!Object.hasOwn(value, 'reincarnation') ? { reincarnation: createReincarnationState() } : {}),
       ...(!Object.hasOwn(value, 'relocations') ? { relocations: createRelocationState() } : {}),
       ...(!Object.hasOwn(value, 'doctrines') ? { doctrines: createDoctrineState() } : {}),
       ...(!Object.hasOwn(value, 'estates') ? { estates: { entries: [] } } : {}),
@@ -432,6 +440,47 @@ function verifyWorld(value: unknown): WorldState {
         (row.actorId && !actor.has(row.actorId)) || (row.sectId && !sector.has(row.sectId)) ||
         (row.volunteerId && !volunteerIds.has(row.volunteerId)) || (row.cultivatorId && !actor.has(row.cultivatorId))) fail('settlements.records.references');
   }
+  const deceasedActors = new Set(w.cultivators.filter(({ alive, hp }) => !alive && hp === 0).map(({ id }) => id));
+  unique(w.reincarnation.cases, ({ id }) => id, 'reincarnation.cases.id');
+  unique(w.reincarnation.cases, ({ deceasedId }) => deceasedId, 'reincarnation.cases.deceased');
+  const registeredCases = new Set<string>();
+  const reservedBirths = new Set<string>();
+  const reborn = new Set<string>();
+  for (const row of w.reincarnation.cases) {
+    const hasBirth = row.settlementId !== undefined || row.birthTick !== undefined ||
+      row.maturesTick !== undefined || row.birthSlot !== undefined;
+    if (!deceasedActors.has(row.deceasedId) || row.deathTick > w.tick || row.expiresTick <= row.deathTick ||
+        ((row.status === 'recruited' || row.status === 'expired') !== (row.resolvedTick !== undefined)) ||
+        (row.resolvedTick !== undefined && (row.resolvedTick < row.deathTick || row.resolvedTick > w.tick)) ||
+        (row.status === 'awaiting_birth' && (hasBirth || row.volunteerId || row.newActorId)) ||
+        ((row.status === 'reserved' || row.status === 'volunteer' || row.status === 'recruited') && !hasBirth) ||
+        ((row.status === 'volunteer' || row.status === 'recruited') && !row.volunteerId) ||
+        (row.status === 'reserved' && row.volunteerId) ||
+        (row.volunteerId !== undefined && (!hasBirth || row.maturesTick === undefined || row.maturesTick > w.tick)) ||
+        ((row.status === 'recruited') !== (row.newActorId !== undefined))) fail('reincarnation.cases.references');
+    if (hasBirth) {
+      if (!row.settlementId || !settlementIds.has(row.settlementId) || row.birthTick === undefined ||
+          row.birthTick <= row.deathTick || row.birthTick > row.expiresTick || row.birthTick > w.tick ||
+          row.maturesTick !== row.birthTick + MORTAL_MATURITY_TICKS || row.birthSlot === undefined) fail('reincarnation.cases.birth');
+      const birthKey = JSON.stringify([row.settlementId, row.birthTick, row.birthSlot]);
+      if (reservedBirths.has(birthKey)) fail('reincarnation.cases.birth');
+      reservedBirths.add(birthKey);
+    }
+    if (row.volunteerId) {
+      if (registeredCases.has(row.volunteerId) ||
+          (row.status === 'volunteer' && !volunteerIds.has(row.volunteerId))) fail('reincarnation.cases.volunteer');
+      registeredCases.add(row.volunteerId);
+    }
+    if (row.newActorId) {
+      if (!actor.has(row.newActorId) || row.newActorId === row.deceasedId || row.newActorId !== `recruit-${row.volunteerId}` ||
+          reborn.has(row.newActorId)) fail('reincarnation.cases.recruit');
+      reborn.add(row.newActorId);
+    }
+  }
+  unique(w.reincarnation.echoes, ({ actorId }) => actorId, 'reincarnation.echoes.actor');
+  for (const row of w.reincarnation.echoes) if (!actor.has(row.actorId) || row.receivedTick > w.tick ||
+      ((row.status === 'unconsidered') !== (row.resolvedTick === undefined)) ||
+      (row.resolvedTick !== undefined && (row.resolvedTick < row.receivedTick || row.resolvedTick > w.tick))) fail('reincarnation.echoes.references');
   const marketLocations = new Set(w.locations.filter(({type}) => type === 'market').map(({id}) => id));
   const marketOrders = unique(w.markets.orders, ({id}) => id, 'markets.orders.id');
   unique(w.markets.shipments, ({id}) => id, 'markets.shipments.id');

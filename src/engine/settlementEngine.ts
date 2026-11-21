@@ -1,10 +1,12 @@
-import type { Cultivator, LLMDecisionPayload, LocationNode, MortalSettlement, MortalVolunteer, SettlementRecord, SettlementState, SpiritRoot, WorldEvent, WorldState } from '../types/world';
+import { attachRecollectionAfterRecruitment, MORTAL_MATURITY_TICKS, maturingReincarnationCases,
+  pruneExpiredVolunteerEchoes, registerMaturedReincarnation, reserveReincarnationBirth } from './reincarnationEngine';
+import type { Cultivator, LLMDecisionPayload, LocationNode, MortalSettlement, MortalVolunteer, ReincarnationCase, SettlementRecord, SettlementState, SpiritRoot, WorldEvent, WorldState } from '../types/world';
 import { knownMapLocations, noteTerrainVisit, terrainTileAt } from './terrainEngine';
 
 export const SETTLEMENT_RELIEF = { stones: 12, jade_leaf: 2 } as const;
 export const SETTLEMENT_RECRUIT_STIPEND = 25;
 export const SETTLEMENT_STRESS_LIMIT = 65;
-export const MORTAL_MATURITY_TICKS = 18 * 12;
+export { MORTAL_MATURITY_TICKS } from './reincarnationEngine';
 const MAX_NEW_VOLUNTEERS_PER_YEAR = 2;
 const MAX_OUTSTANDING_VOLUNTEERS = 8;
 const VOLUNTEER_OFFER_YEARS = 3;
@@ -140,6 +142,7 @@ export function resolveSettlementAction(world: WorldState, actor: Cultivator, de
   person.enlistedCultivatorId = recruit.id;
   world.cultivators.push(recruit);
   noteTerrainVisit(world, recruit);
+  attachRecollectionAfterRecruitment(world, village, person.id, recruit);
   return log(world, village, { kind: 'recruitment', actorId: actor.id, sectId: sect.id, volunteerId: person.id,
     cultivatorId: recruit.id, people: 1, stones: SETTLEMENT_RECRUIT_STIPEND, herbs: 0,
     description: `${village.name}成年志愿者${person.name}自愿加入${sect.name}，坊籍减一；宗门发放${SETTLEMENT_RECRUIT_STIPEND}灵石安置费。` },
@@ -147,7 +150,7 @@ export function resolveSettlementAction(world: WorldState, actor: Cultivator, de
 }
 
 
-function annualCohort(world: WorldState, village: MortalSettlement, stressedByHazard: boolean): WorldEvent | undefined {
+function annualCohort(world: WorldState, village: MortalSettlement, stressedByHazard: boolean, matured: ReincarnationCase[]): WorldEvent | undefined {
   if (world.tick <= 1 || world.month !== 1 || village.lastCohortYear === world.year) return undefined;
   village.lastCohortYear = world.year;
 
@@ -161,12 +164,25 @@ function annualCohort(world: WorldState, village: MortalSettlement, stressedByHa
     person.cohortYear ??= world.year - 1;
     return world.year - person.cohortYear < VOLUNTEER_OFFER_YEARS && person.age <= 47;
   });
-  if (stressedByHazard || village.stress >= SETTLEMENT_STRESS_LIMIT) return undefined;
+  pruneExpiredVolunteerEchoes(world, village);
+  const cannotRegister = stressedByHazard || village.stress >= SETTLEMENT_STRESS_LIMIT;
+  for (const item of matured) {
+    if (cannotRegister || activeVolunteers(village).length >= MAX_OUTSTANDING_VOLUNTEERS || unregisteredAdults(village) <= 0) {
+      registerMaturedReincarnation(world, item, village);
+      continue;
+    }
+    const id = `${village.id}-vol-${village.nextVolunteerSequence++}`;
+    const number = mixed(world.random.seed, id);
+    village.volunteers.push({ id, cohortYear: world.year, name: FAMILY[number % FAMILY.length] + GIVEN[Math.floor(number / 13) % GIVEN.length],
+      age: 18, spiritRoot: ROOTS[Math.floor(number / 113) % ROOTS.length], aptitude: 60 + number % 35, willingness: 68 + number % 30 });
+    registerMaturedReincarnation(world, item, village, id);
+  }
+  if (cannotRegister) return undefined;
 
   // Candidates are existing, previously unregistered adults; recruiting removes one from the village.
   // New children are tracked independently for a full 18 years and never counted in this supply early.
   const yearlySlots = village.stress < 24 ? MAX_NEW_VOLUNTEERS_PER_YEAR : 1;
-  const availableSlots = Math.max(0, Math.min(yearlySlots, MAX_OUTSTANDING_VOLUNTEERS - activeVolunteers(village).length, unregisteredAdults(village)));
+  const availableSlots = Math.max(0, Math.min(yearlySlots - matured.filter(({ status }) => status === 'volunteer').length, MAX_OUTSTANDING_VOLUNTEERS - activeVolunteers(village).length, unregisteredAdults(village)));
   for (let slot = 0; slot < availableSlots; slot++) {
     const sequence = village.nextVolunteerSequence++;
     const id = `${village.id}-vol-${sequence}`;
@@ -184,6 +200,7 @@ function annualCohort(world: WorldState, village: MortalSettlement, stressedByHa
   if (count <= 0) return undefined;
   village.population += count;
   village.juvenileCohorts.push({ bornTick: world.tick, count });
+  reserveReincarnationBirth(world, village, world.tick);
   return log(world, village, { kind: 'growth', people: count, stones: 0, herbs: 0,
     description: `${village.name}今年新生${count}人，纳入未成年坊籍，成年前不计入招募人选。` }, 'births', '凡村人口添丁');
 }
@@ -195,6 +212,7 @@ export function advanceSettlements(world: WorldState): WorldEvent[] {
   const events: WorldEvent[] = [];
   const villages = state.villages.filter(({ locationId }) => world.locations.some(({ id }) => id === locationId)).sort(byId);
   for (const village of villages) {
+    const matured = maturingReincarnationCases(world, village);
     village.juvenileCohorts = village.juvenileCohorts.filter(({ bornTick }) => world.tick - bornTick < MORTAL_MATURITY_TICKS);
     const location = world.locations.find(({ id }) => id === village.locationId)!;
     const tile = terrainTileAt(world, location.x, location.y);
@@ -204,7 +222,7 @@ export function advanceSettlements(world: WorldState): WorldEvent[] {
     if (hazard && (village.lastDisasterTick === undefined || world.tick - village.lastDisasterTick >= 3)) {
       const stress = 12 + Math.min(24, hazard.intensity * 7);
       // Population includes the named volunteers: do not silently kill a tracked individual.
-      const deaths = Math.min(unregisteredAdults(village),
+      const deaths = Math.min(Math.max(0, unregisteredAdults(village) - matured.length),
         Math.min(5, Math.floor(hazard.intensity) + (hazard.kind === 'meteor' ? 1 : 0)));
       village.population -= deaths;
       village.stress = clamp(village.stress + stress);
@@ -215,7 +233,7 @@ export function advanceSettlements(world: WorldState): WorldEvent[] {
     } else if (!hazard && world.tick % 3 === 0) {
       village.stress = clamp(village.stress - 1);
     }
-    const growth = annualCohort(world, village, Boolean(hazard));
+    const growth = annualCohort(world, village, Boolean(hazard), matured);
     if (growth) events.push(growth);
   }
   if (world.tick % 3 !== 0) return events;

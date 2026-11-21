@@ -77,6 +77,7 @@ export type ActionType =
   | 'HOLD_MEMORIAL'
   | 'DOCTRINE'
   | 'RELOCATE'
+  | 'RECOLLECT'
   | 'GATHER_HERBS'
   | 'BREW_PILL'
   | 'USE_PILL'
@@ -357,6 +358,7 @@ export interface LLMDecisionPayload {
   targetDoctrineProposalId?: string;
   relocationMove?: RelocationMove;
   targetRelocationId?: string;
+  recollectionMove?: RecollectionMove;
   targetTechniqueId?: string;
   targetHerbId?: HerbId;
   targetPillId?: PillId;
@@ -996,7 +998,37 @@ export interface RelocationState {
   nextId: number;
 }
 
+export type RecollectionMove = 'consider' | 'dismiss';
+export interface ReincarnationCase {
+  id: string;
+  deceasedId: string;
+  deathEventId: string;
+  deathTick: number;
+  expiresTick: number;
+  status: 'awaiting_birth' | 'reserved' | 'volunteer' | 'recruited' | 'expired';
+  settlementId?: string;
+  birthTick?: number;
+  birthSlot?: number;
+  maturesTick?: number;
+  volunteerId?: string;
+  newActorId?: string;
+  resolvedTick?: number;
+}
+export interface RecollectionEcho {
+  actorId: string;
+  theme: ReflectionTheme;
+  confidence: 'faint' | 'uncertain';
+  receivedTick: number;
+  status: 'unconsidered' | 'considered' | 'dismissed';
+  resolvedTick?: number;
+}
+export interface ReincarnationState {
+  cases: ReincarnationCase[];
+  echoes: RecollectionEcho[];
+}
+
 export interface WorldState {
+  reincarnation: ReincarnationState;
   relocations: RelocationState;
   worldgen?: WorldGeneration;
   doctrines: DoctrineState;

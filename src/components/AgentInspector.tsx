@@ -2,6 +2,7 @@ import React from 'react';
 import { Brain, Shield, Coins, Compass, Heart, Sparkles } from 'lucide-react';
 import { Cultivator, WorldState } from '../types/world';
 import { MemoryPanel } from './MemoryPanel';
+import { RecollectionPanel } from './RecollectionPanel';
 import { ReflectionPanel } from './ReflectionPanel';
 import { RumorPanel } from './RumorPanel';
 import { SchemePanel } from './SchemePanel';
@@ -207,6 +208,7 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
       <AlchemyPanel cultivator={cultivator} location={location} />
       </>}
       {mind && <>
+      <RecollectionPanel world={world} actorId={cultivator.id} />
       <ReflectionPanel cultivator={cultivator} />
       <RumorPanel cultivator={cultivator} locations={world.locations} cultivators={world.cultivators} />
       <SchemePanel cultivator={cultivator} locations={world.locations} cultivators={world.cultivators} />

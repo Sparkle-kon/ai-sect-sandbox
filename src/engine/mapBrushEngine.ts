@@ -1,3 +1,4 @@
+import { recordNewDeathsForReincarnation } from './reincarnationRuntime';
 import { activeRelocationForActor } from './relocationEngine';
 import { advanceEstates } from './estateEngine';
 import { archiveChronicleEvents } from './novelGenerator';
@@ -111,6 +112,7 @@ export function applyMapBrush(prev: WorldState, kind: GodBrushKind, points: MapP
     });
   }
   brushEvents.push(...advanceEstates(world));
+  recordNewDeathsForReincarnation(prev, world, brushEvents);
   archiveChronicleEvents(world, brushEvents);
   world.events = [...brushEvents, ...world.events].slice(0, 120);
   world.mapPresentation = deriveMapPresentation(prev, world, brushEvents);
