@@ -3221,7 +3221,23 @@ export interface DoctrineMaturity {
     transferredScriptureId?:string;scriptureAlreadyHeld?:boolean};
 }
 
+export type AuthoredEraEffect =
+  | {kind:'jade_vein_depleted';siteId:string;before:{spiritQi:number;jadeCapacity:number;jade:number};
+      after:{spiritQi:number;jadeCapacity:number;jade:number}}
+  | {kind:'danxia_branch_moves_north';parentSectId:string;parentSiteId:string;branchSectId:string;
+      destinationId:string;tileId:string;memberIds:string[];branchLeaderId:string;parentLeaderId:string;stayingIds:string[];
+      parentStonesBefore:number;parentStonesAfter:number;branchStones:number;protectedStones:number}
+  | {kind:'village_capacity';settlementId:string;siteId:string;capacityBefore:number;capacityAfter:number;population:number};
+export interface AuthoredEraOrigin {
+  version:1;id:string;openedTick:number;year:number;month:number;
+  draft:import('../engine/eraDesignSchema').EraDesignDraft;
+  baselineDigest:string;designDigest:string;rulesRevision:string;
+  openingEventIds:string[];
+  effects:AuthoredEraEffect[];
+}
+
 export interface WorldState {
+  authoredEraOrigin?:AuthoredEraOrigin;
   fieldObservatories: FieldObservatoriesState;
   danxiaShortages: DanxiaShortagesState;
   danxiaMedicine: DanxiaMedicineState;

@@ -5,6 +5,7 @@ import {
 } from '../engine/scenarioEngine';
 import { WORLDGEN_PROFILES, isWorldgenProfileId } from '../engine/worldgenProfiles';
 import { EraDesignPanel } from './EraDesignPanel';
+import type { AuthoredEraLaunchController } from './AuthoredEraLaunch';
 import { ScenarioAuditCards, ScenarioObjectiveEditor } from './ScenarioObjectives';
 import type { ScenarioObjective, WorldgenProfileId, WorldState } from '../types/world';
 
@@ -68,7 +69,10 @@ function commandLabel(command: Command, catalog: Targets | undefined): string {
   return `${TYPES[command.type]} · ${target?.name ?? '目标不在当前种子与谱系中'}${command.type === 'WHISPER_MIND' ? ` · ${CUES[command.cue]}` : ''}`;
 }
 
-export function ScenarioPanel({ world, busy, onApply }: { world: WorldState; busy: boolean; onApply: (result: WorldState, expected: WorldState) => boolean }) {
+export function ScenarioPanel({ world, busy, onApply, authoredEra }: {
+  world: WorldState; busy: boolean; onApply: (result: WorldState, expected: WorldState) => boolean;
+  authoredEra?: AuthoredEraLaunchController;
+}) {
   const [draft, setDraft] = useState<ScenarioDraft>(() => ({ seed: String(world.random.seed), profileId: world.worldgen?.profileId ?? 'classic', endTick: '6', commands: [] }));
   const [preview, setPreview] = useState<ScenarioPreview>();
   const [pending, setPending] = useState<'import' | 'preview'>();
@@ -264,7 +268,7 @@ export function ScenarioPanel({ world, busy, onApply }: { world: WorldState; bus
       <ScenarioObjectiveEditor key={`${draft.seed}:${draft.profileId}`} objectives={draft.objectives ?? []} catalog={catalog}
         onChange={(objectives) => updateDraft((previous) => ({ ...previous, objectives }))} />
       <ScenarioAuditCards world={world} />
-      <EraDesignPanel world={world} />
+      <EraDesignPanel world={world} authoredEra={authoredEra} />
       <div className={`${panel} space-y-1.5`}>
         <p className="text-xs text-slate-400">剧本文件只有谱系、种子、时限、预设指令与可选目标，不含存档数据、聊天原文或模型服务凭证。</p>
         <label className="grid min-w-0 gap-1 text-xs text-slate-300">导入剧本 JSON（最大 {kb} KiB）

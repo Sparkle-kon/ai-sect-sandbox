@@ -1,10 +1,12 @@
+import {FAST_FORWARD_MAX_TICKS} from './fastForwardTerms';
+export {FAST_FORWARD_MAX_TICKS} from './fastForwardTerms';
 import type { WorldEvent, WorldState } from '../types/world';
 import { cloneWorldWithColdHistory } from './coldHistoryEngine';
 import { advanceWorldTick } from './worldEngine';
 import { sameGeneratedWorld } from './worldIdentity';
 import { detectCampaignStop,isCampaignStopCondition,type CampaignStopCondition,type CampaignStopReceipt } from './campaignStopCondition';
 
-export const FAST_FORWARD_MAX_TICKS = 120;
+
 export const FAST_FORWARD_CHUNK_TICKS = 2;
 export const FAST_FORWARD_CHUNK_MS = 16;
 

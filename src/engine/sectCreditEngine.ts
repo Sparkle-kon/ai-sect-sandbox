@@ -1,5 +1,5 @@
-import {SECT_CREDIT_TREASURY_CAP} from './sectCreditTerms';
-export {SECT_CREDIT_TREASURY_CAP} from './sectCreditTerms';
+import {SECT_CREDIT_TREASURY_CAP,SECT_CREDIT_RESERVE} from './sectCreditTerms';
+export {SECT_CREDIT_TREASURY_CAP,SECT_CREDIT_RESERVE} from './sectCreditTerms';
 import {isSectActive} from './sectActivity';
 import type { Cultivator, LLMDecisionPayload, Sect, SectCreditMove, SectCreditReceipt, SectCreditState, SectLoan, WorldEvent, WorldState } from '../types/world';
 
@@ -8,7 +8,7 @@ export const SECT_CREDIT_OFFER_TICKS = 3;
 export const SECT_CREDIT_TERM_TICKS = 6;
 export const SECT_CREDIT_COLLECTION_TICKS = 3;
 export const SECT_CREDIT_PAYMENT_MAX = 40;
-export const SECT_CREDIT_RESERVE = 80;
+
 export const SECT_CREDIT_EXPOSURE_MAX = 360;
 export const SECT_CREDIT_RESTRICTION_TICKS = 7;
 const RETAIN_TERMINAL = 72;

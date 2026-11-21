@@ -3,6 +3,8 @@ import { validateEraHistory, validateEraHistoryShape } from './storageEraHistory
 import { validateSeasonalHousing } from './storageSeasonalHousingValidation';
 import { validateMentorTransfers } from './storageMentorTransferValidation';
 import { sameGeneratedWorld } from './worldIdentity';
+import {validateAuthoredEraHistory} from './storageAuthoredEraValidation';
+import {validateEraDesignDraft} from './eraDesignSchema';
 import { createAlignedWeatherState } from './alignedWeatherEngine';
 import { alignedWeatherPinnedRuns } from './alignedWeatherTerms';
 import { createExpeditionOmensState, expeditionOmenPinnedRuns } from './expeditionOmenEngine';
@@ -163,6 +165,18 @@ const bool: Validator = (v, path) => { if (typeof v !== 'boolean') fail(path); }
 const tick = num(0, 100_000_000, true);
 const unsigned32 = num(0, 0xffffffff, true);
 const wealth = num(0, 1_000_000_000);
+const authoredHash=strings(64,64);
+const authoredJade=structure({spiritQi:num(0,150),jadeCapacity:wealth,jade:wealth});
+const authoredEraEffect:Validator=(value,path)=>{
+  const item=value as {kind?:unknown}|null;
+  if(item?.kind==='jade_vein_depleted')return structure({
+    kind:one('jade_vein_depleted'),siteId:id,before:authoredJade,after:authoredJade})(value,path);
+  if(item?.kind==='village_capacity')return structure({
+    kind:one('village_capacity'),settlementId:id,siteId:id,capacityBefore:tick,capacityAfter:tick,population:tick})(value,path);
+  return structure({kind:one('danxia_branch_moves_north'),parentSectId:id,parentSiteId:id,branchSectId:id,destinationId:id,
+    tileId:id,memberIds:ids,branchLeaderId:id,parentLeaderId:id,stayingIds:ids,parentStonesBefore:wealth,parentStonesAfter:wealth,
+    branchStones:wealth,protectedStones:wealth})(value,path);
+};
 const percentage = num(0, 100);
 const affinity = num(-100, 100);
 const count = num(0, 10_000, true);
@@ -901,6 +915,9 @@ const shape = structure({
     abandonedSites:arr(SAVE_COLLECTION_LIMIT,structure({id,planId:id,sectId:id,originId:id,destinationId:id,tick,
       originalType:locationKind,facilities:facilityLevels,arrayHp:wealth,arrayMaxHp:wealth}))}),
   scenarioOrigin:optional(structure({version:one(1,2,3),ruleset:one(1),id:strings(100,1),endTick:num(1,120,true)})),
+  authoredEraOrigin:optional(structure({version:one(1),id,openedTick:tick,year:tick,month,
+    draft:(value,path)=>{try{validateEraDesignDraft(value);}catch{fail(path);}},
+    baselineDigest:authoredHash,designDigest:authoredHash,rulesRevision:strings(128,1),openingEventIds:ids,effects:arr(3,authoredEraEffect)})),
   scenarioAudit:optional(structure({version:one(SCENARIO_AUDIT_VERSION),scenarioId:id,seed:unsigned32,profileId:one('classic','spirit-bloom','fractured-frontier'),
     evaluatedTick:num(1,120,true),cards:arr(SCENARIO_MAX_OBJECTIVES,structure({id,objective:scenarioObjective,passed:bool,evidence:scenarioEvidence}))})),
   worldgen:optional(structure({algorithm:one(1),profileId:one('classic','spirit-bloom','fractured-frontier'),
@@ -3028,6 +3045,7 @@ function verifyWorld(value: unknown): WorldState {
   validateProtagonistHistory(w,chapters,actor,fail);
   validateWitnessedPersonalStory(w,actor,fail);
   validateEraHistory(w,fail);
+  validateAuthoredEraHistory(w,fail);
   w.coldHistory = freezeColdHistory(w.coldHistory);
   return w;
 }

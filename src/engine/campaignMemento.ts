@@ -3,6 +3,7 @@ import { decodeEraWorldSave, encodeEraWorldSave, ERA_WORLD_SAVE_MAX_BYTES } from
 import { TIMELINE_MAX_BRANCHES, TIMELINE_MAX_LABEL, TIMELINE_MAX_TICKS } from './timelineEngine';
 import type { TimelineBranch, TimelineSnapshot, WorldTimeline } from './timelineEngine';
 import type { WorldState } from '../types/world';
+import {sameGeneratedWorld} from './worldIdentity';
 
 export const CAMPAIGN_SOURCE_MAX_BYTES = 128 * 1024 * 1024;
 const FORMAT = 'ai-sect-campaign-source';
@@ -97,9 +98,13 @@ function checkShell(value:Record<string,unknown>):Shell {
        !campaignTokenKeyValid(row.id)||typeof row.label!=='string'||row.label.trim()===''||row.label.length>TIMELINE_MAX_LABEL||
        /[\u0000-\u001f\u007f]/.test(row.label)||!Array.isArray(row.snapshots)||row.snapshots.length<1||
        row.snapshots.length>TIMELINE_MAX_TICKS||branchNos.has(row.id))return badCampaign();
-    if(index===0 ? row.id!=='main'||row.parentBranchId!==undefined||row.forkTick!==undefined
+    // An authored root has no ancestor edge. A child always has BOTH edge fields;
+    // the decoded native worlds below, not a claimed topology name/label, authorize either shape.
+    const detached=row.parentBranchId===undefined&&row.forkTick===undefined;
+    if(index===0 ? row.id!=='main'||!detached
       : !/^branch-[1-9][0-9]*$/.test(row.id)||Number(row.id.slice(7))>=Number(value.nextBranchNumber)||
-       !campaignTokenKeyValid(row.parentBranchId)||!branchNos.has(row.parentBranchId)||!campaignInteger(row.forkTick))return badCampaign();
+        !detached&&(!campaignTokenKeyValid(row.parentBranchId)||!branchNos.has(row.parentBranchId)||
+          !campaignInteger(row.forkTick)))return badCampaign();
     const snapshots = row.snapshots.map(readRef);
     if(snapshots.some((snap,i)=>i>0&&snap.tick<=snapshots[i-1].tick)||
        (typeof row.forkTick==='number'&&row.forkTick>snapshots[snapshots.length-1].tick))return badCampaign();
@@ -114,12 +119,33 @@ function checkShell(value:Record<string,unknown>):Shell {
 }
 const tooLarge=()=>new CampaignPersistenceError('size','原时间线超过完整保留预算（128 MiB）；不会裁剪分支或历史。');
 
+function requireCampaignGenesis(branches:readonly TimelineBranch[]):void{
+  const heads=new Map<string,WorldState>(), authoredRoots=new Set<string>();
+  for(const branch of branches){
+    const first=branch.snapshots[0]?.world;
+    if(!first||branch.snapshots.some(({world})=>!sameGeneratedWorld(first,world)))badCampaign();
+    if(branch.parentBranchId){
+      const parent=heads.get(branch.parentBranchId);
+      if(!parent||!sameGeneratedWorld(parent,first))badCampaign();
+    }else{
+      const authored=first.authoredEraOrigin;
+      if(branch.id!=='main'&&!authored)badCampaign();
+      if(authored){
+        if(authoredRoots.has(authored.id))badCampaign();
+        authoredRoots.add(authored.id);
+      }
+    }
+    heads.set(branch.id,first);
+  }
+}
+
 /** Capture only the exact currently authorized timeline and native bytes, never a seed reconstruction. */
 export async function sealCampaignSource(timeline:WorldTimeline,timelineId:string,activeWorld:WorldState,
   {signal}:{signal?:AbortSignal}={}):Promise<CampaignSourceMemento> {
   stopCampaignRead(signal);
   if(!campaignTokenKeyValid(timelineId)||timeline.branches.length<1||timeline.branches.length>TIMELINE_MAX_BRANCHES||
      timeline.branches.some(branch=>branch.snapshots.length<1||branch.snapshots.length>TIMELINE_MAX_TICKS))return badCampaign();
+  requireCampaignGenesis(timeline.branches);
   const seen=new Map<WorldState,CampaignWorldRef>();
   const blobs=new Map<string,CampaignWorldBlob>();
   let bytes=0;
@@ -188,6 +214,7 @@ export async function readCampaignSource(value:unknown,{signal}:{signal?:AbortSi
     });
     return Object.freeze({...branch,snapshots:Object.freeze(bound)});
   });
+  requireCampaignGenesis(branches);
   const active=worlds.get(shell.active.sha256);
   if(!active)return badCampaign();
   return {timeline:Object.freeze({activeBranchId:shell.activeBranchId,nextBranchNumber:shell.nextBranchNumber,

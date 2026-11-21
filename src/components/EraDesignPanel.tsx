@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   createEraDesignDraft, eraDesignCatalog, ERA_DESIGN_PROFILE_LABELS, EraDesignError, previewEraDesignDraft,
   readEraDesignDraft, writeEraDesignDraft, type EraDesignCatalog, type EraDesignCondition, type EraDesignDraft,
 } from '../engine/eraDesignDraft';
+import { AuthoredEraLaunch, canPrepareAuthoredEra, type AuthoredEraLaunchController } from './AuthoredEraLaunch';
 import { WORLDGEN_PROFILES } from '../engine/worldgenProfiles';
 import type { WorldState } from '../types/world';
 
@@ -165,7 +166,9 @@ export function EraDesignPreview({ preview }: { preview: Preview }) {
   </section>;
 }
 
-export function EraDesignPanel({ world }: { world: Pick<WorldState, 'year' | 'month' | 'random' | 'worldgen'> }) {
+export function EraDesignPanel({ world, authoredEra }: {
+  world: Pick<WorldState, 'year' | 'month' | 'random' | 'worldgen'>; authoredEra?: AuthoredEraLaunchController;
+}) {
   const [buffer, setBuffer] = useState<EraDesignBuffer>();
   const [report, setReport] = useState<{ preview: Preview; year: number; month: number }>();
   const [notice, setNotice] = useState('');
@@ -176,7 +179,8 @@ export function EraDesignPanel({ world }: { world: Pick<WorldState, 'year' | 'mo
     try { return eraDesignDraftFromBuffer(buffer); } catch { return undefined; }
   }, [buffer]);
   const catalog = useMemo(() => seed === undefined || profile === undefined ? undefined : eraDesignCatalog(seed, profile), [seed, profile]);
-  const update = (next: EraDesignBuffer | undefined) => { setBuffer(next); setReport(undefined); setNotice(''); setError(''); };
+  const invalidateLaunch = () => { if (authoredEra && authoredEra.state.phase !== 'idle') authoredEra.onCancel(); };
+  const update = (next: EraDesignBuffer | undefined) => { invalidateLaunch(); setBuffer(next); setReport(undefined); setNotice(''); setError(''); };
   const tell = (reason: unknown) => {
     const index = reason instanceof EraDesignError ? reason.conditionIndex : undefined;
     setError(reason instanceof Error ? `${index === undefined ? '' : `第 ${index + 1} 项：`}${reason.message}` : '草案操作未完成。');
@@ -191,7 +195,7 @@ export function EraDesignPanel({ world }: { world: Pick<WorldState, 'year' | 'mo
   };
   const inspect = () => {
     if (!buffer) return;
-    setError(''); setNotice(''); setReport(undefined);
+    invalidateLaunch(); setError(''); setNotice(''); setReport(undefined);
     try {
       const current = { year: world.year, month: world.month };
       setReport({ ...current, preview: previewEraDesignDraft(eraDesignDraftFromBuffer(buffer), current) });
@@ -206,6 +210,12 @@ export function EraDesignPanel({ world }: { world: Pick<WorldState, 'year' | 'mo
     } catch (reason) { tell(reason); }
   };
   const reportCurrent = report && report.year === world.year && report.month === world.month;
+  const launchReady = canPrepareAuthoredEra(savable, world, report);
+  const cancel = authoredEra?.onCancel;
+  const launchPhase = authoredEra?.state.phase;
+  useEffect(() => {
+    if (!launchReady && (launchPhase === 'preparing' || launchPhase === 'prepared')) cancel?.();
+  }, [launchReady, launchPhase, cancel]);
   const targetPast=!!savable&&(savable.target.year<world.year||savable.target.year===world.year&&savable.target.month<=world.month);
   return <details className="min-w-0 space-y-2 rounded-lg border border-slate-800 bg-slate-950/45 p-2.5 text-xs text-slate-300">
     <summary className="flex min-h-11 cursor-pointer items-center text-xs font-semibold text-cyan-100">写下纪元条件</summary>
@@ -227,6 +237,7 @@ export function EraDesignPanel({ world }: { world: Pick<WorldState, 'year' | 'mo
         <button type="button" className={button} onClick={() => { update(undefined); setNotice('已退出编辑；本机已保存的草案和当前世界均未改动。'); }}>退出编辑，丢弃未保存改动</button>
       </div>
       {reportCurrent && <EraDesignPreview preview={report.preview} />}
+      {authoredEra && launchReady && report && <AuthoredEraLaunch draft={report.preview.draft} controller={authoredEra} />}
       {report && !reportCurrent && <p className="text-amber-200">当前世界已推进，请重新预览；草案原有起点未变。</p>}
     </>}
     {!!notice && <p role="status" className="text-cyan-100">{notice}</p>}

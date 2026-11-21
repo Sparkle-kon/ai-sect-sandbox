@@ -1,4 +1,4 @@
-import {FAST_FORWARD_MAX_TICKS} from './fastForwardEngine';
+import {FAST_FORWARD_MAX_TICKS} from './fastForwardTerms';
 
 export const FAST_FORWARD_CAMPAIGN_MAX_MONTHS=1200;
 

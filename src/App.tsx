@@ -1,3 +1,5 @@
+import {AuthoredEraChronicle} from './components/AuthoredEraChronicle';
+import {useAuthoredEraLaunch} from './components/useAuthoredEraLaunch';
 import {activeAvatar,canQueueAvatarSalvage,queueAvatarDanxiaMedicine,queueAvatarDanxiaReview,queueAvatarDoctrineFounding,queueAvatarDoctrineMaturity} from './engine/avatarEngine';
 import {availableDanxiaMedicineActions,type DanxiaMedicineOption} from './engine/danxiaMedicineEngine';
 import type {DanxiaMedicineControlsProps} from './components/DanxiaMedicineControls';
@@ -62,7 +64,7 @@ import { isWorldSeed } from './engine/worldRandom';
 import { isWorldgenProfileId } from './engine/worldgenProfiles';
 import { createDecisionReplayTape, replayOneTurn } from './engine/decisionTraceEngine';
 import type { DecisionReplayTape, DecisionReplayResult } from './engine/decisionTraceEngine';
-import { createTimeline, forkTimeline, readTimelineHead, readTimelineSnapshot, recordTimelineWorld, selectTimelineBranch, forkTimelineCheckpoint, forkTimelineAvatarEntry, TIMELINE_MAX_BRANCHES } from './engine/timelineEngine';
+import { createTimeline, forkTimeline, readTimelineHead, readTimelineSnapshot, recordTimelineWorld, selectTimelineBranch, forkTimelineCheckpoint, forkTimelineAvatarEntry, appendAuthoredTimelineRoot, TIMELINE_MAX_BRANCHES } from './engine/timelineEngine';
 import type { TimelineSnapshot, WorldTimeline } from './engine/timelineEngine';
 import {findEraEntryCandidate,projectEraEntryCandidates} from './engine/eraEntryCandidates';
 import {createTerrainMapView} from './components/terrainMapView';
@@ -730,6 +732,32 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
   };
   const visibleHistory = timeline.branches.find(({ id }) => id === timeline.activeBranchId)?.snapshots;
   const readingChronicle = dashboardOpen && workspace === 'chronicle';
+  const authoredHead=timeline.branches.find(branch=>branch.id===timeline.activeBranchId)?.snapshots.at(-1);
+  const authoredRevision=saveContextVersion.current;
+  const authoredDisabled=!dashboardOpen||workspace!=='world'||Boolean(preview)||isStepping||isRunning||fastForwardLocked||
+    !authoredHead||timeline.branches.length>=TIMELINE_MAX_BRANCHES;
+  const canPublishAuthored=()=>!authoredDisabled&&!browsing.current&&!stepInFlight.current&&!fastForwardRun.current&&
+    !campaignGuard.current&&authority.current===world&&history.current===timeline&&
+    saveContextVersion.current===authoredRevision;
+  const authoredEra=useAuthoredEraLaunch({
+    world,timeline,scopeKey:`${viewScopeKey}:${authoredRevision}`,disabled:authoredDisabled,
+    unavailable:timeline.branches.length>=TIMELINE_MAX_BRANCHES?'分支位已满，不会删除原有分支。':
+      isRunning||isStepping||fastForwardLocked?'当前世界正在运行。请先暂停，再准备作者纪元。':undefined,
+    isCurrent:canPublishAuthored,
+    commit:incoming=>{
+      if(!authoredHead||!canPublishAuthored()||
+        incoming.year<world.year||incoming.year===world.year&&incoming.month<=world.month)return false;
+      try{
+        const next=appendAuthoredTimelineRoot(timeline,timeline.activeBranchId,authoredHead,incoming,
+          `作者纪元 · ${incoming.year} 年 ${incoming.month} 月`);
+        const approved=readTimelineHead(next);
+        if(!approved||!approved.authoredEraOrigin)return false;
+        activateTimeline(next,approved);
+        setStoryEntryOpen(false);setDashboardOpen(false);
+        return true;
+      }catch{return false;}
+    },
+  });
   const storyHome = React.useMemo(() => dashboardOpen ? undefined : projectStoryHomepage(world), [dashboardOpen,world]);
   const chronicleScenes = React.useMemo(() => readingChronicle ? publicChronicleSceneEvents(visibleWorld) : [], [readingChronicle,visibleWorld]);
   const publicDialogue = React.useMemo(() => readingChronicle ? createPublicDialogueResolver(visibleWorld) : undefined, [readingChronicle,visibleWorld]);
@@ -1217,6 +1245,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
         chronicle: <WorkspaceSections label="纪事与历史" initialOpen={opened('chronicle', 'feed')}
           {...fold('chronicle')} forcedOpen={chronicleReturn && ordinaryChronicleFold !== 'feed' ? 'feed' : undefined} sections={[
           { id: 'feed', label: '山河见闻', content: <React.Suspense fallback={<p role="status">载入山河见闻…</p>}>
+            <AuthoredEraChronicle world={visibleWorld} visible={chronicleScenes} />
             {selectedCultivator && mayReadPersonal && !chronicleReturn && <WitnessedStoryScopeToggle selectedName={selectedCultivator.name}
               active={personalStoryActive}
               onToggle={() => setPersonalStoryChoice(personalStoryActive ? undefined : {actorId:selectedCultivator.id,scope:viewScopeKey})} />}
@@ -1335,7 +1364,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
                 onUpdateLLMConfig={changeLlmConfig} onIntervene={handleGodIntervene} /></React.Suspense>
             </div> },
             { id: 'scenario', label: '剧本编辑与复演', content: <React.Suspense fallback={<p role="status">载入剧本编辑器…</p>}>
-              <ScenarioPanel world={world} busy={isStepping} onApply={replaceWorld} />
+              <ScenarioPanel world={world} busy={isStepping} onApply={replaceWorld} authoredEra={authoredEra} />
             </React.Suspense> },
             { id: 'settings', label: '存档、世界种子与推演速度', content: <div className="space-y-2.5">
               <div className={`${panel} flex flex-wrap items-center gap-x-2 gap-y-1.5`}>

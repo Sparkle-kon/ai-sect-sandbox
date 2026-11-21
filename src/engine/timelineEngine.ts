@@ -29,7 +29,7 @@ export interface WorldTimeline {
   readonly nextBranchNumber: number;
 }
 export class TimelineError extends Error {
-  constructor(readonly code: 'branch_limit' | 'missing_snapshot' | 'invalid_intervention' | 'invalid_checkpoint' | 'invalid_avatar_entry', message: string) {
+  constructor(readonly code: 'branch_limit' | 'missing_snapshot' | 'invalid_intervention' | 'invalid_checkpoint' | 'invalid_avatar_entry' | 'invalid_authored_root', message: string) {
     super(message); this.name = 'TimelineError';
   }
 }
@@ -100,6 +100,32 @@ function validateIntervention(world: WorldState, command: GodInterventionCommand
   }
   if (command.whisperText) throw invalid();
   return { type: command.type, targetCultivatorId: command.targetCultivatorId };
+}
+
+/**
+ * Append one independently replayed authored root after the UI has explicitly
+ * approved the already verified exact output. The existing timeline must still
+ * expose the exact origin head pointer reviewed by the caller. This is not a fork.
+ */
+export function appendAuthoredTimelineRoot(timeline:WorldTimeline,expectedBranchId:string,
+  expectedHead:TimelineSnapshot,preparedWorld:WorldState,label?:string):WorldTimeline {
+  if(timeline.branches.length>=TIMELINE_MAX_BRANCHES)
+    throw new TimelineError('branch_limit','时间线已满，不会删减原有支线。');
+  const invalid=()=>new TimelineError('invalid_authored_root','待开启的作者纪元或原时间线已经变化；原世界没有改动。');
+  const branch=branchOf(timeline,expectedBranchId), head=branch?.snapshots.at(-1);
+  if(timeline.activeBranchId!==expectedBranchId||!head||head!==expectedHead)throw invalid();
+  const origin=preparedWorld.authoredEraOrigin;
+  if(!origin||origin.version!==1||origin.openedTick!==preparedWorld.tick||
+    origin.year!==preparedWorld.year||origin.month!==preparedWorld.month||preparedWorld.scenarioOrigin||
+    preparedWorld.random.seed!==origin.draft.seed||preparedWorld.worldgen?.profileId!==origin.draft.profileId||
+    preparedWorld.interventionSequence!==0)throw invalid();
+  if(timeline.branches.some(row=>row.snapshots.at(-1)?.world.authoredEraOrigin?.id===origin.id))
+    throw new TimelineError('invalid_authored_root','同一作者纪元已在这组时间线内开启，不会重复建立来源。');
+  const number=timeline.nextBranchNumber, id=`branch-${number}`;
+  if(!Number.isSafeInteger(number)||number<1||timeline.branches.some(row=>row.id===id))throw invalid();
+  const founded=immutableBranch({id,label:(typeof label==='string'&&cut(label,TIMELINE_MAX_LABEL))||`作者纪元 ${number}`},
+    [saveSnapshot(preparedWorld)]);
+  return Object.freeze({activeBranchId:founded.id,nextBranchNumber:number+1,branches:Object.freeze([...timeline.branches,founded])});
 }
 
 /** Apply exactly one valid intervention to an isolated historical clone; keep the source branch untouched. */
