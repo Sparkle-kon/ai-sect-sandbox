@@ -850,6 +850,8 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
           { id: 'timeline', label: '原始时间线与分支', content: <React.Suspense fallback={<p role="status">载入时间线…</p>}>
             <TimelinePanel timeline={timeline} previewTick={preview?.tick ?? null} busy={isStepping}
               comparisonViewerId={activeActorId ?? undefined} comparisonScopeKey={viewScopeKey}
+              verificationSource={{world:visibleWorld,branchId:timeline.activeBranchId,scopeKey:viewScopeKey,
+                busy:isStepping || isRunning || fastForwardLocked}}
               onPreview={handleTimelinePreview} onSelectBranch={handleTimelineSelectBranch} onFork={handleTimelineFork} notice={timelineNotice}
               fastForward={{ ...fastForwardView, available: typeof Worker === 'function' && !preview && !isStepping && timeline.branches.length < TIMELINE_MAX_BRANCHES,
                 capacitySource: {world,contextVersion:saveContextVersion.current,scopeKey:viewScopeKey},

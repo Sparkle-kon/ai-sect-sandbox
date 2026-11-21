@@ -1,8 +1,29 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { createHash } from 'node:crypto';
+import { readdirSync,readFileSync } from 'node:fs';
+import { join,relative,sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const sourceRoot=fileURLToPath(new URL('.',import.meta.url));
+function ruleSourceFiles(directory:string):string[]{
+  return readdirSync(directory,{withFileTypes:true}).flatMap((entry)=>{
+    const path=join(directory,entry.name);
+    return entry.isDirectory()?ruleSourceFiles(path):entry.isFile()&&entry.name.endsWith('.ts')?[path]:[];
+  });
+}
+const normalized=(path:string)=>relative(sourceRoot,path).split(sep).join('/');
+const ruleFiles=['src/engine','src/data','src/types'].flatMap((path)=>ruleSourceFiles(join(sourceRoot,path)))
+  .concat(join(sourceRoot,'package-lock.json')).sort((a,b)=>normalized(a)<normalized(b)?-1:normalized(a)>normalized(b)?1:0);
+const ruleHash=createHash('sha256');
+for(const file of ruleFiles) {
+  ruleHash.update(normalized(file)).update('\0').update(createHash('sha256').update(readFileSync(file)).digest('hex')).update('\0');
+}
+const utilityRuleVersion=ruleHash.digest('hex');
 
 export default defineConfig({
   plugins: [react()],
+  define: { __SECT_UTILITY_RULE_VERSION__: JSON.stringify(utilityRuleVersion) },
   worker: { format: 'es' },
   build: {
     rollupOptions: {
