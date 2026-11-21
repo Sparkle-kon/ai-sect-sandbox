@@ -2,7 +2,7 @@ import { courierCheckpoint } from './sealedCourierEngine';
 import { pilgrimageCheckpoint } from './pilgrimageEngine';
 import { activeEscortForActor } from './escortEngine';
 import { activeRelocationForActor } from './relocationEngine';
-import type { Cultivator, LLMDecisionPayload, WorldEvent, WorldState } from '../types/world';
+import type { Cultivator, LLMDecisionPayload, RelationshipEdge, WorldEvent, WorldState } from '../types/world';
 import { scriptedDialogue } from './dialogueEngine';
 import { recordMemory } from './memoryEngine';
 import { gainMastery } from './techniqueEngine';
@@ -11,13 +11,25 @@ import { adjustSectAffinity } from './diplomacyEngine';
 type EncounterAction = 'TRADE' | 'DUAL_CULTIVATE' | 'SECT_DIPLOMACY';
 export const ARTIFACT_TRADE_PRICE = 120;
 
+/** Per-read index: match the first native edge in either orientation, never cache mutable world state. */
+export function firstActorRelationships(edges: readonly RelationshipEdge[], actorId: string): ReadonlyMap<string, RelationshipEdge> {
+  const first = new Map<string, RelationshipEdge>();
+  for (const edge of edges) {
+    const subject = edge.fromId === actorId ? edge.toId : edge.toId === actorId ? edge.fromId : undefined;
+    if (subject !== undefined && !first.has(subject)) first.set(subject, edge);
+  }
+  return first;
+}
+
 export function availableEncounters(actor: Cultivator, world: WorldState) {
   if (activeRelocationForActor(world, actor) || activeEscortForActor(world, actor) || pilgrimageCheckpoint(world, actor) || courierCheckpoint(world, actor)) return [];
   const location = world.locations.find((place) => place.id === actor.locationId);
-  return world.cultivators.filter((other) => other.alive && other.id !== actor.id &&
-    other.locationId === actor.locationId && !activeRelocationForActor(world, other) && !activeEscortForActor(world, other) && !pilgrimageCheckpoint(world, other) && !courierCheckpoint(world, other)).flatMap((other) => {
-    const edge = world.relationships.find((item) =>
-      (item.fromId === actor.id && item.toId === other.id) || (item.toId === actor.id && item.fromId === other.id));
+  const nearby = world.cultivators.filter((other) => other.alive && other.id !== actor.id &&
+    other.locationId === actor.locationId && !activeRelocationForActor(world, other) && !activeEscortForActor(world, other) && !pilgrimageCheckpoint(world, other) && !courierCheckpoint(world, other));
+  if (!nearby.length) return [];
+  const edges = firstActorRelationships(world.relationships, actor.id);
+  return nearby.flatMap((other) => {
+    const edge = edges.get(other.id);
     const affinity = edge?.affinity ?? 0;
     const opportunities: { action: EncounterAction; targetId: string }[] = [];
     if (location?.type === 'market' && actor.spiritStones >= ARTIFACT_TRADE_PRICE &&

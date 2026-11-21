@@ -68,7 +68,7 @@ import { llmScheduler } from './llmScheduler';
 import { memoryStrength, recallMemories } from './memoryEngine';
 import { knownRumorLead } from './rumorEngine';
 import { isSchemeKind, schemeOptions, utilityScheme } from './schemeEngine';
-import { availableEncounters } from './encounterEngine';
+import { availableEncounters, firstActorRelationships } from './encounterEngine';
 import { compareCultivationSites, cultivationMultiplier, strikeMultiplier } from './elementalEngine';
 import { availableTechniques, mayAuthorTechnique, utilityStudyTarget } from './techniqueEngine';
 import { availableAlchemy } from './alchemyEngine';
@@ -989,13 +989,10 @@ export function computeHeuristicDecision(
   }
 
   // 3. Check if an enemy is at the same location
+  const edges = coLocatedOthers.length ? firstActorRelationships(world.relationships, cultivator.id) : undefined;
   const enemy = coLocatedOthers.find((other) => {
     if (activeCeasefireBetween(world, cultivator.sectId, other.sectId) || sanctuaryCanShield(world, cultivator, other)) return false;
-    const edge = world.relationships.find(
-      (r) =>
-        (r.fromId === cultivator.id && r.toId === other.id) ||
-        (r.fromId === other.id && r.toId === cultivator.id)
-    );
+    const edge = edges?.get(other.id);
     return edge && edge.affinity <= -50;
   });
 
