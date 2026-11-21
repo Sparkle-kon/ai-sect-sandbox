@@ -109,7 +109,7 @@ const MECHANICAL_FIELDS = [
   'marketQuantity', 'marketLimitPrice', 'targetMarketOrderId', 'targetSettlementId', 'targetVolunteerId', 'targetWitnessEventId',
   'targetWitnessClaimId', 'targetEstateId', 'targetTechniqueId', 'targetHerbId', 'targetPillId', 'targetArtifactId', 'forgeTier',
   'tribulationStance', 'facilityKind', 'targetSectId', 'targetOccasionId', 'targetBountyId', 'targetBeastId',
-  'researchMove', 'researchTopic', 'targetResearchId', 'researchWithdrawReason', 'ceasefireMove', 'targetCeasefireId', 'escortMove', 'targetShipmentId', 'targetEscortId', 'targetHazardId', 'seasonMove', 'editionMove', 'targetScriptureOriginalId', 'targetScriptureEditionId', 'relicMove', 'targetRelicFragmentId', 'targetRelicSetId', 'recollectionMove', 'relocationMove', 'targetRelocationId', 'doctrineMove', 'doctrineTheme', 'targetDoctrineSchoolId', 'targetDoctrineProposalId',
+  'sanctuaryMove', 'targetSanctuaryId', 'researchMove', 'researchTopic', 'targetResearchId', 'researchWithdrawReason', 'ceasefireMove', 'targetCeasefireId', 'escortMove', 'targetShipmentId', 'targetEscortId', 'targetHazardId', 'seasonMove', 'editionMove', 'targetScriptureOriginalId', 'targetScriptureEditionId', 'relicMove', 'targetRelicFragmentId', 'targetRelicSetId', 'recollectionMove', 'relocationMove', 'targetRelocationId', 'doctrineMove', 'doctrineTheme', 'targetDoctrineSchoolId', 'targetDoctrineProposalId',
 ] as const satisfies readonly (keyof LLMDecisionPayload)[];
 
 export function rememberReplayDecision(tape: DecisionReplayTape, actorId: string, decision: LLMDecisionPayload, rngDraws = 0): void {

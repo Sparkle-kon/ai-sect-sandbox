@@ -1,3 +1,4 @@
+import { createSanctuaryState } from '../engine/sanctuaryEngine';
 import { createResearchState } from '../engine/researchEngine';
 import { createCeasefireState } from '../engine/ceasefireEngine';
 import { createAnnotationState } from '../engine/annotationState';
@@ -246,6 +247,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     annotations: createAnnotationState(),
     ceasefires: createCeasefireState(),
     research: createResearchState(),
+    sanctuary: createSanctuaryState(),
     witnesses: createWitnessState(),
     estates: createEstateState(),
     decisionTrace: createDecisionTraceState(),

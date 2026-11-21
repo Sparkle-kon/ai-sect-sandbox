@@ -1,3 +1,4 @@
+import { activeSanctuaryPass, availableSanctuaryActions, sanctuaryCanShield } from './sanctuaryEngine';
 import { availableResearchActions } from './researchEngine';
 import { activeCeasefireBetween, availableCeasefireActions } from './ceasefireEngine';
 import { activeEscortForActor, availableEscortActions } from './escortEngine';
@@ -96,8 +97,18 @@ export function computeHeuristicDecision(
   }
   const alchemy = availableAlchemy(cultivator, world);
 
-  // 1. Low HP -> Rest & recover
+  // 1. Low HP -> Seek a supported refuge where possible, otherwise rest.
   if (cultivator.hp < cultivator.maxHp * 0.45) {
+    if (!cultivator.guardAssignment && world.sanctuary.charters.some(({ status }) => status === 'active')) {
+      const held = activeSanctuaryPass(world, cultivator);
+      const charter = held && world.sanctuary.charters.find(({ id }) => id === held.charterId);
+      if (charter && charter.shieldHp > 0 && charter.siteId !== cultivator.locationId &&
+          knownMapLocations(world, cultivator).some(({ id }) => id === charter.siteId)) {
+        return { chosenAction: 'EXPLORE', targetLocationId: charter.siteId, innerMonologue: '依所领敕令亲自前往已知避难所。' };
+      }
+      const pass = availableSanctuaryActions(cultivator, world).find(({ sanctuaryMove }) => sanctuaryMove === 'take_pass');
+      if (pass) return { ...pass, chosenAction: 'SANCTUARY', innerMonologue: '暂避斗法，按规领一张限期敕令。' };
+    }
     const healing = alchemy.find((option) => option.action === 'USE_PILL' && option.targetPillId === 'golden');
     if (healing && cultivator.pillToxicity < 45) {
       return { ...healing, chosenAction: healing.action, innerMonologue: '伤势不可久拖，先炼化金丹。' };
@@ -329,7 +340,7 @@ export function computeHeuristicDecision(
 
   // 3. Check if an enemy is at the same location
   const enemy = coLocatedOthers.find((other) => {
-    if (activeCeasefireBetween(world, cultivator.sectId, other.sectId)) return false;
+    if (activeCeasefireBetween(world, cultivator.sectId, other.sectId) || sanctuaryCanShield(world, cultivator, other)) return false;
     const edge = world.relationships.find(
       (r) =>
         (r.fromId === cultivator.id && r.toId === other.id) ||
@@ -392,6 +403,13 @@ export function computeHeuristicDecision(
     const move = seasonChoices.find(({ seasonMove }) => (seasonMove === 'withdraw' && wantsWithdrawal) ||
       (seasonMove === 'join' && wantsRegistration));
     if (move) return { ...move, chosenAction: 'RANK_SEASON', innerMonologue: '按己愿选择是否公开参评，不混入私事。' };
+  }
+
+  if (!cultivator.guardAssignment && world.tick >= 12 && world.tick % 9 === 5) {
+    const choices = availableSanctuaryActions(cultivator, world);
+    const action = choices.find(({ sanctuaryMove }) => sanctuaryMove === 'repair') ??
+      choices.find(({ sanctuaryMove }) => sanctuaryMove === 'found');
+    if (action) return { ...action, chosenAction: 'SANCTUARY', innerMonologue: '此处救济须凭实拨库银与查验护盾。' };
   }
 
   const mayProposeResearch = world.tick >= 18 && world.tick % 8 === 3;
@@ -499,6 +517,7 @@ export async function queryCultivatorLLMDecision(
   const estateOptions = availableEstateActions(cultivator, world);
   const doctrineOptions = availableDoctrineActions(cultivator, world);
   const relocationOptions = availableRelocationActions(cultivator, world);
+  const sanctuaryOptions = availableSanctuaryActions(cultivator, world);
   const researchOptions = availableResearchActions(cultivator, world);
   const ceasefireOptions = availableCeasefireActions(cultivator, world);
   const escortOptions = availableEscortActions(cultivator, world);
@@ -527,6 +546,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 天机悬赏榜：${JSON.stringify(world.bounties.filter((item) => item.status === 'open').map(({id,targetCultivatorId,reward,reason}) => ({id,targetCultivatorId,reward,reason})))}；可接的追缉：${JSON.stringify(availableBountyHunts(cultivator, world))}
 - 天下公示的大会与秘境：${JSON.stringify(world.occasions.filter((item) => item.status === 'registration' || item.status === 'running').map(({id,title,kind,locationId,status,registrationClosesTick}) => ({id,title,kind,locationId,status,registrationClosesTick})))}；可报名项目：${JSON.stringify(availableOccasionJoins(cultivator, world))}
 - 本宗邦交：${JSON.stringify(world.diplomacy.filter((relation) => relation.sectAId === cultivator.sectId || relation.sectBId === cultivator.sectId))}；公示的外事权限：${JSON.stringify(availableDiplomacyActions(cultivator, world))}
+- 避难敕令只在指定站点保护持票人的直接斗法，且护盾有限。可执行事务：${JSON.stringify(sanctuaryOptions)}
 - 共研只可使用本宗的实际议案、实有投入与已核实退出理由：${JSON.stringify(researchOptions)}
 - 停战议约只可使用双方现行授权和账款所列选项：${JSON.stringify(ceasefireOptions)}
 - 商队护送只能选择已列的合法委托、接镖或可复核报险，货款不当作镖资：${JSON.stringify(escortOptions)}
@@ -556,8 +576,8 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
 请以第一人称进行内心独白思考，并决定本回合行动。只输出合法的 JSON 对象（不要 Markdown 代码块），字段如下：
 {
   "innerMonologue": "你的第一人称内心独白（40字以内，体现你的性格与秘密目标）",
-  "chosenAction": "CULTIVATE | BREAKTHROUGH | EXPLORE | SOCIALIZE | DUEL | SCHEMING | PURSUE_SCHEME | AUTHOR_TECHNIQUE | STUDY_TECHNIQUE | GATHER_HERBS | BREW_PILL | USE_PILL | FORGE_ARTIFACT | BIND_ARTIFACT | REPAIR_ARTIFACT | AWAKEN_ARTIFACT | FACE_TRIBULATION | AMBUSH_TRIBULATION | CHALLENGE_LEADERSHIP | PLOT_COUP | BUILD_FACILITY | DISPATCH_GUARD | GUARD_DUTY | OFFER_ALLIANCE | DECLARE_WAR | DEMAND_TRIBUTE | LAUNCH_SIEGE | JOIN_OCCASION | PURSUE_BOUNTY | TAME_BEAST | TRADE | DUAL_CULTIVATE | SECT_DIPLOMACY | TEACH | ACCEPT_TUITION | DECLINE_TUITION | OFFER_OATH | ACCEPT_OATH | DECLINE_OATH | FULFILL_OATH | APPEAL_OATH | PLACE_MARKET_BUY | PLACE_MARKET_SELL | CANCEL_MARKET_ORDER | RECRUIT_SETTLER | DELIVER_RELIEF | FILE_WITNESS_CLAIM | ATTEST_WITNESS | CHALLENGE_WITNESS | NAME_HEIR | CLAIM_ESTATE | HOLD_MEMORIAL | DOCTRINE | RELOCATE | RECOLLECT | RELIC | SCRIPTURE | RANK_SEASON | ESCORT | CEASEFIRE | RESEARCH | REST 之一",
-  "targetLocationId": "EXPLORE 可填已知地点 id（探索未知时省略）；宗门经营或迁宗提议只能填所列地点 id",
+  "chosenAction": "CULTIVATE | BREAKTHROUGH | EXPLORE | SOCIALIZE | DUEL | SCHEMING | PURSUE_SCHEME | AUTHOR_TECHNIQUE | STUDY_TECHNIQUE | GATHER_HERBS | BREW_PILL | USE_PILL | FORGE_ARTIFACT | BIND_ARTIFACT | REPAIR_ARTIFACT | AWAKEN_ARTIFACT | FACE_TRIBULATION | AMBUSH_TRIBULATION | CHALLENGE_LEADERSHIP | PLOT_COUP | BUILD_FACILITY | DISPATCH_GUARD | GUARD_DUTY | OFFER_ALLIANCE | DECLARE_WAR | DEMAND_TRIBUTE | LAUNCH_SIEGE | JOIN_OCCASION | PURSUE_BOUNTY | TAME_BEAST | TRADE | DUAL_CULTIVATE | SECT_DIPLOMACY | TEACH | ACCEPT_TUITION | DECLINE_TUITION | OFFER_OATH | ACCEPT_OATH | DECLINE_OATH | FULFILL_OATH | APPEAL_OATH | PLACE_MARKET_BUY | PLACE_MARKET_SELL | CANCEL_MARKET_ORDER | RECRUIT_SETTLER | DELIVER_RELIEF | FILE_WITNESS_CLAIM | ATTEST_WITNESS | CHALLENGE_WITNESS | NAME_HEIR | CLAIM_ESTATE | HOLD_MEMORIAL | DOCTRINE | RELOCATE | RECOLLECT | RELIC | SCRIPTURE | RANK_SEASON | ESCORT | CEASEFIRE | RESEARCH | SANCTUARY | REST 之一",
+  "targetLocationId": "EXPLORE 可填已知地点 id（探索未知时省略）；宗门经营、迁宗或新设避难所只能填所列地点 id",
   "targetCultivatorId": "如果 chosenAction 为 SOCIALIZE / DUEL / SCHEMING / AMBUSH_TRIBULATION / CHALLENGE_LEADERSHIP / PLOT_COUP / DISPATCH_GUARD / TRADE / DUAL_CULTIVATE / SECT_DIPLOMACY / TEACH / OFFER_OATH / FILE_WITNESS_CLAIM / NAME_HEIR 则填目标修士 id；DOCTRINE 仅在所选事务列出该字段时填写；其余省略",
   "spokenLine": "简短台词（可选）",
   "rumorIntent": "只有阴险或诡诈角色选择 SCHEMING 时才可选填 FABRICATE 或 EXAGGERATE",
@@ -573,6 +593,8 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
   "targetMarketOrderId": "撤单时选择自己仍可撤的挂单 id",
   "targetOathId": "回应、履行或申诉契书时，指定可用契书 id",
   "oathTerm": "提出契书时选择给定条款 foundation_pill 或 jade_herb",
+  "sanctuaryMove": "SANCTUARY 只复制所列 found、take_pass、repair 或 surrender",
+  "targetSanctuaryId": "只复制所选敕令或站点事务列出的章程 id",
   "researchMove": "RESEARCH 仅复制列出的 propose、join、work 或 withdraw",
   "researchTopic": "只复制发起共研选项的研究题目 id",
   "targetResearchId": "只复制共研选项列出的项目 id",
@@ -706,9 +728,15 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
             'ESCORT',
             'CEASEFIRE',
             'RESEARCH',
+            'SANCTUARY',
           ];
           const chosenAction = parsed?.chosenAction;
           if (!chosenAction || !validActions.includes(chosenAction)) return undefined;
+
+          const legalSanctuary = chosenAction === 'SANCTUARY' ? sanctuaryOptions.find((item) =>
+            item.sanctuaryMove === parsed.sanctuaryMove && item.targetLocationId === parsed.targetLocationId &&
+            item.targetSanctuaryId === parsed.targetSanctuaryId) : undefined;
+          if (chosenAction === 'SANCTUARY' && (!legalSanctuary || parsed.targetCultivatorId !== undefined)) return undefined;
 
           const legalResearch = chosenAction === 'RESEARCH' ? researchOptions.find((item) =>
             item.researchMove === parsed.researchMove && item.researchTopic === parsed.researchTopic &&
@@ -853,7 +881,7 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
               cultivator.innerMonologue ||
               '天道无常，唯有苦修方是正途。',
             chosenAction,
-            targetLocationId: legalRelocation ? legalRelocation.targetLocationId :
+            targetLocationId: legalSanctuary ? legalSanctuary.targetLocationId : legalRelocation ? legalRelocation.targetLocationId :
               chosenAction !== 'DOCTRINE' && typeof parsed.targetLocationId === 'string' ? parsed.targetLocationId : undefined,
             targetCultivatorId: legalDoctrine ? legalDoctrine.targetCultivatorId : legalEstate ? legalEstate.targetCultivatorId : legalWitness ? legalWitness.targetCultivatorId : legalOath ? legalOath.targetCultivatorId : legalTraining ? legalTraining.targetCultivatorId
               : typeof parsed.targetCultivatorId === 'string' ? parsed.targetCultivatorId : undefined,
@@ -868,6 +896,8 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
             forgeTier: legalArtifact?.forgeTier,
             targetHerbId: legalAlchemy?.targetHerbId,
             targetPillId: legalAlchemy?.targetPillId,
+            sanctuaryMove: legalSanctuary?.sanctuaryMove,
+            targetSanctuaryId: legalSanctuary?.targetSanctuaryId,
             researchMove: legalResearch?.researchMove,
             researchTopic: legalResearch?.researchTopic,
             targetResearchId: legalResearch?.targetResearchId,

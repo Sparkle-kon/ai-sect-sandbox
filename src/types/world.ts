@@ -86,6 +86,7 @@ export type ActionType =
   | 'ESCORT'
   | 'CEASEFIRE'
   | 'RESEARCH'
+  | 'SANCTUARY'
   | 'GATHER_HERBS'
   | 'BREW_PILL'
   | 'USE_PILL'
@@ -381,6 +382,8 @@ export interface LLMDecisionPayload {
   targetHazardId?: string;
   ceasefireMove?: CeasefireMove;
   targetCeasefireId?: string;
+  sanctuaryMove?: SanctuaryMove;
+  targetSanctuaryId?: string;
   researchMove?: ResearchMove;
   researchTopic?: ResearchTopic;
   targetResearchId?: string;
@@ -1278,7 +1281,54 @@ export interface ResearchState {
   nextId: number;
 }
 
+export type SanctuaryMove = 'found' | 'take_pass' | 'repair' | 'surrender';
+export type SanctuaryCharterEndReason = 'expiry' | 'site_lost';
+export type SanctuaryPassEndReason = 'expiry' | 'charter_ended' | 'surrendered' | 'violation' | 'ineligible';
+export interface SanctuaryCharter {
+  id: string;
+  siteId: string;
+  sponsorSectId: string;
+  founderId: string;
+  openedTick: number;
+  expiresTick: number;
+  status: 'active' | 'ended';
+  shieldHp: number;
+  maxShieldHp: number;
+  stonesSpent: number;
+  endedTick?: number;
+  endReason?: SanctuaryCharterEndReason;
+  lastRepairTick?: number;
+}
+export interface SanctuaryPass {
+  id: string;
+  charterId: string;
+  actorId: string;
+  issuedTick: number;
+  expiresTick: number;
+  status: 'active' | 'ended';
+  endedTick?: number;
+  endReason?: SanctuaryPassEndReason;
+}
+export interface SanctuaryIncident {
+  id: string;
+  charterId: string;
+  tick: number;
+  aggressorId: string;
+  visitorId: string;
+  kind: 'blocked' | 'exhausted' | 'forfeited';
+  shieldSpent: number;
+  karmaPenalty: number;
+  sourceEventId: string;
+}
+export interface SanctuaryState {
+  charters: SanctuaryCharter[];
+  passes: SanctuaryPass[];
+  incidents: SanctuaryIncident[];
+  nextId: number;
+}
+
 export interface WorldState {
+  sanctuary: SanctuaryState;
   research: ResearchState;
   ceasefires: CeasefireState;
   annotations: AnnotationState;

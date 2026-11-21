@@ -1,3 +1,4 @@
+import { advanceSanctuaries, interceptSanctuaryDuel, resolveSanctuaryAction } from './sanctuaryEngine';
 import { advanceResearch, resolveResearchAction } from './researchEngine';
 import { advanceCeasefires, availableCeasefireActions, recordCeasefireHostility, resolveCeasefireAction } from './ceasefireEngine';
 import { activeEscortForActor, resolveEscortAction } from './escortEngine';
@@ -116,12 +117,20 @@ function closeInterruptedTrial(actor: Cultivator, tick: number): void {
   }
 }
 
+function recordAuxiliaryActionEvent(world: WorldState, event: WorldEvent, emit?: (value: WorldEvent) => void): void {
+  if (emit) { emit(event); return; }
+  witnessEvent(world, event);
+  archiveChronicleEvents(world, [event]);
+  world.events = [event, ...world.events].slice(0, 120);
+}
+
 export function applyCultivatorBrainDecision(
   world: WorldState,
   cultivator: Cultivator,
   decision: LLMDecisionPayload,
   rng: () => number = worldRandom(world),
   authorizedBountyTargetId?: string,
+  emit?: (event: WorldEvent) => void,
 ): WorldEvent | null {
   if (!cultivator.alive) return null;
   if (isTribulationActive(cultivator)) {
@@ -144,7 +153,7 @@ export function applyCultivatorBrainDecision(
       return pursueBounty(world, cultivator, decision, (target) => {
         const result = applyCultivatorBrainDecision(world, cultivator, {
           chosenAction: 'DUEL', innerMonologue: decision.innerMonologue, targetCultivatorId: target.id,
-        }, rng, target.id);
+        }, rng, target.id, emit);
         cultivator.currentAction = 'PURSUE_BOUNTY';
         return result?.duelWinnerId ? { event: result, winnerId: result.duelWinnerId } : result;
       });
@@ -187,6 +196,8 @@ export function applyCultivatorBrainDecision(
     case 'ATTEST_WITNESS':
     case 'CHALLENGE_WITNESS':
       return resolveWitnessAction(world, cultivator, decision);
+    case 'SANCTUARY':
+      return resolveSanctuaryAction(world, cultivator, decision);
     case 'RESEARCH':
       return resolveResearchAction(world, cultivator, decision);
     case 'CEASEFIRE':
@@ -230,7 +241,7 @@ export function applyCultivatorBrainDecision(
       return pursueScheme(cultivator, world, decision.proposedScheme, (target) => {
         const result = applyCultivatorBrainDecision(world, cultivator, {
           chosenAction: 'DUEL', innerMonologue: decision.innerMonologue, targetCultivatorId: target.id,
-        }, rng);
+        }, rng, undefined, emit);
         cultivator.currentAction = 'PURSUE_SCHEME';
         return result;
       }, (target, delta) => adjustRelationship(world, cultivator.id, target.id, delta, '竞争'), rng);
@@ -482,6 +493,14 @@ export function applyCultivatorBrainDecision(
         (decision.targetCultivatorId === undefined || c.id === decision.targetCultivatorId)
       );
       if (!defender) return null;
+      const ward = interceptSanctuaryDuel(world, cultivator, defender);
+      if (ward?.blocked) return ward.event;
+      if (ward) recordAuxiliaryActionEvent(world, ward.event, emit);
+      const finishDuel = (proof: WorldEvent): WorldEvent => {
+        const breach = recordCeasefireHostility(world, cultivator, defender, proof);
+        if (breach) recordAuxiliaryActionEvent(world, breach, emit);
+        return proof;
+      };
 
       const attackerScore = cultivator.combatPower * (0.85 + rng() * 0.3) * strikeMultiplier(cultivator, defender) * masteryMultiplier(cultivator) * petCombatBonus(world, cultivator);
       const defenderScore = defender.combatPower * (0.85 + rng() * 0.3) * strikeMultiplier(defender, cultivator) * masteryMultiplier(defender) * petCombatBonus(world, defender);
@@ -540,7 +559,7 @@ export function applyCultivatorBrainDecision(
         };
         const fragments = transferLootedRelics(world, winner, loser, lethalEvent);
         if (fragments) lethalEvent.description += `另有${fragments}枚古器碎片循实账随战利品转移。`;
-        return lethalEvent;
+        return finishDuel(lethalEvent);
       }
 
       recordMemory(
@@ -557,7 +576,7 @@ export function applyCultivatorBrainDecision(
         9,
         'combat', -5
       );
-      return {
+      return finishDuel({
         id: `evt-${world.tick}-${cultivator.id}-duel`,
         tick: world.tick,
         year: world.year,
@@ -570,7 +589,7 @@ export function applyCultivatorBrainDecision(
         damage,
         dialogue: scriptedDialogue('combat', cultivator, defender, `${winner.name}占得上风，${loser.name}负伤离去。`, decision.spokenLine),
         locationId: cultivator.locationId,
-      };
+      });
     }
   }
 }
@@ -622,7 +641,7 @@ export function advanceWorldTick(
   const avatarOrder = consumeAvatarOrder(nextState);
   maintainAlchemy(nextState);
   maintainSectEconomy(nextState);
-  const newEvents: WorldEvent[] = [...advanceCeasefires(nextState), ...advanceCompetitionSeasons(nextState), ...advanceMapHazards(nextState), ...advanceRelocations(nextState), ...advanceSettlements(nextState), ...advanceSpiritBeasts(nextState, rng)];
+  const newEvents: WorldEvent[] = [...advanceSanctuaries(nextState), ...advanceCeasefires(nextState), ...advanceCompetitionSeasons(nextState), ...advanceMapHazards(nextState), ...advanceRelocations(nextState), ...advanceSettlements(nextState), ...advanceSpiritBeasts(nextState, rng)];
   for (const event of newEvents) witnessEvent(nextState, event);
 
   for (const cultivator of [...nextState.cultivators]) {
@@ -699,7 +718,10 @@ export function advanceWorldTick(
     if (traceOptions?.tape) rememberReplayDecision(traceOptions.tape, cultivator.id, decision, decisionDraws);
     const previousLocation = cultivator.locationId;
     const previousRealm = cultivator.realm;
-    const evt = applyCultivatorBrainDecision(nextState, cultivator, decision, rng);
+    const evt = applyCultivatorBrainDecision(nextState, cultivator, decision, rng, undefined, (event) => {
+      newEvents.push(event);
+      witnessEvent(nextState, event);
+    });
     const validEffect = decision.chosenAction === cultivator.currentAction && (evt !== null ||
       decision.chosenAction === 'REST' || decision.chosenAction === 'CULTIVATE' ||
       (decision.chosenAction === 'EXPLORE' && previousLocation !== cultivator.locationId));
@@ -710,7 +732,7 @@ export function advanceWorldTick(
     creditSectService(nextState, cultivator, evt);
     if (evt) {
       if (cultivator.realm !== previousRealm) recordBreakthroughCompetition(nextState, cultivator, previousRealm, evt);
-      if (decision.chosenAction === 'DUEL' || decision.chosenAction === 'AMBUSH_TRIBULATION') {
+      if (decision.chosenAction === 'AMBUSH_TRIBULATION') {
         const opponent = nextState.cultivators.find((candidate) => candidate.id !== cultivator.id && evt.actorIds.includes(candidate.id));
         if (opponent) {
           const breach = recordCeasefireHostility(nextState, cultivator, opponent, evt);
@@ -737,7 +759,7 @@ export function advanceWorldTick(
     if (yearly) cultivator.reflections = synthesizeReflections(cultivator, nextState.tick);
   }
 
-  for (const event of [...advanceDiplomacy(nextState, rng), ...advanceOccasions(nextState, rng), ...advanceOaths(nextState), ...advanceMarkets(nextState), ...advanceWitnesses(nextState), ...maintainSectPolitics(nextState), ...advanceBounties(nextState), ...advanceResearch(nextState), ...advanceEstates(nextState), ...advanceDoctrines(nextState)]) {
+  for (const event of [...advanceDiplomacy(nextState, rng), ...advanceOccasions(nextState, rng), ...advanceOaths(nextState), ...advanceMarkets(nextState), ...advanceWitnesses(nextState), ...maintainSectPolitics(nextState), ...advanceBounties(nextState), ...advanceResearch(nextState), ...advanceEstates(nextState), ...advanceDoctrines(nextState), ...advanceSanctuaries(nextState)]) {
     newEvents.push(event);
     witnessEvent(nextState, event);
   }

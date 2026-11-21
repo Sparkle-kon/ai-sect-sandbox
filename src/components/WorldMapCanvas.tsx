@@ -21,6 +21,7 @@ import { BRUSH_LABELS, brushPoint, drawHazards, getVisibleHazards } from './mapB
 import { BEAST_COLORS, visibleBeastsByLocation } from './spiritBeastView';
 import { activeAvatar } from '../engine/avatarEngine';
 import { localQiWeather } from '../engine/weatherEngine';
+import { visibleSanctuaryMapMarks } from './sanctuaryView';
 
 const MapKeyboardExplorer = React.lazy(async () => ({ default: (await import('./MapKeyboardExplorer')).MapKeyboardExplorer }));
 
@@ -92,6 +93,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const weatherAtVisibleSites = useMemo(() => new Map(seenLocations
     .filter(({ id }) => isCurrentLocation(id))
     .map((site) => [site.id, localQiWeather(world, site)])), [world, seenLocations, isCurrentLocation]);
+  const sanctuaryMarks = useMemo(() => visibleSanctuaryMapMarks(world, mapView, selected), [world, mapView, selected]);
   const annotationPins = useMemo(() => annotationView?.mapAnnotationPins(world, mapView, selectedCultivatorId) ?? [], [annotationView, world, mapView, selectedCultivatorId]);
   const convoys = useMemo(() => visibleMapConvoys(world, mapView), [world, mapView]);
   const escortedCaravan = useMemo(() => visibleMapEscort(world, mapView, selected), [world, mapView, selected]);
@@ -314,6 +316,15 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           ctx.fillStyle = '#67e8f9';
           ctx.fillText('会', loc.x + 28, loc.y - 4);
         }
+        const sanctuary = sanctuaryMarks.get(loc.id);
+        if (sanctuary !== undefined) {
+          ctx.save();
+          ctx.textAlign = 'left';
+          ctx.font = 'bold 11px sans-serif';
+          ctx.fillStyle = sanctuary > 0 ? '#67e8f9' : '#94a3b8';
+          ctx.fillText(sanctuary > 0 ? '敕' : '敕·竭', loc.x + 20, loc.y + 25);
+          ctx.restore();
+        }
         const localWeather = weatherAtVisibleSites.get(loc.id);
         if (localWeather && localWeather.kind !== '平息') {
           const appearance = WEATHER_MARK[localWeather.kind];
@@ -470,7 +481,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener('change', stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, hazards, convoys, escortedCaravan, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, armedBrush, preview, compact]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, hazards, convoys, escortedCaravan, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -858,6 +869,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
             const localVillage = villagesAt.get(location.id);
             const localWeather = weatherAtVisibleSites.get(location.id);
             const localBeasts = beastsByLocation.get(location.id) ?? [];
+            const sanctuary = sanctuaryMarks.get(location.id);
             return (
               <li key={location.id} className="inline-flex items-center gap-1.5">
                 <span>{location.name} · 灵脉</span>
@@ -878,6 +890,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                 {localWeather && <span style={{ color: WEATHER_MARK[localWeather.kind].color }}>
                   · 已观测：{localWeather.kind} {Math.round(localWeather.intensity * 100)}%
                 </span>}
+                {sanctuary !== undefined && <span className="text-cyan-200">· 本人通行权有效 · {sanctuary > 0 ? `护阵可挡 ${sanctuary} 次决斗` : '护阵已耗尽'}</span>}
                 {localCouncil && <span className="text-violet-300">· 本月议决：{localCouncil.title}</span>}
                 {besiegedLocationIds.has(location.id) && <span className="text-rose-300">· 围攻中</span>}
                 {localOccasions.map((occasion) => (
