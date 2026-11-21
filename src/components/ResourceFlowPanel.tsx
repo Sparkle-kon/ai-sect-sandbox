@@ -26,6 +26,7 @@ const REASONS: Readonly<Record<string, string>> = {
   artifact_salvage_recovery: '拆解原器实回玄土根',
   furnace_safety_inspection: '现场验炉实耗灵石', furnace_safety_repair: '炉体修缮实耗备料',
   civic_memorial_supplies: '乡祠立册实际耗用',
+  fair_reserve_fee: '乡集摊位预约资金保管', fair_local_service: '原地摆摊实际摊费', fair_refund_fee: '未摆摊实退原预约资金',
   granary_donation: '捐入村镇义仓', granary_draw: '灾后短缺实际支用',
   granary_donation_roots: '实捐玄土根', granary_donation_stones: '实捐灵石',
   village_supply_transport: '互助实耗运费', village_supply_dispatch: '互助原货启运封存',
@@ -65,6 +66,7 @@ export function ResourceFlowMonth({ ledger, world, scope, visibleSiteIds }: {
       case 'shipment': return '商队在途保管';
       case 'granary': return '村镇义仓';
       case 'village_supply': return '互助在途封存';
+      case 'village_fair': return '乡集摊位待付保管';
       case 'salvage': return '货损幸存物封存';
       case 'relocation': return '迁址在途公库';
       case 'workshop': return '工坊备料托管';

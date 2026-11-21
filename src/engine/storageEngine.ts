@@ -28,6 +28,8 @@ import { createPavilionLoansState } from './pavilionLoanEngine';
 import { validatePavilionLoanHistory } from './storagePavilionLoanValidation';
 import { createCivicMemorialsState } from './civicMemorialEngine';
 import { validateCivicMemorialHistory } from './storageCivicMemorialValidation';
+import { createVillageFairsState,VILLAGE_FAIR_CAPACITY } from './villageFairEngine';
+import { validateVillageFairHistory } from './storageVillageFairValidation';
 import { effectiveWorkshopDeadline, effectiveWorkshopQuantity } from './workshopCapacityTerms';
 import { validateWorkshopCapacityClauses } from './storageWorkshopCapacityValidation';
 import { validateRouteWarningHistory } from './storageRouteWarningValidation';
@@ -138,13 +140,13 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT SALVAGE_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP FURNACE_RESERVATION FURNACE_SAFETY SPARRING EXPEDITION_RESCUE SHORT_SHIFT BOUNDARY_RELIEF APPRENTICE_COHORT HOUSEHOLD_NAME CARAVAN_RESTITUTION VILLAGE_GRANARY VILLAGE_SUPPLY ROUTE_WARNING PAVILION_LOAN WORKSHOP_CAPACITY CIVIC_MEMORIAL RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY SEASON_REVIEW REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT SALVAGE_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP FURNACE_RESERVATION FURNACE_SAFETY SPARRING EXPEDITION_RESCUE SHORT_SHIFT BOUNDARY_RELIEF APPRENTICE_COHORT HOUSEHOLD_NAME CARAVAN_RESTITUTION VILLAGE_GRANARY VILLAGE_SUPPLY ROUTE_WARNING PAVILION_LOAN WORKSHOP_CAPACITY CIVIC_MEMORIAL VILLAGE_FAIR RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY SEASON_REVIEW REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const flowGood = one('stone','jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const flowMeasure = num(0,Number.MAX_SAFE_INTEGER);
 const flowSerial = num(1,Number.MAX_SAFE_INTEGER,true);
-const flowAccount = structure({kind:one('actor','site','sect','order','shipment','oath','relocation','workshop','salvage','granary','village_supply'),id,
+const flowAccount = structure({kind:one('actor','site','sect','order','shipment','oath','relocation','workshop','salvage','granary','village_supply','village_fair'),id,
   pocket:optional(one('payment','collateral'))});
 const granaryReceipt: Validator = (value, path) => {
   const kind = (value as { kind?: unknown } | null)?.kind;
@@ -483,6 +485,15 @@ const shape = structure({
     spentRoots:num(0,Number.MAX_SAFE_INTEGER,true),spentStones:num(0,Number.MAX_SAFE_INTEGER,true),
     lastDrawTick:otick,receipts:arr(VILLAGE_GRANARY_RECEIPT_LIMIT,granaryReceipt),
   }))}),
+  villageFairs:structure({nextId:num(1,Number.MAX_SAFE_INTEGER,true),fairs:arr(SAVE_COLLECTION_LIMIT,structure({
+    id,settlementId:id,siteId:id,sponsorId:id,sponsorDonationTick:tick,sponsorDonationKind:one('donate','donate_roots','donate_stones'),
+    announcedTick:tick,claimTick:tick,opensTick:tick,endsTick:tick,status:one('announced','open','ended','cancelled'),
+    closedTick:otick,closure:optional(one('site_hazard','sponsor_absent','venue_missing')),hazard:optional(villageSupplyHazard),
+    stalls:arr(VILLAGE_FAIR_CAPACITY,structure({merchantId:id,orderId:id,reservedTick:tick,feeEscrow:count,
+      status:one('reserved','paid','refund_due','refunded'),settledTick:otick,
+      releaseReason:optional(one('fair_cancelled','merchant_absent','order_unavailable')),
+      offering:optional(structure({good:marketGood,quantity:marketQty,unitPrice:marketPrice}))})),
+  }))}),
   civicMemorials:structure({nextDeedId:num(1,Number.MAX_SAFE_INTEGER,true),nextMemorialId:num(1,Number.MAX_SAFE_INTEGER,true),
     deeds:arr(SAVE_COLLECTION_LIMIT,structure({
       id,reliefRecordId:id,settlementId:id,siteId:id,subjectId:id,volunteerId:id,householdId:id,name:id,enrolledTick:tick,
@@ -517,7 +528,7 @@ const shape = structure({
     tick,year:tick,month,totalEntries:num(0,Number.MAX_SAFE_INTEGER,true),
     totals:arr(9,structure({good:flowGood,transfer:flowMeasure,production:flowMeasure,consumption:flowMeasure,loss:flowMeasure})),
     entries:arr(RESOURCE_FLOW_DETAIL_LIMIT,structure({
-      id:flowSerial,tick,mechanism:one('alchemy','market','sect_economy','oath','commons','relocation','terrain','workshop','road','observatory','pilgrimage','granary','furnace_safety','artifact_salvage','village_supply','civic_memorial'),
+      id:flowSerial,tick,mechanism:one('alchemy','market','sect_economy','oath','commons','relocation','terrain','workshop','road','observatory','pilgrimage','granary','furnace_safety','artifact_salvage','village_supply','civic_memorial','village_fair'),
       refId:id,reason:strings(40,1),good:flowGood,amount:flowMeasure,visibility:flowScope,
       kind:one('transfer','production','consumption','loss'),from:optional(flowAccount),to:optional(flowAccount)
     }))
@@ -791,6 +802,7 @@ function verifyWorld(value: unknown): WorldState {
       ...(!Object.hasOwn(value, 'routeWarnings') ? { routeWarnings: createRouteWarningsState() } : {}),
       ...(!Object.hasOwn(value, 'pavilionLoans') ? { pavilionLoans: createPavilionLoansState() } : {}),
       ...(!Object.hasOwn(value, 'civicMemorials') ? { civicMemorials: createCivicMemorialsState() } : {}),
+      ...(!Object.hasOwn(value, 'villageFairs') ? { villageFairs: createVillageFairsState() } : {}),
       ...(!Object.hasOwn(value, 'caravanRestitution') ? { caravanRestitution: createCaravanRestitutionState() } : {}),
       ...(!Object.hasOwn(value, 'terrainSuccession') ? { terrainSuccession: createTerrainSuccessionState() } : {}),
       ...(!Object.hasOwn(value, 'resourceFlow') ? { resourceFlow: createResourceFlowState() } : {}),
@@ -1270,6 +1282,7 @@ function verifyWorld(value: unknown): WorldState {
   validateApprenticeCohortRelationships(w, actor, sector, locations, fail);
   validateHouseholdNameRelationships(w, actor, fail);
   validateCaravanRestitutionRelationships(w, actor, fail);
+  validateVillageFairHistory(w, actor, fail);
   validateCivicMemorialHistory(w, actor, fail);
   validatePavilionLoanHistory(w, actor, sector, fail);
   validateRouteWarningHistory(w, actor, fail);

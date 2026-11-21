@@ -151,6 +151,7 @@ export type ActionType =
   | 'PAVILION_LOAN'
   | 'WORKSHOP_CAPACITY'
   | 'CIVIC_MEMORIAL'
+  | 'VILLAGE_FAIR'
   | 'FORGE_ARTIFACT'
   | 'BIND_ARTIFACT'
   | 'REPAIR_ARTIFACT'
@@ -554,6 +555,8 @@ export interface LLMDecisionPayload {
   pavilionLoanMove?: PavilionLoanMove;
   workshopCapacityMove?: WorkshopCapacityMove;
   civicMemorialMove?: CivicMemorialMove;
+  villageFairMove?: VillageFairMove;
+  targetVillageFairId?: string;
   targetCivicDeedId?: string;
   targetCivicMemorialId?: string;
   targetPavilionLoanId?: string;
@@ -1126,6 +1129,37 @@ export interface CivicErrataEvidence {
   retellings:Array<{id:string;tick:number;reading:ChronicleReliefReading}>;
   correction?:{id:string;tick:number;reading:'full_supplies'};
 }
+export type VillageFairMove = 'announce'|'reserve';
+export type VillageFairClosure='site_hazard'|'sponsor_absent'|'venue_missing';
+export interface VillageFairStall {
+  merchantId:string;
+  orderId:string;
+  reservedTick:number;
+  feeEscrow:number;
+  status:'reserved'|'paid'|'refund_due'|'refunded';
+  settledTick?:number;
+  releaseReason?:'fair_cancelled'|'merchant_absent'|'order_unavailable';
+  offering?:{good:MarketGood;quantity:number;unitPrice:number};
+}
+export interface VillageFair {
+  id:string;
+  settlementId:string;
+  siteId:string;
+  sponsorId:string;
+  sponsorDonationTick:number;
+  sponsorDonationKind:VillageGranaryDonation;
+  announcedTick:number;
+  claimTick:number;
+  opensTick:number;
+  endsTick:number;
+  status:'announced'|'open'|'ended'|'cancelled';
+  closedTick?:number;
+  closure?:VillageFairClosure;
+  hazard?:Pick<MapHazard,'id'|'kind'|'tileId'|'createdTick'|'expiresTick'|'intensity'>;
+  stalls:VillageFairStall[];
+}
+export interface VillageFairsState { fairs:VillageFair[];nextId:number }
+
 export interface CivicReliefDeed {
   id:string;
   reliefRecordId:string;
@@ -2247,9 +2281,9 @@ export interface SharedCommonsPact {
 export interface SharedCommonsState { pacts: SharedCommonsPact[]; nextId: number }
 
 export type ResourceFlowGood = 'stone' | MarketGood;
-export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation' | 'terrain' | 'workshop' | 'road' | 'observatory' | 'pilgrimage' | 'granary' | 'furnace_safety' | 'artifact_salvage' | 'village_supply' | 'civic_memorial';
+export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation' | 'terrain' | 'workshop' | 'road' | 'observatory' | 'pilgrimage' | 'granary' | 'furnace_safety' | 'artifact_salvage' | 'village_supply' | 'civic_memorial' | 'village_fair';
 export type ResourceFlowAccount =
-  | { kind: 'actor' | 'site' | 'sect' | 'order' | 'shipment' | 'relocation' | 'workshop' | 'salvage' | 'granary' | 'village_supply'; id: string }
+  | { kind: 'actor' | 'site' | 'sect' | 'order' | 'shipment' | 'relocation' | 'workshop' | 'salvage' | 'granary' | 'village_supply' | 'village_fair'; id: string }
   | { kind: 'oath'; id: string; pocket: 'payment' | 'collateral' };
 export type ResourceFlowVisibility =
   | { kind: 'observer' }
@@ -2781,6 +2815,7 @@ export interface WorldState {
   routeWarnings: RouteWarningsState;
   pavilionLoans: PavilionLoansState;
   civicMemorials: CivicMemorialsState;
+  villageFairs: VillageFairsState;
   resourceFlow: ResourceFlowState;
   roads: RoadState;
   sharedCommons: SharedCommonsState;

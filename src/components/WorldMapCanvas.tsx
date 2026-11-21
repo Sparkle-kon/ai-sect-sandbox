@@ -44,6 +44,7 @@ import { drawVillageSupplyCheckpoints } from './villageSupplyMapDraw';
 import { visiblePublicRouteWarnings } from '../engine/routeWarningEngine';
 import { projectLocalPavilionDesk } from '../engine/pavilionLoanEngine';
 import { projectLocalCivicMemorialCount } from '../engine/civicMemorialEngine';
+import { projectLocalVillageFair } from '../engine/villageFairEngine';
 import { drawRouteWarningMarks,paintedRouteWarningGeometry } from './routeWarningMapDraw';
 import { getCurrentBoundaryCoverage } from '../engine/boundaryReliefEngine';
 import { currentVisibleTileIds, terrainTileAt } from '../engine/terrainEngine';
@@ -168,6 +169,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     order.status==='active' && order.capacityAmendment && order.siteId===selected.locationId &&
     (order.patronId===selected.id || order.makerId===selected.id)) : undefined,[world,selected,furnaceShift]);
   const localPavilionDesk=useMemo(()=>projectLocalPavilionDesk(world,selected),[world,selected]);
+  const localVillageFair=useMemo(()=>world.villageFairs.fairs.length ? projectLocalVillageFair(world,selected) : undefined,[world,selected]);
   const localMemorial=useMemo(()=>world.civicMemorials.memorials.length ? projectLocalCivicMemorialCount(world,selected) : undefined,[world,selected]);
   const ownCurrentFurnaceRecovery = useMemo(() => furnaceShift && selected && world.artifactSalvages.receipts.some((receipt) =>
     receipt.ownerId === selected.id && receipt.siteId === selected.locationId && receipt.tick === world.tick) ?
@@ -572,9 +574,11 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         const pavilionMarker = localPavilionDesk?.siteId===loc.id && isCurrentLocation(loc.id) &&
           (localPavilionDesk.staffed || localPavilionDesk.heldCopies>0 || localPavilionDesk.availableCopies>0) ? ' 经' : '';
         const memorialMarker=localMemorial?.siteId===loc.id && localMemorial.count>0 && isCurrentLocation(loc.id) ? ' 祠' : '';
+        const fairMarker=localVillageFair?.siteId===loc.id&&isCurrentLocation(loc.id)?' 集':'';
+        const fairWidth=ctx.measureText(fairMarker).width;
         const memorialWidth=ctx.measureText(memorialMarker).width;
         const pavilionWidth=ctx.measureText(pavilionMarker).width;
-        const labelStart = loc.x - (placeWidth + markerWidth + scrollWidth + furnaceWidth + guardWidth + pavilionWidth + memorialWidth) / 2;
+        const labelStart = loc.x - (placeWidth + markerWidth + scrollWidth + furnaceWidth + guardWidth + pavilionWidth + memorialWidth + fairWidth) / 2;
         ctx.textAlign = 'left';
         ctx.fillStyle = '#e2e8f0';
         ctx.fillText(loc.name, labelStart, loc.y - 26);
@@ -600,6 +604,10 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         if(memorialMarker){
           ctx.fillStyle='#f5d0a9';
           ctx.fillText(memorialMarker,labelStart+placeWidth+markerWidth+scrollWidth+furnaceWidth+guardWidth+pavilionWidth,loc.y-26);
+        }
+        if(fairMarker){
+          ctx.fillStyle='#a7f3d0';
+          ctx.fillText(fairMarker,labelStart+placeWidth+markerWidth+scrollWidth+furnaceWidth+guardWidth+pavilionWidth+memorialWidth,loc.y-26);
         }
         if (occasionsByLocation.has(loc.id)) {
           ctx.font = 'bold 11px sans-serif';
@@ -806,7 +814,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener('change', stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, observedSalvageSites, localGranary, furnaceShift, localPavilionDesk, localMemorial, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, observedSalvageSites, localGranary, furnaceShift, localPavilionDesk, localMemorial, localVillageFair, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1298,6 +1306,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                   <span className="text-amber-200">· 本人委制只留首件，第二件已解除；首件在第 {ownWorkshopCapacity.capacityAmendment?.workUntilTick} 轮前收尾</span>}
                 {location.id===localPavilionDesk?.siteId && isCurrentLocation(location.id) &&
                   <span className="text-amber-200">· 藏经阁{localPavilionDesk.staffed?'本轮有值守':'本轮未见值守'}，在架 {localPavilionDesk.availableCopies} 册、持有未归 {localPavilionDesk.heldCopies} 册</span>}
+                {location.id===localVillageFair?.siteId && isCurrentLocation(location.id) &&
+                  <span className="text-emerald-200">· 今日乡集已实开，现场确认摊位 {localVillageFair.paidStalls} 席（不计人口）</span>}
                 {location.id===localMemorial?.siteId && localMemorial.count>0 && isCurrentLocation(location.id) &&
                   <span className="text-amber-200">· 现场见乡祠实据 {localMemorial.count} 则</span>}
                 {location.id === locallyObservedWorkshopClosure?.originId &&

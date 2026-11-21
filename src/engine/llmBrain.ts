@@ -3,6 +3,7 @@ import { availableObservatoryActions } from './fieldObservatoryEngine';
 import { availableShortShiftActions } from './shortShiftEngine';
 import { availableCaravanRestitutionActions } from './caravanRestitutionEngine';
 import { availableVillageGranaryActions, projectVillageGranary } from './villageGranaryEngine';
+import { availableVillageFairActions } from './villageFairEngine';
 import { availableCivicMemorialActions } from './civicMemorialEngine';
 import { availableVillageSupplyActions } from './villageSupplyEngine';
 import { availableBoundaryReliefActions } from './boundaryReliefEngine';
@@ -1006,6 +1007,23 @@ export function computeHeuristicDecision(
       targetCivicDeedId: deeds[0].targetCivicDeedId, innerMonologue: '只提请核验这份实事，待另有在场人亲自核实再记。' };
   }
 
+  const fairInterest = !cultivator.guardAssignment && cultivator.hp >= cultivator.maxHp * .75 &&
+    world.settlements.villages.some(({ locationId }) => locationId === cultivator.locationId);
+  if (fairInterest) {
+    const fair = availableVillageFairActions(cultivator, world);
+    const booths = fair.filter(({ villageFairMove }) => villageFairMove === 'reserve');
+    if (booths.length === 1) return { chosenAction: 'VILLAGE_FAIR', villageFairMove: 'reserve',
+      targetVillageFairId: booths[0].targetVillageFairId, targetMarketOrderId: booths[0].targetMarketOrderId,
+      innerMonologue: '用自己已经挂实货的单占一处，只付现场的摊费。' };
+    if (booths.length === 0 && world.tick >= 16 && (world.tick + cultivator.id.charCodeAt(cultivator.id.length - 1)) % 17 === 5 &&
+        (cultivator.personality === '刚正' || cultivator.personality === '逍遥')) {
+      const announcements = fair.filter(({ villageFairMove }) => villageFairMove === 'announce');
+      if (announcements.length === 1) return { chosenAction: 'VILLAGE_FAIR', villageFairMove: 'announce',
+        targetSettlementId: announcements[0].targetSettlementId,
+        innerMonologue: '我在这里依实发出集期，只留现有摊位，不许人凭空备货。' };
+    }
+  }
+
   // Irreversible disposal is optional and never interrupts a scheduled duty.
   // Keep a usable alternative and leave even slightly repairable or distinctive gear alone.
   if (world.tick >= 16 && world.tick % 13 === 3 && !cultivator.guardAssignment &&
@@ -1155,6 +1173,9 @@ export async function requestCultivatorLLMDecision(
   const arbitrationOptions = availableOathArbitrationActions(cultivator, world);
   const oathOptions = availableOathActions(cultivator, world);
   const marketOptions = availableMarketActions(cultivator, world);
+  const villageFairOptions = availableVillageFairActions(cultivator, world, requestTick);
+  const villageFairPromptOptions = villageFairOptions.map(({ villageFairMove, targetSettlementId, targetVillageFairId, targetMarketOrderId }) =>
+    ({ villageFairMove, targetSettlementId, targetVillageFairId, targetMarketOrderId }));
   const restitutionOptions = availableCaravanRestitutionActions(cultivator, world, requestTick);
   const settlementOptions = availableSettlementActions(cultivator, world);
   const granaryOptions = availableVillageGranaryActions(cultivator, world, requestTick);
@@ -1306,6 +1327,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 可提出或质证的已知传闻，仅使用这些证人选项：${JSON.stringify(witnessOptions)}
 - 村镇在地赈济与本人同意的招募选项：${JSON.stringify(settlementOptions)}
 - 坊市当下可用挂单和撤单（参数必须采用给定值）：${JSON.stringify(marketOptions)}
+- 乡集只复制本人执行回合已有的许可：announce 仅用 targetSettlementId；reserve 同填 targetVillageFairId 和本人已经挂实货的 targetMarketOrderId。不填写货物、数量、钱款、商人、时辰或开集结果：${JSON.stringify(villageFairPromptOptions)}
 - 契书仲裁只复制已列动作；双方签署共用现有托管，亲见和裁断身份不得混同：${JSON.stringify(arbitrationOptions)}
 - 两宗契书权限（必须严格采用这些目标与条款）：${JSON.stringify(oathOptions)}
 - 师门传授与回应，只选择给出的行动和目标：${JSON.stringify(mentorshipOptions)}
@@ -1446,6 +1468,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'CARAVAN_RESTITUTION',
             'VILLAGE_GRANARY',
             'VILLAGE_SUPPLY',
+            'VILLAGE_FAIR',
             'RELIC_EXHIBIT',
             'PROBATION',
             'ROAD',
@@ -1514,6 +1537,21 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             item.granaryMove === parsed.granaryMove && item.targetSettlementId === parsed.targetSettlementId) : undefined;
           if (chosenAction === 'VILLAGE_GRANARY' && (!legalGranary || Object.keys(parsed).some((field) =>
             !['chosenAction', 'innerMonologue', 'spokenLine', 'granaryMove', 'targetSettlementId'].includes(field)))) return undefined;
+          const legalVillageFair = chosenAction === 'VILLAGE_FAIR' ? villageFairOptions.find((item) =>
+            item.villageFairMove === parsed.villageFairMove && item.targetSettlementId === parsed.targetSettlementId &&
+            item.targetVillageFairId === parsed.targetVillageFairId && item.targetMarketOrderId === parsed.targetMarketOrderId) : undefined;
+          if (chosenAction === 'VILLAGE_FAIR' && (!legalVillageFair || Object.keys(parsed).some((field) =>
+            !['chosenAction', 'innerMonologue', 'villageFairMove', ...(legalVillageFair.villageFairMove === 'announce'
+              ? ['targetSettlementId'] : ['targetVillageFairId', 'targetMarketOrderId'])].includes(field)))) return undefined;
+          // The fair resolver requires exact enumerable keys, including absence of optional fields from other actions.
+          if (legalVillageFair) {
+            const innerMonologue = (typeof parsed.innerMonologue === 'string' && parsed.innerMonologue.trim().slice(0, 160)) ||
+              cultivator.innerMonologue || '依据真实集期与本人实物行事。';
+            return legalVillageFair.villageFairMove === 'announce'
+              ? { chosenAction: 'VILLAGE_FAIR', villageFairMove: 'announce', targetSettlementId: legalVillageFair.targetSettlementId, innerMonologue }
+              : { chosenAction: 'VILLAGE_FAIR', villageFairMove: 'reserve', targetVillageFairId: legalVillageFair.targetVillageFairId,
+                targetMarketOrderId: legalVillageFair.targetMarketOrderId, innerMonologue };
+          }
           const legalVillageSupply = chosenAction === 'VILLAGE_SUPPLY' ? villageSupplyOptions.find((item) =>
             item.villageSupplyMove === parsed.villageSupplyMove && item.targetSettlementId === parsed.targetSettlementId &&
             item.targetVillageSupplyId === parsed.targetVillageSupplyId) : undefined;

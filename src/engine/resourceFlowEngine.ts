@@ -15,6 +15,8 @@ export const flowSect = (id: string): ResourceFlowAccount => ({ kind: 'sect', id
 export const flowOrder = (id: string): ResourceFlowAccount => ({ kind: 'order', id });
 export const flowShipment = (id: string): ResourceFlowAccount => ({ kind: 'shipment', id });
 export const flowGranary = (id: string): ResourceFlowAccount => ({ kind: 'granary', id });
+export const flowVillageFairStall = (fairId:string,orderId:string):ResourceFlowAccount =>
+  ({kind:'village_fair',id:`${fairId}:${orderId}`});
 export const flowVillageSupplyLeg = (agreementId: string, good: 'earth_root'|'stone'): ResourceFlowAccount =>
   ({ kind:'village_supply', id:`${agreementId}:${good}` });
 export const flowSalvage = (id: string): ResourceFlowAccount => ({ kind: 'salvage', id });

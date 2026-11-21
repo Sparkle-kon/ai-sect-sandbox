@@ -17,6 +17,7 @@ import { resolveVillageGranaryAction } from './villageGranaryEngine';
 import { advanceVillageSupply, resolveVillageSupplyAction } from './villageSupplyEngine';
 import { resolvePavilionLoanAction } from './pavilionLoanEngine';
 import { advanceCivicMemorials,resolveCivicMemorialAction } from './civicMemorialEngine';
+import { advanceVillageFairs,resolveVillageFairAction } from './villageFairEngine';
 import { advanceRouteWarnings,availableRouteWarningActions,resolveRouteWarningAction } from './routeWarningEngine';
 import { resolveCaravanRestitutionAction } from './caravanRestitutionEngine';
 import { boundaryReliefCheckpoint } from './boundaryReliefCheckpoint';
@@ -292,6 +293,8 @@ export function applyCultivatorBrainDecision(
       return resolveApprenticeCohortAction(world, cultivator, decision);
     case 'HOUSEHOLD_NAME':
       return resolveHouseholdNameAction(world, cultivator, decision);
+    case 'VILLAGE_FAIR':
+      return resolveVillageFairAction(world,cultivator,decision);
     case 'CIVIC_MEMORIAL':
       return resolveCivicMemorialAction(world,cultivator,decision);
     case 'WORKSHOP_CAPACITY':
@@ -796,7 +799,7 @@ export function advanceWorldTick(
   const avatarOrder = consumeAvatarOrder(nextState);
   maintainAlchemy(nextState);
   maintainSectEconomy(nextState);
-  const newEvents: WorldEvent[] = [...advanceSanctuaries(nextState), ...advanceCeasefires(nextState), ...advanceCompetitionSeasons(nextState), ...advanceMapHazards(nextState), ...advanceTerrainSuccession(nextState), ...advanceRoads(nextState), ...advanceCouriers(nextState), ...advancePilgrimages(nextState), ...advanceRelocations(nextState), ...advanceWorkshopInstitutionClosures(nextState), ...advanceSettlements(nextState), ...advanceVillageSupply(nextState), ...advanceVillageWorks(nextState), ...advanceSpiritBeasts(nextState, rng), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...advanceSharedCommons(nextState), ...advanceHouseholds(nextState)];
+  const newEvents: WorldEvent[] = [...advanceSanctuaries(nextState), ...advanceCeasefires(nextState), ...advanceCompetitionSeasons(nextState), ...advanceMapHazards(nextState), ...advanceTerrainSuccession(nextState), ...advanceRoads(nextState), ...advanceCouriers(nextState), ...advancePilgrimages(nextState), ...advanceRelocations(nextState), ...advanceWorkshopInstitutionClosures(nextState), ...advanceSettlements(nextState), ...advanceVillageSupply(nextState), ...advanceVillageWorks(nextState), ...advanceSpiritBeasts(nextState, rng), ...advanceVillageFairs(nextState), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...advanceSharedCommons(nextState), ...advanceHouseholds(nextState)];
   for (const event of newEvents) witnessEvent(nextState, event);
   openFurnaceTurn(nextState);
   beginClinicDutyTurn(nextState);

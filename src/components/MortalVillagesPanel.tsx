@@ -10,6 +10,7 @@ import { HouseholdRegisterPanel } from './HouseholdRegisterPanel';
 import { CensusPanel } from './CensusPanel';
 import { VillageSupplyPanel } from './VillageSupplyPanel';
 import { VillageMemorialPanel } from './VillageMemorialPanel';
+import { VillageFairPanel } from './VillageFairPanel';
 
 type RecordEntry = WorldState['settlements']['records'][number];
 const KIND_LABELS: Record<RecordEntry['kind'], string> = {
@@ -73,6 +74,7 @@ export function MortalVillagesPanel({ world, cultivator }: { world: WorldState; 
                     {cultivator && <CensusPanel world={world} cultivator={cultivator} villageId={village.id} />}
                     {cultivator && <VillageMemorialPanel world={world} cultivator={cultivator} villageId={village.id} />}
                     {cultivator && <VillageSupplyPanel world={world} cultivator={cultivator} settlementId={village.id} />}
+                    {cultivator && <VillageFairPanel world={world} cultivator={cultivator} villageId={village.id} />}
                     {worksView.length > 0 && <VillageWorksPanel world={world} village={village} projects={worksView} />}
                     <div className="space-y-1 border-t border-slate-800 pt-2">
                       <h4 className="font-semibold text-emerald-100">自愿入门 · 当前可招募 {eligible.length} 人</h4>
