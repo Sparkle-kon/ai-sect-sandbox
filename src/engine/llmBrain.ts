@@ -7,6 +7,7 @@ import { availableProbationActions, probationReliefTargets } from './probationEn
 import { availableRelicExhibitActions } from './relicExhibitEngine';
 import { availableWorkshopActions } from './workshopEngine';
 import { availableSparringActions, sparringLocksActor, SPARRING_QI_COST } from './sparringEngine';
+import { availableExpeditionRescueActions, EXPEDITION_RESCUE_DISTRESS_HP } from './expeditionRescueEngine';
 import { availableFurnaceReservationActions, heldFurnaceReservation } from './furnaceReservationEngine';
 import { COGNITIVE_RESPONSE_GUIDE } from './llmCognitiveResponseGuide';
 import { availableTerrainRecoveryActions } from './terrainSuccessionEngine';
@@ -53,7 +54,7 @@ import { availableAmbushTargets, isTribulationActive, recommendedTribulationStan
 import { availableLeadershipActions } from './sectPoliticsEngine';
 import { availableSectEconomyActions } from './sectEconomyEngine';
 import { availableDiplomacyActions } from './diplomacyEngine';
-import { availableOccasionJoins } from './occasionEngine';
+import { activeOccasionForActor, availableOccasionJoins } from './occasionEngine';
 import { availableBountyHunts } from './bountyEngine';
 import { knownMapLocations, terrainTileAt } from './terrainEngine';
 import { availableBeastTames, guardingHerbBeast, petCombatBonus } from './spiritBeastEngine';
@@ -74,6 +75,21 @@ export function utilityCeasefireDecision(actor: Cultivator, world: WorldState): 
   const move = choices.find(({ ceasefireMove }) => ceasefireMove === (shouldDecline ? 'decline' : 'accept')) ??
     choices.find(({ ceasefireMove }) => ceasefireMove === 'offer');
   return move ? { ...move, chosenAction: 'CEASEFIRE', innerMonologue: '兵疲须议，若立停战，须见真实撤军与库银担保。' } : undefined;
+}
+
+/** Rescuers opt in only through an actually delivered, currently actionable distress signal. */
+export function utilityExpeditionRescueDecision(actor: Cultivator, world: WorldState): LLMDecisionPayload | undefined {
+  if (!world.expeditionRescues.requests.length && !world.occasions.some((row) => row.kind === 'expedition' && row.status === 'running')) return undefined;
+  const choices = availableExpeditionRescueActions(actor, world);
+  const withdraw = actor.hp > actor.maxHp * EXPEDITION_RESCUE_DISTRESS_HP ? choices.find((option) => option.rescueMove === 'withdraw' &&
+    world.expeditionRescues.requests.some((row) => row.id === option.targetExpeditionRescueId && row.status === 'signaled' && row.explorerId === actor.id)) : undefined;
+  const accept = actor.hp >= actor.maxHp * .65 && actor.personality !== '嗜血' && actor.personality !== '诡诈' ?
+    choices.find(({ rescueMove }) => rescueMove === 'accept') : undefined;
+  const option = withdraw ?? choices.find(({ rescueMove }) => rescueMove === 'signal') ?? accept;
+  if (!option) return undefined;
+  const thought = option.rescueMove === 'signal' ? '向确能收到的在场见证人发出求援。' : option.rescueMove === 'accept' ?
+    '我自愿携实物补给接应，只沿已核实的撤离路。' : '已脱离伤势所致的求援条件；在尚未交付补给时撤信。';
+  return { ...option, chosenAction: option.action, innerMonologue: thought };
 }
 
 /**
@@ -101,6 +117,8 @@ export function computeHeuristicDecision(
       innerMonologue: tribulationStance === 'focus' ? '抱守道心，不为幻象所动。' : '雷云不散，且运转护身法诀抵挡。',
     };
   }
+  const rescue = utilityExpeditionRescueDecision(cultivator, world);
+  if (rescue) return rescue;
   const pilgrim = activePilgrimageForActor(world, cultivator);
   const pendingVow = world.pilgrimages.journeys.some((journey) => journey.status === 'proposed' && journey.companionId === cultivator.id);
   if (pilgrim || pendingVow) {
@@ -808,6 +826,10 @@ export async function requestCultivatorLLMDecision(
   const onPilgrimagePath = activeVow && Boolean(pilgrimageCheckpoint(world, cultivator));
   const pilgrimageOptions = availablePilgrimageActions(cultivator, world, true, requestTick);
   if (onPilgrimagePath && !pilgrimageOptions.length) return undefined;
+  const rescueOptions = availableExpeditionRescueActions(cultivator, world, requestTick);
+  const rescueOnly = activeOccasionForActor(world, cultivator)?.kind === 'expedition' || world.expeditionRescues.requests.some((row) =>
+    row.status === 'extracting' && (row.explorerId === cultivator.id || row.rescuerId === cultivator.id));
+  if (rescueOnly && !rescueOptions.length) return undefined;
 
   const location = world.locations.find((l) => l.id === cultivator.locationId);
   const coLocated = world.cultivators.filter(
@@ -871,7 +893,9 @@ export async function requestCultivatorLLMDecision(
   const relicOptions = availableRelicActions(cultivator, world, requestTick);
   const recollectionOptions = availableRecollectionActions(cultivator, world);
   const ownEcho = visibleRecollection(world, cultivator.id);
-  const prompt = activeVow ? `你是修仙沙盒中自愿参加巡礼的修士。只能使用本人的可执行行动，不许传送、额外援药或虚构站点。
+  const prompt = rescueOnly ? `你是修仙沙盒中参与秘境求援的修士。只从本人执行回合的许可原样复制求援、应援或撤回：${JSON.stringify(rescueOptions)}。
+确认由当事人分别作出，撤离必须实走。不要填写坐标、地点名称、路线、补给数量或战利品。只返回合法 JSON。` :
+    activeVow ? `你是修仙沙盒中自愿参加巡礼的修士。只能使用本人的可执行行动，不许传送、额外援药或虚构站点。
 当前已实到 ${activeVow.stopsVisited.length - 1} 个巡礼站点；${onPilgrimagePath ? '仍在道路途中，不在旧站。' : '当前在已到达的实站，可调息。'}
 只允许复制执行回合的以下巡礼选项：${JSON.stringify(pilgrimageOptions)}
 宿营、接续与撤营只抄本人合法动作和巡礼编号，不填写坐标、营地名称、临时目的地或费用。
@@ -932,6 +956,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 丹毒：${cultivator.pillToxicity}/100；灵药包：${JSON.stringify(cultivator.herbs)}；已有丹药：${JSON.stringify(cultivator.pills)}；允许的炼丹行动：${JSON.stringify(availableAlchemy(cultivator, world, requestTick))}
 - 炉位预约仅复制执行回合的实际许可：${JSON.stringify(furnaceOptions)}；预约不是已开炉，不自填时间、容量或物料。
 - 自愿切磋只使用执行回合的许可：${JSON.stringify(sparringOptions)}；双方分别应允，认输即停，不自行填伤势、胜负或惩罚。
+- 秘境应援仅限本人确已接获且到场可行的执行许可：${JSON.stringify(rescueOptions)}；只复制合法动作与编号，不填坐标、补给或战利品。
 - 功法熟练度：${cultivator.techniqueMastery}/100；可自创：${mayAuthorTechnique(cultivator) ? '是' : '否'}；可研习：${JSON.stringify(availableTechniques(cultivator, world))}
 - 可行的归葬、继承或立嗣选项：${JSON.stringify(estateOptions)}
 - 可提出或质证的已知传闻，仅使用这些证人选项：${JSON.stringify(witnessOptions)}
@@ -1064,6 +1089,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'WORKSHOP',
             'FURNACE_RESERVATION',
             'SPARRING',
+            'EXPEDITION_RESCUE',
             'RELIC_EXHIBIT',
             'PROBATION',
             'ROAD',
@@ -1074,6 +1100,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
           const chosenAction = parsed?.chosenAction;
           if (!chosenAction || !validActions.includes(chosenAction)) return undefined;
 
+          if (rescueOnly && chosenAction !== 'EXPEDITION_RESCUE') return undefined;
           if (activeVow && chosenAction !== 'PILGRIMAGE' && (chosenAction !== 'REST' || onPilgrimagePath)) return undefined;
           const legalRoad = chosenAction === 'ROAD' ? roadOptions.find((item) =>
             item.roadMove === parsed.roadMove && item.targetRoadId === parsed.targetRoadId &&
@@ -1101,6 +1128,11 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             item.targetSparringId === parsed.targetSparringId && item.sparringRounds === parsed.sparringRounds) : undefined;
           if (chosenAction === 'SPARRING' && (!legalSparring || Object.keys(parsed).some((field) =>
             !['chosenAction', 'innerMonologue', 'spokenLine', 'sparringMove', 'targetCultivatorId', 'targetSparringId', 'sparringRounds'].includes(field)))) return undefined;
+          const legalRescue = chosenAction === 'EXPEDITION_RESCUE' ? rescueOptions.find((item) =>
+            item.rescueMove === parsed.rescueMove && item.targetOccasionId === parsed.targetOccasionId &&
+            item.targetExpeditionRescueId === parsed.targetExpeditionRescueId) : undefined;
+          if (chosenAction === 'EXPEDITION_RESCUE' && (!legalRescue || Object.keys(parsed).some((field) =>
+            !['chosenAction', 'innerMonologue', 'spokenLine', 'rescueMove', 'targetOccasionId', 'targetExpeditionRescueId'].includes(field)))) return undefined;
           const legalWorkshop = chosenAction === 'WORKSHOP' ? workshopOptions.find((item) =>
             item.workshopMove === parsed.workshopMove && item.targetWorkshopId === parsed.targetWorkshopId &&
             item.targetCultivatorId === parsed.targetCultivatorId && item.workshopTier === parsed.workshopTier &&
@@ -1356,7 +1388,9 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             spokenLine: typeof parsed.spokenLine === 'string' ? parsed.spokenLine.trim().slice(0, 90) : undefined,
             facilityKind: legalInfrastructure?.facilityKind,
             targetSectId: legalCommons?.targetSectId ?? legalLease?.targetSectId ?? legalFormation?.targetSectId ?? legalCredit?.targetSectId ?? legalCeasefire?.targetSectId ?? legalForeign?.targetSectId,
-            targetOccasionId: legalOccasion?.targetOccasionId,
+            targetOccasionId: legalRescue?.targetOccasionId ?? legalOccasion?.targetOccasionId,
+            rescueMove: legalRescue?.rescueMove,
+            targetExpeditionRescueId: legalRescue?.targetExpeditionRescueId,
             targetBountyId: legalHunt?.targetBountyId,
             targetBeastId: legalHabitat?.targetBeastId ?? legalBeast?.targetBeastId,
             tribulationStance: chosenAction === 'FACE_TRIBULATION' && validStance ? stance : undefined,

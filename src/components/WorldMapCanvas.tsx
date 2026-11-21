@@ -124,6 +124,9 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const furnaceShift = useMemo(() => selected
     ? availableFurnaceSlotSummary(world, selected, selected.locationId) : undefined, [world, selected]);
   const mapView = useMemo(() => createTerrainMapView(world, selected, fog), [world, selected, fog]);
+  const extractionMarks = useMemo(() => [...new Map(
+    [...mapView.extractionPositions.values()].map((point) => [`${point.x}:${point.y}`, point]),
+  ).values()], [mapView]);
   const { seenLocations, isCurrentLocation } = mapView;
   const liveActors = useMemo(() => {
     const travellers = mapTransitActorIds(world);
@@ -333,6 +336,16 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         ctx.font = 'bold 11px sans-serif';
         ctx.textAlign = 'center';
         ctx.fillText(parties > 1 ? `宿×${parties}` : '宿', x, y - 39, width - 2);
+        ctx.restore();
+      }
+      for (const { x, y } of extractionMarks) {
+        ctx.save();
+        ctx.fillStyle = '#173331';
+        ctx.fillRect(x - 9, y - 33, 18, 16);
+        ctx.fillStyle = '#99f6e4';
+        ctx.font = 'bold 11px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('撤', x, y - 21);
         ctx.restore();
       }
 
@@ -653,7 +666,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener('change', stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, hazards, convoys, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, hazards, convoys, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1050,6 +1063,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       </details>}
       {pilgrimageMark && <p className="sr-only">所选修士的巡礼关口：第 {pilgrimageMark.row} 行，第 {pilgrimageMark.col} 列。</p>}
       {campMarks.length > 0 && <p className="sr-only">已观测夜宿营地 {campMarks.length} 处，共 {campMarks.reduce((count, camp) => count + camp.parties, 0)} 队，不是新地点。</p>}
+      {extractionMarks.length > 0 && <p className="sr-only">当前看见 {extractionMarks.length} 处实际撤离关口；不是新地点，也未公开路线。</p>}
       {escortedCaravan && <div className="border-t border-slate-800/80 px-3 text-xs text-sky-200">
         <button type="button" className="min-h-11 text-left" onClick={() => commandCamera(focusMapPoint(cameraRef.current, escortedCaravan.marker))}>
           定位所选护镖车队 · 第 {escortedCaravan.row} 行，第 {escortedCaravan.col} 列

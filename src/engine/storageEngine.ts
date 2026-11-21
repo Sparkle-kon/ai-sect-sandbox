@@ -7,7 +7,9 @@ import { createProbationState, PROBATION_REQUEST_TICKS, PROBATION_REQUIRED_RELIE
 import { createRelicExhibitState, RELIC_EXHIBIT_DURATION, RELIC_EXHIBIT_OFFER_TICKS } from './relicExhibitEngine';
 import { WORKSHOP_ACTIVE_TICKS, WORKSHOP_MAX_WORK_RECEIPTS, WORKSHOP_OFFER_TICKS, createWorkshopState, workshopGradeForScore, workshopTerms } from './workshopEngine';
 import { createFurnaceReservationState, FURNACE_QUEUE_TICKS, FURNACE_TERMINAL_LIMIT, FURNACE_USE_RETENTION_TICKS } from './furnaceReservationEngine';
-import { createSparringState, SPARRING_ACTIVE_TICKS, SPARRING_MASTERY_MAX, SPARRING_OFFER_TICKS, SPARRING_QI_COST } from './sparringEngine';
+import { createSparringState, SPARRING_MASTERY_MAX, SPARRING_QI_COST } from './sparringEngine';
+import { validateSparringRelationships, validateExpeditionRescueRelationships } from './storageActivityValidation';
+import { createExpeditionRescueState } from './expeditionRescueEngine';
 import { createTerrainSuccessionState, TERRAIN_QUIET_CAP, TERRAIN_RECOVERY_LIMIT } from './terrainSuccessionEngine';
 import { createResourceFlowState, RESOURCE_FLOW_DETAIL_LIMIT, RESOURCE_FLOW_MONTH_LIMIT, RESOURCE_FLOW_REASON, sameFlowAccount } from './resourceFlowEngine';
 import { COMMONS_MAINTENANCE_UNIT, COMMONS_MAX_RESERVE, COMMONS_OFFER_TICKS, COMMONS_ROUND_TICKS, COMMONS_TERM_TICKS, commonsQuotaShares, createSharedCommonsState } from './sharedCommonsEngine';
@@ -113,7 +115,7 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP FURNACE_RESERVATION SPARRING RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY SEASON_REVIEW REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP FURNACE_RESERVATION SPARRING EXPEDITION_RESCUE RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY SEASON_REVIEW REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const flowGood = one('stone','jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
@@ -367,6 +369,14 @@ const shape = structure({
     readiness:optional(structure({tick,actorIds:arr(2,id)})),
     rounds:arr(2,structure({tick,members:arr(2,structure({actorId:id,qiSpent:one(SPARRING_QI_COST),
       masteryGained:num(0,SPARRING_MASTERY_MAX)}))})),
+  }))}),
+  expeditionRescues:structure({nextId:num(1,Number.MAX_SAFE_INTEGER,true),requests:arr(SAVE_COLLECTION_LIMIT,structure({
+    id,occasionId:id,explorerId:id,gateSiteId:id,witnessIds:arr(8,id),openedTick:tick,offerExpiresTick:tick,
+    status:one('signaled','extracting','rescued','withdrawn','expired','interrupted'),
+    rescuerId:oid,acceptedTick:otick,exitSiteId:oid,path:arr(6402,structure({x:num(0,1000),y:num(0,600)})),
+    pathIndex:num(0,6401,true),lastAdvancedTick:otick,finishedTick:otick,
+    reason:optional(one('withdrawn','offer_expired','gate_closed','participant_lost','unsafe_route')),
+    supplySpent:optional(one(1)),arrivedIds:optional(arr(2,id)),
   }))}),
   resourceFlow:structure({nextId:flowSerial,months:arr(RESOURCE_FLOW_MONTH_LIMIT,structure({
     tick,year:tick,month,totalEntries:num(0,Number.MAX_SAFE_INTEGER,true),
@@ -629,6 +639,7 @@ function verifyWorld(value: unknown): WorldState {
       ...(!Object.hasOwn(value, 'workshops') ? { workshops: createWorkshopState() } : {}),
       ...(!Object.hasOwn(value, 'furnaceReservations') ? { furnaceReservations: createFurnaceReservationState() } : {}),
       ...(!Object.hasOwn(value, 'sparring') ? { sparring: createSparringState() } : {}),
+      ...(!Object.hasOwn(value, 'expeditionRescues') ? { expeditionRescues: createExpeditionRescueState() } : {}),
       ...(!Object.hasOwn(value, 'terrainSuccession') ? { terrainSuccession: createTerrainSuccessionState() } : {}),
       ...(!Object.hasOwn(value, 'resourceFlow') ? { resourceFlow: createResourceFlowState() } : {}),
       ...(!Object.hasOwn(value, 'sharedCommons') ? { sharedCommons: createSharedCommonsState() } : {}),
@@ -1091,51 +1102,8 @@ function verifyWorld(value: unknown): WorldState {
         (order && (order.makerId !== row.actorId || order.siteId !== row.siteId)))
       fail('furnaceReservations.reservations.source');
   }
-  unique(w.sparring.agreements, ({ id }) => id, 'sparring.agreements.id');
-  const heldPractice = new Set<string>();
-  for (const agreement of w.sparring.agreements) {
-    const { proposerId, partnerId, acceptedTick: accepted, closedTick: closed, deadlineTick: deadline, status } = agreement;
-    const serial = Number(agreement.id.match(/^sparring-([1-9][0-9]*)$/)?.[1]);
-    const participants = [proposerId, partnerId];
-    const open = status === 'offered' || status === 'active';
-    if (!Number.isSafeInteger(serial) || serial >= w.sparring.nextId || proposerId === partnerId ||
-        participants.some((person) => !actor.has(person)) || agreement.offeredTick > w.tick ||
-        agreement.offerExpiresTick !== agreement.offeredTick + SPARRING_OFFER_TICKS ||
-        (open && !locations.has(agreement.siteId)) ||
-        (status === 'offered' && (accepted !== undefined || w.tick >= agreement.offerExpiresTick)) ||
-        (accepted === undefined) !== (deadline === undefined) ||
-        (accepted !== undefined && (accepted < agreement.offeredTick || accepted >= agreement.offerExpiresTick ||
-          accepted > w.tick || deadline !== accepted + SPARRING_ACTIVE_TICKS)) ||
-        (open !== (closed === undefined)) ||
-        (closed !== undefined && (closed < (accepted ?? agreement.offeredTick) || closed > w.tick)) ||
-        (status === 'active' && (accepted === undefined || w.tick >= (deadline ?? 0))) ||
-        (status === 'declined' ? agreement.closedById !== partnerId || accepted !== undefined :
-          status === 'withdrawn' ? agreement.closedById !== proposerId || accepted !== undefined :
-          status === 'yielded' ? !participants.includes(agreement.closedById ?? '') || accepted === undefined :
-          agreement.closedById !== undefined) ||
-        (status === 'expired' && (closed ?? 0) < (deadline ?? agreement.offerExpiresTick)) ||
-        (agreement.rounds.length > agreement.roundsPlanned) ||
-        (status === 'completed' && agreement.rounds.at(-1)?.tick !== closed) ||
-        ((status === 'completed') !== (agreement.rounds.length === agreement.roundsPlanned))) {
-      fail('sparring.agreements.source');
-    }
-    if (open) for (const person of participants) {
-      if (heldPractice.has(person)) fail('sparring.agreements.overlap');
-      heldPractice.add(person);
-    }
-    let previousRound = accepted ?? Infinity;
-    for (const round of agreement.rounds) {
-      if (round.tick <= previousRound || round.tick > (closed ?? w.tick) || round.tick >= (deadline ?? 0) ||
-          round.members.length !== 2 || new Set(round.members.map(({ actorId }) => actorId)).size !== 2 ||
-          round.members.some(({ actorId }) => !participants.includes(actorId)))
-        fail('sparring.rounds.source');
-      previousRound = round.tick;
-    }
-    const ready = agreement.readiness;
-    if (ready && (status !== 'active' || ready.tick !== w.tick || ready.tick <= previousRound ||
-        !ready.actorIds.length || new Set(ready.actorIds).size !== ready.actorIds.length ||
-        ready.actorIds.some((id) => !participants.includes(id)))) fail('sparring.readiness.source');
-  }
+  validateSparringRelationships(w, actor, locations, fail);
+  validateExpeditionRescueRelationships(w, actor, fail);
   let previousFlowTick = -1;
   let previousFlowId = 0;
   for (const book of w.resourceFlow.months) {

@@ -8,6 +8,8 @@ import { advanceRelicExhibits, resolveRelicExhibitAction } from './relicExhibitE
 import { advanceWorkshops, resolveWorkshopAction } from './workshopEngine';
 import { openFurnaceTurn, resolveFurnaceReservationAction, settleFurnaceTurn } from './furnaceReservationEngine';
 import { advanceSparring, resolveSparringAction, sparringLocksActor } from './sparringEngine';
+import { resolveExpeditionRescueAction } from './expeditionRescueEngine';
+import { expeditionRescueCheckpoint } from './expeditionRescueCheckpoint';
 import { advanceTerrainSuccession, resolveTerrainRecovery } from './terrainSuccessionEngine';
 import { openResourceFlowMonth } from './resourceFlowEngine';
 import { advanceSharedCommons, resolveSharedCommonsAction } from './sharedCommonsEngine';
@@ -63,7 +65,7 @@ import {
   WorldEvent,
   WorldState,
 } from '../types/world';
-import { computeHeuristicDecision, utilityCeasefireDecision } from './llmBrain';
+import { computeHeuristicDecision, utilityCeasefireDecision, utilityExpeditionRescueDecision } from './llmBrain';
 import { maintainMemories, recordMemory } from './memoryEngine';
 import { synthesizeReflections } from './reflectionEngine';
 import { fabricateRumor, knownRumorLead, spreadRumors, witnessEvent } from './rumorEngine';
@@ -183,6 +185,11 @@ export function applyCultivatorBrainDecision(
     cultivator.innerMonologue = '切磋已约定，本回合留在现场，未发生其他行动。';
     return null;
   }
+  if (decision.chosenAction !== 'EXPEDITION_RESCUE' && expeditionRescueCheckpoint(world, cultivator)) {
+    cultivator.currentAction = 'EXPEDITION_RESCUE';
+    cultivator.innerMonologue = '正沿已核实的撤离路段前进，不能在原秘境另作行动。';
+    return null;
+  }
   cultivator.innerMonologue = decision.innerMonologue;
   cultivator.currentAction = decision.chosenAction;
 
@@ -249,6 +256,8 @@ export function applyCultivatorBrainDecision(
       return resolveFurnaceReservationAction(world, cultivator, decision);
     case 'SPARRING':
       return resolveSparringAction(world, cultivator, decision);
+    case 'EXPEDITION_RESCUE':
+      return resolveExpeditionRescueAction(world, cultivator, decision);
     case 'TERRAIN_RECOVERY':
       return resolveTerrainRecovery(world, cultivator, decision);
     case 'SHARED_COMMONS':
@@ -495,7 +504,7 @@ export function applyCultivatorBrainDecision(
 
     case 'SOCIALIZE': {
       const target = world.cultivators.find((c) =>
-        c.alive && c.id !== cultivator.id && c.locationId === cultivator.locationId && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) && !courierCheckpoint(world, c) &&
+        c.alive && c.id !== cultivator.id && c.locationId === cultivator.locationId && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) && !courierCheckpoint(world, c) && !expeditionRescueCheckpoint(world, c) &&
         (decision.targetCultivatorId === undefined || c.id === decision.targetCultivatorId)
       );
       if (!target) return null;
@@ -532,7 +541,7 @@ export function applyCultivatorBrainDecision(
 
     case 'SCHEMING': {
       const target = world.cultivators.find((c) =>
-        c.alive && c.id !== cultivator.id && c.locationId === cultivator.locationId && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) && !courierCheckpoint(world, c) &&
+        c.alive && c.id !== cultivator.id && c.locationId === cultivator.locationId && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) && !courierCheckpoint(world, c) && !expeditionRescueCheckpoint(world, c) &&
         (decision.targetCultivatorId === undefined || c.id === decision.targetCultivatorId)
       );
       if (!target) return null;
@@ -583,7 +592,7 @@ export function applyCultivatorBrainDecision(
 
     case 'DUEL': {
       const defender = world.cultivators.find((c) =>
-        c.alive && c.id !== cultivator.id && c.locationId === cultivator.locationId && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) && !courierCheckpoint(world, c) &&
+        c.alive && c.id !== cultivator.id && c.locationId === cultivator.locationId && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) && !courierCheckpoint(world, c) && !expeditionRescueCheckpoint(world, c) &&
         (decision.targetCultivatorId === undefined || c.id === decision.targetCultivatorId)
       );
       if (!defender) return null;
@@ -803,10 +812,17 @@ export function advanceWorldTick(
       }
     }
 
-    if (activeOccasionForActor(nextState, cultivator)) {
-      cultivator.currentAction = 'JOIN_OCCASION';
-      cultivator.innerMonologue = '已入大会或秘境名册，眼下须静候下一轮。';
-      continue;
+    const occasion = activeOccasionForActor(nextState, cultivator);
+    let expeditionOrder: LLMDecisionPayload | undefined;
+    if (occasion) {
+      const action = provided ?? (occasion.kind === 'expedition' ? utilityExpeditionRescueDecision(cultivator, nextState) : undefined);
+      if (occasion.kind === 'expedition' && action?.chosenAction === 'EXPEDITION_RESCUE') expeditionOrder = action;
+      else {
+        const extracting = Boolean(expeditionRescueCheckpoint(nextState, cultivator));
+        cultivator.currentAction = extracting ? 'EXPEDITION_RESCUE' : 'JOIN_OCCASION';
+        cultivator.innerMonologue = extracting ? '沿已经核实的关口撤离，不另取秘境机缘。' : '已入大会或秘境名册，眼下须静候下一轮。';
+        continue;
+      }
     }
 
     let decisionDraws = 0;
@@ -814,7 +830,8 @@ export function advanceWorldTick(
       const replayedDraws = traceOptions.replayDraws[cultivator.id] ?? 0;
       for (let draw = 0; draw < Math.min(64, replayedDraws); draw++) rng();
     }
-    const decision = provided ?? fieldNegotiation ?? computeHeuristicDecision(cultivator, nextState, () => { decisionDraws++; return rng(); });
+    const decision = expeditionOrder ?? provided ?? fieldNegotiation ??
+      computeHeuristicDecision(cultivator, nextState, () => { decisionDraws++; return rng(); });
 
     const captureTrace = traceOptions?.captureTrace !== false;
     const candidates = captureTrace || traceOptions?.onActor ? legalTraceCandidates(nextState, cultivator) : [];
@@ -917,7 +934,7 @@ export function executeGodIntervention(
       loc.spiritQi = clamp(loc.spiritQi + 20, 10, 150);
 
       const luckyOnes = nextState.cultivators.filter(
-        (c) => c.alive && c.locationId === loc.id && !activeRelocationForActor(nextState, c) && !activeEscortForActor(nextState, c) && !pilgrimageCheckpoint(nextState, c) && !courierCheckpoint(nextState, c)
+        (c) => c.alive && c.locationId === loc.id && !activeRelocationForActor(nextState, c) && !activeEscortForActor(nextState, c) && !pilgrimageCheckpoint(nextState, c) && !courierCheckpoint(nextState, c) && !expeditionRescueCheckpoint(nextState, c)
       );
       for (const c of luckyOnes) {
         c.qiProgress = clamp(c.qiProgress + 30, 0, 100);

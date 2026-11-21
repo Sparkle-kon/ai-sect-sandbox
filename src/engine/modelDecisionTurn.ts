@@ -3,6 +3,7 @@ import { activeAvatar } from './avatarEngine';
 import { activeSiegeForActor } from './diplomacyEngine';
 import { activeEscortForActor } from './escortEngine';
 import { activeOccasionForActor } from './occasionEngine';
+import { availableExpeditionRescueActions } from './expeditionRescueEngine';
 import { activeRelocationForActor } from './relocationEngine';
 import { availablePilgrimageActions, pilgrimageCheckpoint } from './pilgrimageEngine';
 import { activeCourierForActor } from './sealedCourierEngine';
@@ -51,8 +52,13 @@ export function modelDecisionCandidates(world: WorldState): Cultivator[] {
   return world.cultivators.filter((actor) => actor.alive && actor.hp > 0 && actor.id !== commandedId &&
     (world.month < 12 || actor.age + 1 < actor.lifespan) &&
     !activeCourierForActor(world, actor) && !activeEscortForActor(world, actor) && !activeRelocationForActor(world, actor) &&
-    !activeSiegeForActor(world, actor) && !activeOccasionForActor(world, actor) &&
+    !activeSiegeForActor(world, actor) && isEligibleForOccasionDecision(world, actor, nextTick) &&
     (!pilgrimageCheckpoint(world, actor) || availablePilgrimageActions(actor, world, false, nextTick).length > 0));
+}
+
+function isEligibleForOccasionDecision(world: WorldState, actor: Cultivator, nextTick: number): boolean {
+  const occasion = activeOccasionForActor(world, actor);
+  return !occasion || occasion.kind === 'expedition' && availableExpeditionRescueActions(actor, world, nextTick).length > 0;
 }
 
 /** The whole batch expires together; late callbacks cannot write orders, fairness or world state. */

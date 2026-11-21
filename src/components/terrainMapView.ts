@@ -1,5 +1,6 @@
 import { courierCheckpoint } from '../engine/sealedCourierEngine';
 import { pilgrimageCheckpoint } from '../engine/pilgrimageEngine';
+import { expeditionRescueCheckpoint } from '../engine/expeditionRescueCheckpoint';
 import type { Cultivator, LocationNode, MapPoint, MapTile, TerrainBiome, WorldState } from '../types/world';
 import { currentVisibleTileIds, terrainTileAt } from '../engine/terrainEngine';
 
@@ -24,16 +25,23 @@ export function createTerrainMapView(world: WorldState, viewer: Cultivator | und
   const isCurrentLocation = (id: string) => !current || current.has(locationTile.get(id)?.id ?? '');
   const seenLocations = world.locations.filter(({ id }) => !known || known.has(locationTile.get(id)?.id ?? ''));
   const trailPositions = new Map<string, MapPoint>();
+  const extractionPositions = new Map<string, MapPoint>();
+  const rescueTiles = world.expeditionRescues.requests.some(({ status, pathIndex }) =>
+    status === 'extracting' || status === 'interrupted' && pathIndex > 0)
+    ? (current ?? (viewer?.alive ? currentVisibleTileIds(world, viewer) : new Set<string>())) : undefined;
   const liveActors = world.cultivators.filter((actor) => {
     if (!actor.alive) return false;
-    const checkpoint = courierCheckpoint(world, actor) ?? pilgrimageCheckpoint(world, actor);
+    const rescue = rescueTiles && expeditionRescueCheckpoint(world, actor);
+    const checkpoint = rescue ?? courierCheckpoint(world, actor) ?? pilgrimageCheckpoint(world, actor);
     if (!checkpoint) return isCurrentLocation(actor.locationId);
-    if (current && !current.has(terrainTileAt(world, checkpoint.x, checkpoint.y)?.id ?? '')) return false;
+    const tiles = rescue ? rescueTiles : current;
+    if (tiles && !tiles.has(terrainTileAt(world, checkpoint.x, checkpoint.y)?.id ?? '')) return false;
     trailPositions.set(actor.id, checkpoint);
+    if (rescue) extractionPositions.set(actor.id, rescue);
     return true;
   });
   return {
-    current, known, locationTile, tileState, isCurrentLocation, seenLocations, liveActors, trailPositions,
+    current, known, locationTile, tileState, isCurrentLocation, seenLocations, liveActors, trailPositions, extractionPositions,
   };
 }
 

@@ -2,6 +2,7 @@ import { FAST_FORWARD_MAX_TICKS } from './engine/fastForwardEngine';
 import type { FastForwardCheckpoint, FastForwardProgress, FastForwardWorkerRequest, FastForwardWorkerResponse } from './engine/fastForwardEngine';
 import type { SaveBranchSource } from './engine/storageEngine';
 import { courierCheckpoint } from './engine/sealedCourierEngine';
+import { expeditionRescueCheckpoint } from './engine/expeditionRescueCheckpoint';
 import { applyWatchMutation, captureWatchDigests } from './engine/watchlistEngine';
 import type { WatchlistCommand, WatchlistMutationResult } from './engine/watchlistEngine';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -70,6 +71,7 @@ const RankSeasonPanel = React.lazy(async () => ({ default: (await import('./comp
 const ChronicleFeed = React.lazy(async () => ({ default: (await import('./components/ChronicleFeed')).ChronicleFeed }));
 const ChronicleLibraryPanel = React.lazy(async () => ({ default: (await import('./components/ChronicleLibraryPanel')).ChronicleLibraryPanel }));
 const WorldOccasionsPanel = React.lazy(async () => ({ default: (await import('./components/WorldOccasionsPanel')).WorldOccasionsPanel }));
+const ExpeditionRescuePanel = React.lazy(async () => ({ default: (await import('./components/ExpeditionRescuePanel')).ExpeditionRescuePanel }));
 const WeatherAtlasPanel = React.lazy(async () => ({ default: (await import('./components/WeatherAtlasPanel')).WeatherAtlasPanel }));
 const MarketCaravansPanel = React.lazy(async () => ({ default: (await import('./components/MarketCaravansPanel')).MarketCaravansPanel }));
 const MortalVillagesPanel = React.lazy(async () => ({ default: (await import('./components/MortalVillagesPanel')).MortalVillagesPanel }));
@@ -90,7 +92,7 @@ interface ChronicleTrail extends ChronicleFeedReturn {
 }
 const chronicleWorkspace = { site: 'map', actor: 'people', sect: 'sect' } as const;
 const chronicleFeedFact = (entry: WorldEvent) => !entry.id.startsWith('evt-sealed-dispatch-') &&
-  !(entry.witnessScope === 'participants' && (entry.id.startsWith('evt-sparring-') ||
+  !(entry.witnessScope === 'participants' && (entry.id.startsWith('evt-sparring-') || entry.id.startsWith('evt-expedition-rescue-') ||
     /^evt-pilgrimage-[1-9]\d*-(?:camp(?:-expiry|-interruption)?|dismantled|resumed)-\d+$/.test(entry.id)));
 type FastForwardPhase = 'idle' | 'running' | 'pausing' | 'paused' | 'staging' | 'ready' | 'error';
 type FastForwardViewState = { phase: FastForwardPhase; progress?: FastForwardProgress; notice?: string };
@@ -699,14 +701,20 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
               <button type="button" onClick={() => openWorkspace('people')} className={`${action} bg-slate-800 text-slate-100 hover:bg-slate-700`}>人物详情</button>
             </div>
             {selectedCultivator && <p className="break-words text-xs leading-relaxed text-slate-300">
-              {selectedCultivator.realm} {selectedCultivator.realmStage}层 · {selectedCultivator.alive ? `气血 ${selectedCultivator.hp}/${selectedCultivator.maxHp}` : '已陨落'} · {courierCheckpoint(visibleWorld, selectedCultivator) ? '信使途中' : characterLocation?.name ?? '所在地点未详'}
+              {selectedCultivator.realm} {selectedCultivator.realmStage}层 · {selectedCultivator.alive ? `气血 ${selectedCultivator.hp}/${selectedCultivator.maxHp}` : '已陨落'} · {expeditionRescueCheckpoint(visibleWorld, selectedCultivator) ? '位于实际撤离关口' :
+                courierCheckpoint(visibleWorld, selectedCultivator) ? '信使途中' : characterLocation?.name ?? '所在地点未详'}
             </p>}
           </aside>
         </div>,
         people: <div className="grid min-w-0 items-start gap-3 md:grid-cols-[17rem_minmax(0,1fr)]">
           <React.Suspense fallback={<p role="status">载入修士名册…</p>}><ActorRoster world={visibleWorld} selected={selectedCultivator} onSelect={setSelectedCultivatorId} /></React.Suspense>
           <WorkspaceSections label={`${selectedCultivator?.name ?? '修士'} · 人物档案`} initialOpen={focusProfile ? 'profile' : opened('people', 'profile')} sections={[
-            { id: 'profile', label: '人物概况', content: inspect('profile') },
+            { id: 'profile', label: '人物概况', content: <>
+              {inspect('profile')}
+              {activeActorId && visibleWorld.expeditionRescues.requests.some(({ explorerId, rescuerId, witnessIds }) =>
+                activeActorId === explorerId || activeActorId === rescuerId || witnessIds.includes(activeActorId)) &&
+                <React.Suspense fallback={<p role="status">载入求援凭证…</p>}><ExpeditionRescuePanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense>}
+            </> },
             { id: 'cultivation', label: '修为、法宝与丹药', content: inspect('cultivation') },
             { id: 'mind', label: '心声、记忆与流言', content: inspect('mind') },
             { id: 'relationships', label: '关系与师承', content: <div className="space-y-2.5">

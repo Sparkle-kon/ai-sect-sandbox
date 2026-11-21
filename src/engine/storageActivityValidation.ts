@@ -1,0 +1,131 @@
+import type { WorldState } from '../types/world';
+import { SPARRING_ACTIVE_TICKS, SPARRING_OFFER_TICKS } from './sparringEngine';
+import { EXPEDITION_RESCUE_OFFER_TICKS, EXPEDITION_RESCUE_STRIDE } from './expeditionRescueEngine';
+import { terrainTileAt } from './terrainEngine';
+
+export function validateSparringRelationships(w: WorldState, actor: ReadonlySet<string>,
+  locations: ReadonlySet<string>, fail: (path: string) => never): void {
+  if (new Set(w.sparring.agreements.map(({ id }) => id)).size !== w.sparring.agreements.length) fail('sparring.agreements.id');
+  const heldPractice = new Set<string>();
+  for (const agreement of w.sparring.agreements) {
+    const { proposerId, partnerId, acceptedTick: accepted, closedTick: closed, deadlineTick: deadline, status } = agreement;
+    const serial = Number(agreement.id.match(/^sparring-([1-9][0-9]*)$/)?.[1]);
+    const participants = [proposerId, partnerId];
+    const open = status === 'offered' || status === 'active';
+    if (!Number.isSafeInteger(serial) || serial >= w.sparring.nextId || proposerId === partnerId ||
+        participants.some((person) => !actor.has(person)) || agreement.offeredTick > w.tick ||
+        agreement.offerExpiresTick !== agreement.offeredTick + SPARRING_OFFER_TICKS ||
+        (open && !locations.has(agreement.siteId)) ||
+        (status === 'offered' && (accepted !== undefined || w.tick >= agreement.offerExpiresTick)) ||
+        (accepted === undefined) !== (deadline === undefined) ||
+        (accepted !== undefined && (accepted < agreement.offeredTick || accepted >= agreement.offerExpiresTick ||
+          accepted > w.tick || deadline !== accepted + SPARRING_ACTIVE_TICKS)) ||
+        (open !== (closed === undefined)) ||
+        (closed !== undefined && (closed < (accepted ?? agreement.offeredTick) || closed > w.tick)) ||
+        (status === 'active' && (accepted === undefined || w.tick >= (deadline ?? 0))) ||
+        (status === 'declined' ? agreement.closedById !== partnerId || accepted !== undefined :
+          status === 'withdrawn' ? agreement.closedById !== proposerId || accepted !== undefined :
+          status === 'yielded' ? !participants.includes(agreement.closedById ?? '') || accepted === undefined :
+          agreement.closedById !== undefined) ||
+        (status === 'expired' && (closed ?? 0) < (deadline ?? agreement.offerExpiresTick)) ||
+        (agreement.rounds.length > agreement.roundsPlanned) ||
+        (status === 'completed' && agreement.rounds.at(-1)?.tick !== closed) ||
+        ((status === 'completed') !== (agreement.rounds.length === agreement.roundsPlanned))) {
+      fail('sparring.agreements.source');
+    }
+    if (open) for (const person of participants) {
+      if (heldPractice.has(person)) fail('sparring.agreements.overlap');
+      heldPractice.add(person);
+    }
+    let previousRound = accepted ?? Infinity;
+    for (const round of agreement.rounds) {
+      if (round.tick <= previousRound || round.tick > (closed ?? w.tick) || round.tick >= (deadline ?? 0) ||
+          round.members.length !== 2 || new Set(round.members.map(({ actorId }) => actorId)).size !== 2 ||
+          round.members.some(({ actorId }) => !participants.includes(actorId)))
+        fail('sparring.rounds.source');
+      previousRound = round.tick;
+    }
+    const ready = agreement.readiness;
+    if (ready && (status !== 'active' || ready.tick !== w.tick || ready.tick <= previousRound ||
+        !ready.actorIds.length || new Set(ready.actorIds).size !== ready.actorIds.length ||
+        ready.actorIds.some((id) => !participants.includes(id)))) fail('sparring.readiness.source');
+  }
+}
+
+export function validateExpeditionRescueRelationships(world: WorldState, actors: ReadonlySet<string>,
+  fail: (path: string) => never): void {
+  const state = world.expeditionRescues;
+  if (!state.requests.length) return;
+  const cases = new Set<string>();
+  const actualSignals = new Set<string>();
+  const held = new Set<string>();
+  const locations = new Map(world.locations.map((site) => [site.id, site]));
+  const occasions = new Map(world.occasions.map((row) => [row.id, row]));
+  for (const row of state.requests) {
+    const serial = Number(row.id.match(/^expedition-rescue-([1-9][0-9]*)$/)?.[1]);
+    const signalKey = JSON.stringify([row.occasionId, row.explorerId]);
+    const occasion = occasions.get(row.occasionId);
+    if (!occasion || occasion.kind !== 'expedition') return fail('expeditionRescues.requests.source');
+    const members = new Set(occasion.participantIds);
+    const gate = locations.get(row.gateSiteId);
+    const accepted = row.acceptedTick;
+    const open = row.status === 'signaled' || row.status === 'extracting';
+    const reached = row.arrivedIds ?? [];
+    const people = [row.explorerId, ...(row.rescuerId === undefined ? [] : [row.rescuerId])];
+    if (!Number.isSafeInteger(serial) || serial >= state.nextId || cases.has(row.id) || actualSignals.has(signalKey) ||
+        !actors.has(row.explorerId) || !members.has(row.explorerId) || row.gateSiteId !== occasion.locationId ||
+        row.openedTick < occasion.registrationClosesTick || row.openedTick >= occasion.expiresTick || row.openedTick > world.tick ||
+        row.offerExpiresTick !== row.openedTick + EXPEDITION_RESCUE_OFFER_TICKS ||
+        !row.witnessIds.length || new Set(row.witnessIds).size !== row.witnessIds.length ||
+        row.witnessIds.some((id) => id === row.explorerId || !actors.has(id) || !members.has(id)) ||
+        (open && (!gate || gate.type !== 'secret_realm' || occasion.status !== 'running' || world.tick >= occasion.expiresTick ||
+          row.finishedTick !== undefined || row.reason !== undefined || row.arrivedIds !== undefined)) ||
+        (row.status === 'signaled' && (accepted !== undefined || world.tick >= row.offerExpiresTick)) ||
+        ((!open) && (row.finishedTick === undefined || row.finishedTick < (accepted ?? row.openedTick) || row.finishedTick > world.tick)) ||
+        (row.status === 'rescued' && (row.reason !== undefined || accepted === undefined || reached.length !== 2)) ||
+        (row.status === 'withdrawn' && row.reason !== 'withdrawn') ||
+        (row.status === 'expired' && (accepted !== undefined ||
+          (row.reason === 'offer_expired' ? (row.finishedTick ?? 0) < row.offerExpiresTick : row.reason !== 'gate_closed'))) ||
+        (row.status === 'interrupted' && !row.reason) ||
+        (row.arrivedIds !== undefined && (!reached.length || new Set(reached).size !== reached.length ||
+          reached.some((id) => !people.includes(id)) ||
+          (row.status !== 'rescued' && (row.status !== 'interrupted' || row.reason !== 'participant_lost' || reached.length !== 1))))) {
+      fail('expeditionRescues.requests.source');
+    }
+    cases.add(row.id);
+    actualSignals.add(signalKey);
+    if (open) for (const id of people) {
+      if (held.has(id)) fail('expeditionRescues.requests.overlap');
+      held.add(id);
+    }
+    if (accepted === undefined) {
+      if (row.rescuerId !== undefined || row.exitSiteId !== undefined || row.path.length !== 0 || row.pathIndex !== 0 ||
+          row.lastAdvancedTick !== undefined || row.supplySpent !== undefined || row.arrivedIds !== undefined || row.status === 'extracting')
+        fail('expeditionRescues.requests.unpaid');
+      continue;
+    }
+    const exit = row.exitSiteId ? locations.get(row.exitSiteId) : undefined;
+    const first = row.path[0];
+    const last = row.path.at(-1);
+    if (accepted <= row.openedTick || accepted >= row.offerExpiresTick || accepted > world.tick ||
+        !row.rescuerId || !row.witnessIds.includes(row.rescuerId) || row.supplySpent !== 1 ||
+        !row.exitSiteId || row.exitSiteId === row.gateSiteId || (open && !exit) ||
+        (exit && (exit.type === 'secret_realm' || exit.type === 'abyss')) ||
+        row.path.length < 2 || row.pathIndex >= row.path.length ||
+        (gate && (first?.x !== gate.x || first.y !== gate.y)) ||
+        (exit && (last?.x !== exit.x || last.y !== exit.y)) ||
+        accepted + Math.ceil((row.path.length - 1) / EXPEDITION_RESCUE_STRIDE) >= occasion.expiresTick ||
+        ((row.pathIndex === 0) !== (row.lastAdvancedTick === undefined)) ||
+        (row.lastAdvancedTick !== undefined && (row.lastAdvancedTick <= accepted ||
+          row.lastAdvancedTick > (row.finishedTick ?? world.tick) || row.lastAdvancedTick >= occasion.expiresTick ||
+          row.pathIndex > (row.lastAdvancedTick - accepted) * EXPEDITION_RESCUE_STRIDE)) ||
+        (row.status === 'extracting' && row.pathIndex >= row.path.length - 1) ||
+        (reached.length > 0 && (row.pathIndex !== row.path.length - 1 || row.finishedTick !== row.lastAdvancedTick)))
+      fail('expeditionRescues.requests.route');
+    const tiles = row.path.map(({ x, y }) => terrainTileAt(world, x, y));
+    if (tiles.some((tile, index) => {
+      const previous = tiles[index - 1];
+      return !tile || (index > 0 && (!previous || Math.abs(tile.col - previous.col) + Math.abs(tile.row - previous.row) !== 1));
+    })) fail('expeditionRescues.requests.path_steps');
+  }
+}

@@ -113,6 +113,7 @@ export type ActionType =
   | 'WORKSHOP'
   | 'FURNACE_RESERVATION'
   | 'SPARRING'
+  | 'EXPEDITION_RESCUE'
   | 'FORGE_ARTIFACT'
   | 'BIND_ARTIFACT'
   | 'REPAIR_ARTIFACT'
@@ -494,6 +495,8 @@ export interface LLMDecisionPayload {
   sparringMove?: SparringMove;
   sparringRounds?: 1 | 2;
   targetSparringId?: string;
+  rescueMove?: ExpeditionRescueMove;
+  targetExpeditionRescueId?: string;
   targetWorkshopId?: string;
   workshopTier?: WorkshopTier;
   workshopQuantity?: 1 | 2;
@@ -2199,6 +2202,29 @@ export interface SparringAgreement {
 }
 export interface SparringState { agreements: SparringAgreement[]; nextId: number }
 
+export type ExpeditionRescueMove = 'signal' | 'accept' | 'withdraw';
+export interface ExpeditionRescue {
+  id: string;
+  occasionId: string;
+  explorerId: string;
+  gateSiteId: string;
+  witnessIds: string[];
+  openedTick: number;
+  offerExpiresTick: number;
+  status: 'signaled' | 'extracting' | 'rescued' | 'withdrawn' | 'expired' | 'interrupted';
+  rescuerId?: string;
+  acceptedTick?: number;
+  exitSiteId?: string;
+  path: MapPoint[];
+  pathIndex: number;
+  lastAdvancedTick?: number;
+  finishedTick?: number;
+  reason?: 'withdrawn' | 'offer_expired' | 'gate_closed' | 'participant_lost' | 'unsafe_route';
+  supplySpent?: 1;
+  arrivedIds?: string[];
+}
+export interface ExpeditionRescueState { requests: ExpeditionRescue[]; nextId: number }
+
 export type ProbationMove = 'request' | 'admit' | 'review' | 'withdraw' | 'restore';
 export type ProbationVote = 'support' | 'oppose';
 export type ProbationStatus = 'requested' | 'active' | 'ready' | 'reinstated' | 'withdrawn' | 'rejected' | 'expired';
@@ -2299,6 +2325,7 @@ export interface WorldState {
   workshops: WorkshopState;
   furnaceReservations: FurnaceReservationState;
   sparring: SparringState;
+  expeditionRescues: ExpeditionRescueState;
   resourceFlow: ResourceFlowState;
   roads: RoadState;
   sharedCommons: SharedCommonsState;
