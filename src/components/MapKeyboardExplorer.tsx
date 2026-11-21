@@ -35,6 +35,20 @@ export function mapExplorerIndex(world: WorldState, view: Terrain, actorPosition
     const site = current.get(siege.destinationId);
     if (site && siege.status === 'sieging') events.push({ id: `siege-${siege.id}`, label: '围攻中', site });
   }
+  const schoolSites = new Map(world.doctrines.schools.map((school) =>
+    [school.id, current.get(world.sects.find(({ id }) => id === school.parentSectId)?.headquartersId ?? '')]));
+  for (const proposal of world.doctrines.proposals) {
+    const site = schoolSites.get(proposal.schoolId);
+    if (site && proposal.status === 'pending' && proposal.openedTick <= world.tick && world.tick < proposal.expiresTick) {
+      events.push({ id: `doctrine-${proposal.id}`, label: proposal.kind === 'separation' ? '道统分立待签议' : '道统和解待签议', site });
+    }
+  }
+  for (const record of world.doctrines.records) {
+    const site = schoolSites.get(record.schoolId);
+    if (!site || record.tick !== world.tick) continue;
+    const label = record.kind === 'separation' ? '道统和平分立' : record.kind === 'reconciliation' ? '宗门道统和解' : undefined;
+    if (label) events.push({ id: `doctrine-${record.id}`, label, site });
+  }
   for (const actor of actors) {
     const site = current.get(actor.locationId);
     if (site && isActiveTrial(actor.tribulation)) events.push({ id: `trial-${actor.id}`, label: `${actor.name}正在渡劫`, site });

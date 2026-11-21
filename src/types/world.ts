@@ -75,6 +75,7 @@ export type ActionType =
   | 'NAME_HEIR'
   | 'CLAIM_ESTATE'
   | 'HOLD_MEMORIAL'
+  | 'DOCTRINE'
   | 'GATHER_HERBS'
   | 'BREW_PILL'
   | 'USE_PILL'
@@ -349,6 +350,10 @@ export interface LLMDecisionPayload {
   targetWitnessEventId?: string;
   targetWitnessClaimId?: string;
   targetEstateId?: string;
+  doctrineMove?: DoctrineMove;
+  doctrineTheme?: ReflectionTheme;
+  targetDoctrineSchoolId?: string;
+  targetDoctrineProposalId?: string;
   targetTechniqueId?: string;
   targetHerbId?: HerbId;
   targetPillId?: PillId;
@@ -883,7 +888,63 @@ export interface DecisionTraceState {
   records: DecisionTraceRecord[];
 }
 
+export type DoctrineMove = 'endorse' | 'propose_separation' | 'propose_reconciliation' | 'accept' | 'decline' | 'join' | 'leave' | 'fund_training';
+export interface DoctrineSchool {
+  id: string;
+  parentSectId: string;
+  theme: ReflectionTheme;
+  founderId: string;
+  stewardId?: string;
+  foundedTick: number;
+  status: 'attached' | 'autonomous' | 'reconciled';
+  memberIds: string[];
+  treasury: number;
+  lastChangeTick?: number;
+  lastTrainingTick?: number;
+}
+export interface DoctrineEndorsement {
+  actorId: string;
+  sectId: string;
+  schoolId: string;
+  theme: ReflectionTheme;
+  tick: number;
+  evidenceCount: number;
+  score: number;
+}
+export interface DoctrineProposal {
+  id: string;
+  schoolId: string;
+  kind: 'separation' | 'reconciliation';
+  openedTick: number;
+  expiresTick: number;
+  stewardId: string;
+  leaderId: string;
+  amount: number;
+  status: 'pending' | 'accepted' | 'declined' | 'expired' | 'invalidated';
+  votes: Array<{ actorId: string; tick: number; verdict: 'accept' | 'decline' }>;
+  settledTick?: number;
+  reason?: string;
+}
+export interface DoctrineHistory {
+  id: string;
+  tick: number;
+  schoolId: string;
+  kind: 'endorse' | 'proposal' | 'separation' | 'reconciliation' | 'declined' | 'expired' | 'invalidated' | 'join' | 'leave' | 'training';
+  actorIds: string[];
+  amount: number;
+  support: number;
+  description: string;
+}
+export interface DoctrineState {
+  schools: DoctrineSchool[];
+  endorsements: DoctrineEndorsement[];
+  proposals: DoctrineProposal[];
+  records: DoctrineHistory[];
+  nextId: number;
+}
+
 export interface WorldState {
+  doctrines: DoctrineState;
   decisionTrace: DecisionTraceState;
   estates: EstateState;
   witnesses: WitnessState;

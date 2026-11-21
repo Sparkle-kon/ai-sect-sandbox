@@ -32,9 +32,6 @@ import { commitCouncilSnapshot, settleAnnualCouncilOnline, settleCouncilSnapshot
 import type { AvatarInteractionRequest, CouncilPlan } from './types/world';
 import { isWorldSeed } from './engine/worldRandom';
 import { TimelinePanel } from './components/TimelinePanel';
-import { MentorshipPanel } from './components/MentorshipPanel';
-import { OathContractsPanel } from './components/OathContractsPanel';
-import { AttestationPanel } from './components/AttestationPanel';
 import { createDecisionReplayTape, replayOneTurn } from './engine/decisionTraceEngine';
 import type { DecisionReplayTape, DecisionReplayResult } from './engine/decisionTraceEngine';
 import { createTimeline, forkTimeline, readTimelineHead, readTimelineSnapshot, recordTimelineWorld, selectTimelineBranch } from './engine/timelineEngine';
@@ -42,6 +39,10 @@ import type { WorldTimeline } from './engine/timelineEngine';
 import { activeAvatar, possessAvatar, queueAvatarOrder } from './engine/avatarEngine';
 import { resolveAvatarSnapshot } from './engine/avatarRuntime';
 
+const AttestationPanel = React.lazy(async () => ({ default: (await import('./components/AttestationPanel')).AttestationPanel }));
+const OathContractsPanel = React.lazy(async () => ({ default: (await import('./components/OathContractsPanel')).OathContractsPanel }));
+const MentorshipPanel = React.lazy(async () => ({ default: (await import('./components/MentorshipPanel')).MentorshipPanel }));
+const SectDoctrinePanel = React.lazy(async () => ({ default: (await import('./components/SectDoctrinePanel')).SectDoctrinePanel }));
 const ChronicleLibraryPanel = React.lazy(async () => ({ default: (await import('./components/ChronicleLibraryPanel')).ChronicleLibraryPanel }));
 const WeatherAtlasPanel = React.lazy(async () => ({ default: (await import('./components/WeatherAtlasPanel')).WeatherAtlasPanel }));
 const MarketCaravansPanel = React.lazy(async () => ({ default: (await import('./components/MarketCaravansPanel')).MarketCaravansPanel }));
@@ -398,7 +399,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
             { id: 'cultivation', label: '修为、法宝与丹药', content: inspect('cultivation') },
             { id: 'mind', label: '心声、记忆与流言', content: inspect('mind') },
             { id: 'relationships', label: '关系与师承', content: <div className="space-y-2.5">
-              <MentorshipPanel world={visibleWorld} cultivator={selectedCultivator} />
+              <React.Suspense fallback={<p role="status">载入师承记录…</p>}><MentorshipPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense>
               <RelationshipGraph world={visibleWorld} selectedCultivatorId={activeActorId} onSelectCultivator={setSelectedCultivatorId} />
             </div> },
             { id: 'trace', label: '天机溯因与单回合复盘', content: <React.Suspense fallback={<p role="status">载入决策纪要…</p>}>
@@ -416,14 +417,17 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
           { id: 'library', label: '藏书阁与史书', content: <React.Suspense fallback={<p role="status">载入藏书阁…</p>}><ChronicleLibraryPanel world={visibleWorld} /></React.Suspense> },
           { id: 'timeline', label: '原始时间线与分支', content: <TimelinePanel timeline={timeline} previewTick={preview?.tick ?? null} busy={isStepping}
             onPreview={handleTimelinePreview} onSelectBranch={handleTimelineSelectBranch} onFork={handleTimelineFork} notice={timelineNotice} /> },
-          { id: 'witness', label: '证词与名誉复核', content: <AttestationPanel world={visibleWorld} cultivator={selectedCultivator} /> },
+          { id: 'witness', label: '证词与名誉复核', content: <React.Suspense fallback={<p role="status">载入证词记录…</p>}><AttestationPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense> },
           { id: 'estate', label: '归葬与遗产', content: <React.Suspense fallback={<p role="status">载入遗产账簿…</p>}>
             <EstateMemorialPanel world={visibleWorld} cultivator={selectedCultivator} />
           </React.Suspense> },
         ]} />,
         sect: <WorkspaceSections label="宗门事务" initialOpen={opened('sect', 'governance')} sections={[
           { id: 'governance', label: '宗门地位、库账与外交', content: inspect('sect') },
-          { id: 'oaths', label: '天道契书与宗门仲裁', content: <OathContractsPanel world={visibleWorld} cultivator={selectedCultivator} /> },
+          { id: 'oaths', label: '天道契书与宗门仲裁', content: <React.Suspense fallback={<p role="status">载入契书记录…</p>}><OathContractsPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense> },
+          { id: 'doctrine', label: '道统与分合', content: <React.Suspense fallback={<p role="status">载入道统记录…</p>}>
+            <SectDoctrinePanel world={visibleWorld} cultivator={selectedCultivator} />
+          </React.Suspense> },
           ...(preview ? [] : [{ id: 'council', label: '长老议事厅', content: <button type="button" disabled={isStepping} onClick={() => setCouncilOpen(true)}
             className={`${action} bg-violet-900/60 text-violet-100 hover:bg-violet-800`}>打开长老议事厅</button> }]),
         ]} />,

@@ -1,3 +1,4 @@
+import { createDoctrineState } from '../engine/doctrineEngine';
 import { createDecisionTraceState } from '../engine/decisionTraceEngine';
 import { createEstateState } from '../engine/estateEngine';
 import { createWitnessState } from '../engine/witnessEngine';
@@ -225,6 +226,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED): WorldState {
     oaths: createOathState(),
     markets: createMarketState(),
     settlements: createSettlementState(locations, seed),
+    doctrines: createDoctrineState(),
     witnesses: createWitnessState(),
     estates: createEstateState(),
     decisionTrace: createDecisionTraceState(),

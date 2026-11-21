@@ -1,3 +1,4 @@
+import { advanceDoctrines, resolveDoctrineAction } from './doctrineEngine';
 import { legalTraceCandidates, recordDecisionTrace, rememberReplayDecision } from './decisionTraceEngine';
 import type { DecisionReplayTape } from './decisionTraceEngine';
 import type { DecisionTraceCandidate } from '../types/world';
@@ -177,6 +178,8 @@ export function applyCultivatorBrainDecision(
     case 'ATTEST_WITNESS':
     case 'CHALLENGE_WITNESS':
       return resolveWitnessAction(world, cultivator, decision);
+    case 'DOCTRINE':
+      return resolveDoctrineAction(world, cultivator, decision);
     case 'RECRUIT_SETTLER':
     case 'DELIVER_RELIEF':
       return resolveSettlementAction(world, cultivator, decision);
@@ -673,7 +676,7 @@ export function advanceWorldTick(
     if (yearly) cultivator.reflections = synthesizeReflections(cultivator, nextState.tick);
   }
 
-  for (const event of [...advanceDiplomacy(nextState, rng), ...advanceOccasions(nextState, rng), ...advanceOaths(nextState), ...advanceMarkets(nextState), ...advanceWitnesses(nextState), ...maintainSectPolitics(nextState), ...advanceBounties(nextState), ...advanceEstates(nextState)]) {
+  for (const event of [...advanceDiplomacy(nextState, rng), ...advanceOccasions(nextState, rng), ...advanceOaths(nextState), ...advanceMarkets(nextState), ...advanceWitnesses(nextState), ...maintainSectPolitics(nextState), ...advanceBounties(nextState), ...advanceEstates(nextState), ...advanceDoctrines(nextState)]) {
     newEvents.push(event);
     witnessEvent(nextState, event);
   }

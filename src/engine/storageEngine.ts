@@ -1,3 +1,4 @@
+import { createDoctrineState } from './doctrineEngine';
 import { createSettlementState } from './settlementEngine';
 import { OATH_TERMS } from './oathEngine';
 import type { WorldState } from '../types/world';
@@ -56,11 +57,13 @@ const spirit = one('金','木','水','火','土','雷','暗','天灵根');
 const realm = one('练气','筑基','金丹','元婴','化神','炼虚','合体','大乘','渡劫');
 const sectRank = one('外门弟子','内门弟子','真传弟子','长老','太上长老','掌门');
 const source = one('utility','llm');
+const doctrineTheme = one('cultivation','conflict','community','heavenly');
+const doctrineAmount = num(0, 1_000_000_000, true);
 const eventCategory = one('breakthrough','combat','intrigue','heavenly','death','diplomacy');
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const marketQty = num(1,12,true), marketPrice = num(1,500,true);
@@ -151,6 +154,19 @@ const shape = structure({
       attestations:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,tick,verdict:one('supports','contradicts')})),
       appeal:optional(structure({tick,actorId:id,verdict:one('upheld','rejected'),reason:text})),settledTick:otick,
       reputationSectId:oid,reputationPenalty:percentage,reputationRestored:percentage,reason:otext}))}),
+  doctrines:structure({nextId:num(1,100_000_000,true),
+    schools:arr(SAVE_COLLECTION_LIMIT,structure({id,parentSectId:id,theme:doctrineTheme,founderId:id,stewardId:oid,
+      foundedTick:tick,status:one('attached','autonomous','reconciled'),memberIds:ids,treasury:doctrineAmount,
+      lastChangeTick:otick,lastTrainingTick:otick})),
+    endorsements:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,sectId:id,schoolId:id,theme:doctrineTheme,tick,
+      evidenceCount:num(1,100,true),score:num(0,10_000)})),
+    proposals:arr(SAVE_COLLECTION_LIMIT,structure({id,schoolId:id,kind:one('separation','reconciliation'),
+      openedTick:tick,expiresTick:tick,stewardId:id,leaderId:id,amount:doctrineAmount,
+      status:one('pending','accepted','declined','expired','invalidated'),
+      votes:arr(2,structure({actorId:id,tick,verdict:one('accept','decline')})),settledTick:otick,reason:otext})),
+    records:arr(128,structure({id,tick,schoolId:id,
+      kind:one('endorse','proposal','separation','reconciliation','declined','expired','invalidated','join','leave','training'),
+      actorIds:ids,amount:doctrineAmount,support:tick,description:text}))}),
   settlements:structure({lastAdvancedTick:otick,
     villages:arr(48,structure({id,locationId:id,name:id,population:count,capacity:count,stress:percentage,
       volunteers:arr(SAVE_COLLECTION_LIMIT,structure({id,name:id,age:wealth,spiritRoot:spirit,willingness:percentage,aptitude:percentage,
@@ -197,6 +213,7 @@ function verifyWorld(value: unknown): WorldState {
     ? { ...value,
       ...(!Object.hasOwn(value, 'mentorship') ? { mentorship: { offers: [], lineage: [], budgets: [] } } : {}),
       ...(!Object.hasOwn(value, 'decisionTrace') ? { decisionTrace: { records: [] } } : {}),
+      ...(!Object.hasOwn(value, 'doctrines') ? { doctrines: createDoctrineState() } : {}),
       ...(!Object.hasOwn(value, 'estates') ? { estates: { entries: [] } } : {}),
       ...(!Object.hasOwn(value, 'witnesses') ? { witnesses: { facts: [], claims: [], nextId: 1 } } : {}),
       ...(!Object.hasOwn(value, 'settlements') ? { settlements: { villages: [], records: [] } } : {}),
@@ -292,6 +309,53 @@ function verifyWorld(value: unknown): WorldState {
       if (historicalPrivate.has(rumor.id)) rumor.witnessScope = 'participants';
     }
   }
+  const doctrineSchoolById = new Map(w.doctrines.schools.map((school) => [school.id, school]));
+  unique(w.doctrines.schools, ({ id }) => id, 'doctrines.schools.id');
+  unique(w.doctrines.schools, ({ parentSectId, theme }) => JSON.stringify([parentSectId, theme]), 'doctrines.schools.theme');
+  unique(w.doctrines.endorsements, ({ actorId }) => actorId, 'doctrines.endorsements.actorId');
+  unique(w.doctrines.proposals, ({ id }) => id, 'doctrines.proposals.id');
+  unique(w.doctrines.proposals.filter(({ status }) => status === 'pending'), ({ schoolId }) => schoolId, 'doctrines.proposals.pending');
+  unique(w.doctrines.records, ({ id }) => id, 'doctrines.records.id');
+  const doctrineSequence = new Set<number>();
+  for (const row of [...w.doctrines.proposals, ...w.doctrines.records]) {
+    const prefix = 'votes' in row ? 'proposal' : 'record';
+    const serial = Number(row.id.match(new RegExp(`^doctrine-${prefix}-([1-9][0-9]*)$`))?.[1]);
+    if (!Number.isSafeInteger(serial) || serial >= w.doctrines.nextId || doctrineSequence.has(serial)) fail('doctrines.nextId');
+    doctrineSequence.add(serial);
+  }
+  const doctrineMembers = new Set<string>();
+  for (const school of w.doctrines.schools) {
+    if (!sector.has(school.parentSectId) || !actor.has(school.founderId) ||
+        (school.stewardId && (!actor.has(school.stewardId) || !school.memberIds.includes(school.stewardId))) || school.foundedTick > w.tick ||
+        (school.lastChangeTick !== undefined && (school.lastChangeTick < school.foundedTick || school.lastChangeTick > w.tick)) ||
+        (school.lastTrainingTick !== undefined && (school.lastTrainingTick < school.foundedTick || school.lastTrainingTick > w.tick)) ||
+        (school.status !== 'autonomous' && (school.treasury !== 0 || school.memberIds.length !== 0))) fail('doctrines.schools.references');
+    for (const member of school.memberIds) {
+      if (!actor.has(member) || doctrineMembers.has(member)) fail('doctrines.schools.members');
+      doctrineMembers.add(member);
+    }
+  }
+  for (const row of w.doctrines.endorsements) {
+    const school = doctrineSchoolById.get(row.schoolId);
+    if (!actor.has(row.actorId) || !school || school.parentSectId !== row.sectId ||
+        school.theme !== row.theme || row.tick < school.foundedTick || row.tick > w.tick) fail('doctrines.endorsements.references');
+  }
+  for (const row of w.doctrines.proposals) {
+    const school = doctrineSchoolById.get(row.schoolId);
+    unique(row.votes, ({ actorId }) => actorId, 'doctrines.proposals.vote');
+    if (!school || row.openedTick < school.foundedTick || row.openedTick > w.tick || row.openedTick >= row.expiresTick ||
+        !actor.has(row.stewardId) || !actor.has(row.leaderId) || row.stewardId === row.leaderId ||
+        (row.status === 'pending') !== (row.settledTick === undefined) ||
+        row.votes.length !== (row.status === 'accepted' || row.status === 'declined' ? 2 : 1) ||
+        row.votes[0]?.verdict !== 'accept' ||
+        (row.status === 'accepted' && row.votes[1]?.verdict !== 'accept') ||
+        (row.status === 'declined' && row.votes[1]?.verdict !== 'decline') ||
+        (row.settledTick !== undefined && (row.settledTick < row.openedTick || row.settledTick > w.tick)) ||
+        row.votes.some((vote) => (vote.actorId !== row.stewardId && vote.actorId !== row.leaderId) ||
+          vote.tick < row.openedTick || vote.tick > w.tick || vote.tick > row.expiresTick)) fail('doctrines.proposals.references');
+  }
+  for (const row of w.doctrines.records) if (!doctrineSchoolById.has(row.schoolId) || row.tick > w.tick ||
+      row.actorIds.some((actorId) => !actor.has(actorId))) fail('doctrines.records.references');
   for (const village of w.settlements.villages) {
     // Older snapshots have the original numbered volunteers but no cohort metadata.
     if (village.nextVolunteerSequence === undefined) {

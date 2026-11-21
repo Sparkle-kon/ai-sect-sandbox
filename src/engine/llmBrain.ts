@@ -1,3 +1,4 @@
+import { availableDoctrineActions } from './doctrineEngine';
 import { availableEstateActions } from './estateEngine';
 import { availableWitnessActions } from './witnessEngine';
 import { availableSettlementActions } from './settlementEngine';
@@ -119,6 +120,22 @@ export function computeHeuristicDecision(
       const recruit = options.find((option) => option.action === 'RECRUIT_SETTLER');
       if (recruit) return { ...recruit, chosenAction: recruit.action, innerMonologue: '此人具仙缘且愿入门，依规发放安置资粮。' };
     }
+  }
+
+  if (world.tick >= 13 && !cultivator.guardAssignment &&
+      (world.tick % 4 === 0 || world.doctrines.proposals.some(({ status }) => status === 'pending'))) {
+    const options = availableDoctrineActions(cultivator, world);
+    const dissent = cultivator.personality === '诡诈' || (cultivator.personality === '苟道' && cultivator.hp < cultivator.maxHp * .7);
+    const answer = options.find(({ doctrineMove }) => doctrineMove === (dissent ? 'decline' : 'accept'));
+    const initiative = world.tick % 4 !== 0 ? undefined
+      : options.find(({ doctrineMove }) => doctrineMove === 'endorse') ??
+        options.find(({ doctrineMove }) => doctrineMove === 'fund_training') ??
+        options.find(({ doctrineMove }) => doctrineMove === 'join') ??
+        options.find(({ doctrineMove }) => doctrineMove === (cultivator.personality === '逍遥' || cultivator.personality === '狂傲'
+          ? 'propose_separation' : 'propose_reconciliation')) ??
+        options.find(({ doctrineMove }) => doctrineMove === 'propose_separation');
+    const choice = answer ?? initiative;
+    if (choice) return { ...choice, chosenAction: 'DOCTRINE', innerMonologue: '道统之议须凭公开证据，按双方约定行事。' };
   }
 
   if (world.tick >= 5 && world.tick % 5 === 1 && !cultivator.guardAssignment) {
@@ -389,6 +406,7 @@ export async function queryCultivatorLLMDecision(
   const settlementOptions = availableSettlementActions(cultivator, world);
   const witnessOptions = availableWitnessActions(cultivator, world);
   const estateOptions = availableEstateActions(cultivator, world);
+  const doctrineOptions = availableDoctrineActions(cultivator, world);
   const prompt = `你是修仙沙盒世界中的修士【${cultivator.name}】（称号：${cultivator.title}）。
 【自身状态】
 - 境界：${cultivator.realm}${cultivator.realmStage}层（灵气进度：${cultivator.qiProgress}%）
@@ -408,6 +426,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 天机悬赏榜：${JSON.stringify(world.bounties.filter((item) => item.status === 'open').map(({id,targetCultivatorId,reward,reason}) => ({id,targetCultivatorId,reward,reason})))}；可接的追缉：${JSON.stringify(availableBountyHunts(cultivator, world))}
 - 天下公示的大会与秘境：${JSON.stringify(world.occasions.filter((item) => item.status === 'registration' || item.status === 'running').map(({id,title,kind,locationId,status,registrationClosesTick}) => ({id,title,kind,locationId,status,registrationClosesTick})))}；可报名项目：${JSON.stringify(availableOccasionJoins(cultivator, world))}
 - 本宗邦交：${JSON.stringify(world.diplomacy.filter((relation) => relation.sectAId === cultivator.sectId || relation.sectBId === cultivator.sectId))}；公示的外事权限：${JSON.stringify(availableDiplomacyActions(cultivator, world))}
+- 道统当前可用事务（只能照抄一个列出的选项，不可自行转移账款）：${JSON.stringify(doctrineOptions)}
 - 宗门经营许可：${JSON.stringify(availableSectEconomyActions(cultivator, world))}；巡守派任：${JSON.stringify(cultivator.guardAssignment ?? null)}
 - 宗门职位：${cultivator.sectRank}；贡献：${cultivator.contribution}；当前可行的宗门权力行动：${JSON.stringify(availableLeadershipActions(cultivator, world))}
 - 自身天劫：${JSON.stringify(isTribulationActive(cultivator) ? cultivator.tribulation : null)}；如果正在应劫，须选择 FACE_TRIBULATION；同地可袭扰的仇敌：${JSON.stringify(availableAmbushTargets(cultivator, world).map((target) => ({ id: target.id, name: target.name })))}
@@ -428,9 +447,9 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
 请以第一人称进行内心独白思考，并决定本回合行动。只输出合法的 JSON 对象（不要 Markdown 代码块），字段如下：
 {
   "innerMonologue": "你的第一人称内心独白（40字以内，体现你的性格与秘密目标）",
-  "chosenAction": "CULTIVATE | BREAKTHROUGH | EXPLORE | SOCIALIZE | DUEL | SCHEMING | PURSUE_SCHEME | AUTHOR_TECHNIQUE | STUDY_TECHNIQUE | GATHER_HERBS | BREW_PILL | USE_PILL | FORGE_ARTIFACT | BIND_ARTIFACT | REPAIR_ARTIFACT | AWAKEN_ARTIFACT | FACE_TRIBULATION | AMBUSH_TRIBULATION | CHALLENGE_LEADERSHIP | PLOT_COUP | BUILD_FACILITY | DISPATCH_GUARD | GUARD_DUTY | OFFER_ALLIANCE | DECLARE_WAR | DEMAND_TRIBUTE | LAUNCH_SIEGE | JOIN_OCCASION | PURSUE_BOUNTY | TAME_BEAST | TRADE | DUAL_CULTIVATE | SECT_DIPLOMACY | TEACH | ACCEPT_TUITION | DECLINE_TUITION | OFFER_OATH | ACCEPT_OATH | DECLINE_OATH | FULFILL_OATH | APPEAL_OATH | PLACE_MARKET_BUY | PLACE_MARKET_SELL | CANCEL_MARKET_ORDER | RECRUIT_SETTLER | DELIVER_RELIEF | FILE_WITNESS_CLAIM | ATTEST_WITNESS | CHALLENGE_WITNESS | NAME_HEIR | CLAIM_ESTATE | HOLD_MEMORIAL | REST 之一",
+  "chosenAction": "CULTIVATE | BREAKTHROUGH | EXPLORE | SOCIALIZE | DUEL | SCHEMING | PURSUE_SCHEME | AUTHOR_TECHNIQUE | STUDY_TECHNIQUE | GATHER_HERBS | BREW_PILL | USE_PILL | FORGE_ARTIFACT | BIND_ARTIFACT | REPAIR_ARTIFACT | AWAKEN_ARTIFACT | FACE_TRIBULATION | AMBUSH_TRIBULATION | CHALLENGE_LEADERSHIP | PLOT_COUP | BUILD_FACILITY | DISPATCH_GUARD | GUARD_DUTY | OFFER_ALLIANCE | DECLARE_WAR | DEMAND_TRIBUTE | LAUNCH_SIEGE | JOIN_OCCASION | PURSUE_BOUNTY | TAME_BEAST | TRADE | DUAL_CULTIVATE | SECT_DIPLOMACY | TEACH | ACCEPT_TUITION | DECLINE_TUITION | OFFER_OATH | ACCEPT_OATH | DECLINE_OATH | FULFILL_OATH | APPEAL_OATH | PLACE_MARKET_BUY | PLACE_MARKET_SELL | CANCEL_MARKET_ORDER | RECRUIT_SETTLER | DELIVER_RELIEF | FILE_WITNESS_CLAIM | ATTEST_WITNESS | CHALLENGE_WITNESS | NAME_HEIR | CLAIM_ESTATE | HOLD_MEMORIAL | DOCTRINE | REST 之一",
   "targetLocationId": "EXPLORE 可填已知地点 id（探索未知时省略）；宗门经营许可要求时填指定地点 id",
-  "targetCultivatorId": "如果 chosenAction 为 SOCIALIZE / DUEL / SCHEMING / AMBUSH_TRIBULATION / CHALLENGE_LEADERSHIP / PLOT_COUP / DISPATCH_GUARD / TRADE / DUAL_CULTIVATE / SECT_DIPLOMACY / TEACH / OFFER_OATH / FILE_WITNESS_CLAIM / NAME_HEIR 则填目标修士 id，否则省略",
+  "targetCultivatorId": "如果 chosenAction 为 SOCIALIZE / DUEL / SCHEMING / AMBUSH_TRIBULATION / CHALLENGE_LEADERSHIP / PLOT_COUP / DISPATCH_GUARD / TRADE / DUAL_CULTIVATE / SECT_DIPLOMACY / TEACH / OFFER_OATH / FILE_WITNESS_CLAIM / NAME_HEIR 则填目标修士 id；DOCTRINE 仅在所选事务列出该字段时填写；其余省略",
   "spokenLine": "简短台词（可选）",
   "rumorIntent": "只有阴险或诡诈角色选择 SCHEMING 时才可选填 FABRICATE 或 EXAGGERATE",
   "proposedScheme": "仅在没有进行中的谋划并选择 PURSUE_SCHEME 时，从列出的目标类别中选择一项",
@@ -445,6 +464,10 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
   "targetMarketOrderId": "撤单时选择自己仍可撤的挂单 id",
   "targetOathId": "回应、履行或申诉契书时，指定可用契书 id",
   "oathTerm": "提出契书时选择给定条款 foundation_pill 或 jade_herb",
+  "doctrineMove": "从列出的 DOCTRINE 事务照抄行动",
+  "doctrineTheme": "仅复制该事务所列的信念主题",
+  "targetDoctrineSchoolId": "仅复制该事务所列的道统 id",
+  "targetDoctrineProposalId": "仅复制该事务所列的动议 id",
   "targetTuitionId": "仅在接受或婉拒授艺时选择给定邀约 id",
   "targetTechniqueId": "仅在选择 STUDY_TECHNIQUE 时，从可研习项目的 id 中选一个",
   "targetHerbId": "采药时使用允许行动中给定的 targetHerbId",
@@ -545,9 +568,17 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
             'NAME_HEIR',
             'CLAIM_ESTATE',
             'HOLD_MEMORIAL',
+            'DOCTRINE',
           ];
           const chosenAction = parsed?.chosenAction;
           if (!chosenAction || !validActions.includes(chosenAction)) return undefined;
+
+          const legalDoctrine = chosenAction === 'DOCTRINE' ? doctrineOptions.find((item) =>
+            item.doctrineMove === parsed.doctrineMove && item.doctrineTheme === parsed.doctrineTheme &&
+            item.targetDoctrineSchoolId === parsed.targetDoctrineSchoolId &&
+            item.targetDoctrineProposalId === parsed.targetDoctrineProposalId &&
+            item.targetCultivatorId === parsed.targetCultivatorId) : undefined;
+          if (chosenAction === 'DOCTRINE' && !legalDoctrine) return undefined;
 
           const isEstate = chosenAction === 'NAME_HEIR' || chosenAction === 'CLAIM_ESTATE' || chosenAction === 'HOLD_MEMORIAL';
           const legalEstate = isEstate && estateOptions.find((item) => item.action === chosenAction &&
@@ -640,8 +671,8 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
               cultivator.innerMonologue ||
               '天道无常，唯有苦修方是正途。',
             chosenAction,
-            targetLocationId: typeof parsed.targetLocationId === 'string' ? parsed.targetLocationId : undefined,
-            targetCultivatorId: legalEstate ? legalEstate.targetCultivatorId : legalWitness ? legalWitness.targetCultivatorId : legalOath ? legalOath.targetCultivatorId : legalTraining ? legalTraining.targetCultivatorId
+            targetLocationId: chosenAction !== 'DOCTRINE' && typeof parsed.targetLocationId === 'string' ? parsed.targetLocationId : undefined,
+            targetCultivatorId: legalDoctrine ? legalDoctrine.targetCultivatorId : legalEstate ? legalEstate.targetCultivatorId : legalWitness ? legalWitness.targetCultivatorId : legalOath ? legalOath.targetCultivatorId : legalTraining ? legalTraining.targetCultivatorId
               : typeof parsed.targetCultivatorId === 'string' ? parsed.targetCultivatorId : undefined,
             spokenLine: typeof parsed.spokenLine === 'string' ? parsed.spokenLine.trim().slice(0, 90) : undefined,
             facilityKind: legalInfrastructure?.facilityKind,
@@ -654,6 +685,10 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
             forgeTier: legalArtifact?.forgeTier,
             targetHerbId: legalAlchemy?.targetHerbId,
             targetPillId: legalAlchemy?.targetPillId,
+            doctrineMove: legalDoctrine?.doctrineMove,
+            doctrineTheme: legalDoctrine?.doctrineTheme,
+            targetDoctrineSchoolId: legalDoctrine?.targetDoctrineSchoolId,
+            targetDoctrineProposalId: legalDoctrine?.targetDoctrineProposalId,
             targetEstateId: legalEstate ? legalEstate.targetEstateId : undefined,
             targetWitnessEventId: legalWitness ? legalWitness.targetWitnessEventId : undefined,
             targetWitnessClaimId: legalWitness ? legalWitness.targetWitnessClaimId : undefined,

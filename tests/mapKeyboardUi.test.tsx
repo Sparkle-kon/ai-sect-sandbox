@@ -78,6 +78,34 @@ describe('map keyboard and accessible target parity', () => {
     expect(mapExplorerIndex(world, later.view, later.actorPositions, later.presentation).events).toHaveLength(0);
   });
 
+  it('points to public doctrine negotiations and realized charter changes only at visible headquarters', () => {
+    const { world, here, remembered, local, viewer, scenery } = fixture();
+    const [localSect, remoteSect] = world.sects;
+    localSect.headquartersId = here.id;
+    remoteSect.headquartersId = remembered.id;
+    world.doctrines.schools = [localSect, remoteSect].map((sect) => ({
+      id: `school-${sect.id}`, parentSectId: sect.id, founderId: viewer.id, theme: 'community',
+      foundedTick: 1, status: 'attached', memberIds: [], treasury: 0,
+    }));
+    world.doctrines.proposals = world.doctrines.schools.map((school, offset) => ({
+      id: `p${offset}`, schoolId: school.id, kind: 'separation', openedTick: 3, expiresTick: 8,
+      status: 'pending', stewardId: local.id, leaderId: viewer.id, amount: 30, votes: [],
+    }));
+    const locations = () => {
+      const { view, actorPositions, presentation } = scenery();
+      return mapExplorerIndex(world, view, actorPositions, presentation).events;
+    };
+    expect(locations().filter(({ id }) => id.startsWith('doctrine-'))).toEqual([
+      { id: 'doctrine-p0', label: '道统分立待签议', site: here },
+    ]);
+    world.doctrines.proposals[0].status = 'accepted';
+    world.doctrines.records = [{ id: 'r0', tick: world.tick, schoolId: world.doctrines.schools[0].id,
+      kind: 'separation', actorIds: [viewer.id, local.id], amount: 30, support: 3, description: '已交割' }];
+    expect(locations().filter(({ id }) => id.startsWith('doctrine-'))).toEqual([
+      { id: 'doctrine-r0', label: '道统和平分立', site: here },
+    ]);
+  });
+
   it('renders native activation controls behind a closed default disclosure and leaves targets available in reduced-motion mode', () => {
     const { world, viewer, scenery } = fixture();
     expect(shouldAnimateMap(true, true)).toBe(false);
