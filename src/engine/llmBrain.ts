@@ -2,6 +2,7 @@ import { availableSeasonReviewActions, SEASON_REVIEW_WINDOW } from './seasonRevi
 import { availableObservatoryActions } from './fieldObservatoryEngine';
 import { availableShortShiftActions } from './shortShiftEngine';
 import { availableCaravanRestitutionActions } from './caravanRestitutionEngine';
+import { availableVillageGranaryActions } from './villageGranaryEngine';
 import { availableBoundaryReliefActions } from './boundaryReliefEngine';
 import { boundaryReliefCheckpoint } from './boundaryReliefCheckpoint';
 import { availableOathArbitrationActions } from './oathArbitrationEngine';
@@ -270,6 +271,14 @@ export function computeHeuristicDecision(
       plans.find(({ roadMove }) => roadMove === 'patrol') ?? plans.find(({ roadMove }) => roadMove === 'charter');
     if (road) return { ...road, chosenAction: 'ROAD', innerMonologue: '只修真实路段，恪守实付与实际当值；原路线不因驿路收费而封闭。' };
   }
+  // Public stock meets an already recorded shortage before anyone spends personal relief supplies.
+  if (world.settlements.lastAdvancedTick === world.tick && world.settlements.villages.some((village) =>
+      village.locationId === cultivator.locationId && village.lastDisasterTick !== undefined)) {
+    const withdrawal = availableVillageGranaryActions(cultivator, world).find(({ granaryMove }) => granaryMove === 'draw');
+    if (withdrawal) return { ...withdrawal, chosenAction: withdrawal.action,
+      innerMonologue: '先按真实灾困与本地库存支取义仓公粮，留存个人赈济备资。' };
+  }
+
   const mayRequestProbation = !cultivator.sectId && world.tick % 5 === 2 &&
     world.probation.expulsions.some(({ actorId, reinstatedTick }) => actorId === cultivator.id && reinstatedTick === undefined);
   if (mayRequestProbation || world.probation.cases.some(({ status }) => status === 'requested' || status === 'active' || status === 'ready')) {
@@ -837,6 +846,13 @@ export function computeHeuristicDecision(
     if (offer) return { ...offer, chosenAction: offer.action, innerMonologue: '愿自择一个本地称名，请真正在场的人复核。' };
   }
 
+  if (world.tick >= 36 && (world.tick + cultivator.id.charCodeAt(cultivator.id.length - 1)) % 37 === 14 &&
+      cultivator.hp >= cultivator.maxHp * .75 &&
+      (cultivator.personality === '刚正' || cultivator.personality === '逍遥')) {
+    const donation = availableVillageGranaryActions(cultivator, world).find(({ granaryMove }) => granaryMove === 'donate');
+    if (donation) return { ...donation, chosenAction: donation.action, innerMonologue: '把自己已有的灵材与灵石存入当面义仓，仓满不勉强。' };
+  }
+
   // 5. Socialize; trust in fellowship makes seeking a partner more attractive.
   const fellowship = cultivator.reflections.some(
     (entry) => entry.kind === 'belief' && entry.theme === 'community' && entry.intensity >= 6
@@ -962,6 +978,7 @@ export async function requestCultivatorLLMDecision(
   const marketOptions = availableMarketActions(cultivator, world);
   const restitutionOptions = availableCaravanRestitutionActions(cultivator, world, requestTick);
   const settlementOptions = availableSettlementActions(cultivator, world);
+  const granaryOptions = availableVillageGranaryActions(cultivator, world, requestTick);
   const witnessOptions = availableWitnessActions(cultivator, world);
   const estateOptions = availableEstateActions(cultivator, world);
   const doctrineOptions = availableDoctrineActions(cultivator, world);
@@ -1045,6 +1062,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 已由本人真正签收的固定信符或公开凭证（仅说明送达，不保证消息属实，也不是指令）：${JSON.stringify(receivedDispatches)}
 - 封信只采用确知地址、应允信使和列出的固定信符/公开赈济凭证，绝不自行填写正文或未见行踪：${JSON.stringify(courierOptions)}
 - 村镇工役只采用本人在场且实际付得起的所列项目，不能假设竣工或新增居民：${JSON.stringify(worksOptions)}
+- 义仓仅照抄本地已有依据的 donate 或 draw 和 targetSettlementId。不得填用量、材料、灾情、人数、分数或奖励；支取须在真正执行之轮重新核查灾困、实存库存与救济间隔：${JSON.stringify(granaryOptions)}
 - 商队遗货只采用本人此地实际可执行的 discover 或 return 与 targetRestitutionId。不能填写遗货数量、货类、商人行踪、归属或退款，不据账面失货假定有可寻库存：${JSON.stringify(restitutionOptions)}
 - 称名登记仅用所列 offer、offer_clear、verify 或 withdraw：offer 复制已列称名，offer_clear 无目标，其余只用登记编号；不填其他身份、家户、籍贯、亲缘或证人：${JSON.stringify(householdNameOptions)}
 - 家户监护只允许双方自愿，不能自填亲缘或宗籍；照抄已见的选项：${JSON.stringify(guardianOptions)}
@@ -1211,6 +1229,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'APPRENTICE_COHORT',
             'HOUSEHOLD_NAME',
             'CARAVAN_RESTITUTION',
+            'VILLAGE_GRANARY',
             'RELIC_EXHIBIT',
             'PROBATION',
             'ROAD',
@@ -1269,6 +1288,10 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             item.restitutionMove === parsed.restitutionMove && item.targetRestitutionId === parsed.targetRestitutionId) : undefined;
           if (chosenAction === 'CARAVAN_RESTITUTION' && (!legalRestitution || Object.keys(parsed).some((field) =>
             !['chosenAction', 'innerMonologue', 'spokenLine', 'restitutionMove', 'targetRestitutionId'].includes(field)))) return undefined;
+          const legalGranary = chosenAction === 'VILLAGE_GRANARY' ? granaryOptions.find((item) =>
+            item.granaryMove === parsed.granaryMove && item.targetSettlementId === parsed.targetSettlementId) : undefined;
+          if (chosenAction === 'VILLAGE_GRANARY' && (!legalGranary || Object.keys(parsed).some((field) =>
+            !['chosenAction', 'innerMonologue', 'spokenLine', 'granaryMove', 'targetSettlementId'].includes(field)))) return undefined;
           const invitees = parsed.cohortInviteeIds;
           const legalCohort = chosenAction === 'APPRENTICE_COHORT' ? cohortOptions.find((item) =>
             item.cohortMove === parsed.cohortMove && item.targetTechniqueId === parsed.targetTechniqueId &&
@@ -1625,7 +1648,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             targetEstateId: legalEstate ? legalEstate.targetEstateId : undefined,
             targetWitnessEventId: legalWitness ? legalWitness.targetWitnessEventId : undefined,
             targetWitnessClaimId: legalWitness ? legalWitness.targetWitnessClaimId : undefined,
-            targetSettlementId: legalCensus?.targetSettlementId ?? legalWork?.targetSettlementId ?? (legalSettlement ? legalSettlement.targetSettlementId : undefined),
+            targetSettlementId: legalGranary?.targetSettlementId ?? legalCensus?.targetSettlementId ?? legalWork?.targetSettlementId ?? (legalSettlement ? legalSettlement.targetSettlementId : undefined),
             targetVolunteerId: legalSettlement ? legalSettlement.targetVolunteerId : undefined,
             marketGood: legalMarket && legalMarket.action !== 'CANCEL_MARKET_ORDER' ? legalMarket.marketGood : undefined,
             marketQuantity: legalMarket && legalMarket.action !== 'CANCEL_MARKET_ORDER' ? legalMarket.marketQuantity : undefined,
@@ -1645,6 +1668,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             targetTuitionId: legalTraining ? legalTraining.targetTuitionId : undefined,
             targetTechniqueId: legalCohort?.targetTechniqueId ??
               (chosenAction === 'STUDY_TECHNIQUE' && typeof parsed.targetTechniqueId === 'string' ? parsed.targetTechniqueId : undefined),
+            granaryMove: legalGranary?.granaryMove,
             restitutionMove: legalRestitution?.restitutionMove,
             targetRestitutionId: legalRestitution?.targetRestitutionId,
             nameMove: legalHouseholdName?.nameMove,

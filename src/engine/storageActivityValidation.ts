@@ -1,6 +1,9 @@
-import type { ResourceFlowEntry, WorldState } from '../types/world';
+import type { ResourceFlowEntry, VillageGranaryReceipt, WorldState } from '../types/world';
 import { SPARRING_ACTIVE_TICKS, SPARRING_OFFER_TICKS } from './sparringEngine';
 import { EXPEDITION_RESCUE_OFFER_TICKS, EXPEDITION_RESCUE_STRIDE } from './expeditionRescueEngine';
+import { VILLAGE_GRANARY_CAPACITY, VILLAGE_GRANARY_DISASTER_WINDOW, VILLAGE_GRANARY_DONATION, VILLAGE_GRANARY_DRAW,
+  VILLAGE_GRANARY_MIN_STRESS, VILLAGE_GRANARY_RECEIPT_LIMIT, VILLAGE_GRANARY_RELIEF_COOLDOWN,
+  VILLAGE_GRANARY_STRESS_REDUCTION } from './villageGranaryEngine';
 import { terrainTileAt } from './terrainEngine';
 import { OBSERVATORY_LEAD_TICKS } from './fieldObservatoryEngine';
 import { COHORT_GRADUATION_MASTERY, COHORT_LESSON_DELAY } from './apprenticeCohortEngine';
@@ -454,5 +457,99 @@ export function validateCaravanRestitutionRelationships(world: WorldState, actor
       }
     }
     if (inflow > 1 || outflow > 1) fail('caravanRestitution.lots.custody');
+  }
+}
+
+export function validateVillageGranaryRelationships(world: WorldState, actors: ReadonlySet<string>,
+  fail: (path: string) => never): void {
+  const villages = new Map(world.settlements.villages.map((village) => [village.id, village]));
+  const disasterKey = (id: string, tick: number) => JSON.stringify([id, tick]);
+  const disasters = new Set(world.settlements.records.filter(({kind}) => kind === 'disaster')
+    .map(({ settlementId, tick }) => disasterKey(settlementId, tick)));
+  const settlementHead = world.settlements.records[0]?.tick;
+  const key = (id: string, tick: number, actorId: string) => JSON.stringify([id, tick, actorId]);
+  const durableReceipts = new Map<string, VillageGranaryReceipt>();
+  const oldestReceipt = new Map<string, number>();
+  for (const granary of world.villageGranaries.granaries) {
+    const village = villages.get(granary.settlementId);
+    const receipts = granary.receipts;
+    const donationCount = granary.donatedRoots / VILLAGE_GRANARY_DONATION.roots;
+    const draws = granary.spentRoots / VILLAGE_GRANARY_DRAW.roots;
+    if (!village || oldestReceipt.has(granary.settlementId) || !Number.isInteger(donationCount) ||
+        !Number.isInteger(draws) || donationCount < 1 || granary.donatedStones !== donationCount * VILLAGE_GRANARY_DONATION.stones ||
+        granary.spentStones !== draws * VILLAGE_GRANARY_DRAW.stones ||
+        granary.roots !== granary.donatedRoots - granary.spentRoots || granary.stones !== granary.donatedStones - granary.spentStones ||
+        receipts.length !== Math.min(VILLAGE_GRANARY_RECEIPT_LIMIT, donationCount + draws))
+      return fail('villageGranaries.inventory');
+    oldestReceipt.set(granary.settlementId, receipts.length === VILLAGE_GRANARY_RECEIPT_LIMIT ? receipts[0].tick : -1);
+    if ((draws > 0) !== (granary.lastDrawTick !== undefined) ||
+        (granary.lastDrawTick !== undefined && (granary.lastDrawTick > world.tick ||
+          granary.lastDrawTick > (village.lastReliefTick ?? -1) || granary.lastDrawTick >= receipts[0].tick &&
+          !receipts.some((receipt) => receipt.kind === 'draw' && receipt.tick === granary.lastDrawTick))))
+      return fail('villageGranaries.lastDrawTick');
+    let previousTick = -1;
+    let previousDraw = -Infinity;
+    let roots = granary.roots - receipts.reduce((net, row) => net + (row.kind === 'donate'
+      ? VILLAGE_GRANARY_DONATION.roots : -VILLAGE_GRANARY_DRAW.roots), 0);
+    let retainedDonations = 0;
+    let retainedDraws = 0;
+    for (const receipt of receipts) {
+      const receiptKey = key(granary.settlementId, receipt.tick, receipt.actorId);
+      if (!actors.has(receipt.actorId) || receipt.tick < previousTick || receipt.tick > world.tick ||
+          durableReceipts.has(receiptKey) || roots < 0 || roots > VILLAGE_GRANARY_CAPACITY.roots)
+        return fail('villageGranaries.receipts.source');
+      previousTick = receipt.tick;
+      if (receipt.kind === 'draw') {
+        if (receipt.tick - previousDraw < VILLAGE_GRANARY_RELIEF_COOLDOWN ||
+            receipt.tick > (granary.lastDrawTick ?? -1) ||
+            receipt.disasterTick > receipt.tick || receipt.tick - receipt.disasterTick > VILLAGE_GRANARY_DISASTER_WINDOW ||
+            receipt.disasterTick > (village.lastDisasterTick ?? -1) ||
+            receipt.stressBefore < VILLAGE_GRANARY_MIN_STRESS ||
+            receipt.stressBefore - VILLAGE_GRANARY_STRESS_REDUCTION !== receipt.stressAfter ||
+            (settlementHead !== undefined && receipt.disasterTick > settlementHead &&
+              !disasters.has(disasterKey(granary.settlementId, receipt.disasterTick))))
+          return fail('villageGranaries.receipts.draw');
+        previousDraw = receipt.tick;
+        retainedDraws++;
+        roots -= VILLAGE_GRANARY_DRAW.roots;
+      } else {
+        retainedDonations++;
+        roots += VILLAGE_GRANARY_DONATION.roots;
+      }
+      durableReceipts.set(receiptKey, receipt);
+    }
+    if (roots !== granary.roots || retainedDonations > donationCount || retainedDraws > draws)
+      return fail('villageGranaries.receipts.balance');
+  }
+  const complete = new Set(world.resourceFlow.months.filter((month) => month.entries.length === month.totalEntries)
+    .map(({tick}) => tick));
+  const journal = new Map<string, Set<string>>();
+  for (const month of world.resourceFlow.months) for (const row of month.entries) {
+    const from = 'from' in row ? row.from : undefined;
+    const to = 'to' in row ? row.to : undefined;
+    if (row.mechanism !== 'granary' && from?.kind !== 'granary' && to?.kind !== 'granary') continue;
+    const isDonation = row.reason === 'granary_donation';
+    const participant = row.visibility.kind === 'participants' && row.visibility.actorIds.length === 1
+      ? row.visibility.actorIds[0] : undefined;
+    const quantity = isDonation ? VILLAGE_GRANARY_DONATION : VILLAGE_GRANARY_DRAW;
+    if (row.mechanism !== 'granary' || !participant || !actors.has(participant) || !oldestReceipt.has(row.refId) ||
+        (row.good !== 'stone' && row.good !== 'earth_root') ||
+        row.amount !== (row.good === 'stone' ? quantity.stones : quantity.roots) ||
+        (isDonation ? row.kind !== 'transfer' || from?.kind !== 'actor' || from.id !== participant ||
+          to?.kind !== 'granary' || to.id !== row.refId :
+          row.reason !== 'granary_draw' || row.kind !== 'consumption' || from?.kind !== 'granary' || from.id !== row.refId))
+      return fail('villageGranaries.journal.coordinates');
+    const receiptKey = key(row.refId, row.tick, participant);
+    const receipt = durableReceipts.get(receiptKey);
+    if ((receipt && receipt.kind !== (isDonation ? 'donate' : 'draw')) ||
+        (!receipt && row.tick > oldestReceipt.get(row.refId)!))
+      return fail('villageGranaries.journal.source');
+    const goods = journal.get(receiptKey) ?? new Set<string>();
+    if (goods.has(row.good)) return fail('villageGranaries.journal.duplicate');
+    goods.add(row.good);
+    journal.set(receiptKey, goods);
+  }
+  for (const [receiptKey, {tick}] of durableReceipts) {
+    if (complete.has(tick) && journal.get(receiptKey)?.size !== 2) return fail('villageGranaries.journal.missing');
   }
 }

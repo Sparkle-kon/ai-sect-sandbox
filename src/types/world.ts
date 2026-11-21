@@ -119,6 +119,7 @@ export type ActionType =
   | 'APPRENTICE_COHORT'
   | 'HOUSEHOLD_NAME'
   | 'CARAVAN_RESTITUTION'
+  | 'VILLAGE_GRANARY'
   | 'FORGE_ARTIFACT'
   | 'BIND_ARTIFACT'
   | 'REPAIR_ARTIFACT'
@@ -513,6 +514,7 @@ export interface LLMDecisionPayload {
   householdAlias?: string;
   targetHouseholdNameId?: string;
   restitutionMove?: CaravanRestitutionMove;
+  granaryMove?: VillageGranaryMove;
   targetRestitutionId?: string;
   targetWorkshopId?: string;
   workshopTier?: WorkshopTier;
@@ -2085,9 +2087,9 @@ export interface SharedCommonsPact {
 export interface SharedCommonsState { pacts: SharedCommonsPact[]; nextId: number }
 
 export type ResourceFlowGood = 'stone' | MarketGood;
-export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation' | 'terrain' | 'workshop' | 'road' | 'observatory' | 'pilgrimage';
+export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation' | 'terrain' | 'workshop' | 'road' | 'observatory' | 'pilgrimage' | 'granary';
 export type ResourceFlowAccount =
-  | { kind: 'actor' | 'site' | 'sect' | 'order' | 'shipment' | 'relocation' | 'workshop' | 'salvage'; id: string }
+  | { kind: 'actor' | 'site' | 'sect' | 'order' | 'shipment' | 'relocation' | 'workshop' | 'salvage' | 'granary'; id: string }
   | { kind: 'oath'; id: string; pocket: 'payment' | 'collateral' };
 export type ResourceFlowVisibility =
   | { kind: 'observer' }
@@ -2382,6 +2384,23 @@ export interface CaravanRestitutionLot {
 }
 export interface CaravanRestitutionState { lots: CaravanRestitutionLot[] }
 
+export type VillageGranaryMove = 'donate' | 'draw';
+export type VillageGranaryReceipt =
+  | { tick: number; actorId: string; kind: 'donate' }
+  | { tick: number; actorId: string; kind: 'draw'; stressBefore: number; stressAfter: number; disasterTick: number };
+export interface VillageGranary {
+  settlementId: string;
+  roots: number;
+  stones: number;
+  donatedRoots: number;
+  donatedStones: number;
+  spentRoots: number;
+  spentStones: number;
+  lastDrawTick?: number;
+  receipts: VillageGranaryReceipt[];
+}
+export interface VillageGranariesState { granaries: VillageGranary[] }
+
 export type ProbationMove = 'request' | 'admit' | 'review' | 'withdraw' | 'restore';
 export type ProbationVote = 'support' | 'oppose';
 export type ProbationStatus = 'requested' | 'active' | 'ready' | 'reinstated' | 'withdrawn' | 'rejected' | 'expired';
@@ -2488,6 +2507,7 @@ export interface WorldState {
   apprenticeCohorts: ApprenticeCohortState;
   householdNames: HouseholdNameState;
   caravanRestitution: CaravanRestitutionState;
+  villageGranaries: VillageGranariesState;
   resourceFlow: ResourceFlowState;
   roads: RoadState;
   sharedCommons: SharedCommonsState;

@@ -13,6 +13,7 @@ import { advanceShortShifts, resolveShortShiftAction } from './shortShiftEngine'
 import { advanceBoundaryReliefs, resolveBoundaryReliefAction } from './boundaryReliefEngine';
 import { advanceApprenticeCohorts, recordCohortPractice, resolveApprenticeCohortAction } from './apprenticeCohortEngine';
 import { advanceHouseholdNames, resolveHouseholdNameAction } from './householdNameEngine';
+import { resolveVillageGranaryAction } from './villageGranaryEngine';
 import { resolveCaravanRestitutionAction } from './caravanRestitutionEngine';
 import { boundaryReliefCheckpoint } from './boundaryReliefCheckpoint';
 import { expeditionRescueCheckpoint } from './expeditionRescueCheckpoint';
@@ -277,6 +278,8 @@ export function applyCultivatorBrainDecision(
       return resolveApprenticeCohortAction(world, cultivator, decision);
     case 'HOUSEHOLD_NAME':
       return resolveHouseholdNameAction(world, cultivator, decision);
+    case 'VILLAGE_GRANARY':
+      return resolveVillageGranaryAction(world, cultivator, decision);
     case 'CARAVAN_RESTITUTION':
       return resolveCaravanRestitutionAction(world, cultivator, decision);
     case 'TERRAIN_RECOVERY':

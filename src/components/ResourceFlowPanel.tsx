@@ -23,6 +23,8 @@ const REASONS: Readonly<Record<string, string>> = {
   order_deposit: '挂单托管', order_release: '撤单或到期退回', price_improvement: '限价差退回',
   local_fill: '现场交割', shipment_departure: '商队启程转入保管', shipment_delivery: '商队到货交割',
   shipment_return: '商队退运退款退货', shipment_refund: '货损退款', shipment_loss: '实际货损',
+  granary_donation: '捐入村镇义仓', granary_draw: '灾后短缺实际支用',
+  shipment_salvage: '幸存原物转入封存',
   shipment_survived: '真实幸存货物转入封存', caravan_restitution: '核实封存原货后归还原卖方',
 };
 const control = 'min-h-11 min-w-0 rounded border border-slate-700 bg-slate-950 px-2 text-xs text-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300 disabled:opacity-40';
@@ -55,6 +57,7 @@ export function ResourceFlowMonth({ ledger, world, scope, visibleSiteIds }: {
       case 'oath': return row.pocket === 'payment' ? '契书价金托管' : '契书抵押托管';
       case 'order': return '坊市挂单托管';
       case 'shipment': return '商队在途保管';
+      case 'granary': return '村镇义仓';
       case 'salvage': return '货损幸存物封存';
       case 'relocation': return '迁址在途公库';
       case 'workshop': return '工坊备料托管';

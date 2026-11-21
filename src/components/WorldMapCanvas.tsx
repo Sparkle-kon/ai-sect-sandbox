@@ -39,6 +39,7 @@ import { resolveChronicleFocus } from '../engine/chronicleFocusEngine';
 import { availableFurnaceSlotSummary } from '../engine/furnaceReservationEngine';
 import { getCurrentBoundaryCoverage } from '../engine/boundaryReliefEngine';
 import { currentVisibleTileIds, terrainTileAt } from '../engine/terrainEngine';
+import { projectVillageGranary } from '../engine/villageGranaryEngine';
 import { projectHouseholdNames } from '../engine/householdNameEngine';
 import type { ChronicleFocusRequest } from '../engine/chronicleFocusEngine';
 
@@ -171,6 +172,10 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const localNameRegisterSite = useMemo(() => {
     const register = selected && projectHouseholdNames(world, selected);
     return register?.entries.some(({ status }) => status !== 'visitor') ? selected?.locationId : undefined;
+  }, [world, selected]);
+  const localGranary = useMemo(() => {
+    const granary = projectVillageGranary(world, selected);
+    return granary && granary.roots > 0 && granary.stones > 0 ? granary : undefined;
   }, [world, selected]);
   const observedSalvageSites = useMemo(() => {
     if (!selected?.alive || selected.hp <= 0 || !world.caravanRestitution.lots.some(({ status }) => status === 'sealed'))
@@ -573,7 +578,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           ctx.font = 'bold 10px sans-serif';
           ctx.textAlign = 'center';
           ctx.fillStyle = localVillage.stress >= 55 ? '#fdba74' : '#bef264';
-          ctx.fillText(`村 ${localVillage.population}`, loc.x, loc.y + 43);
+          ctx.fillText(`村 ${localVillage.population}${localGranary?.siteId === loc.id ? ' · 仓' : ''}`, loc.x, loc.y + 43);
           ctx.restore();
         }
         const localCouncil = currentCouncils.get(headquarters.get(loc.id)?.id ?? '');
@@ -745,7 +750,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener('change', stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, hazards, convoys, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, observedSalvageSites, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, hazards, convoys, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, observedSalvageSites, localGranary, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -952,6 +957,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       {boundaryMarks.length > 0 && <p className="sr-only">当前看见 {boundaryMarks.length} 处实际换防关口。尚在途中的候补不算驻守。</p>}
       {observedCohortSites.size > 0 && <p className="sr-only">当前亲见 {observedCohortSites.size} 处实际合班授课场所，不显示学徒身份。</p>}
       {observedSalvageSites.size > 0 && <p className="sr-only">当前见到 {observedSalvageSites.size} 处已发现并封存原货的地点，不显示货主身份。</p>}
+      {localGranary && <p className="sr-only">在场确认：村镇义仓有实际库存。</p>}
       {compact && <p className="min-w-0 break-words border-t border-slate-800 px-3 py-2 text-xs text-slate-300" aria-label="地图当前选择">
         {selected ? <>当前选择：<span className="text-slate-100">{selected.name}</span> · {selected.alive ? `${selected.realm}${selected.realmStage}层` : '已陨落'}</> : '轻触地图选择修士。'}
       </p>}
@@ -1241,6 +1247,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                 {localVillage && <span className="text-lime-200">· {localVillage.name} {localVillage.population} 人</span>}
                 {location.id === localNameRegisterSite && isCurrentLocation(location.id) &&
                   <span className="text-lime-200">· 本地称名簿可核对实际身份</span>}
+                {location.id === localGranary?.siteId && isCurrentLocation(location.id) &&
+                  <span className="text-lime-200">· 在场确认义仓有库存</span>}
                 {!!villageRegister?.groups.length && <span className="text-lime-200">· 家户坊籍 {villageRegister.groups.length} 组（非另计人口）</span>}
                 {construction && <span className="text-lime-200">· 在建工役 {construction.laborTotal}/{VILLAGE_WORK_RULES[construction.kind].labor} 工时</span>}
                 {localWeather && <span style={{ color: WEATHER_MARK[localWeather.kind].color }}>

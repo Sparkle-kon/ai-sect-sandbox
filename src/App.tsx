@@ -79,6 +79,7 @@ const BoundaryReliefPanel = React.lazy(async () => ({ default: (await import('./
 const WeatherAtlasPanel = React.lazy(async () => ({ default: (await import('./components/WeatherAtlasPanel')).WeatherAtlasPanel }));
 const ShortShiftPanel = React.lazy(async () => ({ default: (await import('./components/ShortShiftPanel')).ShortShiftPanel }));
 const MarketCaravansPanel = React.lazy(async () => ({ default: (await import('./components/MarketCaravansPanel')).MarketCaravansPanel }));
+const VillageGranaryPanel = React.lazy(async () => ({ default: (await import('./components/VillageGranaryPanel')).VillageGranaryPanel }));
 const CaravanRestitutionPanel = React.lazy(async () => ({ default: (await import('./components/CaravanRestitutionPanel')).CaravanRestitutionPanel }));
 const MortalVillagesPanel = React.lazy(async () => ({ default: (await import('./components/MortalVillagesPanel')).MortalVillagesPanel }));
 const HouseholdNamePanel = React.lazy(async () => ({ default: (await import('./components/HouseholdNamePanel')).HouseholdNamePanel }));
@@ -102,7 +103,7 @@ const chronicleFeedFact = (entry: WorldEvent) => !entry.id.startsWith('evt-seale
   !(entry.witnessScope === 'participants' && (entry.id.startsWith('evt-sparring-') || entry.id.startsWith('evt-expedition-rescue-') ||
     entry.id.startsWith('evt-short-shift-') || entry.id.startsWith('evt-boundary-relief-') ||
     entry.id.startsWith('evt-apprentice-cohort-') || entry.id.startsWith('evt-household-name-') ||
-    entry.id.startsWith('evt-caravan-restitution-') ||
+    entry.id.startsWith('evt-caravan-restitution-') || entry.id.startsWith('evt-village-granary-') ||
     /^evt-pilgrimage-[1-9]\d*-(?:camp(?:-expiry|-interruption)?|dismantled|resumed)-\d+$/.test(entry.id)));
 type FastForwardPhase = 'idle' | 'running' | 'pausing' | 'paused' | 'staging' | 'ready' | 'error';
 type FastForwardViewState = { phase: FastForwardPhase; progress?: FastForwardProgress; notice?: string };
@@ -864,7 +865,10 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
           { id: 'villages', label: '凡人村镇与赈济', content: <div className="space-y-2.5">
             <React.Suspense fallback={<p role="status">载入世界记录…</p>}><MortalVillagesPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense>
             {selectedCultivator && selectedSettlementId &&
-              <React.Suspense fallback={null}><HouseholdNamePanel world={visibleWorld} cultivator={selectedCultivator} settlementId={selectedSettlementId} /></React.Suspense>}
+              <>
+                <React.Suspense fallback={null}><HouseholdNamePanel world={visibleWorld} cultivator={selectedCultivator} settlementId={selectedSettlementId} /></React.Suspense>
+                <React.Suspense fallback={null}><VillageGranaryPanel world={visibleWorld} cultivator={selectedCultivator} settlementId={selectedSettlementId} /></React.Suspense>
+              </>}
           </div> },
           { id: 'occasions', label: '比武与秘境盛会', content: selectedCultivator
             ? <React.Suspense fallback={<p role="status">载入盛会记录…</p>}><WorldOccasionsPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense>
