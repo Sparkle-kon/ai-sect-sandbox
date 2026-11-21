@@ -1,3 +1,5 @@
+import { FAST_FORWARD_MAX_TICKS } from './engine/fastForwardEngine';
+import type { FastForwardCheckpoint, FastForwardProgress, FastForwardWorkerRequest, FastForwardWorkerResponse } from './engine/fastForwardEngine';
 import type { SaveBranchSource } from './engine/storageEngine';
 import { courierCheckpoint } from './engine/sealedCourierEngine';
 import { applyWatchMutation, captureWatchDigests } from './engine/watchlistEngine';
@@ -32,7 +34,7 @@ import { isWorldSeed } from './engine/worldRandom';
 import { isWorldgenProfileId } from './engine/worldgenProfiles';
 import { createDecisionReplayTape, replayOneTurn } from './engine/decisionTraceEngine';
 import type { DecisionReplayTape, DecisionReplayResult } from './engine/decisionTraceEngine';
-import { createTimeline, forkTimeline, readTimelineHead, readTimelineSnapshot, recordTimelineWorld, selectTimelineBranch } from './engine/timelineEngine';
+import { createTimeline, forkTimeline, readTimelineHead, readTimelineSnapshot, recordTimelineWorld, selectTimelineBranch, forkTimelineCheckpoint, TIMELINE_MAX_BRANCHES } from './engine/timelineEngine';
 import type { WorldTimeline } from './engine/timelineEngine';
 import { activeAvatar, possessAvatar, queueAvatarOrder } from './engine/avatarEngine';
 import { resolveAvatarSnapshot } from './engine/avatarRuntime';
@@ -72,6 +74,18 @@ const SectCouncilModal = React.lazy(async () => ({ default: (await import('./com
 const AnalyticsModal = React.lazy(async () => ({ default: (await import('./components/AnalyticsModal')).AnalyticsModal }));
 
 interface AppProps { initialWorkspace?: WorkspaceId; initialSection?: string }
+type FastForwardPhase = 'idle' | 'running' | 'pausing' | 'paused' | 'staging' | 'ready' | 'error';
+type FastForwardViewState = { phase: FastForwardPhase; progress?: FastForwardProgress; notice?: string };
+interface ActiveFastForward {
+  readonly id: string;
+  readonly base: WorldState;
+  readonly timeline: WorldTimeline;
+  readonly branchId: string;
+  readonly context: number;
+  worker?: Worker;
+  progress?: FastForwardProgress;
+  checkpoint?: FastForwardCheckpoint;
+}
 const saveTimelineIdentity = (): string | undefined => {
   try { return globalThis.crypto?.randomUUID?.(); }
   catch { return undefined; }
@@ -84,6 +98,10 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
   const [world, setWorld] = useState<WorldState>(() => createInitialWorld());
   const [viewEpoch, setViewEpoch] = useState(0);
   const saveContextVersion = useRef(0);
+  const fastForwardSerial = useRef(0);
+  const fastForwardRun = useRef<ActiveFastForward>();
+  const [fastForwardView, setFastForwardView] = useState<FastForwardViewState>({ phase: 'idle' });
+  useEffect(() => () => { fastForwardRun.current?.worker?.terminate(); fastForwardRun.current = undefined; }, []);
   const [saveTimelineId, setSaveTimelineId] = useState(saveTimelineIdentity);
   const authority = useRef(world);
   const [timeline, setTimeline] = useState(() => createTimeline(world));
@@ -136,7 +154,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
   });
 
   const handleStepTick = useCallback(async () => {
-    if (stepInFlight.current || browsing.current) return;
+    if (stepInFlight.current || browsing.current || fastForwardRun.current) return;
     stepInFlight.current = true;
     setIsStepping(true);
     try {
@@ -283,7 +301,15 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
     setPreview(undefined);
   };
 
+  const stopFastForward = (notice?: string, phase: FastForwardPhase = 'idle') => {
+    const former = fastForwardRun.current;
+    fastForwardRun.current = undefined;
+    former?.worker?.terminate();
+    setFastForwardView({ phase, ...(notice ? { notice } : {}) });
+  };
+
   const activateTimeline = (next: WorldTimeline, incoming: WorldState) => {
+    if (fastForwardRun.current) stopFastForward('原分支已改变，暂存快进已丢弃。');
     saveContextVersion.current += 1;
     setIsRunning(false);
     clearPreview();
@@ -390,6 +416,87 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
   };
 
   const visibleWorld = preview?.world ?? world;
+  const isFastForwardSourceCurrent = (run: ActiveFastForward) =>
+    authority.current === run.base && history.current === run.timeline && history.current.activeBranchId === run.branchId &&
+    saveContextVersion.current === run.context && !browsing.current && !stepInFlight.current;
+
+  useEffect(() => {
+    const run = fastForwardRun.current;
+    if (run && !isFastForwardSourceCurrent(run)) stopFastForward('原分支已经变化，隔离结果未提交。');
+  }, [world, timeline, preview]);
+
+  const startFastForward = (requestedTicks: number) => {
+    if (fastForwardRun.current || typeof Worker !== 'function' || stepInFlight.current || browsing.current ||
+        !Number.isSafeInteger(requestedTicks) || requestedTicks < 1 || requestedTicks > FAST_FORWARD_MAX_TICKS) return;
+    const at = history.current;
+    if (at.branches.length >= TIMELINE_MAX_BRANCHES) {
+      setFastForwardView({ phase: 'error', notice: '分支位已满，未开始快进，也没有删除任何分支。' });
+      return;
+    }
+    let worker: Worker;
+    try { worker = new Worker(new URL('./engine/fastForward.worker.ts', import.meta.url), { type: 'module' }); }
+    catch { setFastForwardView({ phase: 'error', notice: '浏览器未能启动隔离推演，当前世界未改变。' }); return; }
+    const run: ActiveFastForward = {
+      id: `fast-forward-${++fastForwardSerial.current}`, base: authority.current, timeline: at,
+      branchId: at.activeBranchId, context: saveContextVersion.current, worker,
+    };
+    fastForwardRun.current = run;
+    setIsRunning(false);
+    setFastForwardView({ phase: 'running' });
+    const fail = (notice: string) => {
+      if (fastForwardRun.current === run) stopFastForward(notice, 'error');
+    };
+    worker.onerror = () => fail('隔离推演失败，当前世界与原分支未改变。');
+    worker.onmessageerror = () => fail('无法读取隔离推演结果，当前世界未改变。');
+    worker.onmessage = ({ data }: MessageEvent<FastForwardWorkerResponse>) => {
+      if (fastForwardRun.current !== run || data.runId !== run.id) return;
+      if (!isFastForwardSourceCurrent(run)) { fail('原分支已经变化，隔离结果未提交。'); return; }
+      if (data.type === 'error') { fail(data.message); return; }
+      if (data.type === 'cancelled') { stopFastForward('已取消，当前世界不变。'); return; }
+      run.progress = data.progress;
+      if (data.type === 'staged') {
+        run.checkpoint = data.checkpoint;
+        run.worker?.terminate();
+        run.worker = undefined;
+        setFastForwardView({ phase: 'ready', progress: data.progress });
+      } else if (data.type === 'paused') {
+        setFastForwardView({ phase: 'paused', progress: data.progress });
+      } else {
+        setFastForwardView((previous) => ({ ...previous, progress: data.progress }));
+      }
+    };
+    const request: FastForwardWorkerRequest = { type: 'start', runId: run.id, base: run.base, requestedTicks };
+    try { worker.postMessage(request); }
+    catch { fail('无法交给隔离推演处理，当前世界未改变。'); }
+  };
+
+  const commandFastForward = (type: 'pause' | 'resume' | 'stage') => {
+    const run = fastForwardRun.current;
+    if (!run?.worker || !isFastForwardSourceCurrent(run)) return;
+    const expected = type === 'pause' ? 'running' : 'paused';
+    if (fastForwardView.phase !== expected || (type === 'stage' && !run.progress?.completedTicks)) return;
+    setFastForwardView({ phase: type === 'pause' ? 'pausing' : type === 'stage' ? 'staging' : 'running', progress: run.progress });
+    const request: FastForwardWorkerRequest = { type, runId: run.id };
+    try { run.worker.postMessage(request); }
+    catch { stopFastForward('隔离推演已断开，当前世界未改变。', 'error'); }
+  };
+
+  const applyFastForward = () => {
+    const run = fastForwardRun.current;
+    if (!run?.checkpoint || fastForwardView.phase !== 'ready') return;
+    if (!isFastForwardSourceCurrent(run)) { stopFastForward('原分支已经变化，暂存结果未提交。', 'error'); return; }
+    try {
+      const next = forkTimelineCheckpoint(run.timeline, run.branchId, run.base.tick, run.checkpoint);
+      const received = readTimelineHead(next);
+      if (!received) throw new Error('无法读取已验证检查点。');
+      stopFastForward(`已把 ${run.checkpoint.completedTicks} 个完整回合放入新分支；原分支保留。`);
+      activateTimeline(next, received);
+    } catch {
+      stopFastForward('检查点未通过校验或分支位不足，未替换当前世界。', 'error');
+    }
+  };
+
+  const fastForwardLocked = fastForwardView.phase !== 'idle' && fastForwardView.phase !== 'error';
   const activeSaveBranch = timeline.branches.find(({ id }) => id === timeline.activeBranchId);
   const sourceBranch: SaveBranchSource | undefined = activeSaveBranch ? {
     branchId: activeSaveBranch.id, label: activeSaveBranch.label, ...(saveTimelineId ? { timelineId: saveTimelineId } : {}),
@@ -437,12 +544,13 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
                 <button type="button" onClick={() => handleTimelinePreview(null)} className={`${action} bg-amber-400/15 text-amber-100`}>回到当前</button></>
             ) : (
               <>
-                <button type="button" onClick={() => setIsRunning((current) => !current)}
-                  className={`${action} ${isRunning ? 'bg-amber-500 text-slate-950' : 'bg-emerald-500 text-slate-950'}`}>
+                <button type="button" disabled={fastForwardLocked} onClick={() => {
+                  if (!fastForwardRun.current) setIsRunning((current) => !current);
+                }} className={`${action} ${isRunning ? 'bg-amber-500 text-slate-950' : 'bg-emerald-500 text-slate-950'}`}>
                   {isRunning ? <Pause aria-hidden="true" className="h-4 w-4" /> : <Play aria-hidden="true" className="h-4 w-4" />}
                   {isRunning ? '暂停推演' : '自动推演'}
                 </button>
-                <button type="button" disabled={isStepping} onClick={() => void handleStepTick()} className={`${action} bg-slate-800 text-slate-100 hover:bg-slate-700`}>
+                <button type="button" disabled={isStepping || fastForwardLocked} onClick={() => void handleStepTick()} className={`${action} bg-slate-800 text-slate-100 hover:bg-slate-700`}>
                   <FastForward aria-hidden="true" className="h-4 w-4" />{isStepping ? '推演中…' : '单步推演'}
                 </button>
               </>
@@ -507,7 +615,10 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
           </React.Suspense> },
           { id: 'timeline', label: '原始时间线与分支', content: <React.Suspense fallback={<p role="status">载入时间线…</p>}>
             <TimelinePanel timeline={timeline} previewTick={preview?.tick ?? null} busy={isStepping}
-              onPreview={handleTimelinePreview} onSelectBranch={handleTimelineSelectBranch} onFork={handleTimelineFork} notice={timelineNotice} />
+              onPreview={handleTimelinePreview} onSelectBranch={handleTimelineSelectBranch} onFork={handleTimelineFork} notice={timelineNotice}
+              fastForward={{ ...fastForwardView, available: typeof Worker === 'function' && !preview && !isStepping && timeline.branches.length < TIMELINE_MAX_BRANCHES,
+                onStart: startFastForward, onPause: () => commandFastForward('pause'), onResume: () => commandFastForward('resume'),
+                onStage: () => commandFastForward('stage'), onCancel: () => stopFastForward('已取消并丢弃暂存结果，原分支不变。'), onApply: applyFastForward }} />
           </React.Suspense> },
           { id: 'witness', label: '证词与名誉复核', content: <React.Suspense fallback={<p role="status">载入证词记录…</p>}><AttestationPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense> },
           { id: 'estate', label: '归葬与遗产', content: <React.Suspense fallback={<p role="status">载入遗产账簿…</p>}>

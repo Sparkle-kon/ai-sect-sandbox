@@ -3,6 +3,8 @@ import { sameGeneratedWorld } from './worldIdentity';
 import type { WorldState } from '../types/world';
 import { executeGodIntervention } from './worldEngine';
 import type { GodInterventionCommand } from './worldEngine';
+import { validFastForwardCount } from './fastForwardEngine';
+import type { FastForwardCheckpoint } from './fastForwardEngine';
 
 export const TIMELINE_MAX_TICKS = 50;
 export const TIMELINE_MAX_BRANCHES = 4;
@@ -23,7 +25,7 @@ export interface WorldTimeline {
   readonly nextBranchNumber: number;
 }
 export class TimelineError extends Error {
-  constructor(readonly code: 'branch_limit' | 'missing_snapshot' | 'invalid_intervention', message: string) {
+  constructor(readonly code: 'branch_limit' | 'missing_snapshot' | 'invalid_intervention' | 'invalid_checkpoint', message: string) {
     super(message); this.name = 'TimelineError';
   }
 }
@@ -113,4 +115,30 @@ export function forkTimeline(timeline: WorldTimeline, tick: number, command: God
     label: (typeof label === 'string' && cut(label, TIMELINE_MAX_LABEL)) || `支线 ${number}` },
     [...base.snapshots.slice(0, index), saveSnapshot(changed)]);
   return Object.freeze({ activeBranchId: newBranch.id, nextBranchNumber: number + 1, branches: Object.freeze([...timeline.branches, newBranch]) });
+}
+
+/** Commit one exact isolated checkpoint to a new branch; never synthesize intermediate history or a God action. */
+export function forkTimelineCheckpoint(timeline: WorldTimeline, sourceBranchId: string, sourceTick: number,
+  checkpoint: FastForwardCheckpoint, label?: string): WorldTimeline {
+  if (timeline.branches.length >= TIMELINE_MAX_BRANCHES) throw new TimelineError('branch_limit', '时间线已达上限，不会删除已有分支。');
+  const invalid = () => new TimelineError('invalid_checkpoint', '快进检查点与原始分支不吻合；已有进度未改动。');
+  if (timeline.activeBranchId !== sourceBranchId) throw invalid();
+  const source = branchOf(timeline, sourceBranchId);
+  const anchor = source?.snapshots.find(({ tick }) => tick === sourceTick);
+  if (!source || !anchor) throw new TimelineError('missing_snapshot', '原始轮次已不在当前分支的时间线中。');
+  const base = anchor.world;
+  if (!checkpoint || !checkpoint.world || checkpoint.startTick !== sourceTick ||
+      !validFastForwardCount(checkpoint.requestedTicks) || !Number.isSafeInteger(checkpoint.completedTicks) ||
+      checkpoint.completedTicks < 1 || checkpoint.completedTicks > checkpoint.requestedTicks ||
+      checkpoint.world.tick !== sourceTick + checkpoint.completedTicks || checkpoint.baseRandomState !== base.random.state ||
+      checkpoint.baseInterventionSequence !== base.interventionSequence || checkpoint.world.interventionSequence !== base.interventionSequence ||
+      checkpoint.world.random.algorithm !== base.random.algorithm || !sameGeneratedWorld(checkpoint.world, base)) throw invalid();
+  const candidates = new Set(checkpoint.world.cultivators.map(({ id }) => id));
+  if (candidates.size !== checkpoint.world.cultivators.length || base.cultivators.some(({ id }) => !candidates.has(id))) throw invalid();
+  const number = timeline.nextBranchNumber;
+  const branch = immutableBranch({ id: `branch-${number}`, parentBranchId: source.id, forkTick: sourceTick,
+    label: (typeof label === 'string' && cut(label, TIMELINE_MAX_LABEL)) || `快进支线 ${number}` },
+  [anchor, saveSnapshot(checkpoint.world)]);
+  return Object.freeze({ activeBranchId: branch.id, nextBranchNumber: number + 1,
+    branches: Object.freeze([...timeline.branches, branch]) });
 }

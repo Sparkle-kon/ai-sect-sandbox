@@ -3,6 +3,8 @@ import { TIMELINE_MAX_BRANCHES, TIMELINE_MAX_TICKS } from '../engine/timelineEng
 import type { WorldTimeline } from '../engine/timelineEngine';
 import type { GodInterventionCommand } from '../engine/worldEngine';
 import type { WorldState } from '../types/world';
+import { FastForwardPanel } from './FastForwardPanel';
+import type { FastForwardControls } from './FastForwardPanel';
 
 type Intervention = 'SPAWN_TREASURE' | 'TRIBULATION_STRIKE' | 'DEMONIC_TIDE';
 const INTERVENTIONS: Record<Intervention, { title: string; target: 'location' | 'cultivator' | 'world' }> = {
@@ -42,12 +44,13 @@ export interface TimelinePanelProps {
   onSelectBranch: (branchId: string) => void;
   onFork: (sourceBranchId: string, tick: number, command: GodInterventionCommand) => void;
   notice?: string | null;
+  fastForward?: FastForwardControls;
 }
 
 const control = 'rounded border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-100 disabled:opacity-40';
 const button = 'rounded border border-violet-500/50 bg-violet-950/50 px-2 py-1.5 text-xs text-violet-100 disabled:opacity-40';
 
-export function TimelinePanel({ timeline, previewTick, busy, onPreview, onSelectBranch, onFork, notice }: TimelinePanelProps) {
+export function TimelinePanel({ timeline, previewTick, busy, onPreview, onSelectBranch, onFork, notice, fastForward }: TimelinePanelProps) {
   const [requestedBranch, setRequestedBranch] = useState<string>();
   const [intervention, setIntervention] = useState<Intervention>('SPAWN_TREASURE');
   const [target, setTarget] = useState<string>();
@@ -57,6 +60,7 @@ export function TimelinePanel({ timeline, previewTick, busy, onPreview, onSelect
   const selectedIndex = previewTick === null ? snapshots.length - 1 : snapshots.findIndex(({ tick }) => tick === previewTick);
   const preview = previewTick === null ? undefined : snapshots[selectedIndex];
   const branchId = timeline.branches.some(({ id }) => id === requestedBranch) ? requestedBranch : current?.id;
+  const timelineLocked = busy || Boolean(fastForward && fastForward.phase !== 'idle' && fastForward.phase !== 'error');
   const canFork = timeline.branches.length < TIMELINE_MAX_BRANCHES;
   const targets = preview ? choicesFor(preview.world, intervention) : [];
   const selectedTarget = target === undefined ? targets[0] : targets.find(({ id }) => id === target);
@@ -81,14 +85,14 @@ export function TimelinePanel({ timeline, previewTick, busy, onPreview, onSelect
       </header>
       <div className="flex flex-wrap items-end gap-2 rounded border border-slate-800 bg-slate-950/60 p-2">
         <label className="grid min-w-0 flex-1 gap-1 text-xs text-slate-300">已保留分支
-          <select value={branchId ?? ''} disabled={busy || timeline.branches.length === 0} className={control}
+          <select value={branchId ?? ''} disabled={timelineLocked || timeline.branches.length === 0} className={control}
             onChange={(event) => { setRequestedBranch(event.currentTarget.value); setPending(undefined); }}>
             {timeline.branches.map((branch) => (
               <option key={branch.id} value={branch.id}>{branch.label}{branch.id === current?.id ? '（当前）' : ''}</option>
             ))}
           </select>
         </label>
-        <button type="button" disabled={busy || !branchId || branchId === current?.id} className={button} onClick={() => {
+        <button type="button" disabled={timelineLocked || !branchId || branchId === current?.id} className={button} onClick={() => {
           if (!branchId) return;
           setPending(undefined);
           setTarget(undefined);
@@ -99,7 +103,7 @@ export function TimelinePanel({ timeline, previewTick, busy, onPreview, onSelect
       <div className="space-y-1.5 rounded border border-slate-800 bg-slate-950/60 p-2">
         <label className="grid gap-1 text-xs text-slate-300">历史刻度
           <input type="range" min={0} max={Math.max(0, snapshots.length - 1)} step={1}
-            value={Math.max(0, selectedIndex)} disabled={busy || snapshots.length < 2}
+            value={Math.max(0, selectedIndex)} disabled={timelineLocked || snapshots.length < 2}
             aria-valuetext={selectedIndex < 0 ? '未选到快照' : `Tick #${snapshots[selectedIndex]?.tick}`}
             onChange={(event) => {
               const frame = snapshots[Number(event.currentTarget.value)];
@@ -117,9 +121,9 @@ export function TimelinePanel({ timeline, previewTick, busy, onPreview, onSelect
           </div>
         )}
         <div className="flex flex-wrap gap-1.5">
-          <button type="button" className={button} disabled={busy || previewTick !== null || snapshots.length === 0}
+          <button type="button" className={button} disabled={timelineLocked || previewTick !== null || snapshots.length === 0}
             onClick={() => { const latest = snapshots.at(-1); if (latest) onPreview(latest.tick); }}>查看最新快照</button>
-          <button type="button" className={button} disabled={busy || previewTick === null}
+          <button type="button" className={button} disabled={timelineLocked || previewTick === null}
             onClick={() => { setPending(undefined); setTarget(undefined); onPreview(null); }}>返回实时状态</button>
         </div>
       </div>
@@ -127,7 +131,7 @@ export function TimelinePanel({ timeline, previewTick, busy, onPreview, onSelect
         <form className="space-y-2 rounded border border-slate-800 bg-slate-950/60 p-2" aria-label="历史分支干预"
           onSubmit={(event) => {
             event.preventDefault();
-            if (!current || !command || !canFork || busy) return;
+            if (!current || !command || !canFork || timelineLocked) return;
             setPending({ branchId: current.id, tick: preview.tick, baseline: preview.world, command,
               summary: `${INTERVENTIONS[intervention].title} → ${selectedTarget?.name ?? '该分支世界'}` });
           }}>
@@ -135,7 +139,7 @@ export function TimelinePanel({ timeline, previewTick, busy, onPreview, onSelect
           {!canFork && <p className="text-xs text-amber-200">分支上限已到，仍可查看或切换已有分支。</p>}
           <div className="grid gap-2 sm:grid-cols-2">
             <label className="grid min-w-0 gap-1 text-xs text-slate-300">天道干预
-              <select className={control} value={intervention} disabled={busy || !canFork || !!pending}
+              <select className={control} value={intervention} disabled={timelineLocked || !canFork || !!pending}
                 onChange={(event) => {
                   const type = event.currentTarget.value;
                   if (Object.hasOwn(INTERVENTIONS, type)) { setIntervention(type as Intervention); setTarget(undefined); }
@@ -145,7 +149,7 @@ export function TimelinePanel({ timeline, previewTick, busy, onPreview, onSelect
             </label>
             {INTERVENTIONS[intervention].target === 'world' ? <p className="self-center text-xs text-slate-400">范围：仅新分支世界，不需指定对象。</p> : (
               <label className="grid min-w-0 gap-1 text-xs text-slate-300">此刻的有效对象
-                <select className={control} value={selectedTarget?.id ?? ''} disabled={busy || !canFork || !!pending || targets.length === 0}
+                <select className={control} value={selectedTarget?.id ?? ''} disabled={timelineLocked || !canFork || !!pending || targets.length === 0}
                   onChange={(event) => setTarget(event.currentTarget.value)}>
                   {!selectedTarget && <option value="">请选择历史对象</option>}
                   {targets.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}
@@ -153,7 +157,7 @@ export function TimelinePanel({ timeline, previewTick, busy, onPreview, onSelect
               </label>
             )}
           </div>
-          <button type="submit" className={button} disabled={busy || !command || !canFork || !!pending}>准备创建分支</button>
+          <button type="submit" className={button} disabled={timelineLocked || !command || !canFork || !!pending}>准备创建分支</button>
         </form>
       )}
       {pending && (
@@ -162,8 +166,8 @@ export function TimelinePanel({ timeline, previewTick, busy, onPreview, onSelect
             ? <p>从「{current?.label}」Tick #{pending.tick} 分叉：{pending.summary}。原线不受影响。</p>
             : <p>当前分支或快照已变化，本次不会执行。</p>}
           <div className="flex flex-wrap gap-1.5">
-            <button type="button" className={button} disabled={busy || !pendingStillCurrent || !canFork} onClick={() => {
-              if (!pendingStillCurrent || busy || !canFork) return;
+            <button type="button" className={button} disabled={timelineLocked || !pendingStillCurrent || !canFork} onClick={() => {
+              if (!pendingStillCurrent || timelineLocked || !canFork) return;
               setPending(undefined);
               onFork(pending.branchId, pending.tick, pending.command);
             }}>确认并进入新分支</button>
@@ -171,6 +175,7 @@ export function TimelinePanel({ timeline, previewTick, busy, onPreview, onSelect
           </div>
         </section>
       )}
+      {fastForward && <FastForwardPanel controls={fastForward} branchLimit={!canFork} blocked={busy || previewTick !== null || !!pending} />}
       {notice && <p role="status" className="break-words text-xs text-violet-200">{notice}</p>}
     </section>
   );

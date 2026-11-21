@@ -140,7 +140,7 @@
 - [x] **[P11-7] Field Weather Observatories (观象台与区域实测校准)**: Fund local observations and measure forecast errors against later real readings. Age and relay timestamped observations without treating stale predictions as current facts or revealing fog-hidden sites.
 - [x] **[P11-8] Season Honor Review & Corrections (赛季荣誉复核与更正)**: Allow bounded review of a public scoring receipt using actual event evidence. Preserve the original record, publish justified corrections and move an honor at most once without rewriting private actions.
 - [x] **[P11-9] Recoverable Save Journals (事务存档与恢复点)**: Keep a separately validated previous snapshot when a browser save is interrupted. Restore only after explicit selection and validate slot identity, version, branch and integrity without silently clearing older progress.
-- [ ] **[P11-10] Pause-Safe Long-World Fast Forward (长局快进与可取消回放)**: Advance through budgeted chunks on an isolated branch, keep pause/cancel responsive and commit only checked checkpoints. Test equivalence to ordinary ticks and compare latency on growing rosters without dropping people.
+- [x] **[P11-10] Pause-Safe Long-World Fast Forward (长局快进与可取消回放)**: Advance through budgeted chunks on an isolated branch, keep pause/cancel responsive and commit only checked checkpoints. Test equivalence to ordinary ticks and compare latency on growing rosters without dropping people.
 
 ---
 

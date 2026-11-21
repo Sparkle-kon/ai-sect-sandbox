@@ -13,7 +13,8 @@
     "verify": "npm run typecheck && npm run test && npm run build",
     "balance": "vite-node scripts/simulationBalance.ts",
     "map:benchmark": "vite-node scripts/mapRosterBenchmark.ts",
-    "history:benchmark": "node --expose-gc ./node_modules/vite-node/vite-node.mjs scripts/historyBudgetBenchmark.ts"
+    "history:benchmark": "node --expose-gc ./node_modules/vite-node/vite-node.mjs scripts/historyBudgetBenchmark.ts",
+    "fastforward:benchmark": "vite-node scripts/fastForwardBenchmark.ts"
   },
   "dependencies": {
     "lucide-react": "^0.460.0",
