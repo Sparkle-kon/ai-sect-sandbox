@@ -112,6 +112,7 @@ export type ActionType =
   | 'PROBATION'
   | 'WORKSHOP'
   | 'FURNACE_RESERVATION'
+  | 'SPARRING'
   | 'FORGE_ARTIFACT'
   | 'BIND_ARTIFACT'
   | 'REPAIR_ARTIFACT'
@@ -490,6 +491,9 @@ export interface LLMDecisionPayload {
   workshopMove?: WorkshopMove;
   furnaceMove?: 'reserve' | 'cancel';
   targetFurnaceReservationId?: string;
+  sparringMove?: SparringMove;
+  sparringRounds?: 1 | 2;
+  targetSparringId?: string;
   targetWorkshopId?: string;
   workshopTier?: WorkshopTier;
   workshopQuantity?: 1 | 2;
@@ -2172,6 +2176,29 @@ export interface FurnaceReservationState {
   nextId: number;
 }
 
+export type SparringMove = 'offer' | 'accept' | 'decline' | 'withdraw' | 'ready' | 'yield';
+export interface SparringRound {
+  tick: number;
+  members: Array<{ actorId: string; qiSpent: number; masteryGained: number }>;
+}
+export interface SparringAgreement {
+  id: string;
+  proposerId: string;
+  partnerId: string;
+  siteId: string;
+  roundsPlanned: 1 | 2;
+  offeredTick: number;
+  offerExpiresTick: number;
+  status: 'offered' | 'active' | 'completed' | 'declined' | 'withdrawn' | 'yielded' | 'expired' | 'interrupted';
+  acceptedTick?: number;
+  deadlineTick?: number;
+  closedTick?: number;
+  closedById?: string;
+  readiness?: { tick: number; actorIds: string[] };
+  rounds: SparringRound[];
+}
+export interface SparringState { agreements: SparringAgreement[]; nextId: number }
+
 export type ProbationMove = 'request' | 'admit' | 'review' | 'withdraw' | 'restore';
 export type ProbationVote = 'support' | 'oppose';
 export type ProbationStatus = 'requested' | 'active' | 'ready' | 'reinstated' | 'withdrawn' | 'rejected' | 'expired';
@@ -2271,6 +2298,7 @@ export interface WorldState {
   probation: ProbationState;
   workshops: WorkshopState;
   furnaceReservations: FurnaceReservationState;
+  sparring: SparringState;
   resourceFlow: ResourceFlowState;
   roads: RoadState;
   sharedCommons: SharedCommonsState;

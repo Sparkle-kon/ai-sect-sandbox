@@ -6,6 +6,7 @@ import { availableRoadActions } from './roadEngine';
 import { availableProbationActions, probationReliefTargets } from './probationEngine';
 import { availableRelicExhibitActions } from './relicExhibitEngine';
 import { availableWorkshopActions } from './workshopEngine';
+import { availableSparringActions, sparringLocksActor, SPARRING_QI_COST } from './sparringEngine';
 import { availableFurnaceReservationActions, heldFurnaceReservation } from './furnaceReservationEngine';
 import { COGNITIVE_RESPONSE_GUIDE } from './llmCognitiveResponseGuide';
 import { availableTerrainRecoveryActions } from './terrainSuccessionEngine';
@@ -118,6 +119,24 @@ export function computeHeuristicDecision(
     if (move) return { ...move, chosenAction: 'PILGRIMAGE', innerMonologue: '只按同伴应允与实走的路程行事。' };
     if (pilgrim) return { chosenAction: 'REST', innerMonologue: '等同伴沿已知路段前行，到站再作休整。' };
   }
+  const actorHasSparring = world.sparring.agreements.some((row) => (row.status === 'offered' || row.status === 'active') &&
+    (row.proposerId === cultivator.id || row.partnerId === cultivator.id));
+  const mayPractice = world.tick >= 8 && (world.tick + cultivator.id.charCodeAt(cultivator.id.length - 1)) % 17 === 3 &&
+    cultivator.hp >= cultivator.maxHp * .85 && cultivator.qiProgress >= SPARRING_QI_COST &&
+    (cultivator.personality === '刚正' || cultivator.personality === '逍遥');
+  if (actorHasSparring) {
+    const choices = availableSparringActions(cultivator, world, false);
+    const fatigued = cultivator.hp < cultivator.maxHp * .7 || cultivator.qiProgress < SPARRING_QI_COST;
+    const wouldAccept = !fatigued && cultivator.hp >= cultivator.maxHp * .8 && cultivator.personality !== '嗜血' &&
+      cultivator.personality !== '诡诈' && cultivator.personality !== '阴险';
+    const move = choices.find(({ sparringMove }) => sparringMove === (fatigued ? 'yield' : 'ready')) ??
+      choices.find(({ sparringMove }) => sparringMove === (wouldAccept ? 'accept' : 'decline'));
+    if (move) return { ...move, chosenAction: 'SPARRING', innerMonologue: move.sparringMove === 'yield' ?
+      '余力不足，当下认输；不再扣练功余力。' : '各自应允，按约切磋；对方未准备就不演算。' };
+  }
+  if (world.sparring.agreements.length && sparringLocksActor(world, cultivator)) {
+    return { chosenAction: 'REST', innerMonologue: '等对方自行应允或喊停，本轮不另作交手。' };
+  }
   if (cultivator.qiProgress < 45 && world.formations.links.some((link) =>
     (cultivator.sectId === link.sectAId && cultivator.locationId === link.siteAId && link.heldA > 0) ||
     (cultivator.sectId === link.sectBId && cultivator.locationId === link.siteBId && link.heldB > 0))) {
@@ -220,6 +239,11 @@ export function computeHeuristicDecision(
       (cultivator.personality === '刚正' || cultivator.personality === '逍遥')) {
     const census = availableVillageCensusActions(cultivator, world)[0];
     if (census) return { ...census, chosenAction: 'VILLAGE_CENSUS', innerMonologue: '核点实际坊籍，抽到的家户已包含在到场实数。' };
+  }
+  if (mayPractice) {
+    const offer = availableSparringActions(cultivator, world).find(({ sparringMove, sparringRounds }) =>
+      sparringMove === 'offer' && sparringRounds === 1);
+    if (offer) return { ...offer, chosenAction: 'SPARRING', innerMonologue: '正事办妥，只邀同道自愿练习一轮。' };
   }
 
   const workshopState = world.workshops.orders;
@@ -822,6 +846,7 @@ export async function requestCultivatorLLMDecision(
   const exhibitOptions = availableRelicExhibitActions(cultivator, world);
   const workshopOptions = availableWorkshopActions(cultivator, world, true, requestTick);
   const furnaceOptions = availableFurnaceReservationActions(cultivator, world, requestTick);
+  const sparringOptions = availableSparringActions(cultivator, world, true, requestTick);
   const recoveryOptions = availableTerrainRecoveryActions(cultivator, world);
   const commonsOptions = availableSharedCommonsActions(cultivator, world);
   const serviceOptions = availableServiceRetirementActions(cultivator, world);
@@ -906,6 +931,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 法宝状况：${JSON.stringify(cultivator.artifacts)}；本地可用炼器行动：${JSON.stringify(availableArtifactActions(cultivator, world, requestTick))}
 - 丹毒：${cultivator.pillToxicity}/100；灵药包：${JSON.stringify(cultivator.herbs)}；已有丹药：${JSON.stringify(cultivator.pills)}；允许的炼丹行动：${JSON.stringify(availableAlchemy(cultivator, world, requestTick))}
 - 炉位预约仅复制执行回合的实际许可：${JSON.stringify(furnaceOptions)}；预约不是已开炉，不自填时间、容量或物料。
+- 自愿切磋只使用执行回合的许可：${JSON.stringify(sparringOptions)}；双方分别应允，认输即停，不自行填伤势、胜负或惩罚。
 - 功法熟练度：${cultivator.techniqueMastery}/100；可自创：${mayAuthorTechnique(cultivator) ? '是' : '否'}；可研习：${JSON.stringify(availableTechniques(cultivator, world))}
 - 可行的归葬、继承或立嗣选项：${JSON.stringify(estateOptions)}
 - 可提出或质证的已知传闻，仅使用这些证人选项：${JSON.stringify(witnessOptions)}
@@ -1037,6 +1063,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'TERRAIN_RECOVERY',
             'WORKSHOP',
             'FURNACE_RESERVATION',
+            'SPARRING',
             'RELIC_EXHIBIT',
             'PROBATION',
             'ROAD',
@@ -1069,6 +1096,11 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             item.targetWorkshopId === parsed.targetWorkshopId && item.targetFurnaceReservationId === parsed.targetFurnaceReservationId) : undefined;
           if (chosenAction === 'FURNACE_RESERVATION' && (!legalFurnace || Object.keys(parsed).some((field) =>
             !['innerMonologue', 'chosenAction', 'spokenLine', 'furnaceMove', 'targetLocationId', 'targetWorkshopId', 'targetFurnaceReservationId'].includes(field)))) return undefined;
+          const legalSparring = chosenAction === 'SPARRING' ? sparringOptions.find((item) =>
+            item.sparringMove === parsed.sparringMove && item.targetCultivatorId === parsed.targetCultivatorId &&
+            item.targetSparringId === parsed.targetSparringId && item.sparringRounds === parsed.sparringRounds) : undefined;
+          if (chosenAction === 'SPARRING' && (!legalSparring || Object.keys(parsed).some((field) =>
+            !['chosenAction', 'innerMonologue', 'spokenLine', 'sparringMove', 'targetCultivatorId', 'targetSparringId', 'sparringRounds'].includes(field)))) return undefined;
           const legalWorkshop = chosenAction === 'WORKSHOP' ? workshopOptions.find((item) =>
             item.workshopMove === parsed.workshopMove && item.targetWorkshopId === parsed.targetWorkshopId &&
             item.targetCultivatorId === parsed.targetCultivatorId && item.workshopTier === parsed.workshopTier &&
@@ -1319,7 +1351,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             chosenAction,
             targetLocationId: legalFurnace ? legalFurnace.targetLocationId : legalSanctuary ? legalSanctuary.targetLocationId : legalRelocation ? legalRelocation.targetLocationId :
               chosenAction !== 'DOCTRINE' && typeof parsed.targetLocationId === 'string' ? parsed.targetLocationId : undefined,
-            targetCultivatorId: legalObservatory ? legalObservatory.targetCultivatorId : legalArbitration ? legalArbitration.targetCultivatorId : legalWorkshop ? legalWorkshop.targetCultivatorId : legalDoctrine ? legalDoctrine.targetCultivatorId : legalEstate ? legalEstate.targetCultivatorId : legalWitness ? legalWitness.targetCultivatorId : legalOath ? legalOath.targetCultivatorId : legalTraining ? legalTraining.targetCultivatorId
+            targetCultivatorId: legalSparring ? legalSparring.targetCultivatorId : legalObservatory ? legalObservatory.targetCultivatorId : legalArbitration ? legalArbitration.targetCultivatorId : legalWorkshop ? legalWorkshop.targetCultivatorId : legalDoctrine ? legalDoctrine.targetCultivatorId : legalEstate ? legalEstate.targetCultivatorId : legalWitness ? legalWitness.targetCultivatorId : legalOath ? legalOath.targetCultivatorId : legalTraining ? legalTraining.targetCultivatorId
               : typeof parsed.targetCultivatorId === 'string' ? parsed.targetCultivatorId : undefined,
             spokenLine: typeof parsed.spokenLine === 'string' ? parsed.spokenLine.trim().slice(0, 90) : undefined,
             facilityKind: legalInfrastructure?.facilityKind,
@@ -1343,6 +1375,9 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             exhibitMove: legalExhibit?.exhibitMove,
             targetRelicExhibitId: legalExhibit?.targetRelicExhibitId,
             workshopMove: legalWorkshop?.workshopMove,
+            sparringMove: legalSparring?.sparringMove,
+            targetSparringId: legalSparring?.targetSparringId,
+            sparringRounds: legalSparring?.sparringRounds,
             furnaceMove: legalFurnace?.furnaceMove,
             targetFurnaceReservationId: legalFurnace?.targetFurnaceReservationId,
             targetWorkshopId: legalFurnace?.targetWorkshopId ?? legalWorkshop?.targetWorkshopId,

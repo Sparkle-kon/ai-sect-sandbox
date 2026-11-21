@@ -118,6 +118,9 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const [heat, setHeat] = useState(false);
   const [tileDetailsOpen, setTileDetailsOpen] = useState(false);
   const selected = world.cultivators.find((c) => c.id === selectedCultivatorId);
+  const ownPracticeSite = selected?.alive && selected.hp > 0 ? world.sparring.agreements.find((row) =>
+    row.status === 'active' && row.siteId === selected.locationId && (row.deadlineTick ?? 0) > world.tick &&
+    (row.proposerId === selected.id || row.partnerId === selected.id))?.siteId : undefined;
   const furnaceShift = useMemo(() => selected
     ? availableFurnaceSlotSummary(world, selected, selected.locationId) : undefined, [world, selected]);
   const mapView = useMemo(() => createTerrainMapView(world, selected, fog), [world, selected, fog]);
@@ -1114,6 +1117,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                 {fog && (visibleActorsAtSite.get(location.id) ?? 0) > 0 &&
                   <span className="text-slate-300">· 可见修士 {visibleActorsAtSite.get(location.id)} 位（山河索引可查）</span>}
                 {location.furnaceGrade > 0 && <span className="text-emerald-300">· {location.furnaceGrade} 阶丹炉</span>}
+                {location.id === ownPracticeSite && isCurrentLocation(location.id) &&
+                  <span className="text-sky-200">· 本人已约定自愿切磋</span>}
                 {location.id === selected?.locationId && furnaceShift && (furnaceShift.used + furnaceShift.reserved + furnaceShift.queued > 0) && <span className="text-amber-200">
                   · 炉位 {furnaceShift.used + furnaceShift.reserved}/{furnaceShift.capacity} 已用或预留 · 候炉 {furnaceShift.queued} 位
                 </span>}

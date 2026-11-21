@@ -7,6 +7,7 @@ import { advanceProbation, resolveProbationAction } from './probationEngine';
 import { advanceRelicExhibits, resolveRelicExhibitAction } from './relicExhibitEngine';
 import { advanceWorkshops, resolveWorkshopAction } from './workshopEngine';
 import { openFurnaceTurn, resolveFurnaceReservationAction, settleFurnaceTurn } from './furnaceReservationEngine';
+import { advanceSparring, resolveSparringAction, sparringLocksActor } from './sparringEngine';
 import { advanceTerrainSuccession, resolveTerrainRecovery } from './terrainSuccessionEngine';
 import { openResourceFlowMonth } from './resourceFlowEngine';
 import { advanceSharedCommons, resolveSharedCommonsAction } from './sharedCommonsEngine';
@@ -177,6 +178,11 @@ export function applyCultivatorBrainDecision(
     cultivator.innerMonologue = '要守同行之约，途中不能在旧站另作行动。';
     return null;
   }
+  if (decision.chosenAction !== 'SPARRING' && sparringLocksActor(world, cultivator)) {
+    cultivator.currentAction = 'SPARRING';
+    cultivator.innerMonologue = '切磋已约定，本回合留在现场，未发生其他行动。';
+    return null;
+  }
   cultivator.innerMonologue = decision.innerMonologue;
   cultivator.currentAction = decision.chosenAction;
 
@@ -241,6 +247,8 @@ export function applyCultivatorBrainDecision(
       return resolveWorkshopAction(world, cultivator, decision, rng);
     case 'FURNACE_RESERVATION':
       return resolveFurnaceReservationAction(world, cultivator, decision);
+    case 'SPARRING':
+      return resolveSparringAction(world, cultivator, decision);
     case 'TERRAIN_RECOVERY':
       return resolveTerrainRecovery(world, cultivator, decision);
     case 'SHARED_COMMONS':
@@ -854,7 +862,7 @@ export function advanceWorldTick(
     if (yearly) cultivator.reflections = synthesizeReflections(cultivator, nextState.tick);
   }
 
-  for (const event of [...advanceDiplomacy(nextState, rng), ...advanceOccasions(nextState, rng), ...advanceOaths(nextState), ...advanceMarkets(nextState), ...advanceWitnesses(nextState), ...advanceSeasonReviews(nextState, (state, seasonId) =>
+  for (const event of [...advanceSparring(nextState), ...advanceDiplomacy(nextState, rng), ...advanceOccasions(nextState, rng), ...advanceOaths(nextState), ...advanceMarkets(nextState), ...advanceWitnesses(nextState), ...advanceSeasonReviews(nextState, (state, seasonId) =>
     publicCompetitionStandings(state, seasonId).find(({ rank }) => rank === 1)), ...maintainSectPolitics(nextState), ...advanceBounties(nextState), ...advanceResearch(nextState), ...advanceWorkshops(nextState), ...advanceRelicExhibits(nextState), ...advanceProbation(nextState), ...advanceEstates(nextState), ...advanceDoctrines(nextState), ...advanceSectCredit(nextState), ...advanceSanctuaries(nextState), ...advancePilgrimages(nextState), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...reconcileCourierDeaths(nextState), ...advanceHouseholds(nextState)]) {
     newEvents.push(event);
     witnessEvent(nextState, event);

@@ -50,6 +50,7 @@ const WorldMapCanvas = React.lazy(async () => ({ default: (await import('./compo
 const AttestationPanel = React.lazy(async () => ({ default: (await import('./components/AttestationPanel')).AttestationPanel }));
 const OathContractsPanel = React.lazy(async () => ({ default: (await import('./components/OathContractsPanel')).OathContractsPanel }));
 const MentorshipPanel = React.lazy(async () => ({ default: (await import('./components/MentorshipPanel')).MentorshipPanel }));
+const SparringPanel = React.lazy(async () => ({ default: (await import('./components/SparringPanel')).SparringPanel }));
 const WatchlistsPanel = React.lazy(async () => ({ default: (await import('./components/WatchlistsPanel')).WatchlistsPanel }));
 const TimelinePanel = React.lazy(async () => ({ default: (await import('./components/TimelinePanel')).TimelinePanel }));
 const ActorRoster = React.lazy(async () => ({ default: (await import('./components/ActorRoster')).ActorRoster }));
@@ -88,6 +89,9 @@ interface ChronicleTrail extends ChronicleFeedReturn {
   revision: number;
 }
 const chronicleWorkspace = { site: 'map', actor: 'people', sect: 'sect' } as const;
+const chronicleFeedFact = (entry: WorldEvent) => !entry.id.startsWith('evt-sealed-dispatch-') &&
+  !(entry.witnessScope === 'participants' && (entry.id.startsWith('evt-sparring-') ||
+    /^evt-pilgrimage-[1-9]\d*-(?:camp(?:-expiry|-interruption)?|dismantled|resumed)-\d+$/.test(entry.id)));
 type FastForwardPhase = 'idle' | 'running' | 'pausing' | 'paused' | 'staging' | 'ready' | 'error';
 type FastForwardViewState = { phase: FastForwardPhase; progress?: FastForwardProgress; notice?: string };
 interface ActiveFastForward {
@@ -707,6 +711,9 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
             { id: 'mind', label: '心声、记忆与流言', content: inspect('mind') },
             { id: 'relationships', label: '关系与师承', content: <div className="space-y-2.5">
               <React.Suspense fallback={<p role="status">载入师承记录…</p>}><MentorshipPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense>
+              {activeActorId && visibleWorld.sparring.agreements.some(({ proposerId, partnerId }) =>
+                proposerId === activeActorId || partnerId === activeActorId) &&
+                <React.Suspense fallback={<p role="status">载入切磋凭证…</p>}><SparringPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense>}
               <React.Suspense fallback={<p role="status">载入关系图…</p>}><RelationshipGraph key={viewScopeKey} world={visibleWorld} selectedCultivatorId={activeActorId} onSelectCultivator={setSelectedCultivatorId} /></React.Suspense>
             </div> },
             ...(workspace === 'people' && selectedCultivator && visiblePilgrimages(visibleWorld, selectedCultivator).length > 0 ? [{
@@ -726,7 +733,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
         </div>,
         chronicle: <WorkspaceSections label="纪事与历史" initialOpen={chronicleReturn ? 'feed' : opened('chronicle', 'feed')} sections={[
           { id: 'feed', label: '当世纪事', content: <React.Suspense fallback={<p role="status">载入当世纪事…</p>}><ChronicleFeed
-            events={visibleWorld.events.filter((entry) => !entry.id.startsWith('evt-sealed-dispatch-'))}
+            events={visibleWorld.events.filter(chronicleFeedFact)}
             category={chronicleFilter} onCategoryChange={setChronicleFilter} focusOptions={resolver?.build}
             causality={(eventId) => chronicleCauses?.get(eventId)}
             onJump={followChronicle} returnPosition={chronicleReturn} onReturnHandled={clearChronicleReturn} focusNotice={focusNotice} /></React.Suspense> },
