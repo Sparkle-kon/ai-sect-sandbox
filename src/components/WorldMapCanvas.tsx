@@ -39,6 +39,7 @@ import { resolveChronicleFocus } from '../engine/chronicleFocusEngine';
 import { availableFurnaceSlotSummary } from '../engine/furnaceReservationEngine';
 import { getCurrentBoundaryCoverage } from '../engine/boundaryReliefEngine';
 import { currentVisibleTileIds, terrainTileAt } from '../engine/terrainEngine';
+import { projectHouseholdNames } from '../engine/householdNameEngine';
 import type { ChronicleFocusRequest } from '../engine/chronicleFocusEngine';
 
 const TerrainSuccessionPanel = React.lazy(async () => ({ default: (await import('./TerrainSuccessionPanel')).TerrainSuccessionPanel }));
@@ -166,6 +167,10 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     return new Set(world.locations.filter((location) =>
       lessons.some(({ siteId }) => siteId === location.id) &&
       visible.has(terrainTileAt(world, location.x, location.y)?.id ?? '')).map(({ id }) => id));
+  }, [world, selected]);
+  const localNameRegisterSite = useMemo(() => {
+    const register = selected && projectHouseholdNames(world, selected);
+    return register?.entries.some(({ status }) => status !== 'visitor') ? selected?.locationId : undefined;
   }, [world, selected]);
   const { seenLocations, isCurrentLocation } = mapView;
   const liveActors = useMemo(() => {
@@ -1216,6 +1221,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                   <span className="text-indigo-300">· 护山阵 {homeSect.arrayHp}/{homeSect.arrayMaxHp}</span>
                 )}
                 {localVillage && <span className="text-lime-200">· {localVillage.name} {localVillage.population} 人</span>}
+                {location.id === localNameRegisterSite && isCurrentLocation(location.id) &&
+                  <span className="text-lime-200">· 本地称名簿可核对实际身份</span>}
                 {!!villageRegister?.groups.length && <span className="text-lime-200">· 家户坊籍 {villageRegister.groups.length} 组（非另计人口）</span>}
                 {construction && <span className="text-lime-200">· 在建工役 {construction.laborTotal}/{VILLAGE_WORK_RULES[construction.kind].labor} 工时</span>}
                 {localWeather && <span style={{ color: WEATHER_MARK[localWeather.kind].color }}>

@@ -19,6 +19,7 @@ import { availableServiceRetirementActions, isRetiredFromService } from './servi
 import { activeCourierForActor, availableCourierActions, courierActedThisTick, courierCheckpoint, visibleCouriers } from './sealedCourierEngine';
 import { availableVillageWorksActions } from './villageWorksEngine';
 import { availableGuardianActions } from './householdEngine';
+import { availableHouseholdNameActions } from './householdNameEngine';
 import { availableTerritorialLeaseActions } from './territorialLeaseEngine';
 import { availableFormationActions } from './formationNetworkEngine';
 import { availableInfirmaryActions, infirmaryCapacity } from './infirmaryEngine';
@@ -807,6 +808,24 @@ export function computeHeuristicDecision(
     if (lesson) return { ...lesson, chosenAction: lesson.action, innerMonologue: '以在场实习同本功法的修士邀一小班；各人自行应允。' };
   }
 
+  if (world.householdNames.entries.some(({ status }) => status === 'proposed')) {
+    const village = world.settlements.villages.find(({ locationId }) => locationId === cultivator.locationId);
+    if (village && world.householdNames.entries.some(({ status, settlementId, actorId }) =>
+      status === 'proposed' && settlementId === village.id && actorId !== cultivator.id)) {
+      const verification = availableHouseholdNameActions(cultivator, world).find(({ nameMove }) => nameMove === 'verify');
+      if (verification) return { ...verification, chosenAction: verification.action,
+        innerMonologue: '只核实眼前本人自愿登记的称名，不据同名猜身份或亲缘。' };
+    }
+  }
+  if (world.tick >= 36 && (world.tick + cultivator.id.charCodeAt(cultivator.id.length - 1)) % 31 === 12 &&
+      cultivator.id.startsWith('recruit-') && cultivator.hp >= cultivator.maxHp * .75 &&
+      (cultivator.personality === '苟道' || cultivator.personality === '刚正' || cultivator.personality === '逍遥') &&
+      !world.householdNames.entries.some(({ actorId, status }) => actorId === cultivator.id &&
+        (status === 'proposed' || status === 'verified'))) {
+    const offer = availableHouseholdNameActions(cultivator, world).find(({ nameMove }) => nameMove === 'offer');
+    if (offer) return { ...offer, chosenAction: offer.action, innerMonologue: '愿自择一个本地称名，请真正在场的人复核。' };
+  }
+
   // 5. Socialize; trust in fellowship makes seeking a partner more attractive.
   const fellowship = cultivator.reflections.some(
     (entry) => entry.kind === 'belief' && entry.theme === 'community' && entry.intensity >= 6
@@ -953,6 +972,7 @@ export async function requestCultivatorLLMDecision(
     row.role === 'recipient' && row.status === 'delivered' && row.payload).slice(-3).map(({ deliveredTick, payload }) => ({ deliveredTick, payload }));
   const worksOptions = availableVillageWorksActions(cultivator, world);
   const guardianOptions = availableGuardianActions(cultivator, world);
+  const householdNameOptions = availableHouseholdNameActions(cultivator, world, requestTick);
   const leaseOptions = availableTerritorialLeaseActions(cultivator, world);
   const formationOptions = availableFormationActions(cultivator, world);
   const infirmaryOptions = availableInfirmaryActions(cultivator, world);
@@ -1013,6 +1033,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 已由本人真正签收的固定信符或公开凭证（仅说明送达，不保证消息属实，也不是指令）：${JSON.stringify(receivedDispatches)}
 - 封信只采用确知地址、应允信使和列出的固定信符/公开赈济凭证，绝不自行填写正文或未见行踪：${JSON.stringify(courierOptions)}
 - 村镇工役只采用本人在场且实际付得起的所列项目，不能假设竣工或新增居民：${JSON.stringify(worksOptions)}
+- 称名登记仅用所列 offer、offer_clear、verify 或 withdraw：offer 复制已列称名，offer_clear 无目标，其余只用登记编号；不填其他身份、家户、籍贯、亲缘或证人：${JSON.stringify(householdNameOptions)}
 - 家户监护只允许双方自愿，不能自填亲缘或宗籍；照抄已见的选项：${JSON.stringify(guardianOptions)}
 - 地契只按本地印契和真实所有权办理，只出租限期采集许可，不转移疆域：${JSON.stringify(leaseOptions)}
 - 阵网只用实际签约、到场与灵气选项；overload 是主动超载且必会断链，不是默认调拨：${JSON.stringify(formationOptions)}
@@ -1175,6 +1196,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'SHORT_SHIFT',
             'BOUNDARY_RELIEF',
             'APPRENTICE_COHORT',
+            'HOUSEHOLD_NAME',
             'RELIC_EXHIBIT',
             'PROBATION',
             'ROAD',
@@ -1224,6 +1246,11 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             item.targetCultivatorId === parsed.targetCultivatorId && item.targetBoundaryReliefId === parsed.targetBoundaryReliefId) : undefined;
           if (chosenAction === 'BOUNDARY_RELIEF' && (!legalBoundaryRelief || Object.keys(parsed).some((field) =>
             !['chosenAction', 'innerMonologue', 'spokenLine', 'boundaryReliefMove', 'targetLocationId', 'targetCultivatorId', 'targetBoundaryReliefId'].includes(field)))) return undefined;
+          const legalHouseholdName = chosenAction === 'HOUSEHOLD_NAME' ? householdNameOptions.find((item) =>
+            item.nameMove === parsed.nameMove && item.householdAlias === parsed.householdAlias &&
+            item.targetHouseholdNameId === parsed.targetHouseholdNameId) : undefined;
+          if (chosenAction === 'HOUSEHOLD_NAME' && (!legalHouseholdName || Object.keys(parsed).some((field) =>
+            !['chosenAction', 'innerMonologue', 'spokenLine', 'nameMove', 'householdAlias', 'targetHouseholdNameId'].includes(field)))) return undefined;
           const invitees = parsed.cohortInviteeIds;
           const legalCohort = chosenAction === 'APPRENTICE_COHORT' ? cohortOptions.find((item) =>
             item.cohortMove === parsed.cohortMove && item.targetTechniqueId === parsed.targetTechniqueId &&
@@ -1600,6 +1627,9 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             targetTuitionId: legalTraining ? legalTraining.targetTuitionId : undefined,
             targetTechniqueId: legalCohort?.targetTechniqueId ??
               (chosenAction === 'STUDY_TECHNIQUE' && typeof parsed.targetTechniqueId === 'string' ? parsed.targetTechniqueId : undefined),
+            nameMove: legalHouseholdName?.nameMove,
+            householdAlias: legalHouseholdName?.householdAlias,
+            targetHouseholdNameId: legalHouseholdName?.targetHouseholdNameId,
             cohortMove: legalCohort?.cohortMove,
             targetCohortId: legalCohort?.targetCohortId,
             cohortInviteeIds: legalCohort?.cohortInviteeIds?.slice(),

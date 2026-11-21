@@ -117,6 +117,7 @@ export type ActionType =
   | 'SHORT_SHIFT'
   | 'BOUNDARY_RELIEF'
   | 'APPRENTICE_COHORT'
+  | 'HOUSEHOLD_NAME'
   | 'FORGE_ARTIFACT'
   | 'BIND_ARTIFACT'
   | 'REPAIR_ARTIFACT'
@@ -507,6 +508,9 @@ export interface LLMDecisionPayload {
   cohortMove?: ApprenticeCohortMove;
   cohortInviteeIds?: string[];
   targetCohortId?: string;
+  nameMove?: HouseholdNameMove;
+  householdAlias?: string;
+  targetHouseholdNameId?: string;
   targetWorkshopId?: string;
   workshopTier?: WorkshopTier;
   workshopQuantity?: 1 | 2;
@@ -2334,6 +2338,23 @@ export interface ApprenticeCohortState {
   nextId: number;
 }
 
+export type HouseholdNameMove = 'offer' | 'offer_clear' | 'verify' | 'withdraw';
+export interface HouseholdNameEntry {
+  id: string;
+  actorId: string;
+  volunteerId: string;
+  householdId: string;
+  settlementId: string;
+  kind: 'alias' | 'clear';
+  alias?: string;
+  openedTick: number;
+  expiresTick: number;
+  status: 'proposed' | 'verified' | 'withdrawn' | 'expired';
+  closedTick?: number;
+  witnessId?: string;
+}
+export interface HouseholdNameState { entries: HouseholdNameEntry[]; nextId: number }
+
 export type ProbationMove = 'request' | 'admit' | 'review' | 'withdraw' | 'restore';
 export type ProbationVote = 'support' | 'oppose';
 export type ProbationStatus = 'requested' | 'active' | 'ready' | 'reinstated' | 'withdrawn' | 'rejected' | 'expired';
@@ -2438,6 +2459,7 @@ export interface WorldState {
   shortShifts: ShortShiftState;
   boundaryReliefs: BoundaryReliefState;
   apprenticeCohorts: ApprenticeCohortState;
+  householdNames: HouseholdNameState;
   resourceFlow: ResourceFlowState;
   roads: RoadState;
   sharedCommons: SharedCommonsState;

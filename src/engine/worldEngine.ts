@@ -12,6 +12,7 @@ import { resolveExpeditionRescueAction } from './expeditionRescueEngine';
 import { advanceShortShifts, resolveShortShiftAction } from './shortShiftEngine';
 import { advanceBoundaryReliefs, resolveBoundaryReliefAction } from './boundaryReliefEngine';
 import { advanceApprenticeCohorts, recordCohortPractice, resolveApprenticeCohortAction } from './apprenticeCohortEngine';
+import { advanceHouseholdNames, resolveHouseholdNameAction } from './householdNameEngine';
 import { boundaryReliefCheckpoint } from './boundaryReliefCheckpoint';
 import { expeditionRescueCheckpoint } from './expeditionRescueCheckpoint';
 import { advanceTerrainSuccession, resolveTerrainRecovery } from './terrainSuccessionEngine';
@@ -273,6 +274,8 @@ export function applyCultivatorBrainDecision(
       return resolveBoundaryReliefAction(world, cultivator, decision);
     case 'APPRENTICE_COHORT':
       return resolveApprenticeCohortAction(world, cultivator, decision);
+    case 'HOUSEHOLD_NAME':
+      return resolveHouseholdNameAction(world, cultivator, decision);
     case 'TERRAIN_RECOVERY':
       return resolveTerrainRecovery(world, cultivator, decision);
     case 'SHARED_COMMONS':
@@ -896,7 +899,7 @@ export function advanceWorldTick(
   }
 
   for (const event of [...advanceApprenticeCohorts(nextState), ...advanceBoundaryReliefs(nextState), ...advanceShortShifts(nextState), ...advanceSparring(nextState), ...advanceDiplomacy(nextState, rng), ...advanceOccasions(nextState, rng), ...advanceOaths(nextState), ...advanceMarkets(nextState), ...advanceWitnesses(nextState), ...advanceSeasonReviews(nextState, (state, seasonId) =>
-    publicCompetitionStandings(state, seasonId).find(({ rank }) => rank === 1)), ...maintainSectPolitics(nextState), ...advanceBounties(nextState), ...advanceResearch(nextState), ...advanceWorkshops(nextState), ...advanceRelicExhibits(nextState), ...advanceProbation(nextState), ...advanceEstates(nextState), ...advanceDoctrines(nextState), ...advanceSectCredit(nextState), ...advanceSanctuaries(nextState), ...advancePilgrimages(nextState), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...reconcileCourierDeaths(nextState), ...advanceHouseholds(nextState)]) {
+    publicCompetitionStandings(state, seasonId).find(({ rank }) => rank === 1)), ...maintainSectPolitics(nextState), ...advanceBounties(nextState), ...advanceResearch(nextState), ...advanceWorkshops(nextState), ...advanceRelicExhibits(nextState), ...advanceProbation(nextState), ...advanceEstates(nextState), ...advanceDoctrines(nextState), ...advanceSectCredit(nextState), ...advanceSanctuaries(nextState), ...advancePilgrimages(nextState), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...reconcileCourierDeaths(nextState), ...advanceHouseholds(nextState), ...advanceHouseholdNames(nextState)]) {
     newEvents.push(event);
     witnessEvent(nextState, event);
   }

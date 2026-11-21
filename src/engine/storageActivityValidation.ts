@@ -4,6 +4,7 @@ import { EXPEDITION_RESCUE_OFFER_TICKS, EXPEDITION_RESCUE_STRIDE } from './exped
 import { terrainTileAt } from './terrainEngine';
 import { OBSERVATORY_LEAD_TICKS } from './fieldObservatoryEngine';
 import { COHORT_GRADUATION_MASTERY, COHORT_LESSON_DELAY } from './apprenticeCohortEngine';
+import { HOUSEHOLD_NAME_OFFER_TICKS } from './householdNameEngine';
 import { SHORT_SHIFT_OFFER_TICKS, SHORT_SHIFT_WAGE } from './shortShiftEngine';
 import { BOUNDARY_RELIEF_LATE_GRACE_TICKS, BOUNDARY_RELIEF_OFFER_TICKS, BOUNDARY_RELIEF_QI_PER_TILE, BOUNDARY_RELIEF_STRIDE } from './boundaryReliefEngine';
 
@@ -345,5 +346,47 @@ export function validateApprenticeCohortRelationships(world: WorldState, actors:
         receipt.masteryAfter > receipt.masteryBefore + 3 + 1e-8)
       fail('apprenticeCohorts.graduations.source');
     graduations.add(key);
+  }
+}
+
+export function validateHouseholdNameRelationships(world: WorldState, actors: ReadonlySet<string>,
+  fail: (path: string) => never): void {
+  const state = world.householdNames;
+  if (!state.entries.length) return;
+  const members = new Map(world.households.members.map((member) => [member.volunteerId, member]));
+  const settlements = new Set(world.settlements.villages.map(({ id }) => id));
+  const groups = new Set(world.households.groups.map(({ id }) => id));
+  const keys = new Set<string>();
+  const liveActors = new Set<string>();
+  const receipts = new Set<string>();
+  for (const row of state.entries) {
+    const serial = Number(row.id.match(/^household-name-([1-9][0-9]*)$/)?.[1]);
+    const member = members.get(row.volunteerId);
+    const closed = row.closedTick;
+    if (!Number.isSafeInteger(serial) || serial >= state.nextId || keys.has(row.id) ||
+        !actors.has(row.actorId) || row.actorId !== `recruit-${row.volunteerId}` ||
+        member?.recruitedId !== row.actorId || member.householdId !== row.householdId || member.settlementId !== row.settlementId ||
+        !groups.has(row.householdId) || !settlements.has(row.settlementId) ||
+        row.openedTick < member.registeredTick || row.openedTick > world.tick ||
+        row.expiresTick !== row.openedTick + HOUSEHOLD_NAME_OFFER_TICKS ||
+        ((row.kind === 'alias') !== (row.alias !== undefined)) ||
+        ((row.status === 'proposed') !== (closed === undefined)) ||
+        (row.status === 'proposed' && world.tick >= row.expiresTick) ||
+        (closed !== undefined && (closed < row.openedTick || closed > world.tick)) ||
+        (row.status === 'verified' && (closed === undefined || closed <= row.openedTick || closed >= row.expiresTick ||
+          !row.witnessId || row.witnessId === row.actorId || !actors.has(row.witnessId))) ||
+        (row.status !== 'verified' && row.witnessId !== undefined) ||
+        (row.status === 'withdrawn' && (closed ?? Infinity) >= row.expiresTick))
+      fail('householdNames.entries.identity');
+    keys.add(row.id);
+    if (row.status === 'proposed') {
+      if (liveActors.has(row.actorId)) fail('householdNames.entries.active');
+      liveActors.add(row.actorId);
+    }
+    if (row.status === 'verified') {
+      const key = JSON.stringify([row.actorId, closed]);
+      if (receipts.has(key)) fail('householdNames.entries.receipt');
+      receipts.add(key);
+    }
   }
 }

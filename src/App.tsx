@@ -80,6 +80,7 @@ const WeatherAtlasPanel = React.lazy(async () => ({ default: (await import('./co
 const ShortShiftPanel = React.lazy(async () => ({ default: (await import('./components/ShortShiftPanel')).ShortShiftPanel }));
 const MarketCaravansPanel = React.lazy(async () => ({ default: (await import('./components/MarketCaravansPanel')).MarketCaravansPanel }));
 const MortalVillagesPanel = React.lazy(async () => ({ default: (await import('./components/MortalVillagesPanel')).MortalVillagesPanel }));
+const HouseholdNamePanel = React.lazy(async () => ({ default: (await import('./components/HouseholdNamePanel')).HouseholdNamePanel }));
 const DecisionTracePanel = React.lazy(async () => ({ default: (await import('./components/DecisionTracePanel')).DecisionTracePanel }));
 const PossessionPanel = React.lazy(async () => ({ default: (await import('./components/PossessionPanel')).PossessionPanel }));
 const EstateMemorialPanel = React.lazy(async () => ({ default: (await import('./components/EstateMemorialPanel')).EstateMemorialPanel }));
@@ -99,7 +100,7 @@ const chronicleWorkspace = { site: 'map', actor: 'people', sect: 'sect' } as con
 const chronicleFeedFact = (entry: WorldEvent) => !entry.id.startsWith('evt-sealed-dispatch-') &&
   !(entry.witnessScope === 'participants' && (entry.id.startsWith('evt-sparring-') || entry.id.startsWith('evt-expedition-rescue-') ||
     entry.id.startsWith('evt-short-shift-') || entry.id.startsWith('evt-boundary-relief-') ||
-    entry.id.startsWith('evt-apprentice-cohort-') ||
+    entry.id.startsWith('evt-apprentice-cohort-') || entry.id.startsWith('evt-household-name-') ||
     /^evt-pilgrimage-[1-9]\d*-(?:camp(?:-expiry|-interruption)?|dismantled|resumed)-\d+$/.test(entry.id)));
 type FastForwardPhase = 'idle' | 'running' | 'pausing' | 'paused' | 'staging' | 'ready' | 'error';
 type FastForwardViewState = { phase: FastForwardPhase; progress?: FastForwardProgress; notice?: string };
@@ -592,6 +593,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
   const selectedCultivator = resolveWorkspaceActor(visibleWorld, selectedCultivatorId);
   const aliveCount = visibleWorld.cultivators.filter((c) => c.alive).length;
   const activeActorId = selectedCultivator?.id ?? null;
+  const selectedSettlementId = visibleWorld.settlements.villages.find((village) => village.locationId === selectedCultivator?.locationId)?.id;
   useEffect(() => {
     if (selectedCultivatorId !== activeActorId) setSelectedCultivatorId(activeActorId);
   }, [activeActorId, selectedCultivatorId]);
@@ -853,7 +855,11 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
           { id: 'markets', label: '坊市与商队', content: selectedCultivator
             ? <React.Suspense fallback={<p role="status">载入世界记录…</p>}><MarketCaravansPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense>
             : <p className="text-xs text-slate-300">从人物名册选择实际修士后查看坊市。</p> },
-          { id: 'villages', label: '凡人村镇与赈济', content: <React.Suspense fallback={<p role="status">载入世界记录…</p>}><MortalVillagesPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense> },
+          { id: 'villages', label: '凡人村镇与赈济', content: <div className="space-y-2.5">
+            <React.Suspense fallback={<p role="status">载入世界记录…</p>}><MortalVillagesPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense>
+            {selectedCultivator && selectedSettlementId &&
+              <React.Suspense fallback={null}><HouseholdNamePanel world={visibleWorld} cultivator={selectedCultivator} settlementId={selectedSettlementId} /></React.Suspense>}
+          </div> },
           { id: 'occasions', label: '比武与秘境盛会', content: selectedCultivator
             ? <React.Suspense fallback={<p role="status">载入盛会记录…</p>}><WorldOccasionsPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense>
             : <p className="text-xs text-slate-300">从人物名册选择实际修士后查看盛会。</p> },
