@@ -64,6 +64,9 @@ export type ActionType =
   | 'DECLINE_OATH'
   | 'FULFILL_OATH'
   | 'APPEAL_OATH'
+  | 'PLACE_MARKET_BUY'
+  | 'PLACE_MARKET_SELL'
+  | 'CANCEL_MARKET_ORDER'
   | 'GATHER_HERBS'
   | 'BREW_PILL'
   | 'USE_PILL'
@@ -325,6 +328,10 @@ export interface LLMDecisionPayload {
   targetTuitionId?: string;
   targetOathId?: string;
   oathTerm?: OathTerm;
+  marketGood?: MarketGood;
+  marketQuantity?: number;
+  marketLimitPrice?: number;
+  targetMarketOrderId?: string;
   targetTechniqueId?: string;
   targetHerbId?: HerbId;
   targetPillId?: PillId;
@@ -654,7 +661,66 @@ export interface OathContract {
 }
 export interface OathState { contracts: OathContract[]; nextId: number }
 
+export type MarketGood = HerbId | PillId;
+export interface MarketOrder {
+  id: string;
+  sequence: number;
+  actorId: string;
+  locationId: string;
+  side: 'buy' | 'sell';
+  good: MarketGood;
+  quantity: number;
+  remaining: number;
+  limitPrice: number;
+  escrowStones: number;
+  escrowGoods: number;
+  placedTick: number;
+  expiresTick: number;
+  status: 'open' | 'filled' | 'cancelled' | 'expired';
+  settledTick?: number;
+}
+export interface MarketShipment {
+  id: string;
+  sequence: number;
+  buyOrderId: string;
+  sellOrderId: string;
+  buyerId: string;
+  sellerId: string;
+  originId: string;
+  destinationId: string;
+  good: MarketGood;
+  quantity: number;
+  unitPrice: number;
+  departedTick: number;
+  arrivalTick: number;
+  status: 'in_transit' | 'delivered' | 'lost' | 'returned';
+  settledTick?: number;
+  reason?: string;
+}
+export interface MarketReceipt {
+  id: string;
+  sequence: number;
+  buyerId: string;
+  sellerId: string;
+  originId: string;
+  destinationId: string;
+  good: MarketGood;
+  quantity: number;
+  unitPrice: number;
+  tick: number;
+  status: 'local_fill' | 'delivered' | 'lost' | 'returned';
+  shipmentId?: string;
+  reason?: string;
+}
+export interface MarketState {
+  orders: MarketOrder[];
+  shipments: MarketShipment[];
+  receipts: MarketReceipt[];
+  nextId: number;
+}
+
 export interface WorldState {
+  markets: MarketState;
   oaths: OathState;
   mentorship: MentorshipState;
   random: WorldRandomState;

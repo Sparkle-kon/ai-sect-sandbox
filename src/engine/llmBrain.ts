@@ -1,3 +1,4 @@
+import { availableMarketActions, marketClosureReason } from './marketEngine';
 import { localQiWeather, weatherTravelFriction } from './weatherEngine';
 import { availableOathActions } from './oathEngine';
 import { availableMentorshipActions } from './mentorshipEngine';
@@ -86,6 +87,20 @@ export function computeHeuristicDecision(
       chosenAction: 'BREAKTHROUGH',
       spokenLine: '天地灵气，入我丹田，破！',
     };
+  }
+
+  if (world.tick >= 5 && world.tick % 5 === 1 && !cultivator.guardAssignment) {
+    const market = availableMarketActions(cultivator, world);
+    const preferred = market.find((order) => order.action === 'PLACE_MARKET_SELL' &&
+      order.marketGood === 'jade_leaf' && cultivator.herbs.jade_leaf >= 4) ??
+      market.find((order) => order.action === 'PLACE_MARKET_BUY' && order.marketGood === 'jade_leaf' && cultivator.herbs.jade_leaf < 2);
+    if (preferred) return { ...preferred, chosenAction: preferred.action, innerMonologue: '按坊市挂价与实际存货下单，等候成交。' };
+    if (currentLocation?.type !== 'market' && cultivator.techniqueMastery >= 22 && cultivator.herbs.jade_leaf >= 4) {
+      const nextMarket = world.locations.filter((site) => site.type === 'market' && !marketClosureReason(world, site.id))
+        .sort((a, b) => Math.hypot(a.x - (currentLocation?.x ?? 0), a.y - (currentLocation?.y ?? 0)) -
+          Math.hypot(b.x - (currentLocation?.x ?? 0), b.y - (currentLocation?.y ?? 0)) || a.id.localeCompare(b.id))[0];
+      if (nextMarket) return { chosenAction: 'EXPLORE', targetLocationId: nextMarket.id, innerMonologue: '带上余裕灵草去坊市。' };
+    }
   }
 
   const oaths = availableOathActions(cultivator, world);
@@ -336,6 +351,7 @@ export async function queryCultivatorLLMDecision(
   const unverifiedTrail = knownRumorLead(cultivator, world);
   const mentorshipOptions = availableMentorshipActions(cultivator, world);
   const oathOptions = availableOathActions(cultivator, world);
+  const marketOptions = availableMarketActions(cultivator, world);
   const prompt = `你是修仙沙盒世界中的修士【${cultivator.name}】（称号：${cultivator.title}）。
 【自身状态】
 - 境界：${cultivator.realm}${cultivator.realmStage}层（灵气进度：${cultivator.qiProgress}%）
@@ -361,6 +377,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 法宝状况：${JSON.stringify(cultivator.artifacts)}；本地可用炼器行动：${JSON.stringify(availableArtifactActions(cultivator, world))}
 - 丹毒：${cultivator.pillToxicity}/100；灵药包：${JSON.stringify(cultivator.herbs)}；已有丹药：${JSON.stringify(cultivator.pills)}；允许的炼丹行动：${JSON.stringify(availableAlchemy(cultivator, world))}
 - 功法熟练度：${cultivator.techniqueMastery}/100；可自创：${mayAuthorTechnique(cultivator) ? '是' : '否'}；可研习：${JSON.stringify(availableTechniques(cultivator, world))}
+- 坊市当下可用挂单和撤单（参数必须采用给定值）：${JSON.stringify(marketOptions)}
 - 两宗契书权限（必须严格采用这些目标与条款）：${JSON.stringify(oathOptions)}
 - 师门传授与回应，只选择给出的行动和目标：${JSON.stringify(mentorshipOptions)}
 - 当前可用的专门交互（必须使用给定 targetId）：${JSON.stringify(availableEncounters(cultivator, world))}
@@ -371,12 +388,16 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
 请以第一人称进行内心独白思考，并决定本回合行动。只输出合法的 JSON 对象（不要 Markdown 代码块），字段如下：
 {
   "innerMonologue": "你的第一人称内心独白（40字以内，体现你的性格与秘密目标）",
-  "chosenAction": "CULTIVATE | BREAKTHROUGH | EXPLORE | SOCIALIZE | DUEL | SCHEMING | PURSUE_SCHEME | AUTHOR_TECHNIQUE | STUDY_TECHNIQUE | GATHER_HERBS | BREW_PILL | USE_PILL | FORGE_ARTIFACT | BIND_ARTIFACT | REPAIR_ARTIFACT | AWAKEN_ARTIFACT | FACE_TRIBULATION | AMBUSH_TRIBULATION | CHALLENGE_LEADERSHIP | PLOT_COUP | BUILD_FACILITY | DISPATCH_GUARD | GUARD_DUTY | OFFER_ALLIANCE | DECLARE_WAR | DEMAND_TRIBUTE | LAUNCH_SIEGE | JOIN_OCCASION | PURSUE_BOUNTY | TAME_BEAST | TRADE | DUAL_CULTIVATE | SECT_DIPLOMACY | TEACH | ACCEPT_TUITION | DECLINE_TUITION | OFFER_OATH | ACCEPT_OATH | DECLINE_OATH | FULFILL_OATH | APPEAL_OATH | REST 之一",
+  "chosenAction": "CULTIVATE | BREAKTHROUGH | EXPLORE | SOCIALIZE | DUEL | SCHEMING | PURSUE_SCHEME | AUTHOR_TECHNIQUE | STUDY_TECHNIQUE | GATHER_HERBS | BREW_PILL | USE_PILL | FORGE_ARTIFACT | BIND_ARTIFACT | REPAIR_ARTIFACT | AWAKEN_ARTIFACT | FACE_TRIBULATION | AMBUSH_TRIBULATION | CHALLENGE_LEADERSHIP | PLOT_COUP | BUILD_FACILITY | DISPATCH_GUARD | GUARD_DUTY | OFFER_ALLIANCE | DECLARE_WAR | DEMAND_TRIBUTE | LAUNCH_SIEGE | JOIN_OCCASION | PURSUE_BOUNTY | TAME_BEAST | TRADE | DUAL_CULTIVATE | SECT_DIPLOMACY | TEACH | ACCEPT_TUITION | DECLINE_TUITION | OFFER_OATH | ACCEPT_OATH | DECLINE_OATH | FULFILL_OATH | APPEAL_OATH | PLACE_MARKET_BUY | PLACE_MARKET_SELL | CANCEL_MARKET_ORDER | REST 之一",
   "targetLocationId": "EXPLORE 可填已知地点 id（探索未知时省略）；宗门经营许可要求时填指定地点 id",
   "targetCultivatorId": "如果 chosenAction 为 SOCIALIZE / DUEL / SCHEMING / AMBUSH_TRIBULATION / CHALLENGE_LEADERSHIP / PLOT_COUP / DISPATCH_GUARD / TRADE / DUAL_CULTIVATE / SECT_DIPLOMACY / TEACH / OFFER_OATH 则填目标修士 id，否则省略",
   "spokenLine": "简短台词（可选）",
   "rumorIntent": "只有阴险或诡诈角色选择 SCHEMING 时才可选填 FABRICATE 或 EXAGGERATE",
   "proposedScheme": "仅在没有进行中的谋划并选择 PURSUE_SCHEME 时，从列出的目标类别中选择一项",
+  "marketGood": "挂单时选择所列货物代码",
+  "marketQuantity": "挂单数量，使用候选中的整数",
+  "marketLimitPrice": "每单位限价，使用候选中的整数",
+  "targetMarketOrderId": "撤单时选择自己仍可撤的挂单 id",
   "targetOathId": "回应、履行或申诉契书时，指定可用契书 id",
   "oathTerm": "提出契书时选择给定条款 foundation_pill 或 jade_herb",
   "targetTuitionId": "仅在接受或婉拒授艺时选择给定邀约 id",
@@ -468,9 +489,18 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
             'DECLINE_OATH',
             'FULFILL_OATH',
             'APPEAL_OATH',
+            'PLACE_MARKET_BUY',
+            'PLACE_MARKET_SELL',
+            'CANCEL_MARKET_ORDER',
           ];
           const chosenAction = parsed?.chosenAction;
           if (!chosenAction || !validActions.includes(chosenAction)) return undefined;
+
+          const isMarket = chosenAction === 'PLACE_MARKET_BUY' || chosenAction === 'PLACE_MARKET_SELL' || chosenAction === 'CANCEL_MARKET_ORDER';
+          const legalMarket = isMarket && marketOptions.find((item) => item.action === chosenAction &&
+            (item.action === 'CANCEL_MARKET_ORDER' ? item.targetMarketOrderId === parsed.targetMarketOrderId
+              : item.marketGood === parsed.marketGood && item.marketQuantity === parsed.marketQuantity && item.marketLimitPrice === parsed.marketLimitPrice));
+          if (isMarket && !legalMarket) return undefined;
 
           const oath = chosenAction === 'OFFER_OATH' || chosenAction === 'ACCEPT_OATH' || chosenAction === 'DECLINE_OATH' ||
             chosenAction === 'FULFILL_OATH' || chosenAction === 'APPEAL_OATH';
@@ -555,6 +585,10 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
             forgeTier: legalArtifact?.forgeTier,
             targetHerbId: legalAlchemy?.targetHerbId,
             targetPillId: legalAlchemy?.targetPillId,
+            marketGood: legalMarket && legalMarket.action !== 'CANCEL_MARKET_ORDER' ? legalMarket.marketGood : undefined,
+            marketQuantity: legalMarket && legalMarket.action !== 'CANCEL_MARKET_ORDER' ? legalMarket.marketQuantity : undefined,
+            marketLimitPrice: legalMarket && legalMarket.action !== 'CANCEL_MARKET_ORDER' ? legalMarket.marketLimitPrice : undefined,
+            targetMarketOrderId: legalMarket && legalMarket.action === 'CANCEL_MARKET_ORDER' ? legalMarket.targetMarketOrderId : undefined,
             targetOathId: legalOath ? legalOath.targetOathId : undefined,
             oathTerm: legalOath ? legalOath.oathTerm : undefined,
             targetTuitionId: legalTraining ? legalTraining.targetTuitionId : undefined,

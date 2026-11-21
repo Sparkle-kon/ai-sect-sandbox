@@ -57,8 +57,10 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
+const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
+const marketQty = num(1,12,true), marketPrice = num(1,500,true);
 const pills = structure({foundation:count,golden:count,barrier:count,heart_poison:count});
 const technique = structure({id:oid,authorId:oid,createdTick:otick,name:id,spiritRoot:spirit});
 const artifact = structure({id:oid,tier:optional(one('法器','灵器','法宝','通天灵宝')),durability:optional(wealth),maxDurability:optional(wealth),boundTo:oid,
@@ -126,6 +128,15 @@ const shape = structure({
     status:one('passed','rejected','stale'),outcome:text})),
   chronicleArchive:structure({anchors:arr(384,anchor),chapters:arr(24,structure({id,chapterNumber:tick,startTick:tick,endTick:tick,title:text,
     anchors:arr(18,anchor),biographies:arr(8,structure({actorId:id,name:id,realm,sectName:otext,anchorIds:ids})),body:strings(25_000),source}))}),
+  markets:structure({nextId:tick,
+    orders:arr(320,structure({id,sequence:tick,actorId:id,locationId:id,side:one('buy','sell'),good:marketGood,
+      quantity:marketQty,remaining:num(0,12,true),limitPrice:marketPrice,escrowStones:wealth,escrowGoods:num(0,12,true),
+      placedTick:tick,expiresTick:tick,status:one('open','filled','cancelled','expired'),settledTick:otick})),
+    shipments:arr(160,structure({id,sequence:tick,buyOrderId:id,sellOrderId:id,buyerId:id,sellerId:id,originId:id,destinationId:id,
+      good:marketGood,quantity:marketQty,unitPrice:marketPrice,departedTick:tick,arrivalTick:tick,
+      status:one('in_transit','delivered','lost','returned'),settledTick:otick,reason:otext})),
+    receipts:arr(100,structure({id,sequence:tick,buyerId:id,sellerId:id,originId:id,destinationId:id,
+      good:marketGood,quantity:marketQty,unitPrice:marketPrice,tick,status:one('local_fill','delivered','lost','returned'),shipmentId:oid,reason:otext}))}),
   oaths:structure({nextId:tick,contracts:arr(300,structure({id,requesterId:id,providerId:id,locationId:id,
     term:one('foundation_pill','jade_herb'),quantity:num(1,100,true),payment:wealth,collateral:wealth,
     offeredTick:tick,offerExpiresTick:tick,deadlineTick:otick,appealUntilTick:otick,
@@ -153,6 +164,7 @@ function verifyWorld(value: unknown): WorldState {
   const candidate = value !== null && typeof value === 'object' && !Array.isArray(value)
     ? { ...value,
       ...(!Object.hasOwn(value, 'mentorship') ? { mentorship: { offers: [], lineage: [], budgets: [] } } : {}),
+      ...(!Object.hasOwn(value, 'markets') ? { markets: { orders: [], shipments: [], receipts: [], nextId: 1 } } : {}),
       ...(!Object.hasOwn(value, 'oaths') ? { oaths: { contracts: [], nextId: 1 } } : {}),
     } : value;
   shape(candidate, 'world');
@@ -194,6 +206,24 @@ function verifyWorld(value: unknown): WorldState {
   if ((w.playerAvatar.possessedId && !actor.has(w.playerAvatar.possessedId)) ||
       (w.playerAvatar.pendingOrder && w.playerAvatar.pendingOrder.actorId !== w.playerAvatar.possessedId) ||
       w.playerAvatar.transcript.some((entry) => !actor.has(entry.targetCultivatorId) || (entry.actorId && !actor.has(entry.actorId)))) fail('playerAvatar.references');
+  const marketLocations = new Set(w.locations.filter(({type}) => type === 'market').map(({id}) => id));
+  const marketOrders = unique(w.markets.orders, ({id}) => id, 'markets.orders.id');
+  unique(w.markets.shipments, ({id}) => id, 'markets.shipments.id');
+  unique(w.markets.receipts, ({id}) => id, 'markets.receipts.id');
+  for (const order of w.markets.orders) {
+    if (!actor.has(order.actorId) || (order.status === 'open' && !marketLocations.has(order.locationId)) ||
+        order.remaining > order.quantity || order.expiresTick <= order.placedTick ||
+        order.escrowStones !== (order.status === 'open' && order.side === 'buy' ? order.remaining * order.limitPrice : 0) ||
+        order.escrowGoods !== (order.status === 'open' && order.side === 'sell' ? order.remaining : 0)) fail('markets.orders.references');
+  }
+  for (const shipment of w.markets.shipments) {
+    if (!actor.has(shipment.buyerId) || !actor.has(shipment.sellerId) || shipment.buyerId === shipment.sellerId ||
+        shipment.originId === shipment.destinationId || shipment.arrivalTick <= shipment.departedTick ||
+        (shipment.status === 'in_transit' && (!marketOrders.has(shipment.buyOrderId) || !marketOrders.has(shipment.sellOrderId)))) fail('markets.shipments.references');
+  }
+  for (const receipt of w.markets.receipts) {
+    if (!actor.has(receipt.buyerId) || !actor.has(receipt.sellerId) || receipt.buyerId === receipt.sellerId) fail('markets.receipts.references');
+  }
   unique(w.oaths.contracts, ({ id }) => id, 'oaths.contracts.id');
   for (const oath of w.oaths.contracts) {
     const terms = OATH_TERMS[oath.term];

@@ -1,3 +1,4 @@
+import { createMarketState } from '../engine/marketEngine';
 import { createOathState } from '../engine/oathEngine';
 import { createMentorshipState } from '../engine/mentorshipEngine';
 import { createWorldRandom, DEFAULT_WORLD_SEED } from '../engine/worldRandom';
@@ -209,10 +210,16 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED): WorldState {
         description: '孕育极品冰系灵石的野生灵脉，常有修士争夺。',
       },
     ];
+  locations.push({
+    id: 'loc-market-east', name: '松灯坊市', x: 784, y: 160, type: 'market', spiritRoot: '木', spiritQi: 42,
+    inheritanceScrolls: [], herbs: herbs(4, 1, 1, 0), herbCapacity: herbs(4, 2, 1, 0), furnaceGrade: 1,
+    description: '东北山路的松灯集，悬牌收货，也有通往万仙坊市的商队。',
+  });
   const world: WorldState = {
     random,
     mentorship: createMentorshipState(),
     oaths: createOathState(),
+    markets: createMarketState(),
     tick: 1,
     interventionSequence: 0,
     year: 1001,

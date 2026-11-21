@@ -31,14 +31,16 @@ import { PossessionPanel } from './components/PossessionPanel';
 import { WorldStoragePanel } from './components/WorldStoragePanel';
 import { isWorldSeed } from './engine/worldRandom';
 import { TimelinePanel } from './components/TimelinePanel';
-import { AnalyticsModal } from './components/AnalyticsModal';
 import { MentorshipPanel } from './components/MentorshipPanel';
 import { OathContractsPanel } from './components/OathContractsPanel';
 import { WeatherAtlasPanel } from './components/WeatherAtlasPanel';
+import { MarketCaravansPanel } from './components/MarketCaravansPanel';
 import { createTimeline, forkTimeline, readTimelineHead, readTimelineSnapshot, recordTimelineWorld, selectTimelineBranch } from './engine/timelineEngine';
 import type { WorldTimeline } from './engine/timelineEngine';
 import { activeAvatar, possessAvatar, queueAvatarOrder } from './engine/avatarEngine';
 import { resolveAvatarSnapshot } from './engine/avatarRuntime';
+
+const AnalyticsModal = React.lazy(async () => ({ default: (await import('./components/AnalyticsModal')).AnalyticsModal }));
 
 export const App: React.FC = () => {
   const [world, setWorld] = useState<WorldState>(() => createInitialWorld());
@@ -389,6 +391,7 @@ export const App: React.FC = () => {
             onBrushStroke={preview ? undefined : handleBrushStroke}
           />
           <WeatherAtlasPanel world={visibleWorld} cultivator={selectedCultivator} />
+          <MarketCaravansPanel world={visibleWorld} cultivator={selectedCultivator} />
           <BountyBoard world={visibleWorld} />
           {!preview && <GodConsole
             world={world}
@@ -423,7 +426,9 @@ export const App: React.FC = () => {
           />
         </div>
       </main>
-      <AnalyticsModal world={visibleWorld} history={visibleHistory} open={analyticsOpen} onClose={() => setAnalyticsOpen(false)} />
+      {analyticsOpen && <React.Suspense fallback={<span role="status">载入天道观测…</span>}>
+        <AnalyticsModal world={visibleWorld} history={visibleHistory} open onClose={() => setAnalyticsOpen(false)} />
+      </React.Suspense>}
       <SectCouncilModal
         world={world}
         open={councilOpen && !preview}
