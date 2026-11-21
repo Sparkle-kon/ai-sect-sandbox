@@ -1,4 +1,5 @@
 import { FAST_FORWARD_MAX_TICKS } from './engine/fastForwardEngine';
+import { projectChronicleLead, publicChronicleSceneEvents } from './engine/chronicleLead';
 import type { FastForwardCheckpoint, FastForwardProgress, FastForwardWorkerRequest, FastForwardWorkerResponse } from './engine/fastForwardEngine';
 import type { SaveBranchSource } from './engine/storageEngine';
 import { courierCheckpoint } from './engine/sealedCourierEngine';
@@ -99,12 +100,6 @@ interface ChronicleTrail extends ChronicleFeedReturn {
   revision: number;
 }
 const chronicleWorkspace = { site: 'map', actor: 'people', sect: 'sect' } as const;
-const chronicleFeedFact = (entry: WorldEvent) => !entry.id.startsWith('evt-sealed-dispatch-') &&
-  !(entry.witnessScope === 'participants' && (entry.id.startsWith('evt-sparring-') || entry.id.startsWith('evt-expedition-rescue-') ||
-    entry.id.startsWith('evt-short-shift-') || entry.id.startsWith('evt-boundary-relief-') ||
-    entry.id.startsWith('evt-apprentice-cohort-') || entry.id.startsWith('evt-household-name-') ||
-    entry.id.startsWith('evt-caravan-restitution-') || entry.id.startsWith('evt-village-granary-') || entry.id.startsWith('evt-infirmary-') ||
-    /^evt-pilgrimage-[1-9]\d*-(?:camp(?:-expiry|-interruption)?|dismantled|resumed)-\d+$/.test(entry.id)));
 type FastForwardPhase = 'idle' | 'running' | 'pausing' | 'paused' | 'staging' | 'ready' | 'error';
 type FastForwardViewState = { phase: FastForwardPhase; progress?: FastForwardProgress; notice?: string };
 interface ActiveFastForward {
@@ -593,6 +588,9 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
       (base, orders, mode, onActor, replayDraws) => advanceWorldTick(base, orders, undefined, mode, undefined, { captureTrace: false, onActor, replayDraws }));
   };
   const visibleHistory = timeline.branches.find(({ id }) => id === timeline.activeBranchId)?.snapshots;
+  const readingChronicle = workspace === 'chronicle';
+  const chronicleScenes = React.useMemo(() => readingChronicle ? publicChronicleSceneEvents(visibleWorld) : [], [readingChronicle,visibleWorld]);
+  const chronicleLead = React.useMemo(() => readingChronicle ? projectChronicleLead(visibleWorld) : undefined, [readingChronicle,visibleWorld]);
   const selectedCultivator = resolveWorkspaceActor(visibleWorld, selectedCultivatorId);
   const aliveCount = visibleWorld.cultivators.filter((c) => c.alive).length;
   const activeActorId = selectedCultivator?.id ?? null;
@@ -792,12 +790,12 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
         </div>,
         chronicle: <WorkspaceSections label="纪事与历史" initialOpen={opened('chronicle', 'feed')}
           {...fold('chronicle')} forcedOpen={chronicleReturn && ordinaryChronicleFold !== 'feed' ? 'feed' : undefined} sections={[
-          { id: 'feed', label: '当世纪事', content: <React.Suspense fallback={<p role="status">载入当世纪事…</p>}><ChronicleFeed
-            events={visibleWorld.events.filter(chronicleFeedFact)}
+          { id: 'feed', label: '山河见闻', content: <React.Suspense fallback={<p role="status">载入山河见闻…</p>}><ChronicleFeed
+            events={chronicleScenes} lead={chronicleLead}
             category={chronicleFilter} onCategoryChange={setChronicleFilter} focusOptions={resolver?.build}
             causality={(eventId) => chronicleCauses?.get(eventId)}
             onJump={followChronicle} returnPosition={chronicleReturn} onReturnHandled={clearChronicleReturn} focusNotice={focusNotice} /></React.Suspense> },
-          { id: 'library', label: '藏书阁与史书', content: <React.Suspense fallback={<p role="status">载入藏书阁…</p>}><ChronicleLibraryPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense> },
+          { id: 'library', label: '藏书阁与故事', content: <React.Suspense fallback={<p role="status">载入藏书阁…</p>}><ChronicleLibraryPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense> },
           { id: 'notebook', label: '书签与地图批注', content: <React.Suspense fallback={<p role="status">载入分支记录…</p>}>
             <ChronicleNotebookPanel key={`${timeline.activeBranchId}:${preview?.tick ?? 'live'}:${activeActorId ?? ''}`}
               world={visibleWorld} actorId={activeActorId} branchId={timeline.activeBranchId} readOnly={!!preview} busy={isStepping} onWrite={writeAnnotation} />

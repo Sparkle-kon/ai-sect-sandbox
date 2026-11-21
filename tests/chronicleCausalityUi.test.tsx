@@ -28,7 +28,7 @@ describe('typed reverse evidence within the existing chronicle', () => {
         ? { links: [{ eventId: id, kind: 'site', targetId: 'visible-place', label: '可见地点' }], withheld: false }
         : { links: [], withheld: false }} />);
     expect(html.match(/逆查可证原因/g)).toHaveLength(1);
-    expect(html).toMatch(/<details class="[^"]+"><summary class="[^"]+">逆查可证原因/);
+    expect(html).toMatch(/<details class="[^"]+" data-chronicle-cause="true"><summary class="[^"]+">逆查可证原因/);
     expect(html).toMatch(/交易结算 · Tick #9[\s\S]*实际结果：商队已到货交割[\s\S]*实际结算的商队[\s\S]*商队启程 · Tick #6/);
     expect(html).toContain('实际撮合的买单');
     expect(html).toContain('挂出卖单 · Tick #3');

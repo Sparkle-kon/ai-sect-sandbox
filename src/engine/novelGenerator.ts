@@ -1,4 +1,7 @@
 import { compactColdHistory } from './coldHistoryEngine';
+import { isChronicleStoryFact, projectChronicleLead } from './chronicleLead';
+import type { ChronicleLead } from './chronicleLead';
+import { writeChronicleScene } from './chronicleScene';
 import type { ChronicleAnchor, ChronicleArchive, ChronicleChapter, ChronicleChapterPlan, WorldEvent, WorldState } from '../types/world';
 
 export const CHRONICLE_INTERVAL = 12;
@@ -84,7 +87,10 @@ export function availableChronicleChapter(world: WorldState, force = false, endT
   const unrecordedFrom = (previous?.endTick ?? 0) + 1;
   if (!force && endTick - unrecordedFrom + 1 < CHRONICLE_INTERVAL) return undefined;
   const startTick = Math.max(unrecordedFrom, endTick - CHRONICLE_INTERVAL * 2 + 1);
-  const anchors = sampleAnchors(archive.anchors.filter(({ tick }) => tick >= startTick && tick <= endTick));
+  // A currently retained private/future original overrides an archival display copy with the same ID.
+  const unavailable = new Set(world.events.filter((event) => !isChronicleStoryFact(event, endTick)).map(({ id }) => id));
+  const anchors = sampleAnchors(archive.anchors.filter((anchor) => anchor.tick >= startTick &&
+    isChronicleStoryFact(anchor, endTick) && !unavailable.has(anchor.id)));
   if (!anchors.length) return undefined;
   const mentions = new Map<string, string[]>();
   for (const anchor of anchors) {
@@ -98,21 +104,67 @@ export function availableChronicleChapter(world: WorldState, force = false, endT
         sectName: world.sects.find(({ id }) => id === actor.sectId)?.name, anchorIds }];
     });
   const chapterNumber = (previous?.chapterNumber ?? 0) + 1;
-  return { id: `chapter-${startTick}-${endTick}`, chapterNumber, startTick, endTick, title: `第${chapterNumber}章：第${startTick}至${endTick}轮 · 山河行纪`,
+  const lead = projectChronicleLead(world, anchors, endTick);
+  return { id: `chapter-${startTick}-${endTick}`, chapterNumber, startTick, endTick,
+    title: chapterReadingTitle(chapterNumber, readScenes(anchors), lead),
     anchors: structuredClone(anchors), biographies };
 }
 
-function deterministicBody(plan: ChronicleChapterPlan): string {
-  const first = plan.anchors[0];
-  const last = plan.anchors[plan.anchors.length - 1];
-  const record = plan.anchors.map((anchor) => {
-    const dialogue = anchor.dialogue?.turns.map(({ speakerName, text }) => `${speakerName}曰：「${text}」`).join(' ') ?? '';
-    return `${anchor.year}年${anchor.month}月，天道史牍记曰：「${anchor.title}」。${anchor.description}${dialogue ? `\n${dialogue}` : ''}`;
+export interface ChronicleReadingSection {
+  eventId: string;
+  title: string;
+  paragraph: string;
+  dialogue?: WorldEvent['dialogue'];
+}
+export interface ChronicleReading { title: string; sections: ChronicleReadingSection[] }
+
+const drama: Record<ChronicleAnchor['category'], number> = {
+  death: 5, combat: 4, breakthrough: 3, intrigue: 2, diplomacy: 1, heavenly: 0,
+};
+
+type AnchoredScene = { anchor: ChronicleAnchor; section: ChronicleReadingSection };
+function readScenes(anchors: readonly ChronicleAnchor[]): AnchoredScene[] {
+  return anchors.map((anchor) => {
+    const { title, paragraph } = writeChronicleScene(anchor);
+    const turns = anchor.dialogue?.turns.filter(({ speakerId, text }) =>
+      anchor.actorIds.includes(speakerId) && Boolean(text.trim())).slice(0, 4).map((turn) => ({ ...turn }));
+    const dialogue = anchor.dialogue && turns?.length ? { ...anchor.dialogue, turns } : undefined;
+    return { anchor, section: { eventId: anchor.id, title, paragraph, ...(dialogue ? { dialogue } : {}) } };
   });
-  const bios = plan.biographies.map(({ name, realm, sectName, anchorIds }) =>
-    `${name}，${sectName ? `归属${sectName}，` : ''}编录时修至${realm}。本章公开史料见其名${anchorIds.length}次。`);
-  return [`风过山门，卷帙新启。此卷采自${first.year}年${first.month}月至${last.year}年${last.month}月的公开纪闻，未录密会之语。`,
-    record.join('\n\n'), ...(bios.length ? [`列传小记\n\n${bios.join('\n')}`] : [])].join('\n\n');
+}
+
+function chapterReadingTitle(chapterNumber: number, scenes: readonly AnchoredScene[], lead?: ChronicleLead): string {
+  const proved = lead ? new Set(lead.eventIds) : undefined;
+  const any = scenes.filter(({ anchor }) => lead && proved?.has(anchor.id) && anchor.actorIds.includes(lead.actorId) &&
+    anchor.tick >= lead.firstTick && anchor.tick <= lead.lastTick);
+  const selection = any.length ? any : scenes;
+  const chosen = selection.reduce<AnchoredScene | undefined>((best, scene) =>
+    !best || drama[scene.anchor.category] > drama[best.anchor.category] ? scene : best, undefined);
+  const prefix = `第${chapterNumber}章：`;
+  return prefix + cutText(chosen?.section.title ?? '山河一页', MAX_TITLE - prefix.length);
+}
+
+/** Novel-first view of existing public facts. Saved prose, chronology and proof are left untouched. */
+export function projectChronicleReading(chapter: ChronicleChapter, lead?: ChronicleLead): ChronicleReading {
+  const scenes = readScenes(chapter.anchors.filter((anchor) =>
+    anchor.tick >= chapter.startTick && isChronicleStoryFact(anchor, chapter.endTick)));
+  return { title: chapterReadingTitle(chapter.chapterNumber, scenes, lead), sections: scenes.map(({ section }) => section) };
+}
+
+const calendricalHeading = /(?:^|\n)\s*(?:[#*]+\s*)?(?:仙历\s*\d+|第[零〇一二三四五六七八九十百千万两\d]+(?:大?纪元|大世纪|(?:至第?[零〇一二三四五六七八九十百千万两\d]+)?轮)|(?:大?纪元|纪年|编年史)[:：])/u;
+
+/** Legacy/enhanced model prose is ancillary. The app, not the model, quotes the recorded dialogue. */
+export function isChronicleDraftNovelStyle(title: string, body: string): boolean {
+  const bareTitle = title.replace(/^第[0-9一二三四五六七八九十百千万〇零]+章\s*[：:]?\s*/, '');
+  return !calendricalHeading.test(bareTitle) && !calendricalHeading.test(body) &&
+    !/[「」『』“”"]/u.test(body) && !/(?:曰|问道|答道|说道)[：:]/u.test(body);
+}
+
+function deterministicBody(chapter: ChronicleChapterPlan): string {
+  return projectChronicleReading({ ...chapter, body: '', source: 'utility' }).sections.map(({ title, paragraph, dialogue }) => {
+    const quoted = dialogue?.turns.map(({ speakerName, text }) => `${speakerName}：「${text}」`).join('\n') ?? '';
+    return [title, paragraph === title ? '' : paragraph, quoted].filter(Boolean).join('\n');
+  }).join('\n\n');
 }
 
 export function resolveChronicleChapter(world: WorldState, plan: ChronicleChapterPlan, prose?: { title: string; body: string }, endTick = world.tick): ChronicleChapter | null {
@@ -123,7 +175,7 @@ export function resolveChronicleChapter(world: WorldState, plan: ChronicleChapte
     ? cutText(prose.title, MAX_TITLE).replace(/^第[0-9一二三四五六七八九十百千万〇零]+章\s*[：:]?\s*/, '').slice(0, MAX_TITLE - prefix.length)
     : '';
   const body = typeof prose?.body === 'string' ? cutText(prose.body, MAX_PROSE) : '';
-  const chapter: ChronicleChapter = titleSuffix && body ? { ...current, title: prefix + titleSuffix, body: `${body}\n\n公开史料索引（以上为文学演绎）\n${current.anchors.map((anchor) =>
+  const chapter: ChronicleChapter = titleSuffix && body && isChronicleDraftNovelStyle(titleSuffix, body) ? { ...current, title: prefix + titleSuffix, body: `${body}\n\n公开史料索引（以上为文学演绎）\n${current.anchors.map((anchor) =>
       `第${anchor.tick}轮 · ${anchor.title}`).join('\n')}`, source: 'llm' } :
     { ...current, body: deterministicBody(current), source: 'utility' };
   world.chronicleArchive.chapters = [chapter, ...world.chronicleArchive.chapters];

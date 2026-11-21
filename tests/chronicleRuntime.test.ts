@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createInitialWorld } from '../src/data/initialWorld';
+import { projectChronicleReading } from '../src/engine/novelGenerator';
 import { settleChronicleOnline } from '../src/engine/chronicleRuntime';
 import { advanceWorldTick, executeGodIntervention } from '../src/engine/worldEngine';
 import type { LLMConfig, LLMDecisionPayload, WorldState } from '../src/types/world';
@@ -38,6 +39,8 @@ describe('public chronicle engine integration', () => {
     const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
       const modelRequest = JSON.parse(String(init.body));
       expect(modelRequest.messages[1].content).not.toContain('不能外送的隐私');
+      expect(modelRequest.messages[0].content).toContain('不用纪元、年表、逐轮或纪年标题');
+      expect(modelRequest.messages[0].content).toContain('对白由应用照录公开原文');
       const data = JSON.parse(modelRequest.messages[1].content) as { anchors: Array<{ id: string }> };
       return envelope({ title: '风自山门起', body: '风声掠过山门，史官循案核对这一年的所见。', anchorIds: data.anchors.map(({ id }) => id) });
     });
@@ -47,8 +50,32 @@ describe('public chronicle engine integration', () => {
     expect(book.title).toBe('第1章：风自山门起');
     expect(book.source).toBe('llm');
     expect(book.body).toContain('公开史料索引');
+    expect(projectChronicleReading(book).sections.map(({ paragraph }) => paragraph).join('')).not.toContain('史官循案');
     await settleChronicleOnline(deferred, config);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the factual offline scenes if an optional draft uses eras or adds dialogue', async () => {
+    const both = [
+      { title: '第三纪元：风起', body: '故事从山门写起。' },
+      { title: '风起山门', body: '那人忽然说道：「这是一句未曾发生的话。」' },
+    ];
+    for (const draft of both) {
+      const due = monthTwelve();
+      const deferred = advanceWorldTick(due, decisions(due), () => 0.9, 'deferred');
+      const mock = vi.fn(async (_url: string, init: RequestInit) => {
+        const payload = JSON.parse(String(init.body));
+        const facts = JSON.parse(payload.messages[1].content) as { anchors: Array<{ id: string }> };
+        return envelope({ ...draft, anchorIds: facts.anchors.map(({ id }) => id) });
+      });
+      vi.stubGlobal('fetch', mock);
+      await settleChronicleOnline(deferred, config);
+      const chapter = deferred.chronicleArchive.chapters[0];
+      expect(chapter.source).toBe('utility');
+      expect(chapter.body).not.toContain('一句未曾发生的话');
+      expect(chapter.title).not.toContain('纪元');
+      expect(mock).toHaveBeenCalledTimes(1);
+    }
   });
 
   it('falls back on malformed or reordered anchor trace', async () => {

@@ -76,7 +76,10 @@ describe('public retellings and separately appended errata in the library', () =
     expect(html()).toContain('原传本存在冲突，已另附勘误');
     expect(html()).toContain('据公开史料附录勘误 · 古卷真实勘误者 · Tick #17');
     expect(html()).toContain('核定：斗法获胜者：斗法另一当事人。对照 2 则传本。');
-    expect(html()).toContain(chapter.body);
+    // The original remains reviewable but is not the canonical-first story.
+    expect(html()).toContain('原存档稿');
+    expect(html()).not.toContain(chapter.body);
+    expect(world.chronicleArchive.chapters[0].body).toBe(chapter.body);
     expect(html()).toContain('未核实传本 · 传本甲作者');
     expect(JSON.stringify(world.chronicleArchive)).toBe(original);
   });

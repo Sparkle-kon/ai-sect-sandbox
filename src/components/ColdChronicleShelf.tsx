@@ -16,7 +16,9 @@ export function coldChroniclePage(world: WorldState, requestedPage: number) {
 
 const button = 'min-h-11 min-w-0 rounded border border-slate-700 bg-slate-950 px-2 text-xs text-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300 disabled:opacity-40';
 
-export function ColdChronicleShelf({ world, readChapter }: { world: WorldState; readChapter: (chapter: ChronicleChapter) => ReactNode }) {
+export function ColdChronicleShelf({ world, chapterTitle, readChapter }: {
+  world: WorldState; chapterTitle: (chapter: ChronicleChapter) => string; readChapter: (chapter: ChronicleChapter) => ReactNode;
+}) {
   const [cursor, setCursor] = useState(0);
   const [requested, setRequested] = useState<string>();
   const [opened, setOpened] = useState(false);
@@ -38,7 +40,7 @@ export function ColdChronicleShelf({ world, readChapter }: { world: WorldState; 
             {rows.map((chapter) => <li key={chapter.id} className="min-w-0">
               <button type="button" aria-pressed={selected?.id === chapter.id} className={`${button} w-full break-words py-1 text-left`}
                 onClick={() => setRequested((prior) => prior === chapter.id ? undefined : chapter.id)}>
-                {chapter.title}<span className="block text-[11px] text-slate-400">Tick #{chapter.startTick} 至 #{chapter.endTick}</span>
+                {chapterTitle(chapter)}
               </button>
             </li>)}
           </ol>
@@ -47,7 +49,7 @@ export function ColdChronicleShelf({ world, readChapter }: { world: WorldState; 
             <button type="button" className={button} disabled={page + 1 === pages} onClick={() => { setRequested(undefined); setCursor(page + 1); }}>下一页</button>
           </div>}
           {selected && <div className="space-y-2 border-t border-slate-800 pt-2" aria-label="所选远纪章目">
-            <h5 className="break-words text-sm font-semibold text-amber-100">{selected.title} · 归档只读</h5>
+            <h5 className="break-words text-sm font-semibold text-amber-100">{chapterTitle(selected)} · 归档只读</h5>
             {readChapter(selected)}
           </div>}
         </> : <p className="text-slate-400">当前未保留可读的远纪章目。</p>)}

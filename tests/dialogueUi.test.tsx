@@ -61,13 +61,13 @@ describe('chronicle dialogue UI', () => {
   it('leaves the canonical record visible and places ordered dialogue in accessible closed details', () => {
     const { actor, partner, combat, trade, plain } = makeWorld();
     const html = renderToStaticMarkup(<ChronicleFeed events={[plain, trade, combat]} />);
-    expect(html).toContain('共记录 3 条因果');
+    expect(html).toContain('山河见闻');
     expect(html).toContain(plain.title);
     expect(html).toContain(plain.description);
     expect(html).toContain(combat.title);
     expect(html).toContain(combat.description);
     expect(html).toContain(trade.description);
-    expect(html.match(/<details\b/g)).toHaveLength(2);
+    expect(html.match(/<details\b/g)).toHaveLength(5); // One proof per card, plus two attached transcripts.
     expect(html).not.toMatch(/<details[^>]*\bopen(?:\s|=|>)/);
     expect(html).toContain('斗法交锋 · 查看对话（2 句）');
     expect(html).toContain('交易交涉 · 查看对话（2 句）');
@@ -88,7 +88,7 @@ describe('chronicle dialogue UI', () => {
     };
     const html = renderToStaticMarkup(<ChronicleFeed events={[plain, empty]} />);
     expect(html).toContain(plain.description);
-    expect(html).not.toContain('<details');
+    expect(html.match(/<details\b/g)).toHaveLength(2); // Keep raw proof, not an empty transcript fold.
     expect(html).not.toContain('查看对话');
   });
 

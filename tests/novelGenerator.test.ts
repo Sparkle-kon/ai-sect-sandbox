@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { COLD_HISTORY_MIN_HOT_CHAPTERS, publicChronicleChapters } from '../src/engine/coldHistoryEngine';
 import { createInitialWorld } from '../src/data/initialWorld';
-import { archiveChronicleEvents, availableChronicleChapter, createChronicleArchive, resolveChronicleChapter } from '../src/engine/novelGenerator';
+import { archiveChronicleEvents, availableChronicleChapter, createChronicleArchive, projectChronicleReading, resolveChronicleChapter } from '../src/engine/novelGenerator';
+import { projectChronicleLead } from '../src/engine/chronicleLead';
 import type { WorldEvent } from '../src/types/world';
 
 function fixture() {
@@ -75,6 +76,49 @@ describe('public literary chronicle archive', () => {
     expect(chapter.body).toContain('第1轮 · 灵脉涌动');
     expect(chapter.anchors.map(({ id }) => id)).toEqual(['known', 'new']);
     expect(chapter.body.length).toBeLessThan(3000);
+  });
+
+  it('reads a proved action of the emergent lead first in the headline without losing other events or rewriting saved text', () => {
+    const { world, actor, fact } = fixture();
+    const peer = world.cultivators[1];
+    world.tick = 8;
+    const reports: WorldEvent[] = [
+      { ...fact('confirmed-peer-fate', 3, `寿元耗尽：${peer.name}坐化陨落`), category: 'death', actorIds: [peer.id],
+        description: `${peer.name}未能突破更高境界，大限将至，于洞府中安然坐化。` },
+      { ...fact('leader-progress', 4, `${actor.name}突破至元婴5层`), category: 'breakthrough',
+        description: `在【太虚剑峰】，${actor.name}突破瓶颈，修为精进至【元婴5层】！` },
+      { ...fact('leader-pavilion', 5, `${actor.name}抄经归阁`), category: 'diplomacy',
+        description: `${actor.name}将实有抄本存入本宗藏经阁。` },
+      { ...fact('leader-mercies', 6, `${actor.name}救济坊村`), category: 'diplomacy',
+        description: `${actor.name}把实有灵草交给坊村。` },
+      { ...fact('private-proof', 6, '密议不外送'), category: 'intrigue', witnessScope: 'participants' },
+    ];
+    archiveChronicleEvents(world, reports);
+    const plan = availableChronicleChapter(world, true)!;
+    const lead = projectChronicleLead(world, plan.anchors, plan.endTick);
+    expect(lead?.actorId).toBe(actor.id);
+    expect(plan.title).toBe(`第1章：${actor.name}踏上元婴5层`);
+    const actual = resolveChronicleChapter(world, plan)!;
+    expect(actual.body).toContain('瓶颈终于松开了');
+    expect(actual.body).not.toMatch(/纪元|编年|史牍记曰|密议不外送/);
+    const legacy = { ...actual, title: '第1章：第1至8轮 · 山河行纪', body: '旧有稿本原样留存。' };
+    const before = JSON.stringify(legacy);
+    const reading = projectChronicleReading(legacy, lead);
+    expect(reading.title).toBe(plan.title);
+    expect(reading.sections.map(({ eventId }) => eventId)).toEqual(reports.slice(0, -1).map(({ id }) => id));
+    expect(JSON.stringify(legacy)).toBe(before);
+    const unrelatedLead = { ...lead!, eventIds: ['missing', 'confirmed-peer-fate'] };
+    expect(projectChronicleReading(actual, unrelatedLead).title).toBe(`第1章：${peer.name}在洞府坐化`);
+  });
+
+  it('does not include a privately superseded live fact even if an older public anchor was retained', () => {
+    const { world, fact } = fixture();
+    const laterPrivate = fact('later-private', 1, '原本缓存的公开字样');
+    archiveChronicleEvents(world, [laterPrivate, fact('still-public', 1, '坊市交割已毕')]);
+    world.events = [{ ...laterPrivate, witnessScope: 'participants' }];
+    const plan = availableChronicleChapter(world, true)!;
+    expect(plan.anchors.map(({ id }) => id)).toEqual(['still-public']);
+    expect(resolveChronicleChapter(world, plan)!.body).not.toContain(laterPrivate.title);
   });
 
   it('keeps separate nonoverlapping chapters and bounds long-running collection', () => {
