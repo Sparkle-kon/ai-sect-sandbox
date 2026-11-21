@@ -1,3 +1,4 @@
+import { createCompetitionReviewState, SEASON_REVIEW_CASE_LIMIT, SEASON_REVIEW_WINDOW, seasonReviewProofId } from './seasonReviewEngine';
 import { OBSERVATORY_INBOX_LIMIT, OBSERVATORY_LEAD_TICKS, OBSERVATORY_RETENTION_TICKS, OBSERVATORY_TERMINAL_LIMIT, createFieldObservatoriesState } from './fieldObservatoryEngine';
 import { ARBITRATION_HEARING_WINDOW, ARBITRATION_JOIN_WINDOW, ARBITRATION_MAX_APPOINTMENTS_PER_SIDE, ARBITRATION_MAX_OBSERVERS, createOathArbitrationState } from './oathArbitrationEngine';
 import { createVillageCensusesState, VILLAGE_CENSUS_PERIOD_LIMIT } from './villageCensusEngine';
@@ -37,7 +38,7 @@ import { createResearchState, researchTechniqueId, RESEARCH_DEPOSIT, RESEARCH_PR
 import { CEASEFIRE_AID_DELAY, CEASEFIRE_BOND, CEASEFIRE_DURATION, CEASEFIRE_OFFER_TICKS, createCeasefireState } from './ceasefireEngine';
 import { ANNOTATION_MAX_BOOKMARKS, ANNOTATION_MAX_NOTES, ANNOTATION_MAX_NOTE_CHARS, ANNOTATION_MAX_TITLE_CHARS, createAnnotationState } from './annotationState';
 import { createEscortState, ESCORT_FEE, ESCORT_RATIONS } from './escortEngine';
-import { COMPETITION_RULES, createCompetitionState } from './competitionEngine';
+import { COMPETITION_RULES, createCompetitionState, publicCompetitionStandings } from './competitionEngine';
 import { createScriptureState } from './scriptureEngine';
 import { createRelicState } from './relicEngine';
 import { createReincarnationState, MORTAL_MATURITY_TICKS } from './reincarnationEngine';
@@ -108,7 +109,7 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY SEASON_REVIEW REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const flowGood = one('stone','jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
@@ -473,6 +474,23 @@ const shape = structure({
       lastCrossedTileIds:ids,arrivedTick:otick,usedReportIds:ids,detours:arr(2,structure({tick,reportId:id,extraSteps:count})),
       settledTick:otick,reason:otext})),
     reports:arr(SAVE_COLLECTION_LIMIT,structure({id,contractId:id,reporterId:id,observedTick:tick,hazardId:id,tileId:id,expiresTick:tick}))}),
+  competitionReviews:structure({
+    proofs:arr(SAVE_COLLECTION_LIMIT,structure({
+      id,seasonId:id,sourceId:id,tick,locationId:id,actorId:id,rule:one('public_relief','tournament_champion'),
+      settlementId:oid,stones:optional(num(SETTLEMENT_RELIEF.stones,SETTLEMENT_RELIEF.stones,true)),
+      herbs:optional(num(SETTLEMENT_RELIEF.jade_leaf,SETTLEMENT_RELIEF.jade_leaf,true)),
+      occasionId:oid,championRound:otick,competitiveWinRound:otick,opponentId:oid
+    })),
+    cases:arr(SAVE_COLLECTION_LIMIT,structure({
+      id,seasonId:id,scoreId:id,proofId:id,applicantId:id,openedTick:tick,
+      status:one('pending','confirmed','corrected','inconclusive'),closedTick:otick
+    })),
+    corrections:arr(SAVE_COLLECTION_LIMIT,structure({
+      scoreId:id,proofId:id,seasonId:id,previousActorId:id,newActorId:oid,points:count,tick,
+      reason:one('wrong_recipient','recipient_ineligible','duplicate_source')
+    })),
+    honorChanges:arr(SAVE_COLLECTION_LIMIT,structure({originalHonorId:id,seasonId:id,previousActorId:id,newActorId:oid,score:optional(wealth),tick}))
+  }),
   competitions:structure({
     optOutActorIds:ids,
     seasons:arr(8,structure({id,year:tick,openedTick:tick,closedTick:otick,status:one('open','settled')})),
@@ -568,6 +586,7 @@ function verifyWorld(value: unknown): WorldState {
       ...(!Object.hasOwn(value, 'mentorship') ? { mentorship: { offers: [], lineage: [], budgets: [] } } : {}),
       ...(!Object.hasOwn(value, 'decisionTrace') ? { decisionTrace: { records: [] } } : {}),
       ...(!Object.hasOwn(value, 'coldHistory') ? { coldHistory: createColdHistoryState() } : {}),
+      ...(!Object.hasOwn(value, 'competitionReviews') ? { competitionReviews: createCompetitionReviewState() } : {}),
       ...(!Object.hasOwn(value, 'fieldObservatories') ? { fieldObservatories: createFieldObservatoriesState() } : {}),
       ...(!Object.hasOwn(value, 'oathArbitrations') ? { oathArbitrations: createOathArbitrationState() } : {}),
       ...(!Object.hasOwn(value, 'villageCensuses') ? { villageCensuses: createVillageCensusesState() } : {}),
@@ -1793,6 +1812,87 @@ function verifyWorld(value: unknown): WorldState {
     if (!actor.has(honor.actorId) || honor.awardedTick > w.tick ||
         (season && (season.status !== 'settled' || honor.awardedTick !== season.closedTick))) fail('competitions.honors.references');
   }
+  unique(w.competitionReviews.proofs, ({ id }) => id, 'competitionReviews.proofs.id');
+  unique(w.competitionReviews.proofs, ({ seasonId, sourceId, rule }) => JSON.stringify([seasonId, sourceId, rule]), 'competitionReviews.proofs.source');
+  unique(w.competitionReviews.cases, ({ scoreId }) => scoreId, 'competitionReviews.cases.score');
+  unique(w.competitionReviews.corrections, ({ scoreId }) => scoreId, 'competitionReviews.corrections.score');
+  unique(w.competitionReviews.honorChanges, ({ seasonId }) => seasonId, 'competitionReviews.honorChanges.season');
+  const reviewProofs = new Map(w.competitionReviews.proofs.map((proof) => [proof.id, proof]));
+  const scoreById = new Map(competitionScores.map((row) => [row.id, row]));
+  const reviewCases = new Map(w.competitionReviews.cases.map((row) => [row.scoreId, row]));
+  const originalHonors = new Map(competitionHonors.map((row) => [row.id, row]));
+  const reviewCorrections = new Set(w.competitionReviews.corrections.map(({ scoreId }) => scoreId));
+  const retainedRelief = new Map(w.settlements.records.map((row) => [row.id, row]));
+  const retainedTournaments = new Map(w.occasions.map((row) => [row.id, row]));
+  const stageCounts = new Map<string, number>();
+  const pinnedWinners = new Set(w.competitionReviews.corrections.filter(({ newActorId }) => !!newActorId).map(({ proofId }) => proofId));
+  if (pinnedWinners.size !== w.competitionReviews.corrections.filter(({ newActorId }) => !!newActorId).length)
+    fail('competitionReviews.corrections.oneAward');
+  for (const proof of w.competitionReviews.proofs) {
+    const current = seasons.find(({ id }) => id === proof.seasonId);
+    if (!current || proof.tick < current.openedTick || proof.tick >= (current.closedTick ?? Infinity) || proof.tick > w.tick ||
+        !actor.has(proof.actorId) || !locations.has(proof.locationId) || proof.id !== seasonReviewProofId(proof.rule, proof.sourceId, proof.seasonId)) fail('competitionReviews.proofs.references');
+    if (proof.rule === 'public_relief') {
+      const historic = retainedRelief.get(proof.sourceId);
+      if (!proof.settlementId || proof.stones !== SETTLEMENT_RELIEF.stones || proof.herbs !== SETTLEMENT_RELIEF.jade_leaf ||
+          'occasionId' in proof || 'championRound' in proof || 'competitiveWinRound' in proof || 'opponentId' in proof ||
+          !villagers.has(proof.settlementId) ||
+          w.settlements.villages.find(({ id }) => id === proof.settlementId)?.locationId !== proof.locationId ||
+          (historic && (historic.kind !== 'relief' || historic.settlementId !== proof.settlementId ||
+            historic.stones !== proof.stones || historic.herbs !== proof.herbs || historic.actorId !== proof.actorId || historic.tick !== proof.tick)))
+        fail('competitionReviews.proofs.relief');
+    } else {
+      const actual = retainedTournaments.get(proof.occasionId);
+      if (!proof.occasionId || proof.sourceId !== `${proof.occasionId}:champion` || !proof.opponentId ||
+          !actor.has(proof.opponentId) || proof.opponentId === proof.actorId ||
+          proof.championRound < 1 || proof.competitiveWinRound < 1 || proof.competitiveWinRound > proof.championRound ||
+          'settlementId' in proof || 'stones' in proof || 'herbs' in proof ||
+          (actual && (actual.kind !== 'tournament' || actual.status !== 'completed' || actual.lastResolvedTick !== proof.tick ||
+            actual.championId !== proof.actorId || actual.locationId !== proof.locationId || actual.round !== proof.championRound ||
+            !actual.bouts.some(({ winnerId, firstId, secondId, round }) => winnerId === proof.actorId &&
+              round === proof.competitiveWinRound && [firstId, secondId].includes(proof.opponentId) &&
+              [firstId, secondId].includes(proof.actorId))))) fail('competitionReviews.proofs.tournament');
+    }
+  }
+  for (const row of w.competitionReviews.cases) {
+    const season = seasons.find(({ id }) => id === row.seasonId);
+    const score = scoreById.get(row.scoreId);
+    const proof = reviewProofs.get(row.proofId);
+    const separate = (stageCounts.get(row.seasonId) ?? 0) + 1;
+    stageCounts.set(row.seasonId, separate);
+    if (!season || season.closedTick === undefined || separate > SEASON_REVIEW_CASE_LIMIT ||
+        !score || !proof || score.seasonId !== row.seasonId || proof.seasonId !== row.seasonId ||
+        score.sourceId !== proof.sourceId || score.rule !== proof.rule || row.id !== `review-${row.scoreId}` ||
+        !competitionEntries.some((entry) => entry.seasonId === row.seasonId && entry.actorId === row.applicantId && entry.withdrawnTick === undefined) ||
+        row.openedTick < season.closedTick || row.openedTick >= season.closedTick + SEASON_REVIEW_WINDOW || row.openedTick > w.tick ||
+        (row.status === 'pending' ? row.closedTick !== undefined :
+          row.closedTick === undefined || row.closedTick < season.closedTick + SEASON_REVIEW_WINDOW || row.closedTick > w.tick) ||
+        (row.status === 'corrected') !== reviewCorrections.has(row.scoreId)) fail('competitionReviews.cases.references');
+  }
+  for (const correction of w.competitionReviews.corrections) {
+    const original = scoreById.get(correction.scoreId);
+    const proof = reviewProofs.get(correction.proofId);
+    const review = reviewCases.get(correction.scoreId);
+    if (!original || !proof || !review || review.proofId !== proof.id || review.closedTick !== correction.tick ||
+        original.actorId !== correction.previousActorId || original.seasonId !== correction.seasonId || original.points !== correction.points ||
+        (correction.reason === 'wrong_recipient' ? correction.newActorId !== proof.actorId || correction.newActorId === original.actorId ||
+          !competitionEntries.some((entry) => entry.seasonId === correction.seasonId && entry.actorId === correction.newActorId &&
+            entry.joinedTick < proof.tick && (entry.withdrawnTick === undefined || entry.withdrawnTick > proof.tick)) :
+          correction.newActorId !== undefined)) fail('competitionReviews.corrections.references');
+  }
+  for (const adjustment of w.competitionReviews.honorChanges) {
+    const original = originalHonors.get(adjustment.originalHonorId);
+    const stillKnown = seasons.some(({ id }) => id === adjustment.seasonId);
+    const expected = stillKnown ? publicCompetitionStandings(w, adjustment.seasonId).find(({ rank }) => rank === 1) : undefined;
+    if (!original || original.seasonId !== adjustment.seasonId || original.actorId !== adjustment.previousActorId ||
+        adjustment.tick < original.awardedTick + SEASON_REVIEW_WINDOW || adjustment.tick > w.tick ||
+        (adjustment.newActorId ? !actor.has(adjustment.newActorId) || adjustment.score === undefined || adjustment.score <= 0
+          : adjustment.score !== undefined) ||
+        (stillKnown && (expected?.actorId !== adjustment.newActorId || expected?.score !== adjustment.score ||
+          !w.competitionReviews.corrections.some(({ seasonId, tick }) =>
+            seasonId === adjustment.seasonId && tick === adjustment.tick)))) fail('competitionReviews.honorChanges.references');
+  }
+
   unique(w.scriptures.originals, ({ id }) => id, 'scriptures.originals.id');
   unique(w.scriptures.editions, ({ id }) => id, 'scriptures.editions.id');
   unique(w.scriptures.editions.filter(({ kind }) => kind !== 'corrected'),

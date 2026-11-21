@@ -1,3 +1,4 @@
+import { createCompetitionReviewState } from '../engine/seasonReviewEngine';
 import { createFieldObservatoriesState } from '../engine/fieldObservatoryEngine';
 import { createOathArbitrationState } from '../engine/oathArbitrationEngine';
 import { createVillageCensusesState } from '../engine/villageCensusEngine';
@@ -294,6 +295,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     villageCensuses: createVillageCensusesState(),
     oathArbitrations: createOathArbitrationState(),
     fieldObservatories: createFieldObservatoriesState(),
+    competitionReviews: createCompetitionReviewState(),
     witnesses: createWitnessState(),
     estates: createEstateState(),
     decisionTrace: createDecisionTraceState(),

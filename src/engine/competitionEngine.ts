@@ -1,3 +1,4 @@
+import { recordSeasonReliefProof, recordSeasonTournamentProof, seasonScoreCorrections } from './seasonReviewEngine';
 import type { CompetitionMove, CompetitionRule, CompetitionSeason, CompetitionState, CultivationRealm, Cultivator,
   LLMDecisionPayload, SettlementRecord, TournamentBout, WorldEvent, WorldOccasion, WorldState } from '../types/world';
 
@@ -113,6 +114,7 @@ export function recordTournamentChampion(world: WorldState, occasion: WorldOccas
   if (!world.occasions.includes(occasion) || occasion.kind !== 'tournament' || occasion.status !== 'completed' ||
       occasion.lastResolvedTick !== world.tick || !publicVenue(world, occasion.locationId) || !occasion.championId ||
       !occasion.bouts.some((bout) => bout.winnerId === occasion.championId && competitiveBout(occasion, bout))) return;
+  recordSeasonTournamentProof(world, occasion);
   awardPoints(world, occasion.championId, 'tournament_champion', `${occasion.id}:champion`, occasion.locationId);
 }
 
@@ -131,6 +133,7 @@ export function recordReliefCompetition(world: WorldState, record: SettlementRec
       !record.actorId || record.stones <= 0 || record.herbs <= 0 || record.people !== 0) return;
   const village = world.settlements.villages.find(({ id }) => id === record.settlementId);
   if (!village || !world.locations.some((site) => site.id === village.locationId && site.type === 'market')) return;
+  recordSeasonReliefProof(world, record);
   awardPoints(world, record.actorId, 'public_relief', record.id, village.locationId);
 }
 
@@ -138,13 +141,17 @@ export function publicCompetitionStandings(world: WorldState, which?: string): C
   const ref = which ?? currentSeason(world)?.id;
   if (!ref || !world.competitions.seasons.some(({ id }) => id === ref)) return [];
   const totals = new Map<string, { score: number; firstScoredTick: number }>();
+  const corrections = seasonScoreCorrections(world, ref);
   for (const row of world.competitions.scores) {
     if (row.seasonId !== ref) continue;
-    const aggregate = totals.get(row.actorId);
+    const adjusted = corrections.get(row.id);
+    if (adjusted === null) continue;
+    const actorId = adjusted ?? row.actorId;
+    const aggregate = totals.get(actorId);
     if (aggregate) {
       aggregate.score += row.points;
       aggregate.firstScoredTick = Math.min(aggregate.firstScoredTick, row.tick);
-    } else totals.set(row.actorId, { score: row.points, firstScoredTick: row.tick });
+    } else totals.set(actorId, { score: row.points, firstScoredTick: row.tick });
   }
   const classified = world.competitions.entries.filter(({ seasonId }) => seasonId === ref).map((entry): CompetitionStanding => {
     if (entry.withdrawnTick !== undefined) return { actorId: entry.actorId, disposition: 'withdrawn', score: 0 };

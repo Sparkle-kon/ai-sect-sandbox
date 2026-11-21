@@ -1,10 +1,16 @@
 import { useState } from 'react';
 import { availableCompetitionActions, competitionActorOptedOut, COMPETITION_RULES, publicCompetitionStandings } from '../engine/competitionEngine';
+import { effectiveCompetitionHonors, visibleSeasonHonorChanges, visibleSeasonReviews } from '../engine/seasonReviewEngine';
 import type { Cultivator, WorldState } from '../types/world';
 
 const PAGE_SIZE = 8;
 const nav = 'min-h-11 rounded border border-slate-700 bg-slate-950 px-2 text-xs text-slate-200 disabled:opacity-40';
 type Standing = ReturnType<typeof publicCompetitionStandings>[number];
+type Review = ReturnType<typeof visibleSeasonReviews>[number];
+const REVIEW_STATUS: Record<Review['status'], string> = { pending: '等待复核', confirmed: '核验维持', corrected: '已更正', inconclusive: '证据不一致，未更改' };
+const CORRECTION_REASON: Record<NonNullable<Review['correction']>['reason'], string> = {
+  wrong_recipient: '原计分归属有误', recipient_ineligible: '实绩修士不具备该笔计分资格', duplicate_source: '同一公开实绩已计分',
+};
 
 function RankRows({ rows, awarded, names }: { rows: Standing[]; awarded: boolean; names: Map<string, string> }) {
   const [page, setPage] = useState(0);
@@ -46,7 +52,12 @@ export function RankSeasonPanel({ world, cultivator }: { world: WorldState; cult
   const declared = new Map(seasons.filter(({ status, closedTick }) => status === 'settled' && closedTick !== undefined && closedTick <= world.tick)
     .map((season) => [season.id, season]));
   const knownSeasons = new Set((standings?.seasons ?? []).map(({ id }) => id));
+  const seasonYears = new Map(seasons.map(({ id, year }) => [id, year]));
   const oldest = seasons.at(-1)?.openedTick ?? 0;
+  const effective = new Map(effectiveCompetitionHonors(world).map((honor) => [honor.id, honor]));
+  const changes = new Map(visibleSeasonHonorChanges(world).map((change) => [change.originalHonorId, change]));
+  const reviews = visibleSeasonReviews(world, viewer).filter(({ closedTick }) => closedTick === undefined || closedTick <= world.tick);
+  const currentCorrections = Boolean(publicSeason && reviews.some((review) => review.seasonId === publicSeason.id && review.status === 'corrected'));
   const honors = (standings?.honors ?? []).filter(({ seasonId, awardedTick }) => awardedTick <= world.tick &&
     (declared.has(seasonId) || !knownSeasons.has(seasonId) && awardedTick < oldest))
     .sort((a, b) => b.awardedTick - a.awardedTick || a.id.localeCompare(b.id));
@@ -65,18 +76,27 @@ export function RankSeasonPanel({ world, cultivator }: { world: WorldState; cult
         <h5 className="text-xs font-semibold text-sky-100">{open ? '进行中 · 临时排名' : latestFinal ? '最近结算 · 正式排名' : '赛季排名'}</h5>
         {publicSeason ? <>
           <p className="text-xs text-slate-400">仙历 {publicSeason.year} 年 · 开榜 Tick #{publicSeason.openedTick}
-            {open ? ' · 结算前不代表已获荣誉。' : ` · 结算 Tick #${publicSeason.closedTick}`}</p>
+            {open ? ' · 结算前不代表已获荣誉。' : ` · 结算 Tick #${publicSeason.closedTick}`}
+            {currentCorrections && ' · 榜上分数包含已生效的更正，原始记录留档。'}</p>
           <RankRows key={publicSeason.id} rows={rows} awarded={!open} names={names} />
         </> : <p className="text-xs text-slate-400">尚未有可查看的赛季。</p>}
       </div>
       <details className="rounded border border-slate-800 bg-slate-950/50 px-2.5">
         <summary className="min-h-11 cursor-pointer py-2.5 text-xs font-semibold text-sky-100">已授予荣誉 · {honors.length} 项</summary>
         {!honors.length ? <p className="pb-2 text-xs text-slate-400">尚无已结算并授予的荣誉。</p> : <ul className="max-h-56 space-y-1.5 overflow-y-auto pb-2">
-          {honors.map((award) => <li key={award.id} className="break-words rounded bg-slate-900 p-2 text-xs">
-            <p>{award.title} · {names.get(award.actorId) ?? '修士未详'} · 第 {award.place} 名</p>
-            <p className="text-slate-400">{declared.has(award.seasonId) ? `仙历 ${declared.get(award.seasonId)!.year} 年` : '已归档赛季'} · 结算 {award.score} 分 · 实授 Tick #{award.awardedTick}</p>
-          </li>)}
+          {honors.map((award) => {
+            const updated = changes.get(award.id);
+            const current = effective.get(award.id);
+            return <li key={award.id} className="space-y-0.5 break-words rounded bg-slate-900 p-2 text-xs">
+              <p>{updated ? '原授留档：' : ''}{award.title} · {names.get(award.actorId) ?? '修士未详'} · 第 {award.place} 名</p>
+              <p className="text-slate-400">{declared.has(award.seasonId) ? `仙历 ${declared.get(award.seasonId)!.year} 年` : '已归档赛季'} · 结算 {award.score} 分 · 实授 Tick #{award.awardedTick}</p>
+              {updated && (current || !updated.newActorId) && <p className="text-sky-200">更正生效 Tick #{updated.tick} · {current
+                ? `当前有效得主：${names.get(current.actorId) ?? '修士未详'}（${current.score} 分）`
+                : '原荣誉已撤销，无有效得主'}。</p>}
+            </li>;
+          })}
         </ul>}
+        {reviews.length > 0 && <SeasonReviewList reviews={reviews} names={names} seasonYears={seasonYears} />}
       </details>
       <details className="rounded border border-slate-800 bg-slate-950/50 px-2.5">
         <summary className="min-h-11 cursor-pointer py-2.5 text-xs font-semibold text-sky-100">公开计分规则</summary>
@@ -87,4 +107,21 @@ export function RankSeasonPanel({ world, cultivator }: { world: WorldState; cult
       </details>
     </section>
   );
+}
+
+function SeasonReviewList({ reviews, names, seasonYears }: { reviews: Review[]; names: Map<string, string>; seasonYears: Map<string, number> }) {
+  return <details className="mb-2 rounded border border-slate-800 px-2">
+    <summary className="min-h-11 cursor-pointer break-words py-2 text-xs font-semibold text-sky-100">赛季荣誉复核与更正</summary>
+    <p className="pb-1 text-xs text-slate-400">仅显示具有公开实绩凭证的复核。提请不变更分数；正式更正另行留档，不覆盖原授奖。</p>
+    <ol aria-label="当前有权查看的复核记录" className="max-h-48 space-y-1.5 overflow-y-auto pb-2">
+      {reviews.map((review) => <li key={review.id} className="break-words rounded bg-slate-900 p-2 text-xs">
+        <p className="font-semibold">{COMPETITION_RULES[review.rule].label} · {REVIEW_STATUS[review.status]}</p>
+        <p className="text-slate-400">{seasonYears.has(review.seasonId) ? `仙历 ${seasonYears.get(review.seasonId)} 年` : '已归档赛季'} · 提请 Tick #{review.openedTick}{review.closedTick !== undefined && ` · 核毕 Tick #${review.closedTick}`}</p>
+        {review.correction && <p>{CORRECTION_REASON[review.correction.reason]} · 涉及 {review.correction.points} 分
+          {review.correction.previousActorId && ` · 原记 ${names.get(review.correction.previousActorId) ?? '修士未详'}`}
+          {review.correction.newActorId && ` · 核正归属 ${names.get(review.correction.newActorId) ?? '修士未详'}`}
+        </p>}
+      </li>)}
+    </ol>
+  </details>;
 }

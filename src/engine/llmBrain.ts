@@ -1,3 +1,4 @@
+import { availableSeasonReviewActions, SEASON_REVIEW_WINDOW } from './seasonReviewEngine';
 import { availableObservatoryActions } from './fieldObservatoryEngine';
 import { availableOathArbitrationActions } from './oathArbitrationEngine';
 import { availableVillageCensusActions } from './villageCensusEngine';
@@ -149,6 +150,12 @@ export function computeHeuristicDecision(
       (cultivator.personality === '刚正' || cultivator.personality === '逍遥')) {
     const work = availableTerrainRecoveryActions(cultivator, world)[0];
     if (work) return { ...work, chosenAction: 'TERRAIN_RECOVERY', innerMonologue: '只修脚下已退灾的实地，付出实物，不抹去永久伤痕。' };
+  }
+  if (cultivator.personality === '刚正' && world.competitionReviews.proofs.length &&
+      world.competitions.seasons.some(({ closedTick }) => closedTick !== undefined && world.tick >= closedTick &&
+        world.tick < closedTick + SEASON_REVIEW_WINDOW)) {
+    const review = availableSeasonReviewActions(cultivator, world)[0];
+    if (review) return { ...review, chosenAction: 'SEASON_REVIEW', innerMonologue: '只请复核有确凿来源的公开计分凭证，封存原账。' };
   }
   const mayFundWeather = world.tick >= 29 && (world.tick + cultivator.id.charCodeAt(cultivator.id.length - 1)) % 19 === 4 &&
     (cultivator.personality === '刚正' || cultivator.personality === '逍遥');
@@ -755,6 +762,7 @@ export async function queryCultivatorLLMDecision(
   const estateOptions = availableEstateActions(cultivator, world);
   const doctrineOptions = availableDoctrineActions(cultivator, world);
   const relocationOptions = availableRelocationActions(cultivator, world);
+  const honorReviewOptions = availableSeasonReviewActions(cultivator, world);
   const observatoryOptions = availableObservatoryActions(cultivator, world, requestTick);
   const censusOptions = availableVillageCensusActions(cultivator, world);
   const roadOptions = availableRoadActions(cultivator, world);
@@ -807,6 +815,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 天机悬赏榜：${JSON.stringify(world.bounties.filter((item) => item.status === 'open').map(({id,targetCultivatorId,reward,reason}) => ({id,targetCultivatorId,reward,reason})))}；可接的追缉：${JSON.stringify(availableBountyHunts(cultivator, world))}
 - 天下公示的大会与秘境：${JSON.stringify(world.occasions.filter((item) => item.status === 'registration' || item.status === 'running').map(({id,title,kind,locationId,status,registrationClosesTick}) => ({id,title,kind,locationId,status,registrationClosesTick})))}；可报名项目：${JSON.stringify(availableOccasionJoins(cultivator, world))}
 - 本宗邦交：${JSON.stringify(world.diplomacy.filter((relation) => relation.sectAId === cultivator.sectId || relation.sectBId === cultivator.sectId))}；公示的外事权限：${JSON.stringify(availableDiplomacyActions(cultivator, world))}
+- 赛季复核只选真实可核验收据；提交不会改写原榜：${JSON.stringify(honorReviewOptions)}
 - 临时观象只复制实际地点的 fund、到期 measure 或带原日期 relay；只能记录实测，不能填写强度：${JSON.stringify(observatoryOptions)}
 - 坊籍核点必须本人在场，只可复制已列村落：${JSON.stringify(censusOptions)}
 - 驿路选项要求实地维修和真实资源；巡礼只有实际列出的付费路才可选，普通路线不另收路费：${JSON.stringify(roadOptions)}
@@ -973,6 +982,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'ROAD',
             'VILLAGE_CENSUS',
             'FIELD_OBSERVATORY',
+            'SEASON_REVIEW',
           ];
           const chosenAction = parsed?.chosenAction;
           if (!chosenAction || !validActions.includes(chosenAction)) return undefined;
@@ -1141,6 +1151,10 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             item.targetWitnessClaimId === parsed.targetWitnessClaimId && item.targetCultivatorId === parsed.targetCultivatorId);
           if (isWitness && !legalWitness) return undefined;
 
+          const legalSeasonReview = chosenAction === 'SEASON_REVIEW' ?
+            honorReviewOptions.find((item) => item.targetScoreId === parsed.targetScoreId) : undefined;
+          if (chosenAction === 'SEASON_REVIEW' && (!legalSeasonReview || parsed.targetLocationId !== undefined ||
+              parsed.targetCultivatorId !== undefined || parsed.targetSectId !== undefined)) return undefined;
           const legalObservatory = chosenAction === 'FIELD_OBSERVATORY' ? observatoryOptions.find((item) =>
             item.observatoryMove === parsed.observatoryMove && item.targetLocationId === parsed.targetLocationId &&
             item.targetObservatoryTick === parsed.targetObservatoryTick && item.targetCultivatorId === parsed.targetCultivatorId) : undefined;
@@ -1330,6 +1344,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             marketLimitPrice: legalMarket && legalMarket.action !== 'CANCEL_MARKET_ORDER' ? legalMarket.marketLimitPrice : undefined,
             targetMarketOrderId: legalMarket && legalMarket.action === 'CANCEL_MARKET_ORDER' ? legalMarket.targetMarketOrderId : undefined,
             targetOathId: legalArbitration?.targetOathId ?? (legalOath ? legalOath.targetOathId : undefined),
+            targetScoreId: legalSeasonReview?.targetScoreId,
             observatoryMove: legalObservatory?.observatoryMove,
             targetObservatoryTick: legalObservatory?.targetObservatoryTick,
             arbitrationMove: legalArbitration?.arbitrationMove,

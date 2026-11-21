@@ -1,3 +1,4 @@
+import { advanceSeasonReviews, resolveSeasonReviewAction } from './seasonReviewEngine';
 import { advanceFieldObservatories, resolveObservatoryAction } from './fieldObservatoryEngine';
 import { resolveOathArbitrationAction } from './oathArbitrationEngine';
 import { closeVillageCensusPeriod, resolveVillageCensusAction } from './villageCensusEngine';
@@ -25,7 +26,7 @@ import { advanceSanctuaries, interceptSanctuaryDuel, resolveSanctuaryAction } fr
 import { advanceResearch, resolveResearchAction } from './researchEngine';
 import { advanceCeasefires, availableCeasefireActions, recordCeasefireHostility, resolveCeasefireAction } from './ceasefireEngine';
 import { activeEscortForActor, resolveEscortAction } from './escortEngine';
-import { advanceCompetitionSeasons, recordBreakthroughCompetition, recordReliefCompetition, resolveCompetitionAction } from './competitionEngine';
+import { advanceCompetitionSeasons, publicCompetitionStandings, recordBreakthroughCompetition, recordReliefCompetition, resolveCompetitionAction } from './competitionEngine';
 import { resolveScriptureAction } from './scriptureEngine';
 import { reconcileRelicCustody, resolveRelicAction, transferLootedRelics } from './relicEngine';
 import { advanceReincarnation, resolveRecollectionAction } from './reincarnationEngine';
@@ -263,6 +264,8 @@ export function applyCultivatorBrainDecision(
       return resolveHabitatAction(world, cultivator, decision);
     case 'CHRONICLE_ERRATA':
       return resolveChronicleErrataAction(world, cultivator, decision);
+    case 'SEASON_REVIEW':
+      return resolveSeasonReviewAction(world, cultivator, decision);
     case 'FIELD_OBSERVATORY':
       return resolveObservatoryAction(world, cultivator, decision);
     case 'OATH_ARBITRATION':
@@ -846,7 +849,8 @@ export function advanceWorldTick(
     if (yearly) cultivator.reflections = synthesizeReflections(cultivator, nextState.tick);
   }
 
-  for (const event of [...advanceDiplomacy(nextState, rng), ...advanceOccasions(nextState, rng), ...advanceOaths(nextState), ...advanceMarkets(nextState), ...advanceWitnesses(nextState), ...maintainSectPolitics(nextState), ...advanceBounties(nextState), ...advanceResearch(nextState), ...advanceWorkshops(nextState), ...advanceRelicExhibits(nextState), ...advanceProbation(nextState), ...advanceEstates(nextState), ...advanceDoctrines(nextState), ...advanceSectCredit(nextState), ...advanceSanctuaries(nextState), ...advancePilgrimages(nextState), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...reconcileCourierDeaths(nextState), ...advanceHouseholds(nextState)]) {
+  for (const event of [...advanceDiplomacy(nextState, rng), ...advanceOccasions(nextState, rng), ...advanceOaths(nextState), ...advanceMarkets(nextState), ...advanceWitnesses(nextState), ...advanceSeasonReviews(nextState, (state, seasonId) =>
+    publicCompetitionStandings(state, seasonId).find(({ rank }) => rank === 1)), ...maintainSectPolitics(nextState), ...advanceBounties(nextState), ...advanceResearch(nextState), ...advanceWorkshops(nextState), ...advanceRelicExhibits(nextState), ...advanceProbation(nextState), ...advanceEstates(nextState), ...advanceDoctrines(nextState), ...advanceSectCredit(nextState), ...advanceSanctuaries(nextState), ...advancePilgrimages(nextState), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...reconcileCourierDeaths(nextState), ...advanceHouseholds(nextState)]) {
     newEvents.push(event);
     witnessEvent(nextState, event);
   }

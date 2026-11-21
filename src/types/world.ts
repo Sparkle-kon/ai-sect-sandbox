@@ -108,6 +108,7 @@ export type ActionType =
   | 'VILLAGE_CENSUS'
   | 'FIELD_OBSERVATORY'
   | 'OATH_ARBITRATION'
+  | 'SEASON_REVIEW'
   | 'PROBATION'
   | 'WORKSHOP'
   | 'FORGE_ARTIFACT'
@@ -378,6 +379,7 @@ export interface LLMDecisionPayload {
   targetOathId?: string;
   arbitrationMove?: OathArbitrationMove;
   targetTenderTick?: number;
+  targetScoreId?: string;
   oathTerm?: OathTerm;
   marketGood?: MarketGood;
   marketQuantity?: number;
@@ -1303,6 +1305,52 @@ export interface CompetitionState {
   optOutActorIds: string[];
 }
 
+export type CompetitionReviewProof = {
+  id: string;
+  seasonId: string;
+  sourceId: string;
+  tick: number;
+  locationId: string;
+  actorId: string;
+} & (
+  | { rule: 'public_relief'; settlementId: string; stones: number; herbs: number }
+  | { rule: 'tournament_champion'; occasionId: string; championRound: number; competitiveWinRound: number; opponentId: string }
+);
+export interface CompetitionReviewCase {
+  id: string;
+  seasonId: string;
+  scoreId: string;
+  proofId: string;
+  applicantId: string;
+  openedTick: number;
+  status: 'pending' | 'confirmed' | 'corrected' | 'inconclusive';
+  closedTick?: number;
+}
+export interface CompetitionScoreCorrection {
+  scoreId: string;
+  proofId: string;
+  seasonId: string;
+  previousActorId: string;
+  newActorId?: string;
+  points: number;
+  tick: number;
+  reason: 'wrong_recipient' | 'recipient_ineligible' | 'duplicate_source';
+}
+export interface CompetitionHonorChange {
+  originalHonorId: string;
+  seasonId: string;
+  previousActorId: string;
+  newActorId?: string;
+  score?: number;
+  tick: number;
+}
+export interface CompetitionReviewState {
+  proofs: CompetitionReviewProof[];
+  cases: CompetitionReviewCase[];
+  corrections: CompetitionScoreCorrection[];
+  honorChanges: CompetitionHonorChange[];
+}
+
 export type EscortMove = 'offer' | 'accept' | 'decline' | 'report';
 export interface EscortContract {
   id: string;
@@ -2176,6 +2224,7 @@ export interface WorldState {
   scenarioAudit?: ScenarioAudit;
   escorts: EscortState;
   competitions: CompetitionState;
+  competitionReviews: CompetitionReviewState;
   scriptures: ScriptureState;
   relics: RelicState;
   relicExhibits: RelicExhibitState;
