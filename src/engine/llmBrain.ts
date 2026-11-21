@@ -1,3 +1,4 @@
+import { activeCeasefireBetween, availableCeasefireActions } from './ceasefireEngine';
 import { activeEscortForActor, availableEscortActions } from './escortEngine';
 import { availableCompetitionActions, competitionActorOptedOut } from './competitionEngine';
 import { availableScriptureActions, scriptureEditionModifiers } from './scriptureEngine';
@@ -37,6 +38,17 @@ import {
   LLMDecisionPayload,
   WorldState,
 } from '../types/world';
+
+/** Treaty decisions share exactly the written choices, including when the leader is deployed. */
+export function utilityCeasefireDecision(actor: Cultivator, world: WorldState): LLMDecisionPayload | undefined {
+  const sect = world.sects.find(({ id, leaderId }) => id === actor.sectId && leaderId === actor.id);
+  if (!sect) return undefined;
+  const choices = availableCeasefireActions(actor, world);
+  const shouldDecline = actor.personality === '狂傲' && actor.hp > actor.maxHp * .85 && sect.arrayHp > sect.arrayMaxHp * .65;
+  const move = choices.find(({ ceasefireMove }) => ceasefireMove === (shouldDecline ? 'decline' : 'accept')) ??
+    choices.find(({ ceasefireMove }) => ceasefireMove === 'offer');
+  return move ? { ...move, chosenAction: 'CEASEFIRE', innerMonologue: '兵疲须议，若立停战，须见真实撤军与库银担保。' } : undefined;
+}
 
 /**
  * Deterministic / Utility AI heuristic decision engine.
@@ -104,6 +116,9 @@ export function computeHeuristicDecision(
       spokenLine: '天地灵气，入我丹田，破！',
     };
   }
+
+  const negotiation = utilityCeasefireDecision(cultivator, world);
+  if (negotiation) return negotiation;
 
   const mayNameHeir = world.tick % 12 === 7 && !cultivator.namedHeirId && cultivator.age >= cultivator.lifespan * .62;
   const estateOptions = availableEstateActions(cultivator, world, mayNameHeir);
@@ -313,6 +328,7 @@ export function computeHeuristicDecision(
 
   // 3. Check if an enemy is at the same location
   const enemy = coLocatedOthers.find((other) => {
+    if (activeCeasefireBetween(world, cultivator.sectId, other.sectId)) return false;
     const edge = world.relationships.find(
       (r) =>
         (r.fromId === cultivator.id && r.toId === other.id) ||
@@ -472,6 +488,7 @@ export async function queryCultivatorLLMDecision(
   const estateOptions = availableEstateActions(cultivator, world);
   const doctrineOptions = availableDoctrineActions(cultivator, world);
   const relocationOptions = availableRelocationActions(cultivator, world);
+  const ceasefireOptions = availableCeasefireActions(cultivator, world);
   const escortOptions = availableEscortActions(cultivator, world);
   const competitionOptions = availableCompetitionActions(cultivator, world);
   const scriptureOptions = availableScriptureActions(cultivator, world);
@@ -498,6 +515,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 天机悬赏榜：${JSON.stringify(world.bounties.filter((item) => item.status === 'open').map(({id,targetCultivatorId,reward,reason}) => ({id,targetCultivatorId,reward,reason})))}；可接的追缉：${JSON.stringify(availableBountyHunts(cultivator, world))}
 - 天下公示的大会与秘境：${JSON.stringify(world.occasions.filter((item) => item.status === 'registration' || item.status === 'running').map(({id,title,kind,locationId,status,registrationClosesTick}) => ({id,title,kind,locationId,status,registrationClosesTick})))}；可报名项目：${JSON.stringify(availableOccasionJoins(cultivator, world))}
 - 本宗邦交：${JSON.stringify(world.diplomacy.filter((relation) => relation.sectAId === cultivator.sectId || relation.sectBId === cultivator.sectId))}；公示的外事权限：${JSON.stringify(availableDiplomacyActions(cultivator, world))}
+- 停战议约只可使用双方现行授权和账款所列选项：${JSON.stringify(ceasefireOptions)}
 - 商队护送只能选择已列的合法委托、接镖或可复核报险，货款不当作镖资：${JSON.stringify(escortOptions)}
 - 公开赛季只计列出的结果，不许以私下谋划计分。已保存的退出偏好：${competitionActorOptedOut(world, cultivator.id) ? '继续保留，只有自己明确改变心意才在未来赛季重报' : '无'}；本回合可选：${JSON.stringify(competitionOptions)}
 - 功法版本对当前行气和实战的独立倍率（1 为无额外效果）：${JSON.stringify(currentEdition)}；当地可行的校勘与版本选项：${JSON.stringify(scriptureOptions)}
@@ -525,7 +543,7 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
 请以第一人称进行内心独白思考，并决定本回合行动。只输出合法的 JSON 对象（不要 Markdown 代码块），字段如下：
 {
   "innerMonologue": "你的第一人称内心独白（40字以内，体现你的性格与秘密目标）",
-  "chosenAction": "CULTIVATE | BREAKTHROUGH | EXPLORE | SOCIALIZE | DUEL | SCHEMING | PURSUE_SCHEME | AUTHOR_TECHNIQUE | STUDY_TECHNIQUE | GATHER_HERBS | BREW_PILL | USE_PILL | FORGE_ARTIFACT | BIND_ARTIFACT | REPAIR_ARTIFACT | AWAKEN_ARTIFACT | FACE_TRIBULATION | AMBUSH_TRIBULATION | CHALLENGE_LEADERSHIP | PLOT_COUP | BUILD_FACILITY | DISPATCH_GUARD | GUARD_DUTY | OFFER_ALLIANCE | DECLARE_WAR | DEMAND_TRIBUTE | LAUNCH_SIEGE | JOIN_OCCASION | PURSUE_BOUNTY | TAME_BEAST | TRADE | DUAL_CULTIVATE | SECT_DIPLOMACY | TEACH | ACCEPT_TUITION | DECLINE_TUITION | OFFER_OATH | ACCEPT_OATH | DECLINE_OATH | FULFILL_OATH | APPEAL_OATH | PLACE_MARKET_BUY | PLACE_MARKET_SELL | CANCEL_MARKET_ORDER | RECRUIT_SETTLER | DELIVER_RELIEF | FILE_WITNESS_CLAIM | ATTEST_WITNESS | CHALLENGE_WITNESS | NAME_HEIR | CLAIM_ESTATE | HOLD_MEMORIAL | DOCTRINE | RELOCATE | RECOLLECT | RELIC | SCRIPTURE | RANK_SEASON | ESCORT | REST 之一",
+  "chosenAction": "CULTIVATE | BREAKTHROUGH | EXPLORE | SOCIALIZE | DUEL | SCHEMING | PURSUE_SCHEME | AUTHOR_TECHNIQUE | STUDY_TECHNIQUE | GATHER_HERBS | BREW_PILL | USE_PILL | FORGE_ARTIFACT | BIND_ARTIFACT | REPAIR_ARTIFACT | AWAKEN_ARTIFACT | FACE_TRIBULATION | AMBUSH_TRIBULATION | CHALLENGE_LEADERSHIP | PLOT_COUP | BUILD_FACILITY | DISPATCH_GUARD | GUARD_DUTY | OFFER_ALLIANCE | DECLARE_WAR | DEMAND_TRIBUTE | LAUNCH_SIEGE | JOIN_OCCASION | PURSUE_BOUNTY | TAME_BEAST | TRADE | DUAL_CULTIVATE | SECT_DIPLOMACY | TEACH | ACCEPT_TUITION | DECLINE_TUITION | OFFER_OATH | ACCEPT_OATH | DECLINE_OATH | FULFILL_OATH | APPEAL_OATH | PLACE_MARKET_BUY | PLACE_MARKET_SELL | CANCEL_MARKET_ORDER | RECRUIT_SETTLER | DELIVER_RELIEF | FILE_WITNESS_CLAIM | ATTEST_WITNESS | CHALLENGE_WITNESS | NAME_HEIR | CLAIM_ESTATE | HOLD_MEMORIAL | DOCTRINE | RELOCATE | RECOLLECT | RELIC | SCRIPTURE | RANK_SEASON | ESCORT | CEASEFIRE | REST 之一",
   "targetLocationId": "EXPLORE 可填已知地点 id（探索未知时省略）；宗门经营或迁宗提议只能填所列地点 id",
   "targetCultivatorId": "如果 chosenAction 为 SOCIALIZE / DUEL / SCHEMING / AMBUSH_TRIBULATION / CHALLENGE_LEADERSHIP / PLOT_COUP / DISPATCH_GUARD / TRADE / DUAL_CULTIVATE / SECT_DIPLOMACY / TEACH / OFFER_OATH / FILE_WITNESS_CLAIM / NAME_HEIR 则填目标修士 id；DOCTRINE 仅在所选事务列出该字段时填写；其余省略",
   "spokenLine": "简短台词（可选）",
@@ -542,6 +560,8 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
   "targetMarketOrderId": "撤单时选择自己仍可撤的挂单 id",
   "targetOathId": "回应、履行或申诉契书时，指定可用契书 id",
   "oathTerm": "提出契书时选择给定条款 foundation_pill 或 jade_herb",
+  "ceasefireMove": "CEASEFIRE 仅复制列出的 offer、accept、decline、break",
+  "targetCeasefireId": "仅复制有权回应或退出的停战议约 id",
   "escortMove": "ESCORT 只能复制所列 offer、accept、decline 或 report",
   "targetShipmentId": "仅复制所选委托中的实际商队 id",
   "targetEscortId": "仅复制选项中的护送合同 id",
@@ -568,7 +588,7 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
   "forgeTier": "炼器时选择准许的品阶",
   "tribulationStance": "FACE_TRIBULATION 时填写 guard（护体）、focus（守心）或 defy（冒险硬抗）",
   "facilityKind": "BUILD_FACILITY 时使用宗门经营许可中给定的 facilityKind",
-  "targetSectId": "OFFER_ALLIANCE / DECLARE_WAR / DEMAND_TRIBUTE / LAUNCH_SIEGE 时从公示的外事权限中选目标",
+  "targetSectId": "外交行动从公示权限选目标；CEASEFIRE 发起时只复制停战选项列出的宗门 id",
   "targetOccasionId": "JOIN_OCCASION 时从可报名项目选择 id",
   "targetBountyId": "PURSUE_BOUNTY 时从可接的追缉中选择 id",
   "targetBeastId": "TAME_BEAST 时从可尝试驯服的列表选择 id"
@@ -667,9 +687,16 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
             'SCRIPTURE',
             'RANK_SEASON',
             'ESCORT',
+            'CEASEFIRE',
           ];
           const chosenAction = parsed?.chosenAction;
           if (!chosenAction || !validActions.includes(chosenAction)) return undefined;
+
+          const legalCeasefire = chosenAction === 'CEASEFIRE' ? ceasefireOptions.find((item) =>
+            item.ceasefireMove === parsed.ceasefireMove && item.targetSectId === parsed.targetSectId &&
+            item.targetCeasefireId === parsed.targetCeasefireId) : undefined;
+          if (chosenAction === 'CEASEFIRE' && (!legalCeasefire ||
+              parsed.targetCultivatorId !== undefined || parsed.targetLocationId !== undefined)) return undefined;
 
           const legalEscort = chosenAction === 'ESCORT' ? escortOptions.find((item) =>
             item.escortMove === parsed.escortMove && item.targetShipmentId === parsed.targetShipmentId &&
@@ -808,7 +835,7 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
               : typeof parsed.targetCultivatorId === 'string' ? parsed.targetCultivatorId : undefined,
             spokenLine: typeof parsed.spokenLine === 'string' ? parsed.spokenLine.trim().slice(0, 90) : undefined,
             facilityKind: legalInfrastructure?.facilityKind,
-            targetSectId: legalForeign?.targetSectId,
+            targetSectId: legalCeasefire?.targetSectId ?? legalForeign?.targetSectId,
             targetOccasionId: legalOccasion?.targetOccasionId,
             targetBountyId: legalHunt?.targetBountyId,
             targetBeastId: legalBeast?.targetBeastId,
@@ -817,6 +844,8 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
             forgeTier: legalArtifact?.forgeTier,
             targetHerbId: legalAlchemy?.targetHerbId,
             targetPillId: legalAlchemy?.targetPillId,
+            ceasefireMove: legalCeasefire?.ceasefireMove,
+            targetCeasefireId: legalCeasefire?.targetCeasefireId,
             escortMove: legalEscort?.escortMove,
             targetShipmentId: legalEscort?.targetShipmentId,
             targetEscortId: legalEscort?.targetEscortId,

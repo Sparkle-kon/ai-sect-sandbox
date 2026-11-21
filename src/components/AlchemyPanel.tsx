@@ -1,13 +1,10 @@
 import type { Cultivator, HerbId, LocationNode, PillId } from '../types/world';
+export { countHerbs } from './mapStatusLabels';
 
 import { ALCHEMY_RECIPES, HERB_LABELS, alchemyCost, alchemySuccess } from '../engine/alchemyEngine';
 
 const HERBS = (Object.keys(HERB_LABELS) as HerbId[]).map((id) => [id, HERB_LABELS[id]] as const);
 const PILLS = (Object.keys(ALCHEMY_RECIPES) as PillId[]).map((id) => [id, ALCHEMY_RECIPES[id].name] as const);
-
-export function countHerbs(inventory: Record<HerbId, number>): number {
-  return HERBS.reduce((total, [id]) => total + inventory[id], 0);
-}
 
 function Inventory<Id extends string>({
   heading, counts, labels, unit, empty,

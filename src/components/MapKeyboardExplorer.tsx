@@ -1,8 +1,8 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { Cultivator, LocationNode, WorldState } from '../types/world';
 import { isOpenOccasion, OCCASION_KIND } from './occasionLabels';
-import { isActiveCampaign } from './SectDiplomacyPanel';
-import { isActiveTrial } from './TribulationPanel';
+import { isActiveCampaign } from './siegeLabels';
+import { isActiveTrial } from './mapStatusLabels';
 import { MAP_EFFECT_LABELS } from './mapPresentationView';
 import type { buildMapPresentation } from './mapPresentationView';
 import type { createTerrainMapView, mapActorPositions } from './terrainMapView';

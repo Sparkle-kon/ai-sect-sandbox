@@ -1,3 +1,4 @@
+import { createCeasefireState } from '../engine/ceasefireEngine';
 import { createAnnotationState } from '../engine/annotationState';
 import { createEscortState } from '../engine/escortEngine';
 import { createCompetitionState } from '../engine/competitionEngine';
@@ -242,6 +243,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     competitions: createCompetitionState(),
     escorts: createEscortState(),
     annotations: createAnnotationState(),
+    ceasefires: createCeasefireState(),
     witnesses: createWitnessState(),
     estates: createEstateState(),
     decisionTrace: createDecisionTraceState(),

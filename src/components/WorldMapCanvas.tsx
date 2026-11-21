@@ -1,14 +1,11 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { GodBrushKind, LocationNode, MapPoint, WorldEvent, WorldState } from '../types/world';
 import { memoryStrength } from '../engine/memoryEngine';
-import { countCompletedSchemeSteps, SCHEME_STATUS } from './SchemePanel';
+import { countCompletedSchemeSteps, countHerbs, isActiveTrial, isGuardOnDuty, SCHEME_STATUS, TRIAL_STAGE } from './mapStatusLabels';
 import { DIALOGUE_KIND_LABELS } from './DialogueTranscript';
 import { SPIRIT_ROOT_COLORS, SpiritRootBadge } from './SpiritRootBadge';
-import { countHerbs } from './AlchemyPanel';
 import { durabilityOf, equippedArtifact, maxDurabilityOf } from '../engine/artifactEngine';
-import { isActiveTrial, TRIAL_STAGE } from './TribulationPanel';
-import { isGuardOnDuty } from './SectEconomyPanel';
-import { isActiveCampaign, SIEGE_LABELS } from './SectDiplomacyPanel';
+import { isActiveCampaign, SIEGE_LABELS } from './siegeLabels';
 import { isOpenOccasion, OCCASION_KIND, OCCASION_STATUS } from './occasionLabels';
 import { BOUNTY_STATUS, relevantBounty } from './bountyLabels';
 import { BIOME_PALETTE, createTerrainMapView, mapActorPositions } from './terrainMapView';

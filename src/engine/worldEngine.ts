@@ -1,3 +1,4 @@
+import { advanceCeasefires, availableCeasefireActions, recordCeasefireHostility, resolveCeasefireAction } from './ceasefireEngine';
 import { activeEscortForActor, resolveEscortAction } from './escortEngine';
 import { advanceCompetitionSeasons, recordBreakthroughCompetition, recordReliefCompetition, resolveCompetitionAction } from './competitionEngine';
 import { resolveScriptureAction } from './scriptureEngine';
@@ -33,7 +34,7 @@ import {
   WorldEvent,
   WorldState,
 } from '../types/world';
-import { computeHeuristicDecision } from './llmBrain';
+import { computeHeuristicDecision, utilityCeasefireDecision } from './llmBrain';
 import { maintainMemories, recordMemory } from './memoryEngine';
 import { synthesizeReflections } from './reflectionEngine';
 import { fabricateRumor, knownRumorLead, spreadRumors, witnessEvent } from './rumorEngine';
@@ -185,6 +186,8 @@ export function applyCultivatorBrainDecision(
     case 'ATTEST_WITNESS':
     case 'CHALLENGE_WITNESS':
       return resolveWitnessAction(world, cultivator, decision);
+    case 'CEASEFIRE':
+      return resolveCeasefireAction(world, cultivator, decision);
     case 'ESCORT':
       return resolveEscortAction(world, cultivator, decision);
     case 'RANK_SEASON':
@@ -616,7 +619,7 @@ export function advanceWorldTick(
   const avatarOrder = consumeAvatarOrder(nextState);
   maintainAlchemy(nextState);
   maintainSectEconomy(nextState);
-  const newEvents: WorldEvent[] = [...advanceCompetitionSeasons(nextState), ...advanceMapHazards(nextState), ...advanceRelocations(nextState), ...advanceSettlements(nextState), ...advanceSpiritBeasts(nextState, rng)];
+  const newEvents: WorldEvent[] = [...advanceCeasefires(nextState), ...advanceCompetitionSeasons(nextState), ...advanceMapHazards(nextState), ...advanceRelocations(nextState), ...advanceSettlements(nextState), ...advanceSpiritBeasts(nextState, rng)];
   for (const event of newEvents) witnessEvent(nextState, event);
 
   for (const cultivator of [...nextState.cultivators]) {
@@ -659,10 +662,20 @@ export function advanceWorldTick(
       continue;
     }
 
+    const provided = (avatarOrder?.actorId === cultivator.id ? avatarOrder.decision : undefined) ??
+      precomputedDecisions?.[cultivator.id];
+    let fieldNegotiation: LLMDecisionPayload | undefined;
     if (activeSiegeForActor(nextState, cultivator)) {
-      cultivator.currentAction = 'LAUNCH_SIEGE';
-      cultivator.innerMonologue = '军令已下，今月随本阵行军攻山。';
-      continue;
+      if (!provided) fieldNegotiation = utilityCeasefireDecision(cultivator, nextState);
+      const negotiation = provided ?? fieldNegotiation;
+      const validNegotiation = negotiation?.chosenAction === 'CEASEFIRE' && availableCeasefireActions(cultivator, nextState).some((option) =>
+        option.ceasefireMove === negotiation.ceasefireMove && option.targetSectId === negotiation.targetSectId &&
+        option.targetCeasefireId === negotiation.targetCeasefireId);
+      if (!validNegotiation) {
+        cultivator.currentAction = 'LAUNCH_SIEGE';
+        cultivator.innerMonologue = '军令已下，今月随本阵行军攻山。';
+        continue;
+      }
     }
 
     if (activeOccasionForActor(nextState, cultivator)) {
@@ -671,14 +684,12 @@ export function advanceWorldTick(
       continue;
     }
 
-    const provided = (avatarOrder?.actorId === cultivator.id ? avatarOrder.decision : undefined) ??
-      precomputedDecisions?.[cultivator.id];
     let decisionDraws = 0;
     if (provided && traceOptions?.replayDraws) {
       const replayedDraws = traceOptions.replayDraws[cultivator.id] ?? 0;
       for (let draw = 0; draw < Math.min(64, replayedDraws); draw++) rng();
     }
-    const decision = provided ?? computeHeuristicDecision(cultivator, nextState, () => { decisionDraws++; return rng(); });
+    const decision = provided ?? fieldNegotiation ?? computeHeuristicDecision(cultivator, nextState, () => { decisionDraws++; return rng(); });
 
     const captureTrace = traceOptions?.captureTrace !== false;
     const candidates = captureTrace || traceOptions?.onActor ? legalTraceCandidates(nextState, cultivator) : [];
@@ -696,6 +707,13 @@ export function advanceWorldTick(
     creditSectService(nextState, cultivator, evt);
     if (evt) {
       if (cultivator.realm !== previousRealm) recordBreakthroughCompetition(nextState, cultivator, previousRealm, evt);
+      if (decision.chosenAction === 'DUEL' || decision.chosenAction === 'AMBUSH_TRIBULATION') {
+        const opponent = nextState.cultivators.find((candidate) => candidate.id !== cultivator.id && evt.actorIds.includes(candidate.id));
+        if (opponent) {
+          const breach = recordCeasefireHostility(nextState, cultivator, opponent, evt);
+          if (breach) { newEvents.push(breach); witnessEvent(nextState, breach); }
+        }
+      }
       if (decision.chosenAction === 'DELIVER_RELIEF') {
         const receipt = nextState.settlements.records.at(-1);
         if (receipt && evt.id === `evt-${receipt.id}`) recordReliefCompetition(nextState, receipt);

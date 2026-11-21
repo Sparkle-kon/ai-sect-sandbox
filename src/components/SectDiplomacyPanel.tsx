@@ -1,19 +1,14 @@
 import type { Sect, WorldState } from '../types/world';
 import { COUNCIL_STATUS_LABELS } from './councilLabels';
+import { isActiveCampaign, SIEGE_LABELS } from './siegeLabels';
+export { isActiveCampaign, SIEGE_LABELS } from './siegeLabels';
 
 type Relation = WorldState['diplomacy'][number];
-type Siege = WorldState['sieges'][number];
 type Tribute = WorldState['tributeDemands'][number];
 
 const PACT_LABELS: Record<Relation['pact'], string> = { neutral: '中立', alliance: '盟友', war: '交战' };
-export const SIEGE_LABELS: Record<Siege['status'], string> = {
-  marching: '行军', sieging: '围攻', victory: '攻方胜利', repelled: '攻方遭击退',
-};
 const TRIBUTE_LABELS: Record<Tribute['status'], string> = { pending: '待答复', paid: '已缴纳', rejected: '已拒绝' };
 
-export function isActiveCampaign(siege: Siege): boolean {
-  return siege.status === 'marching' || siege.status === 'sieging';
-}
 
 export function SectDiplomacyPanel({ sect, world }: { sect: Sect | undefined; world: WorldState }) {
   const sectName = (id: string) => world.sects.find((entry) => entry.id === id)?.name ?? '宗门未详';

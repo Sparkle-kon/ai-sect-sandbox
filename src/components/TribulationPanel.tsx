@@ -1,17 +1,6 @@
 import type { Cultivator } from '../types/world';
-
-type Trial = NonNullable<Cultivator['tribulation']>;
-
-export const TRIAL_STAGE: Record<Trial['stage'], { label: string; color: string }> = {
-  lightning: { label: '雷劫', color: 'text-sky-300' },
-  heart_demon: { label: '心魔劫', color: 'text-violet-300' },
-  passed: { label: '已渡过', color: 'text-emerald-300' },
-  failed: { label: '渡劫失败', color: 'text-rose-300' },
-};
-
-export function isActiveTrial(trial: Trial | undefined): boolean {
-  return trial?.stage === 'lightning' || trial?.stage === 'heart_demon';
-}
+import { TRIAL_STAGE, isActiveTrial } from './mapStatusLabels';
+export { TRIAL_STAGE, isActiveTrial } from './mapStatusLabels';
 
 export function TribulationPanel({ cultivator }: { cultivator: Cultivator }) {
   const trial = cultivator.tribulation;

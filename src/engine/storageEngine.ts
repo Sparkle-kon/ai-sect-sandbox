@@ -1,3 +1,4 @@
+import { CEASEFIRE_AID_DELAY, CEASEFIRE_BOND, CEASEFIRE_DURATION, CEASEFIRE_OFFER_TICKS, createCeasefireState } from './ceasefireEngine';
 import { ANNOTATION_MAX_BOOKMARKS, ANNOTATION_MAX_NOTES, ANNOTATION_MAX_NOTE_CHARS, ANNOTATION_MAX_TITLE_CHARS, createAnnotationState } from './annotationState';
 import { createEscortState, ESCORT_FEE, ESCORT_RATIONS } from './escortEngine';
 import { COMPETITION_RULES, createCompetitionState } from './competitionEngine';
@@ -71,7 +72,7 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const marketQty = num(1,12,true), marketPrice = num(1,500,true);
@@ -133,7 +134,7 @@ const shape = structure({
   relationships:arr(SAVE_COLLECTION_LIMIT,structure({fromId:id,toId:id,type:one('师徒','同门','道侣','血仇','挚友','竞争'),affinity,note:text})),
   events:arr(200,structure({...publicFact,witnessScope:optional(one('participants')),duelWinnerId:oid,damage:optional(arr(SAVE_COLLECTION_LIMIT,structure({cultivatorId:id,amount:wealth})))})),
   diplomacy:arr(1200,structure({sectAId:id,sectBId:id,affinity,pact:one('neutral','alliance','war'),sinceTick:tick,lastActionTick:otick})),
-  sieges:arr(2000,structure({id,attackerSectId:id,defenderSectId:id,destinationId:id,participantIds:ids,status:one('marching','sieging','victory','repelled'),
+  sieges:arr(2000,structure({id,attackerSectId:id,defenderSectId:id,destinationId:id,participantIds:ids,status:one('marching','sieging','victory','repelled','withdrawn'),
     startedTick:tick,rounds:count,lastResolvedTick:otick,outcome:otext})),
   tributeDemands:arr(2000,structure({id,demanderSectId:id,targetSectId:id,amount:wealth,status:one('pending','paid','rejected'),startedTick:tick,resolvedTick:otick})),
   occasions:arr(2000,structure({id,kind:one('tournament','expedition'),title:text,locationId:id,startedTick:tick,registrationClosesTick:tick,expiresTick:tick,
@@ -174,6 +175,13 @@ const shape = structure({
       attestations:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,tick,verdict:one('supports','contradicts')})),
       appeal:optional(structure({tick,actorId:id,verdict:one('upheld','rejected'),reason:text})),settledTick:otick,
       reputationSectId:oid,reputationPenalty:percentage,reputationRestored:percentage,reason:otext}))}),
+  ceasefires:structure({nextId:num(1,100_000_000,true),agreements:arr(SAVE_COLLECTION_LIMIT,structure({id,
+    proposerSectId:id,targetSectId:id,proposerId:id,targetLeaderId:id,openedTick:tick,offerExpiresTick:tick,
+    status:one('offered','active','declined','expired','fulfilled','breached'),signedTick:otick,endsTick:otick,
+    terms:structure({duration:num(1,100,true),bondPerSide:doctrineAmount,aidAmount:doctrineAmount,aidPayerSectId:id,aidRecipientSectId:id}),
+    escrow:structure({proposerBond:doctrineAmount,targetBond:doctrineAmount,aid:doctrineAmount}),aidReleasedTick:otick,
+    withdrawnSiegeIds:ids,breach:optional(structure({offenderSectId:id,tick,kind:one('renounced','hostile_damage'),
+      forfeitedBond:doctrineAmount,eventId:oid})),settledTick:otick}))}),
   annotations:structure({nextId:num(1,100_000_000,true),
     bookmarks:arr(ANNOTATION_MAX_BOOKMARKS,structure({id,eventId:id,eventTick:tick,createdTick:tick,title:strings(ANNOTATION_MAX_TITLE_CHARS,1),category:eventCategory,locationId:oid})),
     notes:arr(ANNOTATION_MAX_NOTES,structure({id,createdTick:tick,updatedTick:tick,text:strings(ANNOTATION_MAX_NOTE_CHARS,1),target:noteTarget}))}),
@@ -277,6 +285,7 @@ function verifyWorld(value: unknown): WorldState {
     ? { ...value,
       ...(!Object.hasOwn(value, 'mentorship') ? { mentorship: { offers: [], lineage: [], budgets: [] } } : {}),
       ...(!Object.hasOwn(value, 'decisionTrace') ? { decisionTrace: { records: [] } } : {}),
+      ...(!Object.hasOwn(value, 'ceasefires') ? { ceasefires: createCeasefireState() } : {}),
       ...(!Object.hasOwn(value, 'annotations') ? { annotations: createAnnotationState() } : {}),
       ...(!Object.hasOwn(value, 'escorts') ? { escorts: createEscortState() } : {}),
       ...(!Object.hasOwn(value, 'competitions') ? { competitions: { seasons: [], entries: [], scores: [], honors: [], optOutActorIds: [] } } : {}),
@@ -358,6 +367,43 @@ function verifyWorld(value: unknown): WorldState {
   for (const bounty of w.bounties) if (!actor.has(bounty.targetCultivatorId) || bounty.sponsorSectIds.some((id) => !sector.has(id)) ||
       bounty.escrow.some((item) => !sector.has(item.sectId)) || (bounty.hunterId && !actor.has(bounty.hunterId))) fail('bounties.references');
   unique(w.sieges, ({ id }) => id, 'sieges.id'); unique(w.tributeDemands, ({ id }) => id, 'tributeDemands.id');
+  unique(w.ceasefires.agreements, ({ id }) => id, 'ceasefires.id');
+  const liveAgreements = w.ceasefires.agreements.filter(({ status }) => status === 'offered' || status === 'active');
+  const pairKey = (a: string, b: string) => JSON.stringify([a,b].sort());
+  unique(liveAgreements, (item) => pairKey(item.proposerSectId, item.targetSectId), 'ceasefires.active.pair');
+  const siegeById = new Map(w.sieges.map((siege) => [siege.id, siege]));
+  for (const agreement of w.ceasefires.agreements) {
+    const { terms, escrow } = agreement;
+    const pair = new Set([agreement.proposerSectId, agreement.targetSectId]);
+    const signed = agreement.status === 'active' || agreement.status === 'fulfilled' || agreement.status === 'breached';
+    const resolved = agreement.status !== 'offered' && agreement.status !== 'active';
+    const serial = Number(agreement.id.match(/^ceasefire-([1-9][0-9]*)$/)?.[1]);
+    unique(agreement.withdrawnSiegeIds, (id) => id, 'ceasefires.withdrawal.ids');
+    if (!Number.isSafeInteger(serial) || serial >= w.ceasefires.nextId || pair.size !== 2 ||
+        [...pair].some((id) => !sector.has(id)) || !actor.has(agreement.proposerId) || !actor.has(agreement.targetLeaderId) ||
+        agreement.proposerId === agreement.targetLeaderId || agreement.openedTick > w.tick || agreement.offerExpiresTick !== agreement.openedTick + CEASEFIRE_OFFER_TICKS ||
+        !pair.has(terms.aidPayerSectId) || !pair.has(terms.aidRecipientSectId) || terms.aidPayerSectId === terms.aidRecipientSectId ||
+        signed !== (agreement.signedTick !== undefined) || signed !== (agreement.endsTick !== undefined) ||
+        (agreement.signedTick !== undefined && (agreement.signedTick < agreement.openedTick || agreement.signedTick > w.tick ||
+          agreement.signedTick > agreement.offerExpiresTick || agreement.endsTick !== agreement.signedTick + terms.duration)) ||
+        (agreement.aidReleasedTick !== undefined && (agreement.signedTick === undefined || agreement.endsTick === undefined ||
+          agreement.aidReleasedTick < agreement.signedTick + CEASEFIRE_AID_DELAY || agreement.aidReleasedTick > w.tick ||
+          (agreement.settledTick !== undefined && agreement.aidReleasedTick > agreement.settledTick))) ||
+        (resolved !== (agreement.settledTick !== undefined)) ||
+        (agreement.settledTick !== undefined && (agreement.settledTick < (agreement.signedTick ?? agreement.openedTick) || agreement.settledTick > w.tick)) ||
+        (agreement.status === 'breached') !== (agreement.breach !== undefined) ||
+        (agreement.breach !== undefined && (!pair.has(agreement.breach.offenderSectId) || agreement.breach.tick !== agreement.settledTick ||
+          agreement.breach.forfeitedBond !== terms.bondPerSide)) ||
+        (!signed && agreement.withdrawnSiegeIds.length > 0) ||
+        agreement.withdrawnSiegeIds.some((id) => {
+          const siege = siegeById.get(id);
+          return siege && (siege.status !== 'withdrawn' || pairKey(siege.attackerSectId, siege.defenderSectId) !== pairKey(agreement.proposerSectId, agreement.targetSectId));
+        })) fail('ceasefires.references');
+    if (terms.duration !== CEASEFIRE_DURATION || terms.bondPerSide !== CEASEFIRE_BOND || terms.aidAmount < 30 || terms.aidAmount > 120 ||
+        (agreement.status === 'active' ? (escrow.proposerBond !== terms.bondPerSide || escrow.targetBond !== terms.bondPerSide ||
+          escrow.aid !== (agreement.aidReleasedTick === undefined ? terms.aidAmount : 0))
+          : (escrow.proposerBond !== 0 || escrow.targetBond !== 0 || escrow.aid !== 0))) fail('ceasefires.escrow');
+  }
   unique(w.occasions, ({ id }) => id, 'occasions.id'); unique(w.bounties, ({ id }) => id, 'bounties.id');
   unique(w.mapHazards, ({ id }) => id, 'mapHazards.id'); unique(w.spiritBeasts, ({ id }) => id, 'spiritBeasts.id');
   for (const item of w.mapHazards) if (!map.has(item.tileId) || item.expiresTick <= item.createdTick) fail('mapHazards.references');

@@ -1,3 +1,4 @@
+import { activeCeasefireBetween } from './ceasefireEngine';
 import { activeEscortForActor } from './escortEngine';
 import { activeRelocationForActor, activeRelocationForSect } from './relocationEngine';
 import type { ActionType, Cultivator, LLMDecisionPayload, Sect, SectDiplomaticRelation, SectSiege, WorldEvent, WorldState } from '../types/world';
@@ -56,6 +57,7 @@ export function availableDiplomacyActions(actor: Cultivator, world: WorldState):
   const result: DiplomaticOption[] = [];
   for (const target of world.sects) {
     if (target.id === own.id || activeRelocationForSect(world, target.id)) continue;
+    const protectedByTruce = Boolean(activeCeasefireBetween(world, own.id, target.id));
     const relation = sectRelation(world, own.id, target.id);
     const affinity = relation?.affinity ?? 0;
     const targetLeader = world.cultivators.find((person) => person.id === target.leaderId && person.sectId === target.id && live(person));
@@ -63,12 +65,12 @@ export function availableDiplomacyActions(actor: Cultivator, world: WorldState):
     const cooldown = world.tick - (relation?.lastActionTick ?? -1000) >= 3;
     const add = (action: DiplomaticAction) => result.push({ action, targetSectId: target.id });
     if (cooldown && (!relation || relation.pact === 'neutral') && affinity >= 45 && targetLeader.locationId === target.headquartersId) add('OFFER_ALLIANCE');
-    if (cooldown && relation?.pact !== 'war' && affinity <= -45) add('DECLARE_WAR');
-    if (cooldown && relation?.pact !== 'alliance' && affinity <= -25 &&
+    if (!protectedByTruce && cooldown && relation?.pact !== 'war' && affinity <= -45) add('DECLARE_WAR');
+    if (!protectedByTruce && cooldown && relation?.pact !== 'alliance' && affinity <= -25 &&
         !world.tributeDemands.some((demand) => demand.status === 'pending' &&
           ((demand.demanderSectId === own.id && demand.targetSectId === target.id) ||
            (demand.demanderSectId === target.id && demand.targetSectId === own.id)))) add('DEMAND_TRIBUTE');
-    if (cooldown && relation?.pact === 'war' && own.spiritStones >= SIEGE_COST &&
+    if (!protectedByTruce && cooldown && relation?.pact === 'war' && own.spiritStones >= SIEGE_COST &&
         !world.sieges.some((siege) => (siege.attackerSectId === own.id || siege.attackerSectId === target.id ||
           siege.defenderSectId === own.id || siege.defenderSectId === target.id) &&
           (active(siege) || world.tick - (siege.lastResolvedTick ?? siege.startedTick) < 4)) &&
@@ -153,6 +155,7 @@ export function advanceDiplomacy(world: WorldState, rng: () => number): WorldEve
     const demander = world.sects.find(({ id }) => id === demand.demanderSectId);
     const target = world.sects.find(({ id }) => id === demand.targetSectId);
     demand.resolvedTick = world.tick;
+    if (activeCeasefireBetween(world, demand.demanderSectId, demand.targetSectId)) { demand.status = 'rejected'; continue; }
     const force = (id: string) => livedPower(world.cultivators.filter((actor) => actor.sectId === id && live(actor)));
     if (demander && target && demander.id !== target.id && Number.isFinite(demand.amount) && demand.amount > 0 &&
         target.spiritStones >= demand.amount && force(demander.id) > 0 && force(demander.id) >= force(target.id) * 1.25 &&

@@ -84,6 +84,7 @@ export type ActionType =
   | 'SCRIPTURE'
   | 'RANK_SEASON'
   | 'ESCORT'
+  | 'CEASEFIRE'
   | 'GATHER_HERBS'
   | 'BREW_PILL'
   | 'USE_PILL'
@@ -377,6 +378,8 @@ export interface LLMDecisionPayload {
   targetShipmentId?: string;
   targetEscortId?: string;
   targetHazardId?: string;
+  ceasefireMove?: CeasefireMove;
+  targetCeasefireId?: string;
   targetTechniqueId?: string;
   targetHerbId?: HerbId;
   targetPillId?: PillId;
@@ -405,7 +408,7 @@ export interface SectSiege {
   defenderSectId: string;
   destinationId: string;
   participantIds: string[];
-  status: 'marching' | 'sieging' | 'victory' | 'repelled';
+  status: 'marching' | 'sieging' | 'victory' | 'repelled' | 'withdrawn';
   startedTick: number;
   rounds: number;
   lastResolvedTick?: number;
@@ -1213,7 +1216,32 @@ export interface AnnotationState {
   nextId: number;
 }
 
+export type CeasefireMove = 'offer' | 'accept' | 'decline' | 'break';
+export interface SectCeasefire {
+  id: string;
+  proposerSectId: string;
+  targetSectId: string;
+  proposerId: string;
+  targetLeaderId: string;
+  openedTick: number;
+  offerExpiresTick: number;
+  status: 'offered' | 'active' | 'declined' | 'expired' | 'fulfilled' | 'breached';
+  signedTick?: number;
+  endsTick?: number;
+  terms: { duration: number; bondPerSide: number; aidAmount: number; aidPayerSectId: string; aidRecipientSectId: string };
+  escrow: { proposerBond: number; targetBond: number; aid: number };
+  aidReleasedTick?: number;
+  withdrawnSiegeIds: string[];
+  breach?: { offenderSectId: string; tick: number; kind: 'renounced' | 'hostile_damage'; forfeitedBond: number; eventId?: string };
+  settledTick?: number;
+}
+export interface CeasefireState {
+  agreements: SectCeasefire[];
+  nextId: number;
+}
+
 export interface WorldState {
+  ceasefires: CeasefireState;
   annotations: AnnotationState;
   scenarioOrigin?: ScenarioOrigin;
   escorts: EscortState;

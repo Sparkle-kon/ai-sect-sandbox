@@ -1,4 +1,6 @@
 import type { Cultivator, WorldState } from '../types/world';
+import { SCHEME_STATUS, countCompletedSchemeSteps } from './mapStatusLabels';
+export { SCHEME_STATUS, countCompletedSchemeSteps } from './mapStatusLabels';
 
 type Scheme = NonNullable<Cultivator['activeScheme']>;
 
@@ -8,16 +10,6 @@ const SCHEME_KINDS: Record<Scheme['kind'], string> = {
   vengeance: '寻仇',
   artifact_heist: '夺取法宝',
 };
-
-export const SCHEME_STATUS: Record<Scheme['status'], { label: string; color: string }> = {
-  active: { label: '进行中', color: 'text-amber-300' },
-  completed: { label: '已完成', color: 'text-emerald-300' },
-  failed: { label: '已失败', color: 'text-rose-300' },
-};
-
-export function countCompletedSchemeSteps(scheme: Scheme): number {
-  return scheme.steps.filter((step) => step.completedTick !== undefined).length;
-}
 
 interface SchemePanelProps {
   cultivator: Cultivator;

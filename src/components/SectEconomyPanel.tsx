@@ -1,15 +1,12 @@
 import type { Cultivator, FacilityKind, Sect, WorldState } from '../types/world';
 import { FACILITY_RULES, facilityBuildCost, isGuardAssignmentActive } from '../engine/sectEconomyEngine';
+import { isGuardOnDuty } from './mapStatusLabels';
+export { isGuardOnDuty } from './mapStatusLabels';
 
 const FACILITY_KINDS = Object.keys(FACILITY_RULES) as FacilityKind[];
 
 export function signedStones(value: number): string {
   return value > 0 ? `+${value}` : String(value);
-}
-
-export function isGuardOnDuty(actor: Cultivator, world: WorldState): boolean {
-  return Boolean(actor.guardAssignment && actor.locationId === actor.guardAssignment.locationId &&
-    isGuardAssignmentActive(actor, world));
 }
 
 interface SectEconomyPanelProps {
