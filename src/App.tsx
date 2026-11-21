@@ -2,6 +2,8 @@ import {activeAvatar,canQueueAvatarSalvage,queueAvatarDanxiaMedicine} from './en
 import {availableDanxiaMedicineActions,type DanxiaMedicineOption} from './engine/danxiaMedicineEngine';
 import type {DanxiaMedicineControlsProps} from './components/DanxiaMedicineControls';
 import { StoryFirstHome } from './components/StoryFirstHome';
+import { PlayerStoryEntry } from './components/PlayerStoryEntry';
+import { enterStoryLead, orderStoryAvatar, projectStoryPlayerRole, storyOrderOutcome } from './components/storyPlayerController';
 import { projectStoryHomepage } from './engine/storyHomepage';
 import { FAST_FORWARD_MAX_TICKS } from './engine/fastForwardEngine';
 import { addFastForwardCalendarMonths } from './engine/fastForwardCalendar';
@@ -147,16 +149,21 @@ const panel = 'space-y-2 rounded-xl border border-slate-800 bg-slate-900 p-3';
 export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) => {
   const [dashboardOpen, setDashboardOpen] = useState(initialWorkspace !== undefined);
   const [workspace, setWorkspace] = useState<WorkspaceId>(initialWorkspace ?? 'map');
+  const [storyEntryOpen,setStoryEntryOpen]=useState(false);
   const storyMoreRef = useRef<HTMLButtonElement>(null);
+  const storyEntryHeading=useRef<HTMLHeadingElement>(null);
   const dashboardHeading = useRef<HTMLHeadingElement>(null);
-  const renderedDashboard = useRef(dashboardOpen);
+  const storySurface=dashboardOpen?'tools':storyEntryOpen?'entry':'home';
+  const renderedStorySurface=useRef(storySurface);
   const [storyNotice, setStoryNotice] = useState<string>();
+  const [storyOutcome,setStoryOutcome]=useState<{world:WorldState;text:string}>();
   useEffect(() => {
-    if (renderedDashboard.current === dashboardOpen) return;
-    renderedDashboard.current = dashboardOpen;
+    if (renderedStorySurface.current === storySurface) return;
+    renderedStorySurface.current=storySurface;
     window.scrollTo({top:0,behavior:'instant'});
-    (dashboardOpen ? dashboardHeading.current : storyMoreRef.current)?.focus({preventScroll:true});
-  }, [dashboardOpen]);
+    (storySurface==='tools'?dashboardHeading.current:storySurface==='entry'?storyEntryHeading.current:
+      storyMoreRef.current)?.focus({preventScroll:true});
+  }, [storySurface]);
   const [foldPreferences, setFoldPreferences] = useState(readWorkspaceFoldPreferences);
   const [handedness, setHandedness] = useState(readHandednessPreference);
   const [rosterFocus, setRosterFocus] = useState<{ id: string; scope: string }>();
@@ -961,10 +968,42 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
     writeHandednessPreference(next);
   };
 
-  const openDashboard = () => {
-    if (stepInFlight.current) return;
+  const storyEntryRevision=saveContextVersion.current;
+  const storyEntryCurrent=()=>!dashboardOpen&&storyEntryOpen&&!stepInFlight.current&&!browsing.current&&
+    !fastForwardRun.current&&!campaignGuard.current&&history.current===timeline&&authority.current===world&&
+    saveContextVersion.current===storyEntryRevision;
+  const openStoryEntry=()=>{
+    if(dashboardOpen||stepInFlight.current||browsing.current||fastForwardRun.current||campaignGuard.current)return;
     setStoryNotice(undefined);
+    setStoryEntryOpen(true);
+  };
+  const openDashboard=()=>{
+    if(!storyEntryCurrent())return;
+    setIsRunning(false);
+    setStoryEntryOpen(false);
     setDashboardOpen(true);
+  };
+  const enterCurrentLead=()=>{
+    const lead=storyHome?.lead;
+    if(!storyEntryCurrent()||!lead)return false;
+    return updateWorld((current)=>enterStoryLead(current,lead))!==world;
+  };
+  const orderCurrentStoryAvatar=(action:'REST'|'CULTIVATE')=>{
+    if(!storyEntryCurrent())return false;
+    return updateWorld((current)=>orderStoryAvatar(current,action))!==world;
+  };
+  const followCurrentLead=()=>{
+    const lead=storyHome?.lead;
+    if(!storyEntryCurrent()||!lead)return false;
+    setIsRunning(false);
+    discardChronicleContext();
+    setSelectedCultivatorId(lead.id);
+    setPersonalStoryChoice({actorId:lead.id,scope:viewScopeKey});
+    rememberFold('chronicle','feed');
+    setWorkspace('chronicle');
+    setStoryEntryOpen(false);
+    setDashboardOpen(true);
+    return true;
   };
   const backToStory = () => {
     if (stepInFlight.current || fastForwardRun.current || campaignGuard.current) return;
@@ -975,18 +1014,29 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
     setAnalyticsOpen(false);
     setCouncilOpen(false);
     setStoryNotice(undefined);
+    setStoryEntryOpen(false);
     setDashboardOpen(false);
   };
   const advanceStory = () => {
-    if (dashboardOpen || stepInFlight.current || browsing.current || fastForwardRun.current) return;
+    if (dashboardOpen || storyEntryOpen || stepInFlight.current || browsing.current || fastForwardRun.current||campaignGuard.current) return;
     setStoryNotice(undefined);
-    void handleStepTick().catch(() => setStoryNotice('未能翻到下一幕，请重试。'));
+    setStoryOutcome(undefined);
+    const before=authority.current,branch=history.current.activeBranchId,revision=saveContextVersion.current;
+    void handleStepTick().then(()=>{
+      const after=authority.current;
+      if(history.current.activeBranchId!==branch||saveContextVersion.current!==revision||browsing.current)return;
+      const text=storyOrderOutcome(before,after);
+      if(text)setStoryOutcome({world:after,text});
+    }).catch(()=>setStoryNotice('未能翻到下一幕，请重试。'));
   };
 
   if (storyHome) return <main data-story-home data-story-turn={storyHome.calendar.tick} className="min-h-dvh bg-slate-950 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
-    <StoryFirstHome scene={storyHome.scene} leadName={storyHome.lead?.name}
-      busy={isStepping} moreRef={storyMoreRef} notice={storyNotice}
-      onContinue={advanceStory} onMore={openDashboard} />
+    {storyEntryOpen?<PlayerStoryEntry titleRef={storyEntryHeading} role={projectStoryPlayerRole(world,storyHome.lead)}
+      revision={world} busy={isStepping||fastForwardLocked} onBack={()=>setStoryEntryOpen(false)} onTools={openDashboard}
+      onFollow={storyHome.lead?followCurrentLead:undefined} onEnter={enterCurrentLead} onOrder={orderCurrentStoryAvatar} />:
+      <StoryFirstHome scene={storyHome.scene} leadName={storyHome.lead?.name} playerName={activeAvatar(world)?.name}
+        busy={isStepping} moreRef={storyMoreRef} notice={storyNotice} calendar={storyHome.calendar}
+        outcome={storyOutcome?.world===world?storyOutcome.text:undefined} onContinue={advanceStory} onMore={openStoryEntry} />}
   </main>;
 
   return (

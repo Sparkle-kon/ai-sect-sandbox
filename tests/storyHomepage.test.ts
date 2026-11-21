@@ -64,13 +64,16 @@ describe('compact exact native story homepage',()=>{
     const cover=projectStoryHomepage(world);
     expect(world.tick).toBe(openingTick+4);
     // The ordinary-choice rules evolve who earns the seat; there is still no preset protagonist.
-    expect(cover.lead).toEqual({name:'叶连翘'});
-    expect(cover.scene).toMatchObject({earlier:false,eventId:'evt-5-elder-danxia-2-alchemy',title:'叶连翘采集灵草'});
+    expect(cover.lead).toEqual({id:'elder-danxia-2',name:'叶连翘'});
+    expect(cover.scene).toMatchObject({earlier:false,eventId:'evt-5-elder-danxia-2-alchemy',title:'叶连翘采集灵草',followsLead:true});
+    const following=projectStoryHomepage(advanceWorldTick(world));
+    expect(following.lead).toEqual(cover.lead);
+    expect(following.scene).toMatchObject({followsLead:false});
   });
 
   it('shows a previously earned active character, not a provisional scorer or dead name',()=>{
     const {world,leadId}=earnedProtagonistStory();
-    expect(projectStoryHomepage(world).lead).toEqual({name:storyPerson(world,leadId).name});
+    expect(projectStoryHomepage(world).lead).toEqual({id:leadId,name:storyPerson(world,leadId).name});
     storyPerson(world,leadId).alive=false;
     expect(projectStoryHomepage(world).lead).toBeUndefined();
   });

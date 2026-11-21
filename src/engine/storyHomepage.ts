@@ -5,8 +5,8 @@ import {projectProtagonistSuccession} from './protagonistSuccession';
 
 export interface StoryHomepageView {
   readonly calendar:{readonly year:number;readonly month:number;readonly tick:number};
-  readonly lead?:{readonly name:string};
-  readonly scene?:{readonly eventId:string;readonly title:string;readonly paragraph:string;readonly earlier:boolean};
+  readonly lead?:{readonly id:string;readonly name:string};
+  readonly scene?:{readonly eventId:string;readonly title:string;readonly paragraph:string;readonly earlier:boolean;readonly followsLead?:boolean};
 }
 
 const importance:Record<WorldEvent['category'],number>={death:6,combat:5,breakthrough:4,diplomacy:3,heavenly:2,intrigue:1};
@@ -40,5 +40,5 @@ export function projectStoryHomepage(world:WorldState):StoryHomepageView{
     leads(b.fact)-leads(a.fact)||importance[b.fact.category]-importance[a.fact.category]);
   const first=candidates[0];
   return {calendar,...(first?{scene:{eventId:first.eventId,title:first.title,paragraph:first.paragraph,
-    earlier:first.fact.tick<world.tick}}:{}),...(earnedName?{lead:{name:earnedName}}:{})};
+    earlier:first.fact.tick<world.tick,...(earnedName?{followsLead:leads(first.fact)===1}:{})}}:{}),...(active&&earnedName?{lead:{id:active.actorId,name:earnedName}}:{})};
 }
