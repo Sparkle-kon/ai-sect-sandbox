@@ -578,7 +578,14 @@ export interface PlayerAvatarState {
   transcript: AvatarTranscriptEntry[];
 }
 
+export interface WorldRandomState {
+  algorithm: 'mulberry32-v1';
+  seed: number;
+  state: number;
+}
+
 export interface WorldState {
+  random: WorldRandomState;
   playerAvatar: PlayerAvatarState;
   chronicleArchive: ChronicleArchive;
   councils: CouncilRecord[];

@@ -1,3 +1,4 @@
+import { worldRandom } from './worldRandom';
 import type { AvatarInteractionRequest, AvatarTranscriptEntry, LLMConfig, WorldState } from '../types/world';
 import { resolveAvatarInteraction } from './avatarEngine';
 import { llmScheduler } from './llmScheduler';
@@ -39,9 +40,10 @@ async function avatarVoice(world: WorldState, entry: AvatarTranscriptEntry, conf
 }
 
 export async function resolveAvatarSnapshot(
-  world: WorldState, request: AvatarInteractionRequest, config: LLMConfig, rng: () => number = Math.random,
+  world: WorldState, request: AvatarInteractionRequest, config: LLMConfig, injectedRandom?: () => number,
 ): Promise<{ world: WorldState; entry: AvatarTranscriptEntry | null }> {
   const next = structuredClone(world);
+  const rng = injectedRandom ?? worldRandom(next);
   let draw: number | undefined;
   const fixedDraw = () => (draw ??= rng());
   const entry = resolveAvatarInteraction(next, request, fixedDraw);
@@ -50,6 +52,7 @@ export async function resolveAvatarSnapshot(
   const line = await avatarVoice(next, entry, config);
   if (!line) return { world: next, entry };
   const modelVersion = structuredClone(world);
+  modelVersion.random = { ...next.random };
   const voiced = resolveAvatarInteraction(modelVersion, request, fixedDraw, line);
   return voiced ? { world: modelVersion, entry: voiced } : { world: next, entry };
 }

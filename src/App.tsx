@@ -28,6 +28,8 @@ import { availableCouncilPlans } from './engine/councilEngine';
 import { commitCouncilSnapshot, settleAnnualCouncilOnline, settleCouncilSnapshot } from './engine/councilRuntime';
 import type { AvatarInteractionRequest, CouncilPlan } from './types/world';
 import { PossessionPanel } from './components/PossessionPanel';
+import { WorldStoragePanel } from './components/WorldStoragePanel';
+import { isWorldSeed } from './engine/worldRandom';
 import { activeAvatar, possessAvatar, queueAvatarOrder } from './engine/avatarEngine';
 import { resolveAvatarSnapshot } from './engine/avatarRuntime';
 
@@ -187,13 +189,32 @@ export const App: React.FC = () => {
     updateWorld((previous) => applyMapBrush(previous, kind, points));
   };
 
-  const handleReset = () => {
+  const replaceWorld = (next: WorldState, expected: WorldState): boolean => {
+    if (stepInFlight.current || authority.current !== expected) return false;
     setIsRunning(false);
-    updateWorld(() => createInitialWorld());
+    updateWorld(() => next);
     llmScheduler.resetTickBudget();
-    setSelectedCultivatorId('npc-1');
+    setSelectedCultivatorId(next.cultivators.find(({ alive }) => alive)?.id ?? next.cultivators[0]?.id ?? null);
     setLastManualCouncilId(undefined);
     setAvatarNotice(undefined);
+    return true;
+  };
+
+  const newWorldFromSeed = (seed: number, expected: WorldState): boolean =>
+    isWorldSeed(seed) && replaceWorld(createInitialWorld(seed), expected);
+
+  const handleReset = () => {
+    const previous = authority.current;
+    if (!replaceWorld(createInitialWorld(previous.random.seed), previous)) {
+      // Emergency reset can still invalidate an in-flight model tick, which cannot commit afterward.
+      setIsRunning(false);
+      const reset = createInitialWorld(previous.random.seed);
+      updateWorld(() => reset);
+      llmScheduler.resetTickBudget();
+      setSelectedCultivatorId(reset.cultivators[0]?.id ?? null);
+      setLastManualCouncilId(undefined);
+      setAvatarNotice(undefined);
+    }
   };
 
   const selectedCultivator =
@@ -315,6 +336,7 @@ export const App: React.FC = () => {
             cultivator={selectedCultivator}
             onSelectCultivator={setSelectedCultivatorId}
           />
+          <WorldStoragePanel world={world} busy={isStepping} onRestore={replaceWorld} onNewWorld={newWorldFromSeed} />
           <RelationshipGraph
             world={world}
             selectedCultivatorId={selectedCultivatorId}

@@ -1,3 +1,4 @@
+import { worldRandom } from './worldRandom';
 import { consumeAvatarOrder, maintainPlayerAvatar } from './avatarEngine';
 import { archiveChronicleEvents } from './novelGenerator';
 import { settleChronicleOffline } from './chronicleRuntime';
@@ -99,7 +100,7 @@ export function applyCultivatorBrainDecision(
   world: WorldState,
   cultivator: Cultivator,
   decision: LLMDecisionPayload,
-  rng: () => number = Math.random,
+  rng: () => number = worldRandom(world),
   authorizedBountyTargetId?: string,
 ): WorldEvent | null {
   if (!cultivator.alive) return null;
@@ -521,11 +522,12 @@ function creditSectService(world: WorldState, actor: Cultivator, event: WorldEve
 export function advanceWorldTick(
   prevState: WorldState,
   precomputedDecisions?: Record<string, LLMDecisionPayload>,
-  rng: () => number = Math.random,
+  injectedRandom: (() => number) | undefined = undefined,
   councilMode: 'utility' | 'deferred' = 'utility',
   recordDecisionEffect?: (actorId: string, applied: boolean) => void
 ): WorldState {
   const nextState: WorldState = structuredClone(prevState);
+  const rng = injectedRandom ?? worldRandom(nextState);
   nextState.tick += 1;
   if (nextState.month >= 12) {
     nextState.year += 1;

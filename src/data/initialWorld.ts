@@ -1,3 +1,4 @@
+import { createWorldRandom, DEFAULT_WORLD_SEED } from '../engine/worldRandom';
 import { createPlayerAvatarState } from '../engine/avatarEngine';
 import { archiveChronicleEvents, createChronicleArchive } from '../engine/novelGenerator';
 import { memoryDecayRate } from '../engine/memoryEngine';
@@ -100,7 +101,8 @@ function initialElders(): Cultivator[] {
   }));
 }
 
-export function createInitialWorld(seed = 2031): WorldState {
+export function createInitialWorld(seed = DEFAULT_WORLD_SEED): WorldState {
+  const random = createWorldRandom(seed);
   const locations: LocationNode[] = [
       {
         id: 'loc-taixu',
@@ -206,6 +208,7 @@ export function createInitialWorld(seed = 2031): WorldState {
       },
     ];
   const world: WorldState = {
+    random,
     tick: 1,
     interventionSequence: 0,
     year: 1001,

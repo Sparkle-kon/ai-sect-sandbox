@@ -1,3 +1,4 @@
+import { actorFallbackRandom } from './worldRandom';
 import { llmScheduler } from './llmScheduler';
 import { memoryStrength, recallMemories } from './memoryEngine';
 import { knownRumorLead } from './rumorEngine';
@@ -30,7 +31,7 @@ import {
 export function computeHeuristicDecision(
   cultivator: Cultivator,
   world: WorldState,
-  rng: () => number = Math.random
+  rng: () => number = actorFallbackRandom(world, cultivator.id, world.tick)
 ): LLMDecisionPayload {
   if (isTribulationActive(cultivator)) {
     const tribulationStance = recommendedTribulationStance(cultivator);
@@ -285,7 +286,7 @@ export async function queryCultivatorLLMDecision(
 ): Promise<LLMDecisionPayload> {
   const fallback = () => {
     onSource?.('utility');
-    return computeHeuristicDecision(cultivator, world);
+    return computeHeuristicDecision(cultivator, world, actorFallbackRandom(world, cultivator.id, requestTick));
   };
   if (!config.enabled || !config.apiKey.trim()) return fallback();
 
