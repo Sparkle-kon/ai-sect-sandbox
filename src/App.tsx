@@ -43,6 +43,7 @@ const GodConsole = React.lazy(async () => ({ default: (await import('./component
 const SectRelocationPanel = React.lazy(async () => ({ default: (await import('./components/SectRelocationPanel')).SectRelocationPanel }));
 const SectDoctrinePanel = React.lazy(async () => ({ default: (await import('./components/SectDoctrinePanel')).SectDoctrinePanel }));
 const LlmTelemetryPanel = React.lazy(async () => ({ default: (await import('./components/LlmTelemetryPanel')).LlmTelemetryPanel }));
+const RankSeasonPanel = React.lazy(async () => ({ default: (await import('./components/RankSeasonPanel')).RankSeasonPanel }));
 const ChronicleFeed = React.lazy(async () => ({ default: (await import('./components/ChronicleFeed')).ChronicleFeed }));
 const ChronicleLibraryPanel = React.lazy(async () => ({ default: (await import('./components/ChronicleLibraryPanel')).ChronicleLibraryPanel }));
 const WeatherAtlasPanel = React.lazy(async () => ({ default: (await import('./components/WeatherAtlasPanel')).WeatherAtlasPanel }));
@@ -420,6 +421,9 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
         chronicle: <WorkspaceSections label="纪事与历史" initialOpen={opened('chronicle', 'feed')} sections={[
           { id: 'feed', label: '当世纪事', content: <React.Suspense fallback={<p role="status">载入当世纪事…</p>}><ChronicleFeed events={visibleWorld.events} /></React.Suspense> },
           { id: 'library', label: '藏书阁与史书', content: <React.Suspense fallback={<p role="status">载入藏书阁…</p>}><ChronicleLibraryPanel world={visibleWorld} /></React.Suspense> },
+          { id: 'rank-season', label: '赛季榜与荣誉', content: <React.Suspense fallback={<p role="status">载入赛季榜…</p>}>
+            <RankSeasonPanel world={visibleWorld} cultivator={selectedCultivator} />
+          </React.Suspense> },
           { id: 'timeline', label: '原始时间线与分支', content: <React.Suspense fallback={<p role="status">载入时间线…</p>}>
             <TimelinePanel timeline={timeline} previewTick={preview?.tick ?? null} busy={isStepping}
               onPreview={handleTimelinePreview} onSelectBranch={handleTimelineSelectBranch} onFork={handleTimelineFork} notice={timelineNotice} />

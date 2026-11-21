@@ -1,3 +1,4 @@
+import { advanceCompetitionSeasons, recordBreakthroughCompetition, recordReliefCompetition, resolveCompetitionAction } from './competitionEngine';
 import { resolveScriptureAction } from './scriptureEngine';
 import { reconcileRelicCustody, resolveRelicAction, transferLootedRelics } from './relicEngine';
 import { advanceReincarnation, resolveRecollectionAction } from './reincarnationEngine';
@@ -183,6 +184,8 @@ export function applyCultivatorBrainDecision(
     case 'ATTEST_WITNESS':
     case 'CHALLENGE_WITNESS':
       return resolveWitnessAction(world, cultivator, decision);
+    case 'RANK_SEASON':
+      return resolveCompetitionAction(world, cultivator, decision);
     case 'SCRIPTURE':
       return resolveScriptureAction(world, cultivator, decision);
     case 'RELIC':
@@ -610,7 +613,7 @@ export function advanceWorldTick(
   const avatarOrder = consumeAvatarOrder(nextState);
   maintainAlchemy(nextState);
   maintainSectEconomy(nextState);
-  const newEvents: WorldEvent[] = [...advanceMapHazards(nextState), ...advanceRelocations(nextState), ...advanceSettlements(nextState), ...advanceSpiritBeasts(nextState, rng)];
+  const newEvents: WorldEvent[] = [...advanceCompetitionSeasons(nextState), ...advanceMapHazards(nextState), ...advanceRelocations(nextState), ...advanceSettlements(nextState), ...advanceSpiritBeasts(nextState, rng)];
   for (const event of newEvents) witnessEvent(nextState, event);
 
   for (const cultivator of [...nextState.cultivators]) {
@@ -672,6 +675,7 @@ export function advanceWorldTick(
     const candidates = captureTrace || traceOptions?.onActor ? legalTraceCandidates(nextState, cultivator) : [];
     if (traceOptions?.tape) rememberReplayDecision(traceOptions.tape, cultivator.id, decision, decisionDraws);
     const previousLocation = cultivator.locationId;
+    const previousRealm = cultivator.realm;
     const evt = applyCultivatorBrainDecision(nextState, cultivator, decision, rng);
     const validEffect = decision.chosenAction === cultivator.currentAction && (evt !== null ||
       decision.chosenAction === 'REST' || decision.chosenAction === 'CULTIVATE' ||
@@ -682,6 +686,11 @@ export function advanceWorldTick(
       avatarOrder?.actorId === cultivator.id ? 'avatar' : traceOptions?.modelActors?.has(cultivator.id) ? 'model' : 'utility', validEffect);
     creditSectService(nextState, cultivator, evt);
     if (evt) {
+      if (cultivator.realm !== previousRealm) recordBreakthroughCompetition(nextState, cultivator, previousRealm, evt);
+      if (decision.chosenAction === 'DELIVER_RELIEF') {
+        const receipt = nextState.settlements.records.at(-1);
+        if (receipt && evt.id === `evt-${receipt.id}`) recordReliefCompetition(nextState, receipt);
+      }
       newEvents.push(evt);
       witnessEvent(nextState, evt);
     }

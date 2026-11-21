@@ -1,3 +1,4 @@
+import { recordTournamentChampion, recordTournamentRound } from './competitionEngine';
 import { grantExpeditionRelic } from './relicEngine';
 import type { Cultivator, LLMDecisionPayload, WorldEvent, WorldOccasion, WorldState } from '../types/world';
 import { artifactPowerMultiplier, wearArtifact } from './artifactEngine';
@@ -126,7 +127,9 @@ export function advanceOccasions(world: WorldState, rng: () => number): WorldEve
         loser.hp = Math.max(1, loser.hp - Math.round(loser.maxHp * .14));
         wearArtifact(winner, true); wearArtifact(loser, false);
         winners.push(winner);
-        occasion.bouts.push({ round: occasion.round, firstId: first.id, secondId: second.id, winnerId: winner.id });
+        const bout = { round: occasion.round, firstId: first.id, secondId: second.id, winnerId: winner.id };
+        occasion.bouts.push(bout);
+        recordTournamentRound(world, occasion, bout);
       }
       if (winners.length === 1) {
         const champion = winners[0];
@@ -138,6 +141,7 @@ export function advanceOccasions(world: WorldState, rng: () => number): WorldEve
         recordMemory(champion, world.tick, description, 9, 'combat', 5);
         results.push(event(world, occasion, 'champion', '大比魁首揭晓', description, [champion.id]));
         results.push(finish(world, occasion));
+        recordTournamentChampion(world, occasion);
       } else {
         occasion.remainingIds = winners.map(({ id }) => id);
         results.push(event(world, occasion, 'round', `大比第${occasion.round}轮`, `${winners.length}名修士晋级下一轮。`));

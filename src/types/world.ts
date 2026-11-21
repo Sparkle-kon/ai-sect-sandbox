@@ -82,6 +82,7 @@ export type ActionType =
   | 'RECOLLECT'
   | 'RELIC'
   | 'SCRIPTURE'
+  | 'RANK_SEASON'
   | 'GATHER_HERBS'
   | 'BREW_PILL'
   | 'USE_PILL'
@@ -370,6 +371,7 @@ export interface LLMDecisionPayload {
   editionMove?: ScriptureMove;
   targetScriptureOriginalId?: string;
   targetScriptureEditionId?: string;
+  seasonMove?: CompetitionMove;
   targetTechniqueId?: string;
   targetHerbId?: HerbId;
   targetPillId?: PillId;
@@ -1088,7 +1090,50 @@ export interface ScriptureState {
   editions: ScriptureEdition[];
 }
 
+export type CompetitionMove = 'join' | 'withdraw';
+export type CompetitionRule = 'tournament_win' | 'tournament_champion' | 'major_breakthrough' | 'public_relief';
+export interface CompetitionSeason {
+  id: string;
+  year: number;
+  openedTick: number;
+  closedTick?: number;
+  status: 'open' | 'settled';
+}
+export interface CompetitionEntry {
+  seasonId: string;
+  actorId: string;
+  joinedTick: number;
+  withdrawnTick?: number;
+}
+export interface CompetitionScore {
+  id: string;
+  seasonId: string;
+  actorId: string;
+  sourceId: string;
+  tick: number;
+  rule: CompetitionRule;
+  points: number;
+  locationId: string;
+}
+export interface CompetitionHonor {
+  id: string;
+  seasonId: string;
+  actorId: string;
+  place: 1;
+  score: number;
+  awardedTick: number;
+  title: string;
+}
+export interface CompetitionState {
+  seasons: CompetitionSeason[];
+  entries: CompetitionEntry[];
+  scores: CompetitionScore[];
+  honors: CompetitionHonor[];
+  optOutActorIds: string[];
+}
+
 export interface WorldState {
+  competitions: CompetitionState;
   scriptures: ScriptureState;
   relics: RelicState;
   reincarnation: ReincarnationState;

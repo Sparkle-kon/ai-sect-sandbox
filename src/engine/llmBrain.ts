@@ -1,3 +1,4 @@
+import { availableCompetitionActions, competitionActorOptedOut } from './competitionEngine';
 import { availableScriptureActions, scriptureEditionModifiers } from './scriptureEngine';
 import { availableRelicActions } from './relicEngine';
 import { availableRecollectionActions, visibleRecollection } from './reincarnationEngine';
@@ -354,6 +355,16 @@ export function computeHeuristicDecision(
     };
   }
 
+  if (!cultivator.guardAssignment && world.tick >= 4 && world.tick % 4 === 0) {
+    const seasonChoices = availableCompetitionActions(cultivator, world);
+    const wantsWithdrawal = cultivator.hp < cultivator.maxHp * .66 && cultivator.personality === '苟道';
+    const wantsRegistration = !competitionActorOptedOut(world, cultivator.id) && world.month <= 5 && cultivator.hp > cultivator.maxHp * .75 &&
+      (cultivator.personality === '刚正' || cultivator.personality === '狂傲' || cultivator.personality === '逍遥');
+    const move = seasonChoices.find(({ seasonMove }) => (seasonMove === 'withdraw' && wantsWithdrawal) ||
+      (seasonMove === 'join' && wantsRegistration));
+    if (move) return { ...move, chosenAction: 'RANK_SEASON', innerMonologue: '按己愿选择是否公开参评，不混入私事。' };
+  }
+
   // 5. Socialize; trust in fellowship makes seeking a partner more attractive.
   const fellowship = cultivator.reflections.some(
     (entry) => entry.kind === 'belief' && entry.theme === 'community' && entry.intensity >= 6
@@ -449,6 +460,7 @@ export async function queryCultivatorLLMDecision(
   const estateOptions = availableEstateActions(cultivator, world);
   const doctrineOptions = availableDoctrineActions(cultivator, world);
   const relocationOptions = availableRelocationActions(cultivator, world);
+  const competitionOptions = availableCompetitionActions(cultivator, world);
   const scriptureOptions = availableScriptureActions(cultivator, world);
   const currentEdition = scriptureEditionModifiers(cultivator);
   const relicOptions = availableRelicActions(cultivator, world);
@@ -473,6 +485,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 天机悬赏榜：${JSON.stringify(world.bounties.filter((item) => item.status === 'open').map(({id,targetCultivatorId,reward,reason}) => ({id,targetCultivatorId,reward,reason})))}；可接的追缉：${JSON.stringify(availableBountyHunts(cultivator, world))}
 - 天下公示的大会与秘境：${JSON.stringify(world.occasions.filter((item) => item.status === 'registration' || item.status === 'running').map(({id,title,kind,locationId,status,registrationClosesTick}) => ({id,title,kind,locationId,status,registrationClosesTick})))}；可报名项目：${JSON.stringify(availableOccasionJoins(cultivator, world))}
 - 本宗邦交：${JSON.stringify(world.diplomacy.filter((relation) => relation.sectAId === cultivator.sectId || relation.sectBId === cultivator.sectId))}；公示的外事权限：${JSON.stringify(availableDiplomacyActions(cultivator, world))}
+- 公开赛季只计列出的结果，不许以私下谋划计分。已保存的退出偏好：${competitionActorOptedOut(world, cultivator.id) ? '继续保留，只有自己明确改变心意才在未来赛季重报' : '无'}；本回合可选：${JSON.stringify(competitionOptions)}
 - 功法版本对当前行气和实战的独立倍率（1 为无额外效果）：${JSON.stringify(currentEdition)}；当地可行的校勘与版本选项：${JSON.stringify(scriptureOptions)}
 - 古器可用行动（仅限当前位置可见碎片或实有两部件和已核验炉火）：${JSON.stringify(relicOptions)}
 - 自身残响仅为未证实的主观感受，不提供事件、前人或地点事实：${JSON.stringify(ownEcho ? { theme: ownEcho.theme, confidence: ownEcho.confidence, status: ownEcho.status } : null)}；可选的审视方式：${JSON.stringify(recollectionOptions)}
@@ -498,7 +511,7 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
 请以第一人称进行内心独白思考，并决定本回合行动。只输出合法的 JSON 对象（不要 Markdown 代码块），字段如下：
 {
   "innerMonologue": "你的第一人称内心独白（40字以内，体现你的性格与秘密目标）",
-  "chosenAction": "CULTIVATE | BREAKTHROUGH | EXPLORE | SOCIALIZE | DUEL | SCHEMING | PURSUE_SCHEME | AUTHOR_TECHNIQUE | STUDY_TECHNIQUE | GATHER_HERBS | BREW_PILL | USE_PILL | FORGE_ARTIFACT | BIND_ARTIFACT | REPAIR_ARTIFACT | AWAKEN_ARTIFACT | FACE_TRIBULATION | AMBUSH_TRIBULATION | CHALLENGE_LEADERSHIP | PLOT_COUP | BUILD_FACILITY | DISPATCH_GUARD | GUARD_DUTY | OFFER_ALLIANCE | DECLARE_WAR | DEMAND_TRIBUTE | LAUNCH_SIEGE | JOIN_OCCASION | PURSUE_BOUNTY | TAME_BEAST | TRADE | DUAL_CULTIVATE | SECT_DIPLOMACY | TEACH | ACCEPT_TUITION | DECLINE_TUITION | OFFER_OATH | ACCEPT_OATH | DECLINE_OATH | FULFILL_OATH | APPEAL_OATH | PLACE_MARKET_BUY | PLACE_MARKET_SELL | CANCEL_MARKET_ORDER | RECRUIT_SETTLER | DELIVER_RELIEF | FILE_WITNESS_CLAIM | ATTEST_WITNESS | CHALLENGE_WITNESS | NAME_HEIR | CLAIM_ESTATE | HOLD_MEMORIAL | DOCTRINE | RELOCATE | RECOLLECT | RELIC | SCRIPTURE | REST 之一",
+  "chosenAction": "CULTIVATE | BREAKTHROUGH | EXPLORE | SOCIALIZE | DUEL | SCHEMING | PURSUE_SCHEME | AUTHOR_TECHNIQUE | STUDY_TECHNIQUE | GATHER_HERBS | BREW_PILL | USE_PILL | FORGE_ARTIFACT | BIND_ARTIFACT | REPAIR_ARTIFACT | AWAKEN_ARTIFACT | FACE_TRIBULATION | AMBUSH_TRIBULATION | CHALLENGE_LEADERSHIP | PLOT_COUP | BUILD_FACILITY | DISPATCH_GUARD | GUARD_DUTY | OFFER_ALLIANCE | DECLARE_WAR | DEMAND_TRIBUTE | LAUNCH_SIEGE | JOIN_OCCASION | PURSUE_BOUNTY | TAME_BEAST | TRADE | DUAL_CULTIVATE | SECT_DIPLOMACY | TEACH | ACCEPT_TUITION | DECLINE_TUITION | OFFER_OATH | ACCEPT_OATH | DECLINE_OATH | FULFILL_OATH | APPEAL_OATH | PLACE_MARKET_BUY | PLACE_MARKET_SELL | CANCEL_MARKET_ORDER | RECRUIT_SETTLER | DELIVER_RELIEF | FILE_WITNESS_CLAIM | ATTEST_WITNESS | CHALLENGE_WITNESS | NAME_HEIR | CLAIM_ESTATE | HOLD_MEMORIAL | DOCTRINE | RELOCATE | RECOLLECT | RELIC | SCRIPTURE | RANK_SEASON | REST 之一",
   "targetLocationId": "EXPLORE 可填已知地点 id（探索未知时省略）；宗门经营或迁宗提议只能填所列地点 id",
   "targetCultivatorId": "如果 chosenAction 为 SOCIALIZE / DUEL / SCHEMING / AMBUSH_TRIBULATION / CHALLENGE_LEADERSHIP / PLOT_COUP / DISPATCH_GUARD / TRADE / DUAL_CULTIVATE / SECT_DIPLOMACY / TEACH / OFFER_OATH / FILE_WITNESS_CLAIM / NAME_HEIR 则填目标修士 id；DOCTRINE 仅在所选事务列出该字段时填写；其余省略",
   "spokenLine": "简短台词（可选）",
@@ -515,6 +528,7 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
   "targetMarketOrderId": "撤单时选择自己仍可撤的挂单 id",
   "targetOathId": "回应、履行或申诉契书时，指定可用契书 id",
   "oathTerm": "提出契书时选择给定条款 foundation_pill 或 jade_herb",
+  "seasonMove": "RANK_SEASON 从列出的 join 或 withdraw 选择，不填写其他目标",
   "editionMove": "SCRIPTURE 从当地合法选项照抄 annotate、compare、adopt 或 revert",
   "targetScriptureOriginalId": "仅复制选项所列原本 id",
   "targetScriptureEditionId": "仅复制选项所列版本 id",
@@ -633,9 +647,15 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
             'RECOLLECT',
             'RELIC',
             'SCRIPTURE',
+            'RANK_SEASON',
           ];
           const chosenAction = parsed?.chosenAction;
           if (!chosenAction || !validActions.includes(chosenAction)) return undefined;
+
+          const legalCompetition = chosenAction === 'RANK_SEASON'
+            ? competitionOptions.find((item) => item.seasonMove === parsed.seasonMove) : undefined;
+          if (chosenAction === 'RANK_SEASON' && (!legalCompetition ||
+              parsed.targetCultivatorId !== undefined || parsed.targetLocationId !== undefined)) return undefined;
 
           const legalScripture = chosenAction === 'SCRIPTURE' ? scriptureOptions.find((item) =>
             item.editionMove === parsed.editionMove && item.targetScriptureOriginalId === parsed.targetScriptureOriginalId &&
@@ -772,6 +792,7 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
             forgeTier: legalArtifact?.forgeTier,
             targetHerbId: legalAlchemy?.targetHerbId,
             targetPillId: legalAlchemy?.targetPillId,
+            seasonMove: legalCompetition?.seasonMove,
             editionMove: legalScripture?.editionMove,
             targetScriptureOriginalId: legalScripture?.targetScriptureOriginalId,
             targetScriptureEditionId: legalScripture?.targetScriptureEditionId,

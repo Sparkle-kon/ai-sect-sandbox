@@ -1,3 +1,4 @@
+import { COMPETITION_RULES, createCompetitionState } from './competitionEngine';
 import { createScriptureState } from './scriptureEngine';
 import { createRelicState } from './relicEngine';
 import { createReincarnationState, MORTAL_MATURITY_TICKS } from './reincarnationEngine';
@@ -68,7 +69,7 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const marketQty = num(1,12,true), marketPrice = num(1,500,true);
@@ -165,6 +166,13 @@ const shape = structure({
       attestations:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,tick,verdict:one('supports','contradicts')})),
       appeal:optional(structure({tick,actorId:id,verdict:one('upheld','rejected'),reason:text})),settledTick:otick,
       reputationSectId:oid,reputationPenalty:percentage,reputationRestored:percentage,reason:otext}))}),
+  competitions:structure({
+    optOutActorIds:ids,
+    seasons:arr(8,structure({id,year:tick,openedTick:tick,closedTick:otick,status:one('open','settled')})),
+    entries:arr(SAVE_COLLECTION_LIMIT,structure({seasonId:id,actorId:id,joinedTick:tick,withdrawnTick:otick})),
+    scores:arr(SAVE_COLLECTION_LIMIT,structure({id,seasonId:id,actorId:id,sourceId:id,tick,
+      rule:one('tournament_win','tournament_champion','major_breakthrough','public_relief'),points:num(1,20,true),locationId:id})),
+    honors:arr(SAVE_COLLECTION_LIMIT,structure({id,seasonId:id,actorId:id,place:one(1),score:num(1,100_000_000,true),awardedTick:tick,title:text}))}),
   scriptures:structure({
     originals:arr(SAVE_COLLECTION_LIMIT,structure({id,technique,firstSeenTick:tick,source:one('authored','pavilion','inheritance'),
       sourceLocationId:oid,sourceSectId:oid})),
@@ -249,6 +257,7 @@ function verifyWorld(value: unknown): WorldState {
     ? { ...value,
       ...(!Object.hasOwn(value, 'mentorship') ? { mentorship: { offers: [], lineage: [], budgets: [] } } : {}),
       ...(!Object.hasOwn(value, 'decisionTrace') ? { decisionTrace: { records: [] } } : {}),
+      ...(!Object.hasOwn(value, 'competitions') ? { competitions: { seasons: [], entries: [], scores: [], honors: [], optOutActorIds: [] } } : {}),
       ...(!Object.hasOwn(value, 'scriptures') ? { scriptures: createScriptureState() } : {}),
       ...(!Object.hasOwn(value, 'relics') ? { relics: { fragments: [] } } : {}),
       ...(!Object.hasOwn(value, 'reincarnation') ? { reincarnation: createReincarnationState() } : {}),
@@ -268,6 +277,9 @@ function verifyWorld(value: unknown): WorldState {
   }
   if (value !== null && typeof value === 'object' && !Object.hasOwn(value, 'relics')) {
     w.relics = createRelicState(w.locations, w.random.seed);
+  }
+  if (value !== null && typeof value === 'object' && !Object.hasOwn(value, 'competitions')) {
+    w.competitions = createCompetitionState(w.year, w.tick);
   }
   const actor = unique(w.cultivators, (item) => item.id, 'cultivators.id');
   const sector = unique(w.sects, (item) => item.id, 'sects.id');
@@ -384,6 +396,45 @@ function verifyWorld(value: unknown): WorldState {
   for (const row of w.relocations.abandonedSites) {
     if (!sector.has(row.sectId) || !locations.has(row.originId) || !locations.has(row.destinationId) ||
         row.originId === row.destinationId || row.tick > w.tick || row.arrayHp > row.arrayMaxHp) fail('relocations.abandonedSites.references');
+  }
+  const { seasons, entries: competitionEntries, scores: competitionScores, honors: competitionHonors } = w.competitions;
+  unique(w.competitions.optOutActorIds, (id) => id, 'competitions.optout.id');
+  if (w.competitions.optOutActorIds.some((id) => !actor.has(id))) fail('competitions.optout.references');
+  unique(seasons, ({ id }) => id, 'competitions.seasons.id');
+  unique(seasons, ({ year }) => String(year), 'competitions.seasons.year');
+  const seasonById = new Map(seasons.map((season) => [season.id, season]));
+  const entryKey = ({ seasonId, actorId }: { seasonId: string; actorId: string }) => JSON.stringify([seasonId, actorId]);
+  unique(competitionEntries, entryKey, 'competitions.entries.identity');
+  unique(competitionScores, ({ id }) => id, 'competitions.scores.id');
+  unique(competitionScores, ({ seasonId, actorId, sourceId, rule }) => JSON.stringify([seasonId, actorId, sourceId, rule]), 'competitions.scores.source');
+  unique(competitionHonors, ({ id }) => id, 'competitions.honors.id');
+  unique(competitionHonors, ({ seasonId }) => seasonId, 'competitions.honors.season');
+  if (seasons.filter(({ status }) => status === 'open').length !== 1) fail('competitions.seasons.active');
+  for (const season of seasons) if (season.openedTick > w.tick ||
+      ((season.status === 'settled') !== (season.closedTick !== undefined)) ||
+      (season.closedTick !== undefined && (season.closedTick < season.openedTick || season.closedTick > w.tick))) {
+    fail('competitions.seasons.references');
+  }
+  const entryByIdentity = new Map(competitionEntries.map((entry) => [entryKey(entry), entry]));
+  for (const entry of competitionEntries) {
+    const season = seasonById.get(entry.seasonId);
+    if (!season || !actor.has(entry.actorId) || entry.joinedTick < season.openedTick || entry.joinedTick > w.tick ||
+        (season.closedTick !== undefined && entry.joinedTick >= season.closedTick) ||
+        (entry.withdrawnTick !== undefined && (entry.withdrawnTick < entry.joinedTick || entry.withdrawnTick > w.tick ||
+          (season.closedTick !== undefined && entry.withdrawnTick >= season.closedTick)))) fail('competitions.entries.references');
+  }
+  for (const row of competitionScores) {
+    const entry = entryByIdentity.get(entryKey(row));
+    const season = seasonById.get(row.seasonId);
+    if (!entry || !season || row.tick <= entry.joinedTick || row.tick > w.tick ||
+        (entry.withdrawnTick !== undefined && row.tick > entry.withdrawnTick) ||
+        (season.closedTick !== undefined && row.tick >= season.closedTick) ||
+        row.points !== COMPETITION_RULES[row.rule].points) fail('competitions.scores.references');
+  }
+  for (const honor of competitionHonors) {
+    const season = seasonById.get(honor.seasonId);
+    if (!actor.has(honor.actorId) || honor.awardedTick > w.tick ||
+        (season && (season.status !== 'settled' || honor.awardedTick !== season.closedTick))) fail('competitions.honors.references');
   }
   unique(w.scriptures.originals, ({ id }) => id, 'scriptures.originals.id');
   unique(w.scriptures.editions, ({ id }) => id, 'scriptures.editions.id');

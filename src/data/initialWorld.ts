@@ -1,3 +1,4 @@
+import { createCompetitionState } from '../engine/competitionEngine';
 import { createScriptureState } from '../engine/scriptureEngine';
 import { createRelicState } from '../engine/relicEngine';
 import { createReincarnationState } from '../engine/reincarnationEngine';
@@ -236,6 +237,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     reincarnation: createReincarnationState(),
     relics: createRelicState(locations, seed),
     scriptures: createScriptureState(),
+    competitions: createCompetitionState(),
     witnesses: createWitnessState(),
     estates: createEstateState(),
     decisionTrace: createDecisionTraceState(),
