@@ -56,7 +56,7 @@ describe('branch-local deep chronicle shelf and independent file byte inspection
     const world = createInitialWorld();
     const storeMarkup = renderToStaticMarkup(<WorldStoragePanel world={world} busy={false}
       onNewWorld={() => false} onRestore={() => false} />);
-    expect(storeMarkup).toContain('测量当前存档大小');
+    expect(storeMarkup).toContain('预检当前世界 JSON');
     expect(storeMarkup).toContain('UTF-8 字节数，不下载文件，也不是浏览器内存占用');
     expect(storeMarkup).not.toContain('当前存档大小暂不可测');
     const payload = encodeWorldSave(world);

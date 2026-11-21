@@ -175,7 +175,7 @@ export function TimelinePanel({ timeline, previewTick, busy, onPreview, onSelect
           </div>
         </section>
       )}
-      {fastForward && <FastForwardPanel controls={fastForward} branchLimit={!canFork} blocked={busy || previewTick !== null || !!pending} />}
+      {fastForward && <FastForwardPanel controls={fastForward} timeline={timeline} branchLimit={!canFork} blocked={busy || previewTick !== null || !!pending} />}
       {notice && <p role="status" className="break-words text-xs text-violet-200">{notice}</p>}
     </section>
   );

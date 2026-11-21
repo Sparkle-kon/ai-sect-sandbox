@@ -2,6 +2,9 @@ import { FAST_FORWARD_MAX_TICKS } from './engine/fastForwardEngine';
 import { projectChronicleLead, publicChronicleSceneEvents } from './engine/chronicleLead';
 import type { FastForwardCheckpoint, FastForwardProgress, FastForwardWorkerRequest, FastForwardWorkerResponse } from './engine/fastForwardEngine';
 import type { SaveBranchSource } from './engine/storageEngine';
+import type { NarrativeArchivePlan } from './engine/saveCapacityEngine';
+import { applyArchiveOptimization } from './engine/saveArchiveSeal';
+import type { FastForwardPreflightBinding } from './components/FastForwardPanel';
 import { courierCheckpoint } from './engine/sealedCourierEngine';
 import { expeditionRescueCheckpoint } from './engine/expeditionRescueCheckpoint';
 import { boundaryReliefCheckpoint } from './engine/boundaryReliefCheckpoint';
@@ -437,6 +440,23 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
     return true;
   };
 
+  const archiveCurrentNarrative = async (plan: NarrativeArchivePlan, expected: WorldState, contextVersion: number,
+    source?: SaveBranchSource): Promise<boolean> => {
+    const branchId = source?.branchId;
+    const ready = () => canUseSaveContext(expected, contextVersion) && !fastForwardRun.current &&
+      branchId === history.current.activeBranchId;
+    if (!ready()) return false;
+    const candidate = applyArchiveOptimization(expected, plan);
+    if (!candidate) return false;
+    const original = history.current;
+    const archived = recordTimelineWorld(original, candidate, branchId);
+    if (archived === original) return false;
+    saveContextVersion.current += 1;
+    updateTimeline(archived);
+    updateWorld(() => candidate, false);
+    return true;
+  };
+
   const newWorldFromSeed = (seed: number, profileId: WorldgenProfileId, expected: WorldState, expectedContextVersion?: number): boolean =>
     isWorldSeed(seed) && isWorldgenProfileId(profileId) && canUseSaveContext(expected, expectedContextVersion) &&
     replaceWorld(createInitialWorld(seed, profileId), expected, expectedContextVersion);
@@ -503,10 +523,17 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
     if (run && !isFastForwardSourceCurrent(run)) stopFastForward('原分支已经变化，隔离结果未提交。');
   }, [world, timeline, preview]);
 
-  const startFastForward = (requestedTicks: number) => {
+  const startFastForward = (requestedTicks: number, binding: FastForwardPreflightBinding) => {
     if (fastForwardRun.current || typeof Worker !== 'function' || stepInFlight.current || browsing.current ||
         !Number.isSafeInteger(requestedTicks) || requestedTicks < 1 || requestedTicks > FAST_FORWARD_MAX_TICKS) return;
     const at = history.current;
+    const head = at.branches.find(({id})=>id===at.activeBranchId)?.snapshots.at(-1);
+    if (!binding || binding.world !== authority.current || binding.timeline !== at || binding.branchId !== at.activeBranchId ||
+        binding.head !== head || binding.count !== requestedTicks || binding.contextVersion !== saveContextVersion.current ||
+        binding.scopeKey !== viewScopeKey) {
+      setFastForwardView({ phase: 'error', notice: '快进预检已与当前分支不符，请重新预检。当前世界未推进。' });
+      return;
+    }
     if (at.branches.length >= TIMELINE_MAX_BRANCHES) {
       setFastForwardView({ phase: 'error', notice: '分支位已满，未开始快进，也没有删除任何分支。' });
       return;
@@ -809,6 +836,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
             <TimelinePanel timeline={timeline} previewTick={preview?.tick ?? null} busy={isStepping}
               onPreview={handleTimelinePreview} onSelectBranch={handleTimelineSelectBranch} onFork={handleTimelineFork} notice={timelineNotice}
               fastForward={{ ...fastForwardView, available: typeof Worker === 'function' && !preview && !isStepping && timeline.branches.length < TIMELINE_MAX_BRANCHES,
+                capacitySource: {world,contextVersion:saveContextVersion.current,scopeKey:viewScopeKey},
                 onStart: startFastForward, onPause: () => commandFastForward('pause'), onResume: () => commandFastForward('resume'),
                 onStage: () => commandFastForward('stage'), onCancel: () => stopFastForward('已取消并丢弃暂存结果，原分支不变。'), onApply: applyFastForward }} />
           </React.Suspense> },
@@ -897,7 +925,8 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
               </div>
               <React.Suspense fallback={<p role="status">载入存档管理…</p>}>
                 <WorldStoragePanel world={world} busy={isStepping} contextVersion={saveContextVersion.current}
-                  canUseContext={canUseSaveContext} sourceBranch={sourceBranch} onRestore={replaceWorld} onNewWorld={newWorldFromSeed} />
+                  canUseContext={canUseSaveContext} sourceBranch={sourceBranch} timeline={timeline}
+                  onArchiveNarrative={archiveCurrentNarrative} onRestore={replaceWorld} onNewWorld={newWorldFromSeed} />
               </React.Suspense>
             </div> },
           ]),

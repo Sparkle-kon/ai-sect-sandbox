@@ -22,7 +22,8 @@ describe('world storage UI boundary', () => {
     expect(markup).toContain('请先核验此槽，再选择要读取的存档副本');
     expect(markup).not.toContain('读取恢复点');
     expect(markup).toContain('删除存档');
-    expect(markup).toContain('导出当前世界 JSON');
+    expect(markup).toContain('预检当前世界 JSON');
+    expect(markup).not.toContain('下载已预检 JSON');
     expect(markup).toContain('accept=".json,application/json"');
     expect(markup).toContain('最大 8 MiB');
     expect(markup).toContain('私密游戏对话');

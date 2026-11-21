@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import type { WorldgenProfileId, WorldState } from '../types/world';
 import {
-  decodeWorldSave, encodeWorldSave, worldSaveByteCount, WORLD_SAVE_MAX_BYTES, WORLD_SAVE_MAX_SLOTS, worldSaveStore,
+  decodeWorldSave, encodeWorldSave, WORLD_SAVE_MAX_BYTES, WORLD_SAVE_MAX_SLOTS, worldSaveStore,
 } from '../engine/storageEngine';
 import type { SaveBranchSource, SavePointInfo, SaveSlotInspection, SaveSlotSummary } from '../engine/storageEngine';
+import { measureSaveCapacity, prepareArchiveOptimization, type NarrativeArchivePlan, type SaveCapacityReport } from '../engine/saveCapacityEngine';
+import type { WorldTimeline } from '../engine/timelineEngine';
 import { isWorldgenProfileId, WORLDGEN_PROFILES } from '../engine/worldgenProfiles';
 
 type Storage = Pick<typeof worldSaveStore, 'list' | 'inspect' | 'loadSelected' | 'save' | 'delete' | 'capabilities'>;
@@ -16,6 +18,7 @@ type Confirmation =
   | { kind: 'import'; world: WorldState }
   | { kind: 'new'; seed: number; profileId: WorldgenProfileId; expected: WorldState };
 type Staged = { action: Confirmation; stamp: ContextStamp; store: Storage };
+type SnapshotReview<T> = { result: T; stamp: ContextStamp; timeline?: WorldTimeline };
 
 export interface WorldStoragePanelProps {
   world: WorldState;
@@ -24,6 +27,8 @@ export interface WorldStoragePanelProps {
   sourceBranch?: SaveBranchSource;
   contextVersion?: number;
   canUseContext?: (world: WorldState, version: number) => boolean;
+  timeline?: WorldTimeline;
+  onArchiveNarrative?: (plan: NarrativeArchivePlan, expected: WorldState, contextVersion: number, sourceBranch?: SaveBranchSource) => Promise<boolean>;
   onRestore: (incoming: WorldState, expected: WorldState, contextVersion?: number) => boolean;
   onNewWorld: (seed: number, profileId: WorldgenProfileId, expected: WorldState, contextVersion?: number) => boolean;
   store?: Storage;
@@ -61,6 +66,11 @@ export function sameSaveSlotRevision(reviewed: SaveSlotSummary | undefined, curr
 }
 
 export const sameStorageContext = (a: ContextStamp, b: ContextStamp) => a.world === b.world && a.version === b.version && a.branchId === b.branchId && a.timelineId === b.timelineId;
+export const sameStorageReview = <T,>(review: SnapshotReview<T> | undefined, stamp: ContextStamp, timeline?: WorldTimeline): review is SnapshotReview<T> =>
+  review !== undefined && review.timeline === timeline && sameStorageContext(review.stamp, stamp);
+export const canDownloadPreparedSave = (report: SaveCapacityReport): boolean => report.withinLimit === true &&
+  report.jsonBytes !== null && report.jsonBytes > 0 && report.jsonBytes <= report.limitBytes;
+const bytes = (value: number | null) => value === null ? '暂不可测' : `${value.toLocaleString('zh-CN')} 字节`;
 const pointLabel = (point: SavePointInfo['selection']['point']) => point === 'current' ? '当前版' : '恢复点';
 const branchName = (source?: SaveBranchSource) => source ? source.label || source.branchId : '未记录来源分支';
 
@@ -77,7 +87,8 @@ export function describeConfirmation(action: Confirmation): string {
   }
 }
 
-export function WorldStoragePanel({ world, busy, readOnly = false, sourceBranch, contextVersion = 0, canUseContext, onRestore, onNewWorld, store = worldSaveStore }: WorldStoragePanelProps) {
+export function WorldStoragePanel({ world, busy, readOnly = false, sourceBranch, contextVersion = 0, canUseContext, timeline,
+  onArchiveNarrative, onRestore, onNewWorld, store = worldSaveStore }: WorldStoragePanelProps) {
   const [slots, setSlots] = useState<SaveSlotSummary[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [capabilities, setCapabilities] = useState<Capabilities>();
@@ -88,7 +99,8 @@ export function WorldStoragePanel({ world, busy, readOnly = false, sourceBranch,
   const [profileDraft, setProfileDraft] = useState<WorldgenProfileId>();
   const [staged, setStaged] = useState<Staged>();
   const [status, setStatus] = useState('');
-  const [sizeInspection, setSizeInspection] = useState<{ world: WorldState; bytes: number | null }>();
+  const [preflight, setPreflight] = useState<SnapshotReview<SaveCapacityReport>>();
+  const [archiveReview, setArchiveReview] = useState<SnapshotReview<NarrativeArchivePlan>>();
   const [working, setWorking] = useState(false);
   const inFlight = useRef(false);
   const mounted = useRef(true);
@@ -102,12 +114,14 @@ export function WorldStoragePanel({ world, busy, readOnly = false, sourceBranch,
   const profile = WORLDGEN_PROFILES[profileId];
   const longestBirthPath = generation?.resources.reduce((limit, item) => Math.max(limit, item.pathSteps), 0) ?? 0;
   const context = { world, version: contextVersion, branchId: sourceBranch?.branchId, timelineId: sourceBranch?.timelineId };
-  const observed = useRef({ ...context, store, slotId, busy, readOnly });
-  observed.current = { ...context, store, slotId, busy, readOnly };
+  const observed = useRef({ ...context, store, slotId, busy, readOnly, timeline });
+  observed.current = { ...context, store, slotId, busy, readOnly, timeline };
   const confirmation = staged && staged.store === store && sameStorageContext(staged.stamp, context) ? staged : undefined;
   const reviewed = inspection && inspection.store === store && inspection.review.id === slotId &&
     sameStorageContext(inspection.stamp, context) ? inspection.review : undefined;
   const blocked = busy || working || confirmation !== undefined;
+  const currentPreflight = sameStorageReview(preflight, context, timeline) ? preflight : undefined;
+  const currentArchive = sameStorageReview(archiveReview, context, timeline) ? archiveReview : undefined;
   const writeAllowed = loaded && capabilities?.writable === true && !readOnly;
   const stillHere = (stamp: ContextStamp) => mounted.current && observed.current.store === store && sameStorageContext(stamp, observed.current);
   const authority = (stamp: ContextStamp) => stillHere(stamp) && !observed.current.busy && !observed.current.readOnly &&
@@ -235,18 +249,22 @@ export function WorldStoragePanel({ world, busy, readOnly = false, sourceBranch,
     });
   };
 
-  useEffect(() => { setSizeInspection(undefined); }, [world]);
+  useEffect(() => {
+    if (preflight && !currentPreflight) setPreflight(undefined);
+    if (archiveReview && !currentArchive) setArchiveReview(undefined);
+  }, [preflight, currentPreflight, archiveReview, currentArchive]);
 
-  const inspectSize = () => {
-    if (blocked) return;
-    try { setSizeInspection({ world, bytes: worldSaveByteCount(world) }); }
-    catch { setSizeInspection({ world, bytes: null }); }
+  const inspectCapacity = () => {
+    if (blocked || inFlight.current || !stillHere(context)) return;
+    setPreflight({ stamp: context, timeline, result: measureSaveCapacity(world, timeline) });
   };
 
-  const downloadWorld = (snapshot: WorldState, prefix = 'ai-sect') => {
+  const downloadWorld = (snapshot: WorldState, prefix = 'ai-sect', reviewedBytes?: number) => {
     const payload = encodeWorldSave(snapshot);
+    const blob = new Blob([payload], { type: 'application/json' });
+    if (reviewedBytes !== undefined && blob.size !== reviewedBytes) throw new Error('JSON 大小已变化，未下载。请重新预检。');
     if (oldDownload.current) URL.revokeObjectURL(oldDownload.current);
-    const url = URL.createObjectURL(new Blob([payload], { type: 'application/json' }));
+    const url = URL.createObjectURL(blob);
     oldDownload.current = url;
     const link = document.createElement('a');
     link.href = url;
@@ -257,10 +275,34 @@ export function WorldStoragePanel({ world, busy, readOnly = false, sourceBranch,
   };
 
   const exportFile = () => {
-    if (blocked) return;
+    if (blocked || !currentPreflight || !canDownloadPreparedSave(currentPreflight.result)) return;
     void work(async () => {
-      downloadWorld(world);
+      if (!stillHere(currentPreflight.stamp) || !sameStorageReview(currentPreflight, observed.current, observed.current.timeline)) {
+        setStatus('世界、分支或快照在预检后已变化，未下载。请重新预检。');
+        return;
+      }
+      downloadWorld(currentPreflight.stamp.world, 'ai-sect', currentPreflight.result.jsonBytes ?? undefined);
       setStatus('已交给浏览器下载 JSON；请检查浏览器下载目录。');
+    });
+  };
+
+  const stageArchive = () => {
+    if (blocked || inFlight.current || !onArchiveNarrative || !authority(context)) return;
+    setArchiveReview(undefined);
+    setStatus('');
+    try { setArchiveReview({ stamp: context, timeline, result: prepareArchiveOptimization(context.world) }); }
+    catch { setStatus('目前无法预览旧章归档；当前世界未改变。'); }
+  };
+
+  const confirmArchive = () => {
+    if (blocked || !onArchiveNarrative || !currentArchive || currentArchive.result.movedCount <= 0 ||
+      !authority(currentArchive.stamp) || !sameStorageReview(currentArchive, observed.current, observed.current.timeline)) return;
+    const { result, stamp } = currentArchive;
+    setArchiveReview(undefined);
+    void work(async () => {
+      const applied = await onArchiveNarrative(result, stamp.world, stamp.version, sourceBranch);
+      setStatus(applied ? `已移动 ${result.movedCount} 章到本分支远纪档案，没有删除章节。重新预检可查看当前文件大小。`
+        : '世界、分支或归档候选已变化，未迁移。请重新预览。');
     });
   };
 
@@ -342,8 +384,7 @@ export function WorldStoragePanel({ world, busy, readOnly = false, sourceBranch,
         <legend className="px-1 text-xs font-semibold text-slate-200">JSON 文件</legend>
         <p className="text-xs leading-relaxed text-amber-200">存档与导出的 JSON 可能包含私密游戏对话。不会导出应用中的模型服务凭证或配置，但聊天原文会保留，请勿在对话中写入密钥；分享前请检查。</p>
         <div className="flex flex-wrap items-end gap-2">
-          <button type="button" className={button} onClick={exportFile}>导出当前世界 JSON</button>
-          <button type="button" className={`${button} min-h-11`} onClick={inspectSize}>测量当前存档大小</button>
+          <button type="button" className={button} onClick={inspectCapacity}>预检当前世界 JSON</button>
           <label className="grid min-w-0 gap-1 text-xs text-slate-300">
             选择导入文件（最大 {fileLimitMb} MiB）
             <input type="file" accept=".json,application/json" disabled={readOnly} className={`${field} max-w-full`} onChange={(event) => {
@@ -358,11 +399,13 @@ export function WorldStoragePanel({ world, busy, readOnly = false, sourceBranch,
             }} />
           </label>
         </div>
-        <p className="text-xs text-slate-400">测量的是导出 JSON 的 UTF-8 字节数，不下载文件，也不是浏览器内存占用。</p>
-        {sizeInspection?.world === world && <p className="text-xs text-sky-100" role="status">
-          {sizeInspection.bytes === null ? '当前存档大小暂不可测。' :
-            `Tick #${world.tick} · ${sizeInspection.bytes.toLocaleString('zh-CN')} 字节${sizeInspection.bytes > WORLD_SAVE_MAX_BYTES ? '，超过单个 JSON 文件上限' : ''}。`}
-        </p>}
+        <p className="text-xs text-slate-400">预检测量导出 JSON 的 UTF-8 字节数，不下载文件，也不是浏览器内存占用。</p>
+        {currentPreflight && <SaveCapacityResult report={currentPreflight.result} onDownload={exportFile} />}
+        {onArchiveNarrative && !readOnly && <div className="space-y-2 border-t border-slate-800 pt-2">
+          <button type="button" className={button} onClick={stageArchive}>预览旧章归档</button>
+          {currentArchive && <ArchiveOptimizationReview plan={currentArchive.result} onApply={confirmArchive}
+            onCancel={() => setArchiveReview(undefined)} />}
+        </div>}
       </fieldset>
       <fieldset disabled={blocked || readOnly} className="min-w-0 space-y-2 rounded border border-slate-800 p-2">
         <legend className="px-1 text-xs font-semibold text-slate-200">建立新世界</legend>
@@ -401,6 +444,36 @@ export function WorldStoragePanel({ world, busy, readOnly = false, sourceBranch,
       <p role="status" className="break-words text-xs text-sky-200">{working ? '处理中…' : status}</p>
     </section>
   );
+}
+
+export function SaveCapacityResult({ report, onDownload }: { report: SaveCapacityReport; onDownload: () => void }) {
+  return <div aria-label="当前 JSON 预检结果" className="min-w-0 space-y-1.5 rounded border border-slate-800 p-2 text-xs text-slate-300">
+    <p className="break-words text-sky-100" role="status">Tick #{report.tick} · JSON {bytes(report.jsonBytes)} · 上限 {bytes(report.limitBytes)}。
+      {report.withinLimit === false && ' 超过单个 JSON 文件上限，不提供下载。'}
+      {report.withinLimit === null && ' 当前无法完成预检，不提供下载。'}
+    </p>
+    {report.timeline && <p className="break-words">
+      时间线仅计引用：{report.timeline.branchCount} 条分支 · {report.timeline.snapshotReferences} 条快照引用，指向 {report.timeline.uniqueSnapshots} 个不同快照（其中 {report.timeline.sharedReferences} 条为共享引用）。不是内存测量。
+    </p>}
+    {canDownloadPreparedSave(report) && <button type="button" className={button} onClick={onDownload}>下载已预检 JSON</button>}
+  </div>;
+}
+
+export function ArchiveOptimizationReview({ plan, onApply, onCancel }: { plan: NarrativeArchivePlan; onApply: () => void; onCancel: () => void }) {
+  const measured = plan.beforeBytes !== null && plan.afterBytes !== null;
+  return <div aria-label="旧章归档预览" className="min-w-0 space-y-1.5 rounded border border-amber-500/50 p-2 text-xs text-amber-100">
+    <p role="status">Tick #{plan.tick} · {plan.movedCount > 0 ? `本次可移动 ${plan.movedCount} 章。` : measured ? '此时没有可移动的章节。' : '无法核算本次文件大小，不会移动章节。'}</p>
+    <p>近期章目 {plan.hotBefore} → {plan.hotAfter} 章 · 远纪档案 {plan.coldBefore} → {plan.coldAfter} 章。</p>
+    <p>候选 {plan.eligibleCount} 章 · 远纪档案可用位置 {plan.availableColdRoom}。</p>
+    <p className="break-words">JSON：{bytes(plan.beforeBytes)} → {bytes(plan.afterBytes)}。
+      {measured && plan.beforeBytes === plan.afterBytes && ' 导出大小不变。'}
+      {plan.afterBytes !== null && plan.afterBytes > plan.limitBytes && ' 移动后仍超过单个 JSON 文件上限。'}</p>
+    <p>只把旧公开章节移到当前分支的远纪档案。不会删除章节、人物或原始凭据，也不会载入或重置世界。</p>
+    <div className="flex flex-wrap gap-1.5">
+      {measured && plan.movedCount > 0 && <button type="button" className={confirmButton} onClick={onApply}>确认仅迁移旧章</button>}
+      <button type="button" className={button} onClick={onCancel}>关闭预览</button>
+    </div>
+  </div>;
 }
 
 export function SavePointRows({ review, recoverySupported, readOnly, onLoad, onExport }: {
