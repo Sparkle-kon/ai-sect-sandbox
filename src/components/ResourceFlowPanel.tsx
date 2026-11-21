@@ -25,6 +25,7 @@ const REASONS: Readonly<Record<string, string>> = {
   shipment_return: '商队退运退款退货', shipment_refund: '货损退款', shipment_loss: '实际货损',
   artifact_salvage_recovery: '拆解原器实回玄土根',
   furnace_safety_inspection: '现场验炉实耗灵石', furnace_safety_repair: '炉体修缮实耗备料',
+  stipend_payment: '退居俸养本期实际兑付',
   civic_memorial_supplies: '乡祠立册实际耗用',
   fair_reserve_fee: '乡集摊位预约资金保管', fair_local_service: '原地摆摊实际摊费', fair_refund_fee: '未摆摊实退原预约资金',
   granary_donation: '捐入村镇义仓', granary_draw: '灾后短缺实际支用',

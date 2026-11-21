@@ -152,6 +152,7 @@ export type ActionType =
   | 'WORKSHOP_CAPACITY'
   | 'CIVIC_MEMORIAL'
   | 'VILLAGE_FAIR'
+  | 'SECT_STIPEND'
   | 'FORGE_ARTIFACT'
   | 'BIND_ARTIFACT'
   | 'REPAIR_ARTIFACT'
@@ -556,6 +557,8 @@ export interface LLMDecisionPayload {
   workshopCapacityMove?: WorkshopCapacityMove;
   civicMemorialMove?: CivicMemorialMove;
   villageFairMove?: VillageFairMove;
+  stipendMove?:SectStipendMove;
+  targetStipendId?:string;
   targetVillageFairId?: string;
   targetCivicDeedId?: string;
   targetCivicMemorialId?: string;
@@ -2249,6 +2252,36 @@ export interface ServiceRetirementRecord {
 }
 export interface ServiceRetirementState { history: ServiceRetirementRecord[]; nextId: number }
 
+export type SectStipendMove='offer'|'accept'|'adopt'|'decline'|'withdraw';
+export interface SectStipendHandoff {fromId:string;toId:string;successionTick:number;adoptedTick:number}
+export interface SectStipendPeriod {
+  dueTick:number;
+  settledTick:number;
+  authorityId?:string;
+  dueAmount:12;
+  paidAmount:0|12;
+  status:'paid'|'unpaid';
+  reason?:'treasury_short'|'authority_absent'|'recipient_absent'|'title_unavailable'|'recipient_capacity';
+}
+export interface SectStipend {
+  id:string;
+  sectId:string;
+  siteId:string;
+  recipientId:string;
+  sponsorId:string;
+  service:{retirementId:string;retiredTick:number;caseId:string;shiftId:string;patientId:string;servedTick:number};
+  offeredTick:number;
+  expiresTick:number;
+  status:'offered'|'active'|'completed'|'closed'|'declined'|'withdrawn'|'expired';
+  acceptedTick?:number;
+  closedTick?:number;
+  closedById?:string;
+  closure?:'recipient_died'|'returned_to_service'|'affiliation_changed';
+  handoffs:SectStipendHandoff[];
+  periods:SectStipendPeriod[];
+}
+export interface SectStipendsState {stipends:SectStipend[];nextId:number}
+
 export type CommonsMove = 'offer' | 'sign' | 'decline';
 export type CommonsCloseReason = 'declined' | 'offer_expiry' | 'title_change' | 'site_lost' | 'term_complete' | 'stale_signer';
 export interface CommonsParty { sectId: string; signerId: string; share: 1 | 2; signedTick?: number }
@@ -2281,7 +2314,7 @@ export interface SharedCommonsPact {
 export interface SharedCommonsState { pacts: SharedCommonsPact[]; nextId: number }
 
 export type ResourceFlowGood = 'stone' | MarketGood;
-export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation' | 'terrain' | 'workshop' | 'road' | 'observatory' | 'pilgrimage' | 'granary' | 'furnace_safety' | 'artifact_salvage' | 'village_supply' | 'civic_memorial' | 'village_fair';
+export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation' | 'terrain' | 'workshop' | 'road' | 'observatory' | 'pilgrimage' | 'granary' | 'furnace_safety' | 'artifact_salvage' | 'village_supply' | 'civic_memorial' | 'village_fair' | 'sect_stipend';
 export type ResourceFlowAccount =
   | { kind: 'actor' | 'site' | 'sect' | 'order' | 'shipment' | 'relocation' | 'workshop' | 'salvage' | 'granary' | 'village_supply' | 'village_fair'; id: string }
   | { kind: 'oath'; id: string; pocket: 'payment' | 'collateral' };
@@ -2816,6 +2849,7 @@ export interface WorldState {
   pavilionLoans: PavilionLoansState;
   civicMemorials: CivicMemorialsState;
   villageFairs: VillageFairsState;
+  sectStipends: SectStipendsState;
   resourceFlow: ResourceFlowState;
   roads: RoadState;
   sharedCommons: SharedCommonsState;

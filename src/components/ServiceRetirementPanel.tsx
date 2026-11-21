@@ -2,6 +2,7 @@ import {
   availableServiceRetirementActions, isRetiredFromService, SERVICE_RETIREMENT_MIN_TICKS, visibleServiceRetirements,
 } from '../engine/serviceRetirementEngine';
 import type { Cultivator, WorldState } from '../types/world';
+import { ServiceStipendPanel } from './ServiceStipendPanel';
 
 export function ServiceRetirementPanel({ world, cultivator }: { world: WorldState; cultivator: Cultivator }) {
   const actor = world.cultivators.find(({ id }) => id === cultivator.id);
@@ -9,7 +10,7 @@ export function ServiceRetirementPanel({ world, cultivator }: { world: WorldStat
   const history = visibleServiceRetirements(world, actor).filter(({ actorId, tick }) => actorId === actor.id && tick <= world.tick)
     .sort((a, b) => b.tick - a.tick);
   const service = actor.service && actor.service.changedTick <= world.tick ? actor.service : undefined;
-  if (!service && history.length === 0) return null;
+  if (!service && history.length === 0) return <ServiceStipendPanel world={world} cultivator={actor} />;
   const retired = service ? isRetiredFromService(actor) : false;
   const mayReturn = retired && actor.alive && availableServiceRetirementActions(actor, world).some(({ serviceMove }) => serviceMove === 'return');
   const sects = new Map(world.sects.map((sect) => [sect.id, sect]));
@@ -53,6 +54,7 @@ export function ServiceRetirementPanel({ world, cultivator }: { world: WorldStat
             );
           })}
         </ol>}
+        <ServiceStipendPanel world={world} cultivator={actor} />
       </div>
     </details>
   );

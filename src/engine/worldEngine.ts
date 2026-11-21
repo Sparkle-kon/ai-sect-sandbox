@@ -18,6 +18,7 @@ import { advanceVillageSupply, resolveVillageSupplyAction } from './villageSuppl
 import { resolvePavilionLoanAction } from './pavilionLoanEngine';
 import { advanceCivicMemorials,resolveCivicMemorialAction } from './civicMemorialEngine';
 import { advanceVillageFairs,resolveVillageFairAction } from './villageFairEngine';
+import { advanceSectStipends,resolveSectStipendAction } from './sectStipendEngine';
 import { advanceRouteWarnings,availableRouteWarningActions,resolveRouteWarningAction } from './routeWarningEngine';
 import { resolveCaravanRestitutionAction } from './caravanRestitutionEngine';
 import { boundaryReliefCheckpoint } from './boundaryReliefCheckpoint';
@@ -293,6 +294,8 @@ export function applyCultivatorBrainDecision(
       return resolveApprenticeCohortAction(world, cultivator, decision);
     case 'HOUSEHOLD_NAME':
       return resolveHouseholdNameAction(world, cultivator, decision);
+    case 'SECT_STIPEND':
+      return resolveSectStipendAction(world,cultivator,decision);
     case 'VILLAGE_FAIR':
       return resolveVillageFairAction(world,cultivator,decision);
     case 'CIVIC_MEMORIAL':
@@ -937,6 +940,10 @@ export function advanceWorldTick(
     publicCompetitionStandings(state, seasonId).find(({ rank }) => rank === 1)), ...maintainSectPolitics(nextState), ...advanceBounties(nextState), ...advanceResearch(nextState), ...advanceWorkshops(nextState), ...advanceRelicExhibits(nextState), ...advanceProbation(nextState), ...advanceEstates(nextState), ...advanceDoctrines(nextState), ...advanceSectCredit(nextState), ...advanceSanctuaries(nextState), ...advancePilgrimages(nextState), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...reconcileCourierDeaths(nextState), ...advanceHouseholds(nextState), ...advanceHouseholdNames(nextState)]) {
     newEvents.push(event);
     witnessEvent(nextState, event);
+  }
+  for(const event of advanceSectStipends(nextState)) {
+    newEvents.push(event);
+    witnessEvent(nextState,event);
   }
   advanceCivicMemorials(nextState);
   advanceChronicleErrata(nextState);

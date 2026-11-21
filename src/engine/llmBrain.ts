@@ -41,6 +41,7 @@ import { activeEscortForActor, availableEscortActions } from './escortEngine';
 import { availableCompetitionActions, competitionActorOptedOut } from './competitionEngine';
 import { availableScriptureActions, scriptureEditionModifiers } from './scriptureEngine';
 import { availablePavilionLoanActions } from './pavilionLoanEngine';
+import { availableSectStipendActions } from './sectStipendEngine';
 import { availableRelicActions } from './relicEngine';
 import { availableRecollectionActions, visibleRecollection } from './reincarnationEngine';
 import { activeRelocationForActor, availableRelocationActions } from './relocationEngine';
@@ -303,6 +304,24 @@ export function computeHeuristicDecision(
   const returnBook = pavilionLoans.find(({ pavilionLoanMove }) => pavilionLoanMove === 'return');
   if (returnBook) return { chosenAction: 'PAVILION_LOAN', pavilionLoanMove: 'return', targetPavilionLoanId: returnBook.targetPavilionLoanId,
     innerMonologue: '已到原藏经阁，当面将同一册还给当值人。' };
+
+  const leadingAtStipendSite = world.sects.some(({ leaderId, headquartersId }) =>
+    leaderId === cultivator.id && headquartersId === cultivator.locationId);
+  const willingStipend = !cultivator.guardAssignment && cultivator.hp >= cultivator.maxHp * .65;
+  if (willingStipend && (leadingAtStipendSite || isRetiredFromService(cultivator)) &&
+      world.sectStipends.stipends.some(({ status, sectId, recipientId }) =>
+        (status === 'offered' && recipientId === cultivator.id) ||
+        (status === 'active' && leadingAtStipendSite && sectId === cultivator.sectId))) {
+    const selected = availableSectStipendActions(cultivator, world).filter(({ stipendMove }) =>
+      stipendMove === 'accept' || stipendMove === 'adopt');
+    if (selected.length === 1) {
+      const choice = selected[0];
+      return { chosenAction: 'SECT_STIPEND', stipendMove: choice.stipendMove, targetStipendId: choice.targetStipendId,
+        innerMonologue: choice.stipendMove === 'adopt'
+          ? '依实认领前任的这项俸养，不改原约，不替本期支用。'
+          : '本人自愿领受这项据旧勤列出的俸养，不由此复任。' };
+    }
+  }
 
   const observe = surveyOptions.find(({ observatoryMove }) => observatoryMove === 'relay') ??
     (mayFundWeather ? surveyOptions.find(({ observatoryMove }) => observatoryMove === 'fund') : undefined);
@@ -1024,6 +1043,14 @@ export function computeHeuristicDecision(
     }
   }
 
+  if (willingStipend && leadingAtStipendSite && world.tick >= 18 &&
+      (world.tick + cultivator.id.charCodeAt(cultivator.id.length - 1)) % 11 === 7 &&
+      (cultivator.personality === '刚正' || cultivator.personality === '逍遥')) {
+    const offers = availableSectStipendActions(cultivator, world).filter(({ stipendMove }) => stipendMove === 'offer');
+    if (offers.length === 1) return { chosenAction: 'SECT_STIPEND', stipendMove: 'offer',
+      targetInfirmaryCaseId: offers[0].targetInfirmaryCaseId, innerMonologue: '只依既有旧勤记录提请俸养，由对方本人选择。' };
+  }
+
   // Irreversible disposal is optional and never interrupts a scheduled duty.
   // Keep a usable alternative and leave even slightly repairable or distinctive gear alone.
   if (world.tick >= 16 && world.tick % 13 === 3 && !cultivator.guardAssignment &&
@@ -1221,6 +1248,9 @@ export async function requestCultivatorLLMDecision(
   const householdNameOptions = availableHouseholdNameActions(cultivator, world, requestTick);
   const leaseOptions = availableTerritorialLeaseActions(cultivator, world);
   const formationOptions = availableFormationActions(cultivator, world);
+  const stipendOptions = availableSectStipendActions(cultivator, world, requestTick);
+  const stipendPromptOptions = stipendOptions.map(({ stipendMove, targetInfirmaryCaseId, targetStipendId }) =>
+    ({ stipendMove, targetInfirmaryCaseId, targetStipendId }));
   const infirmaryOptions = availableInfirmaryActions(cultivator, world, requestTick)
     .map(({ action, infirmaryMove, targetInfirmaryCaseId }) => ({ action, infirmaryMove, targetInfirmaryCaseId }));
   const habitatOptions = availableHabitatActions(cultivator, world);
@@ -1295,6 +1325,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 家户监护只允许双方自愿，不能自填亲缘或宗籍；照抄已见的选项：${JSON.stringify(guardianOptions)}
 - 地契只按本地印契和真实所有权办理，只出租限期采集许可，不转移疆域：${JSON.stringify(leaseOptions)}
 - 阵网只用实际签约、到场与灵气选项；overload 是主动超载且必会断链，不是默认调拨：${JSON.stringify(formationOptions)}
+- 退居俸养只复制本人执行回合许可：offer 只填已有旧勤凭据的 targetInfirmaryCaseId；accept、adopt、decline、withdraw 只填 targetStipendId。不得填写姓名、病况、钱款、日期、继任依据、发放结果或复职：${JSON.stringify(stipendPromptOptions)}
 - 静养院只可复制本人执行回合的 request、staff、accept、accept_handoff 或 refuse。accept_handoff 是病患另行同意真实已值守的候补，只抄本人候诊编号；不填人员、班次、病况、地名、冲突细节、费用和奖励：${JSON.stringify(infirmaryOptions)}
 - 栖息地复育与放归只用当地实际有资源的选择；记录复见必须亲眼核对同一野生灵兽：${JSON.stringify(habitatOptions)}
 - 纪事异闻只允在当地公示板提交列出的结构化说法或核证勘误，不许生成证据文字：${JSON.stringify(chronicleErrataOptions)}
@@ -1447,6 +1478,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'CHRONICLE_ERRATA',
             'HABITAT',
             'INFIRMARY',
+            'SECT_STIPEND',
             'FORMATION_NETWORK',
             'TERRITORIAL_LEASE',
             'HOUSEHOLD_GUARDIAN',
@@ -1626,6 +1658,19 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
           if (chosenAction === 'FORMATION_NETWORK' && (!legalFormation || parsed.targetLocationId !== undefined ||
               parsed.targetCultivatorId !== undefined)) return undefined;
 
+          const legalStipend = chosenAction === 'SECT_STIPEND' ? stipendOptions.find((item) =>
+            item.stipendMove === parsed.stipendMove && item.targetInfirmaryCaseId === parsed.targetInfirmaryCaseId &&
+            item.targetStipendId === parsed.targetStipendId) : undefined;
+          if (chosenAction === 'SECT_STIPEND' && (!legalStipend || Object.keys(parsed).some((field) =>
+            !['chosenAction', 'innerMonologue', 'stipendMove',
+              legalStipend.stipendMove === 'offer' ? 'targetInfirmaryCaseId' : 'targetStipendId'].includes(field)))) return undefined;
+          if (legalStipend) {
+            const innerMonologue = (typeof parsed.innerMonologue === 'string' && parsed.innerMonologue.trim().slice(0, 160)) ||
+              cultivator.innerMonologue || '按旧勤实据与本人许可办理。';
+            return legalStipend.stipendMove === 'offer'
+              ? { chosenAction: 'SECT_STIPEND', stipendMove: 'offer', targetInfirmaryCaseId: legalStipend.targetInfirmaryCaseId, innerMonologue }
+              : { chosenAction: 'SECT_STIPEND', stipendMove: legalStipend.stipendMove, targetStipendId: legalStipend.targetStipendId, innerMonologue };
+          }
           const legalInfirmary = chosenAction === 'INFIRMARY' ? infirmaryOptions.find((item) =>
             item.infirmaryMove === parsed.infirmaryMove && item.targetInfirmaryCaseId === parsed.targetInfirmaryCaseId) : undefined;
           if (chosenAction === 'INFIRMARY' && (!legalInfirmary || Object.keys(parsed).some((field) =>
