@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { BranchFateComparison } from './BranchFateComparison';
 import { compareAlignedBranches, listAlignedBranchTicks, type BranchComparisonResult } from '../engine/branchComparisonEngine';
 import type { CausalChronicleView } from '../engine/chronicleCausalityEngine';
 import type { WorldTimeline } from '../engine/timelineEngine';
@@ -145,6 +146,8 @@ function OpenComparison({ timeline, viewerId, preferredTick }: { timeline: World
       if (tick !== undefined && ticks.includes(tick) && canAlign) { setTick(tick); setReading({ left, right, tick }); }
     }}>对照此轮</button>
     {result && <BranchComparisonReading result={result} />}
+    {canAlign && tick !== undefined && <BranchFateComparison timeline={timeline} leftId={left} rightId={right}
+      throughTick={tick} viewerId={viewerId} />}
   </div>;
 }
 
