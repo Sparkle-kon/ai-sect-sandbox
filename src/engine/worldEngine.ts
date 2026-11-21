@@ -93,6 +93,7 @@ import { knownMapLocations, noteTerrainVisit } from './terrainEngine';
 import { deriveMapPresentation } from './mapMotionEngine';
 import { advanceMapHazards } from './mapBrushEngine';
 import { resolveFurnaceSafetyAction } from './furnaceSafetyEngine';
+import { resolveArtifactSalvageAction } from './artifactSalvageEngine';
 import { advanceSpiritBeasts, petCombatBonus, tameSpiritBeast } from './spiritBeastEngine';
 
 export type GodInterventionType =
@@ -242,6 +243,8 @@ export function applyCultivatorBrainDecision(
       return null; // No active trial remains to face.
     case 'AMBUSH_TRIBULATION':
       return interfereTribulation(world, cultivator, decision.targetCultivatorId, rng);
+    case 'SALVAGE_ARTIFACT':
+      return resolveArtifactSalvageAction(cultivator, world, decision);
     case 'FORGE_ARTIFACT':
     case 'BIND_ARTIFACT':
     case 'REPAIR_ARTIFACT':

@@ -158,6 +158,9 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     (row.hostId === selected.id || row.workerId === selected.id)) : undefined;
   const furnaceShift = useMemo(() => selected
     ? availableFurnaceSlotSummary(world, selected, selected.locationId) : undefined, [world, selected]);
+  const ownCurrentFurnaceRecovery = useMemo(() => furnaceShift && selected && world.artifactSalvages.receipts.some((receipt) =>
+    receipt.ownerId === selected.id && receipt.siteId === selected.locationId && receipt.tick === world.tick) ?
+    selected.locationId : undefined, [world.tick,world.artifactSalvages,furnaceShift,selected]);
   const mapView = useMemo(() => createTerrainMapView(world, selected, fog), [world, selected, fog]);
   const extractionMarks = useMemo(() => [...new Map(
     [...mapView.extractionPositions.values()].map((point) => [`${point.x}:${point.y}`, point]),
@@ -980,6 +983,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       {localGranary && <p className="sr-only">在场确认：村镇义仓有实际库存。</p>}
       {compact && <p className="min-w-0 break-words border-t border-slate-800 px-3 py-2 text-xs text-slate-300" aria-label="地图当前选择">
         {selected ? <>当前选择：<span className="text-slate-100">{selected.name}</span> · {selected.alive ? `${selected.realm}${selected.realmStage}层` : '已陨落'}</> : '轻触地图选择修士。'}
+        {compact && ownCurrentFurnaceRecovery && isCurrentLocation(ownCurrentFurnaceRecovery) &&
+          <span className="block break-words text-emerald-300">本轮在此拆解原器，实回一份玄土根</span>}
       </p>}
       {clusterActors.length > 0 && <section className="space-y-2 border-t border-sky-900 bg-slate-900 px-3 py-2 text-xs text-slate-200"
         aria-label="聚合修士列表">
@@ -1040,6 +1045,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                 </span>
               </>
             )}
+            {ownCurrentFurnaceRecovery && selectedLocation?.id === ownCurrentFurnaceRecovery && isCurrentLocation(ownCurrentFurnaceRecovery) &&
+              <span className="text-emerald-300">本轮在此拆解原器，实回一份玄土根</span>}
             {selectedArtifact ? (
               <span className="text-violet-300">
                 装备法宝：{selectedArtifact.name} · 耐久 {durabilityOf(selectedArtifact)}/{maxDurabilityOf(selectedArtifact)}

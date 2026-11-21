@@ -225,8 +225,10 @@ function work(world: WorldState, order: WorkshopOrder, maker: Cultivator, rng: (
     const artifactId = artifactIdFor(order, piece);
     const baseDurability = ARTIFACT_RULES[order.tier].durability;
     const durability = quality === 'fine' ? Math.ceil(baseDurability * 1.2) : baseDurability;
+    const blank=order.work[(piece-1)*2];
     patron.artifacts.push({ id: artifactId, tier: order.tier, name: `${maker.spiritRoot}纹·工坊${order.tier}`, spiritRoot: maker.spiritRoot,
-      durability, maxDurability: durability, resonance: 0 });
+      durability, maxDurability: durability, resonance: 0,
+      workshopOrigin:{orderId:order.id,piece,makerId:maker.id,siteId:site.id,blankTick:blank.tick,finishedTick:row.tick} });
     order.escrowStones -= terms.feePerPiece;
     maker.spiritStones += terms.feePerPiece;
     Object.assign(row, { artifactId, feePaid: terms.feePerPiece });

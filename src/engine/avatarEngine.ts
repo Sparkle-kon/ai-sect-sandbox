@@ -1,4 +1,5 @@
 import type { AvatarIntent, AvatarInteractionMode, AvatarInteractionOption, AvatarInteractionRequest, AvatarOrder, AvatarTranscriptEntry, Cultivator, LLMDecisionPayload, PlayerAvatarState, WorldState } from '../types/world';
+import { availableArtifactSalvageActions } from './artifactSalvageEngine';
 import { activeSiegeForActor } from './diplomacyEngine';
 import { isTribulationActive } from './tribulationEngine';
 
@@ -78,13 +79,33 @@ export function queueAvatarOrder(world: WorldState, action: AvatarOrder): boolea
   return true;
 }
 
+/** Queue explicit, exact custody intent without spending a furnace slot or advancing time. */
+export function canQueueAvatarSalvage(world: WorldState, actorId: string): boolean {
+  const state = world.playerAvatar;
+  return Boolean(state && activeAvatar(world)?.id === actorId && !state.pendingOrder &&
+    state.essence >= AVATAR_ORDER_COST && (state.possessionUntilTick ?? 0) > world.tick + 1);
+}
+
+export function queueAvatarSalvage(world: WorldState, actorId: string, targetArtifactId: string, targetLocationId: string): boolean {
+  const { playerAvatar: state } = world;
+  const host = activeAvatar(world);
+  if (!host || !canQueueAvatarSalvage(world, actorId) ||
+      !availableArtifactSalvageActions(host, world, world.tick + 1).some((option) =>
+        option.targetArtifactId === targetArtifactId && option.targetLocationId === targetLocationId)) return false;
+  state.essence -= AVATAR_ORDER_COST;
+  state.pendingOrder = { actorId, action: 'SALVAGE_ARTIFACT', queuedTick: world.tick, targetArtifactId, targetLocationId };
+  return true;
+}
+
 export function consumeAvatarOrder(world: WorldState): { actorId: string; decision: LLMDecisionPayload } | undefined {
   const state = world.playerAvatar;
   const order = state?.pendingOrder;
   if (!order || world.tick <= order.queuedTick) return undefined;
   delete state.pendingOrder;
   if (world.tick !== order.queuedTick + 1 || activeAvatar(world)?.id !== order.actorId) return undefined;
-  return { actorId: order.actorId, decision: { chosenAction: order.action, innerMonologue: '遵化身指令行动' } };
+  const targets = order.action === 'SALVAGE_ARTIFACT' ?
+    { targetArtifactId: order.targetArtifactId, targetLocationId: order.targetLocationId } : {};
+  return { actorId: order.actorId, decision: { chosenAction: order.action, innerMonologue: '遵化身指令行动', ...targets } };
 }
 
 function affinity(world: WorldState, a: string, b: string) {

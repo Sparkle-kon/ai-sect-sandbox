@@ -13,7 +13,32 @@ export interface Technique {
 
 export type ArtifactTier = '法器' | '灵器' | '法宝' | '通天灵宝';
 
+/** Canonical delivery provenance, retained even after completed commission details roll away. */
+export interface WorkshopArtifactOrigin {
+  orderId: string;
+  piece: 1 | 2;
+  makerId: string;
+  siteId: string;
+  blankTick: number;
+  finishedTick: number;
+}
+
+export interface ArtifactSalvageReceipt {
+  artifactId: string;
+  artifactName: string;
+  ownerId: string;
+  siteId: string;
+  tick: number;
+  tier: '法器' | '灵器';
+  durability: number;
+  maxDurability: number;
+  origin: WorkshopArtifactOrigin;
+}
+/** Exact irreversible artifact identities; this is a receipt ledger, not a stockpile. */
+export interface ArtifactSalvageState { receipts: ArtifactSalvageReceipt[] }
+
 export interface Artifact {
+  workshopOrigin?: WorkshopArtifactOrigin;
   id?: string;
   tier?: ArtifactTier;
   durability?: number;
@@ -124,6 +149,7 @@ export type ActionType =
   | 'FORGE_ARTIFACT'
   | 'BIND_ARTIFACT'
   | 'REPAIR_ARTIFACT'
+  | 'SALVAGE_ARTIFACT'
   | 'AWAKEN_ARTIFACT'
   | 'FACE_TRIBULATION'
   | 'AMBUSH_TRIBULATION'
@@ -786,6 +812,10 @@ export interface AvatarInteractionOption {
 export interface AvatarInteractionRequest extends AvatarInteractionOption { message: string }
 export type AvatarInteractionCommand = AvatarInteractionRequest;
 export type AvatarOrder = 'REST' | 'CULTIVATE';
+export type AvatarPendingOrder = { actorId: string; queuedTick: number } & (
+  | { action: AvatarOrder }
+  | { action: 'SALVAGE_ARTIFACT'; targetArtifactId: string; targetLocationId: string }
+);
 export interface AvatarTranscriptEntry extends AvatarInteractionRequest {
   id: string;
   tick: number;
@@ -801,7 +831,7 @@ export interface PlayerAvatarState {
   switchAvailableTick: number;
   essence: number;
   lastRefreshTick: number;
-  pendingOrder?: { actorId: string; action: AvatarOrder; queuedTick: number };
+  pendingOrder?: AvatarPendingOrder;
   transcript: AvatarTranscriptEntry[];
 }
 
@@ -2093,7 +2123,7 @@ export interface SharedCommonsPact {
 export interface SharedCommonsState { pacts: SharedCommonsPact[]; nextId: number }
 
 export type ResourceFlowGood = 'stone' | MarketGood;
-export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation' | 'terrain' | 'workshop' | 'road' | 'observatory' | 'pilgrimage' | 'granary' | 'furnace_safety';
+export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation' | 'terrain' | 'workshop' | 'road' | 'observatory' | 'pilgrimage' | 'granary' | 'furnace_safety' | 'artifact_salvage';
 export type ResourceFlowAccount =
   | { kind: 'actor' | 'site' | 'sect' | 'order' | 'shipment' | 'relocation' | 'workshop' | 'salvage' | 'granary'; id: string }
   | { kind: 'oath'; id: string; pocket: 'payment' | 'collateral' };
@@ -2204,7 +2234,7 @@ export interface WorkshopInstitutionClosure {
 }
 export interface WorkshopDisbandmentState { closures: WorkshopInstitutionClosure[] }
 
-export type FurnaceUseKind = 'brew' | 'forge' | 'repair' | 'awaken' | 'workshop' | 'relic';
+export type FurnaceUseKind = 'brew' | 'forge' | 'repair' | 'awaken' | 'workshop' | 'relic' | 'salvage';
 export interface FurnaceReservation {
   id: string;
   actorId: string;
@@ -2561,6 +2591,7 @@ export interface WorldState {
   villageCensuses: VillageCensusesState;
   probation: ProbationState;
   workshops: WorkshopState;
+  artifactSalvages: ArtifactSalvageState;
   workshopDisbandments: WorkshopDisbandmentState;
   furnaceReservations: FurnaceReservationState;
   furnaceSafety: FurnaceSafetyState;

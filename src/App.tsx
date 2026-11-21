@@ -40,7 +40,8 @@ import { createDecisionReplayTape, replayOneTurn } from './engine/decisionTraceE
 import type { DecisionReplayTape, DecisionReplayResult } from './engine/decisionTraceEngine';
 import { createTimeline, forkTimeline, readTimelineHead, readTimelineSnapshot, recordTimelineWorld, selectTimelineBranch, forkTimelineCheckpoint, TIMELINE_MAX_BRANCHES } from './engine/timelineEngine';
 import type { WorldTimeline } from './engine/timelineEngine';
-import { possessAvatar, queueAvatarOrder } from './engine/avatarEngine';
+import { possessAvatar, queueAvatarOrder, queueAvatarSalvage } from './engine/avatarEngine';
+import type { ArtifactSalvageControls } from './components/ArtifactPanel';
 import { resolveAvatarSnapshot } from './engine/avatarRuntime';
 import { CHRONICLE_FOCUS_UNAVAILABLE, createChronicleFocusResolver } from './engine/chronicleFocusEngine';
 import type { ChronicleFocusRequest } from './engine/chronicleFocusEngine';
@@ -654,8 +655,22 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
     if (trail) backRef.current?.focus({ preventScroll: true });
   }, [trail]);
   const characterLocation = visibleWorld.locations.find((site) => site.id === selectedCultivator?.locationId);
+  const queueSelectedSalvage: ArtifactSalvageControls['onConfirm'] = (command, stamp) => {
+    if (browsing.current || stepInFlight.current || fastForwardRun.current ||
+        history.current.activeBranchId !== timeline.activeBranchId || stamp.scopeKey !== viewScopeKey ||
+        stamp.actorId !== activeActorId || stamp.world !== authority.current) return false;
+    const next = updateWorld((current) => {
+      const candidate = structuredClone(current);
+      return queueAvatarSalvage(candidate, stamp.actorId, command.targetArtifactId, command.targetLocationId) ? candidate : current;
+    });
+    if (next === stamp.world) return false;
+    setIsRunning(false);
+    setAvatarNotice(undefined);
+    return true;
+  };
   const inspect = (workspaceSection: 'profile' | 'cultivation' | 'mind' | 'sect') => <React.Suspense fallback={<p role="status">载入修士档案…</p>}>
-    <AgentInspector world={visibleWorld} cultivator={selectedCultivator} onSelectCultivator={setSelectedCultivatorId} workspaceSection={workspaceSection} />
+    <AgentInspector world={visibleWorld} cultivator={selectedCultivator} onSelectCultivator={setSelectedCultivatorId} workspaceSection={workspaceSection}
+      artifactSalvage={{ scopeKey:viewScopeKey, busy:isStepping || fastForwardLocked, readOnly:!!preview, onConfirm:queueSelectedSalvage }} />
   </React.Suspense>;
   const openWorkspace = (next: WorkspaceId) => {
     if (workspace !== next) {

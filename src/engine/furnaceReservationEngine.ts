@@ -36,7 +36,7 @@ const at = (world: WorldState, siteId: string) => world.locations.find(site => s
 const first = (a: FurnaceReservation, b: FurnaceReservation) =>
   a.requestedTick - b.requestedTick || (a.actorId < b.actorId ? -1 : a.actorId > b.actorId ? 1 : 0);
 const validTick = (world: WorldState, tick: number) => tick === world.tick || tick === world.tick + 1;
-const useKinds = new Set<FurnaceUseKind>(['brew','forge','repair','awaken','workshop','relic']);
+const useKinds = new Set<FurnaceUseKind>(['brew','forge','repair','awaken','workshop','relic','salvage']);
 
 function physicallyAt(world: WorldState, actor: Cultivator | undefined, siteId: string, tick: number): actor is Cultivator {
   if (!isLive(actor) || actor.locationId !== siteId || actor.tribulation?.stage === 'lightning' || actor.tribulation?.stage === 'heart_demon') return false;

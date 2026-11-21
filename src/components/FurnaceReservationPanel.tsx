@@ -15,7 +15,7 @@ const CLOSE: Record<NonNullable<FurnaceView['ownReservations'][number]['reason']
   workshop_closed: '关联委托已结束', queue_expired: '等候期限已到', turn_missed: '留位回合未用',
 };
 const WORK: Record<FurnaceView['ownUses'][number]['kind'], string> = {
-  brew: '炼丹', forge: '锻造', repair: '修复', awaken: '唤醒器灵', workshop: '工坊委制', relic: '遗珍组装',
+  brew: '炼丹', forge: '锻造', repair: '修复', awaken: '唤醒器灵', workshop: '工坊委制', relic: '遗珍组装', salvage: '实拆破器',
 };
 const SAFETY_WORK: Record<FurnaceSafetyView['ownReceipts'][number]['kind'], string> = { inspect: '查验', repair: '修复', reopen: '签署复炉' };
 

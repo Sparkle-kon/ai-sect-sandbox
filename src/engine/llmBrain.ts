@@ -57,7 +57,8 @@ import { availableEncounters } from './encounterEngine';
 import { compareCultivationSites, cultivationMultiplier, strikeMultiplier } from './elementalEngine';
 import { availableTechniques, mayAuthorTechnique, utilityStudyTarget } from './techniqueEngine';
 import { availableAlchemy } from './alchemyEngine';
-import { availableArtifactActions, equippedArtifact } from './artifactEngine';
+import { artifactId, availableArtifactActions, durabilityOf, equippedArtifact } from './artifactEngine';
+import { availableArtifactSalvageActions } from './artifactSalvageEngine';
 import { availableAmbushTargets, isTribulationActive, recommendedTribulationStance } from './tribulationEngine';
 import { availableLeadershipActions } from './sectPoliticsEngine';
 import { availableSectEconomyActions } from './sectEconomyEngine';
@@ -882,6 +883,28 @@ export function computeHeuristicDecision(
     if (donation) return { ...donation, chosenAction: donation.action, innerMonologue: '把自己已有的灵材与灵石存入当面义仓，仓满不勉强。' };
   }
 
+  // Irreversible disposal is optional and never interrupts a scheduled duty.
+  // Keep a usable alternative and leave even slightly repairable or distinctive gear alone.
+  if (world.tick >= 16 && world.tick % 13 === 3 && !cultivator.guardAssignment &&
+      cultivator.hp >= cultivator.maxHp * .75 && cultivator.artifacts.length > 1) {
+    const equipped = equippedArtifact(cultivator);
+    if (equipped) {
+      const brokenBackups = new Set(cultivator.artifacts.flatMap((item, index) => item !== equipped &&
+        (item.tier === undefined || item.tier === '法器') && durabilityOf(item) === 0 &&
+        !item.boundTo && !item.soul && !item.relicSetId && !item.relicFragmentIds
+        ? [artifactId(cultivator, item, index)] : []));
+      if (brokenBackups.size) {
+        const choices = availableArtifactSalvageActions(cultivator, world)
+          .filter(({ targetArtifactId }) => brokenBackups.has(targetArtifactId));
+        // Do not guess which of several expendable pieces the owner would part with.
+        if (choices.length === 1) return {
+          chosenAction: 'SALVAGE_ARTIFACT', targetArtifactId: choices[0].targetArtifactId, targetLocationId: choices[0].targetLocationId,
+          innerMonologue: '尚有趁手兵刃，这件断尽的旧法器可在炉前拆解，能留多少全凭实物。',
+        };
+      }
+    }
+  }
+
   // 5. Socialize; trust in fellowship makes seeking a partner more attractive.
   const fellowship = cultivator.reflections.some(
     (entry) => entry.kind === 'belief' && entry.theme === 'community' && entry.intensity >= 6
@@ -1022,6 +1045,12 @@ export async function requestCultivatorLLMDecision(
   const workshopOptions = availableWorkshopActions(cultivator, world, true, requestTick);
   const mayAcceptCharteredWorkshop = workshopOptions.some(({ workshopMove, targetWorkshopId }) => workshopMove === 'accept' &&
     world.workshops.orders.some((order) => order.id === targetWorkshopId && order.makerId === cultivator.id && order.institution));
+  // Workshop provenance is custody evidence, not an actor's new knowledge of earlier people or places.
+  const ownArtifactView = cultivator.artifacts.map(({ id, name, spiritRoot, tier, durability, maxDurability, boundTo, soul,
+    resonance, relicSetId, relicFragmentIds }) => ({ id, name, spiritRoot, tier, durability, maxDurability, boundTo, soul,
+    resonance, relicSetId, relicFragmentIds }));
+  const salvageOptions = availableArtifactSalvageActions(cultivator, world, requestTick)
+    .map(({ targetArtifactId, targetLocationId }) => ({ targetArtifactId, targetLocationId }));
   const furnaceOptions = availableFurnaceReservationActions(cultivator, world, requestTick);
   const furnaceSafetyOptions = availableFurnaceSafetyActions(cultivator, world, requestTick)
     .map(({ action, furnaceSafetyMove, targetFurnaceSafetyId }) => ({ action, furnaceSafetyMove, targetFurnaceSafetyId }));
@@ -1121,7 +1150,8 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 宗门经营许可：${JSON.stringify(availableSectEconomyActions(cultivator, world))}；巡守派任：${JSON.stringify(cultivator.guardAssignment ?? null)}
 - 宗门职位：${cultivator.sectRank}；贡献：${cultivator.contribution}；当前可行的宗门权力行动：${JSON.stringify(availableLeadershipActions(cultivator, world))}
 - 自身天劫：${JSON.stringify(isTribulationActive(cultivator) ? cultivator.tribulation : null)}；如果正在应劫，须选择 FACE_TRIBULATION；同地可袭扰的仇敌：${JSON.stringify(availableAmbushTargets(cultivator, world).map((target) => ({ id: target.id, name: target.name })))}
-- 法宝状况：${JSON.stringify(cultivator.artifacts)}；本地可用炼器行动：${JSON.stringify(availableArtifactActions(cultivator, world, requestTick))}
+- 法宝状况：${JSON.stringify(ownArtifactView)}；本地可用炼器行动：${JSON.stringify(availableArtifactActions(cultivator, world, requestTick))}
+- 拆解旧器 SALVAGE_ARTIFACT 不可反悔；只成对复制本人于本地执行回合实有的 targetArtifactId、targetLocationId。不填写物料、回收量、耐久、归属或对白：${JSON.stringify(salvageOptions)}
 - 丹毒：${cultivator.pillToxicity}/100；灵药包：${JSON.stringify(cultivator.herbs)}；已有丹药：${JSON.stringify(cultivator.pills)}；允许的炼丹行动：${JSON.stringify(availableAlchemy(cultivator, world, requestTick))}
 - 炉体停用只用本人、此地、执行回合许可的 inspect、repair 或 reopen，照抄 targetFurnaceSafetyId。不得填写完整度、奖惩、物资、地点、复开日期或额外炉位；复开本轮仍停炉：${JSON.stringify(furnaceSafetyOptions)}
 - 炉位预约仅复制执行回合的实际许可：${JSON.stringify(furnaceOptions)}；预约不是已开炉，不自填时间、容量或物料。
@@ -1194,6 +1224,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'FORGE_ARTIFACT',
             'BIND_ARTIFACT',
             'REPAIR_ARTIFACT',
+            'SALVAGE_ARTIFACT',
             'AWAKEN_ARTIFACT',
             'FACE_TRIBULATION',
             'AMBUSH_TRIBULATION',
@@ -1568,6 +1599,10 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             item.action === chosenAction && item.facilityKind === parsed.facilityKind &&
             item.targetCultivatorId === parsed.targetCultivatorId && item.targetLocationId === parsed.targetLocationId) : undefined;
           if (infrastructureChoice && !legalInfrastructure) return undefined;
+          const legalSalvage = chosenAction === 'SALVAGE_ARTIFACT' ? salvageOptions.find((item) =>
+            item.targetArtifactId === parsed.targetArtifactId && item.targetLocationId === parsed.targetLocationId) : undefined;
+          if (chosenAction === 'SALVAGE_ARTIFACT' && (!legalSalvage || Object.keys(parsed).some((field) =>
+            !['chosenAction', 'innerMonologue', 'targetArtifactId', 'targetLocationId'].includes(field)))) return undefined;
           const artifactAction = chosenAction === 'FORGE_ARTIFACT' || chosenAction === 'BIND_ARTIFACT' || chosenAction === 'REPAIR_ARTIFACT' || chosenAction === 'AWAKEN_ARTIFACT';
           const legalArtifact = artifactAction ? availableArtifactActions(cultivator, world, requestTick).find((item) =>
             item.action === chosenAction && item.targetArtifactId === parsed.targetArtifactId && item.forgeTier === parsed.forgeTier) : undefined;
@@ -1595,7 +1630,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
               cultivator.innerMonologue ||
               '天道无常，唯有苦修方是正途。',
             chosenAction,
-            targetLocationId: legalBoundaryRelief ? legalBoundaryRelief.targetLocationId : legalFurnace ? legalFurnace.targetLocationId : legalSanctuary ? legalSanctuary.targetLocationId : legalRelocation ? legalRelocation.targetLocationId :
+            targetLocationId: legalSalvage ? legalSalvage.targetLocationId : legalBoundaryRelief ? legalBoundaryRelief.targetLocationId : legalFurnace ? legalFurnace.targetLocationId : legalSanctuary ? legalSanctuary.targetLocationId : legalRelocation ? legalRelocation.targetLocationId :
               chosenAction !== 'DOCTRINE' && typeof parsed.targetLocationId === 'string' ? parsed.targetLocationId : undefined,
             targetCultivatorId: legalBoundaryRelief ? legalBoundaryRelief.targetCultivatorId : legalShortShift ? legalShortShift.targetCultivatorId : legalSparring ? legalSparring.targetCultivatorId : legalObservatory ? legalObservatory.targetCultivatorId : legalArbitration ? legalArbitration.targetCultivatorId : legalWorkshop ? legalWorkshop.targetCultivatorId : legalDoctrine ? legalDoctrine.targetCultivatorId : legalEstate ? legalEstate.targetCultivatorId : legalWitness ? legalWitness.targetCultivatorId : legalOath ? legalOath.targetCultivatorId : legalTraining ? legalTraining.targetCultivatorId
               : typeof parsed.targetCultivatorId === 'string' ? parsed.targetCultivatorId : undefined,
@@ -1608,7 +1643,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             targetBountyId: legalHunt?.targetBountyId,
             targetBeastId: legalHabitat?.targetBeastId ?? legalBeast?.targetBeastId,
             tribulationStance: chosenAction === 'FACE_TRIBULATION' && validStance ? stance : undefined,
-            targetArtifactId: legalExhibit?.targetArtifactId ?? legalArtifact?.targetArtifactId,
+            targetArtifactId: legalSalvage?.targetArtifactId ?? legalExhibit?.targetArtifactId ?? legalArtifact?.targetArtifactId,
             forgeTier: legalArtifact?.forgeTier,
             targetHerbId: legalCommons?.targetHerbId ?? legalAlchemy?.targetHerbId,
             targetPillId: legalAlchemy?.targetPillId,

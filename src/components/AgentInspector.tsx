@@ -19,6 +19,7 @@ import { heldRelicFragments } from '../engine/relicEngine';
 import { WorkshopPanel } from './WorkshopPanel';
 import { FurnaceReservationPanel } from './FurnaceReservationPanel';
 import { ArtifactPanel } from './ArtifactPanel';
+import type { ArtifactSalvageControls } from './ArtifactPanel';
 import { TribulationPanel } from './TribulationPanel';
 import { SectHierarchyPanel } from './SectHierarchyPanel';
 import { SectEconomyPanel } from './SectEconomyPanel';
@@ -35,12 +36,13 @@ interface AgentInspectorProps {
   cultivator: Cultivator | undefined;
   onSelectCultivator: (id: string) => void;
   workspaceSection?: 'profile' | 'cultivation' | 'mind' | 'sect';
+  artifactSalvage?: ArtifactSalvageControls;
 }
 
 export const AgentInspector: React.FC<AgentInspectorProps> = ({
   world,
   cultivator,
-  onSelectCultivator, workspaceSection,
+  onSelectCultivator, workspaceSection, artifactSalvage,
 }) => {
   if (!cultivator) {
     return (
@@ -204,7 +206,7 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
               : <span className="text-slate-500">未详</span>}
           </div>
         </div>
-        <ArtifactPanel cultivator={cultivator} cultivators={world.cultivators} />
+        <ArtifactPanel world={world} cultivator={cultivator} cultivators={world.cultivators} salvage={artifactSalvage} />
         <WorkshopPanel world={world} cultivator={cultivator} />
         <FurnaceReservationPanel world={world} cultivator={cultivator} />
         {showsRelic && <React.Suspense fallback={<p role="status" className="text-xs text-slate-400">载入套装记录…</p>}>

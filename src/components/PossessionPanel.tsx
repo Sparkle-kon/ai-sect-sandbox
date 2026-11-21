@@ -94,7 +94,7 @@ export function PossessionPanel({ world, selectedCultivatorId, busy, modelReady,
             </>
           )}
         </div>
-        {queued && <p className="text-xs text-violet-200">已排定：{name(queued.actorId)}于 Tick #{queued.queuedTick + 1}{ORDER_LABELS[queued.action]}。</p>}
+        {queued && <p className="text-xs text-violet-200">已排定：{name(queued.actorId)}于 Tick #{queued.queuedTick + 1}{queued.action === 'SALVAGE_ARTIFACT' ? '复核已登记的破器拆解' : ORDER_LABELS[queued.action]}。</p>}
       </div>
       <div role="group" aria-label="交谈方式" className="flex flex-wrap gap-1.5">
         {(['ring', 'avatar'] as const).map((kind) => (

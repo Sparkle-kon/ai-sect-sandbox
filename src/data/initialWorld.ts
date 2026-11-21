@@ -7,6 +7,7 @@ import { createRoadState } from '../engine/roadEngine';
 import { createProbationState } from '../engine/probationEngine';
 import { createRelicExhibitState } from '../engine/relicExhibitEngine';
 import { createWorkshopState } from '../engine/workshopEngine';
+import { createArtifactSalvageState } from '../engine/artifactSalvageEngine';
 import { createFurnaceReservationState } from '../engine/furnaceReservationEngine';
 import { createFurnaceSafetyState } from '../engine/furnaceSafetyEngine';
 import { createSparringState } from '../engine/sparringEngine';
@@ -301,6 +302,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     resourceFlow: createResourceFlowState(),
     terrainSuccession: createTerrainSuccessionState(),
     workshops: createWorkshopState(),
+    artifactSalvages: createArtifactSalvageState(),
     workshopDisbandments: {closures:[]},
     furnaceReservations: createFurnaceReservationState(),
     furnaceSafety: createFurnaceSafetyState(),
