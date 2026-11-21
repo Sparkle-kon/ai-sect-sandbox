@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from 'react';
+import { useId, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { publicChronicleChapters } from '../engine/coldHistoryEngine';
 import { projectChapterTurningPoints, type ChapterTurningPoint } from '../engine/chronicleTurningPoints';
@@ -6,7 +6,11 @@ import { ChapterTurningPoints } from './ChapterTurningPoints';
 import { projectChronicleReading, stampedChronicleLead } from '../engine/novelGenerator';
 import { isChronicleStoryFact, projectChronicleLead, publicChronicleSceneEvents, type ChronicleLead } from '../engine/chronicleLead';
 import type { ChronicleChapter, Cultivator, WorldEvent, WorldState } from '../types/world';
-import { DialogueTranscript } from './DialogueTranscript';
+
+
+import { PublicDialogueTranscript } from './PublicDialogueTranscript';
+import { createPublicDialogueResolver, type PublicDialogueProvenance } from '../engine/publicDialogueProvenance';
+import { canShowOriginalChronicleManuscript, publicChronicleExcerpt } from '../engine/chroniclePublicProse';
 import { ColdChronicleShelf } from './ColdChronicleShelf';
 import { ChronicleTopicDigest } from './ChronicleTopicDigest';
 import { ChronicleErrataPanel } from './ChronicleErrataPanel';
@@ -37,13 +41,16 @@ function chapterForReading(chapter: ChronicleChapter, liveIds: ReadonlySet<strin
   return anchors.length === chapter.anchors.length ? chapter : { ...chapter, anchors, body: '' };
 }
 
-function ChapterArchive({ chapter, reading, lead, turningPoints }: {
+function ChapterArchive({ chapter, reading, lead, turningPoints, resolveDialogue }: {
   chapter: ChronicleChapter; reading: ReturnType<typeof projectChronicleReading>; lead?: ChronicleLead;
   turningPoints: readonly ChapterTurningPoint[];
+  resolveDialogue: (eventId:string)=>PublicDialogueProvenance | undefined;
 }) {
   const [readOriginal, setReadOriginal] = useState(false);
   const scenes = new Map(reading.sections.map((entry) => [entry.eventId, entry]));
   const anchors = chapter.anchors.filter(({ id }) => scenes.has(id));
+  const proofDialogues = new Map(anchors.map(({id})=>[id,resolveDialogue(id)]));
+  const originalProved = readOriginal && canShowOriginalChronicleManuscript(chapter.body,proofDialogues.values());
   const hasLead = lead && new Set(lead.eventIds.filter((id) => scenes.has(id))).size >= 2;
   return (
     <article aria-label="章节正文" className="space-y-3">
@@ -62,12 +69,13 @@ function ChapterArchive({ chapter, reading, lead, turningPoints }: {
         {anchors.length ? (
           <ol className="mt-2 max-h-64 space-y-1.5 overflow-y-auto text-xs text-slate-300">
             {anchors.map((anchor) => {
-              const dialogue = scenes.get(anchor.id)?.dialogue;
+              const provenance = proofDialogues.get(anchor.id);
+              const description = publicChronicleExcerpt(anchor.description);
               return <li key={anchor.id} className="space-y-1 break-words border-b border-slate-800/60 pb-1.5">
                 <span className="text-slate-400">仙历 {anchor.year} 年 {anchor.month} 月 · Tick #{anchor.tick}：</span>
-                {anchor.title}
-                {anchor.description && <p className="text-slate-300">{anchor.description}</p>}
-                {dialogue && <DialogueTranscript dialogue={dialogue} />}
+                {publicChronicleExcerpt(anchor.title) || '原实录'}
+                {description && <p className="text-slate-300">{description}</p>}
+                {provenance && <PublicDialogueTranscript provenance={provenance} />}
               </li>;
             })}
           </ol>
@@ -77,8 +85,9 @@ function ChapterArchive({ chapter, reading, lead, turningPoints }: {
         className="rounded border border-slate-800 bg-slate-950/70 p-2" onToggle={(event) => setReadOriginal(event.currentTarget.open)}>
         <summary className="min-h-11 cursor-pointer break-words py-2 text-xs font-medium text-slate-300">原存档稿</summary>
         {readOriginal && <>
-          <p className="break-words text-xs text-amber-200">{chapter.title} · {chapter.source === 'llm' ? '模型润色' : '离线编纂'}。原稿不是事实来源。</p>
-          <p className="whitespace-pre-wrap break-words font-serif text-sm leading-7 text-slate-100">{chapter.body}</p>
+          <p className="break-words text-xs text-amber-200">{publicChronicleExcerpt(chapter.title) || '原卷'} · {chapter.source === 'llm' ? '模型润色' : '离线编纂'}。原稿不是事实来源。</p>
+          {originalProved ? <p className="whitespace-pre-wrap break-words font-serif text-sm leading-7 text-slate-100">{chapter.body}</p>
+            : <p className="text-xs text-slate-400">原稿有未核定的引语，公开预览暂不显示；原稿未改动。</p>}
         </>}
       </details>}
     </article>
@@ -102,7 +111,7 @@ export function ChapterBiographies({ chapter }: { chapter: ChronicleChapter }) {
             <p className="break-words text-xs text-slate-400">{entry.realm}{entry.sectName ? ` · ${entry.sectName}` : ''}</p>
             {publicFacts.length === 0 ? <p className="text-xs text-slate-400">本章未载其公开事迹。</p> : (
               <ul className="space-y-1 text-xs leading-relaxed text-slate-300">
-                {publicFacts.map((anchor) => <li key={anchor.id} className="break-words">Tick #{anchor.tick} · {anchor.title}</li>)}
+                {publicFacts.map((anchor) => <li key={anchor.id} className="break-words">Tick #{anchor.tick} · {publicChronicleExcerpt(anchor.title) || '原实录'}</li>)}
               </ul>
             )}
           </li>
@@ -117,6 +126,7 @@ export function ChronicleLibraryPanel({ world, cultivator, scopeKey }: { world: 
   const [requestedChapter, setRequestedChapter] = useState<string>();
   const paneId = useId();
   const tabs = useRef<Partial<Record<Page, HTMLButtonElement | null>>>({});
+  const publicDialogues = useMemo(() => createPublicDialogueResolver(world), [world]);
   const recentIds = new Set((world.chronicleArchive?.chapters ?? []).map(({ id }) => id));
   const liveIds = new Set(world.events.map(({ id }) => id));
   const publicById = new Map(publicChronicleSceneEvents(world).map((entry) => [entry.id, entry]));
@@ -125,7 +135,7 @@ export function ChronicleLibraryPanel({ world, cultivator, scopeKey }: { world: 
   const chapter = chapters.find(({ id }) => id === requestedChapter) ?? chapters[0];
   const lead = chapter && (chapter.storyFocal ? stampedChronicleLead(chapter) :
     projectChronicleLead(world, chapter.anchors, chapter.endTick));
-  const reading = chapter && projectChronicleReading(chapter, lead);
+  const reading = chapter && projectChronicleReading(chapter, lead, true);
 
   const moveTab = (event: KeyboardEvent<HTMLButtonElement>) => {
     let next: Page;
@@ -152,7 +162,7 @@ export function ChronicleLibraryPanel({ world, cultivator, scopeKey }: { world: 
             value={chapter?.id ?? ''}
             onChange={(event) => setRequestedChapter(event.currentTarget.value)}
           >
-            {chapters.map((entry) => <option key={entry.id} value={entry.id}>{entry === chapter ? reading?.title : projectChronicleReading(entry, stampedChronicleLead(entry)).title}</option>)}
+            {chapters.map((entry) => <option key={entry.id} value={entry.id}>{entry === chapter ? reading?.title : projectChronicleReading(entry, stampedChronicleLead(entry), true).title}</option>)}
           </select>
         </label>
       )}
@@ -190,20 +200,22 @@ export function ChronicleLibraryPanel({ world, cultivator, scopeKey }: { world: 
           {page === kind && (!chapter || !reading
             ? <p className="text-sm text-slate-400">尚无已编成的章节。公开史料累积到结集时会出现新篇。</p>
             : kind === 'chapter' ? <ChapterArchive key={chapter.id} chapter={chapter} reading={reading} lead={lead}
-              turningPoints={projectChapterTurningPoints(world,chapter.id,cultivator?.id).arcs} /> : <ChapterBiographies chapter={chapter} />)}
+              turningPoints={projectChapterTurningPoints(world,chapter.id,cultivator?.id).arcs}
+              resolveDialogue={(id)=>publicDialogues.chapter(chapter.id,id)} /> : <ChapterBiographies chapter={chapter} />)}
         </div>
       ))}
       <ChronicleTopicDigest world={world} viewerId={cultivator?.id} scopeKey={scopeKey} />
       <ChronicleErrataPanel world={world} chapter={chapter} cultivator={cultivator} />
       <ColdChronicleShelf world={world} chapterTitle={(older) => {
         const safe = readable(older);
-        return projectChronicleReading(safe, stampedChronicleLead(safe)).title;
+        return projectChronicleReading(safe, stampedChronicleLead(safe), true).title;
       }}
         readChapter={(older) => {
           const safe = readable(older);
           const olderLead = safe.storyFocal ? stampedChronicleLead(safe) : projectChronicleLead(world, safe.anchors, safe.endTick);
-          return <ChapterArchive key={safe.id} chapter={safe} reading={projectChronicleReading(safe, olderLead)} lead={olderLead}
-            turningPoints={projectChapterTurningPoints(world,safe.id,cultivator?.id).arcs} />;
+          return <ChapterArchive key={safe.id} chapter={safe} reading={projectChronicleReading(safe, olderLead, true)} lead={olderLead}
+            turningPoints={projectChapterTurningPoints(world,safe.id,cultivator?.id).arcs}
+            resolveDialogue={(id)=>publicDialogues.chapter(safe.id,id)} />;
         }} />
     </section>
   );

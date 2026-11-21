@@ -2,6 +2,7 @@ import { compactColdHistory } from './coldHistoryEngine';
 import { isChronicleStoryFact, projectChronicleLead } from './chronicleLead';
 import type { ChronicleLead } from './chronicleLead';
 import { projectEarnedChronicleLead } from './protagonistSuccession';
+import { writePublicChronicleScene } from './chroniclePublicProse';
 import { writeChronicleScene } from './chronicleScene';
 import type { ChronicleAnchor, ChronicleArchive, ChronicleChapter, ChronicleChapterPlan, WorldEvent, WorldState } from '../types/world';
 
@@ -130,9 +131,9 @@ const drama: Record<ChronicleAnchor['category'], number> = {
 };
 
 type AnchoredScene = { anchor: ChronicleAnchor; section: ChronicleReadingSection };
-function readScenes(anchors: readonly ChronicleAnchor[]): AnchoredScene[] {
+function readScenes(anchors: readonly ChronicleAnchor[], publicAttributionOnly = false): AnchoredScene[] {
   return anchors.map((anchor) => {
-    const { title, paragraph } = writeChronicleScene(anchor);
+    const { title, paragraph } = (publicAttributionOnly ? writePublicChronicleScene : writeChronicleScene)(anchor);
     const turns = anchor.dialogue?.turns.filter(({ speakerId, text }) =>
       anchor.actorIds.includes(speakerId) && Boolean(text.trim())).slice(0, 4).map((turn) => ({ ...turn }));
     const dialogue = anchor.dialogue && turns?.length ? { ...anchor.dialogue, turns } : undefined;
@@ -166,9 +167,9 @@ export function stampedChronicleLead(chapter: ChronicleChapterPlan): ChronicleLe
 }
 
 /** Novel-first view of existing public facts. Saved prose, chronology and proof are left untouched. */
-export function projectChronicleReading(chapter: ChronicleChapter, lead?: ChronicleLead): ChronicleReading {
+export function projectChronicleReading(chapter: ChronicleChapter, lead?: ChronicleLead, publicAttributionOnly = false): ChronicleReading {
   const scenes = readScenes(chapter.anchors.filter((anchor) =>
-    anchor.tick >= chapter.startTick && isChronicleStoryFact(anchor, chapter.endTick)));
+    anchor.tick >= chapter.startTick && isChronicleStoryFact(anchor, chapter.endTick)), publicAttributionOnly);
   return { title: chapterReadingTitle(chapter.chapterNumber, scenes, lead), sections: scenes.map(({ section }) => section) };
 }
 

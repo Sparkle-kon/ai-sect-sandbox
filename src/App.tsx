@@ -1,4 +1,5 @@
 import { FAST_FORWARD_MAX_TICKS } from './engine/fastForwardEngine';
+import { createPublicDialogueResolver } from './engine/publicDialogueProvenance';
 import { projectEarnedChronicleLead, projectProtagonistSuccession } from './engine/protagonistSuccession';
 import { projectChronicleLead, publicChronicleSceneEvents } from './engine/chronicleLead';
 import type { FastForwardCheckpoint, FastForwardProgress, FastForwardWorkerRequest, FastForwardWorkerResponse } from './engine/fastForwardEngine';
@@ -621,6 +622,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
   const visibleHistory = timeline.branches.find(({ id }) => id === timeline.activeBranchId)?.snapshots;
   const readingChronicle = workspace === 'chronicle';
   const chronicleScenes = React.useMemo(() => readingChronicle ? publicChronicleSceneEvents(visibleWorld) : [], [readingChronicle,visibleWorld]);
+  const publicDialogue = React.useMemo(() => readingChronicle ? createPublicDialogueResolver(visibleWorld) : undefined, [readingChronicle,visibleWorld]);
   const succession = React.useMemo(() => readingChronicle &&
     visibleWorld.protagonistSuccession.lastEvaluatedTick !== undefined ? projectProtagonistSuccession(visibleWorld) : undefined,
     [readingChronicle,visibleWorld]);
@@ -852,7 +854,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
         chronicle: <WorkspaceSections label="纪事与历史" initialOpen={opened('chronicle', 'feed')}
           {...fold('chronicle')} forcedOpen={chronicleReturn && ordinaryChronicleFold !== 'feed' ? 'feed' : undefined} sections={[
           { id: 'feed', label: '山河见闻', content: <React.Suspense fallback={<p role="status">载入山河见闻…</p>}><ChronicleFeed
-            events={chronicleScenes} lead={chronicleLead} succession={succession}
+            events={chronicleScenes} lead={chronicleLead} succession={succession} resolvePublicDialogue={publicDialogue?.event}
             category={chronicleFilter} onCategoryChange={setChronicleFilter} focusOptions={resolver?.build}
             causality={(eventId) => chronicleCauses?.get(eventId)}
             onJump={followChronicle} returnPosition={chronicleReturn} onReturnHandled={clearChronicleReturn} focusNotice={focusNotice} /></React.Suspense> },

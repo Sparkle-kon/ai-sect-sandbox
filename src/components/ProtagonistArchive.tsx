@@ -1,5 +1,6 @@
 import type { Ref } from 'react';
 import type { projectProtagonistSuccession } from '../engine/protagonistSuccession';
+import { publicChronicleExcerpt } from '../engine/chroniclePublicProse';
 
 export type ProtagonistSuccessionView = ReturnType<typeof projectProtagonistSuccession>;
 type Arc = ProtagonistSuccessionView['archived'][number];
@@ -8,7 +9,7 @@ type Arc = ProtagonistSuccessionView['archived'][number];
 export function protagonistCueTitles(arc: Pick<Arc, 'evidence'>): string[] {
   const sources = new Map<string, { tick: number; title: string }>();
   for (const proof of arc.evidence) {
-    const title = proof.title?.trim();
+    const title = proof.title && publicChronicleExcerpt(proof.title).trim();
     if (title && !sources.has(proof.eventId)) sources.set(proof.eventId, { tick: proof.tick, title });
   }
   const titles = [...new Set([...sources.values()].sort((a, b) => a.tick - b.tick).map(({ title }) => title))];
@@ -38,7 +39,8 @@ export function ProtagonistArchive({ succession, disclosureRef }: {
         const candidate = successorByArc.get(arc.id);
         const successor = candidate?.actorId !== arc.actorId ? candidate?.name : undefined;
         const cues = protagonistCueTitles(arc);
-        const deathTitle = arc.closeReason === 'public_death' && arc.death?.category === 'death' ? arc.death.title : undefined;
+        const deathTitle = arc.closeReason === 'public_death' && arc.death?.category === 'death' && arc.death.title
+          ? publicChronicleExcerpt(arc.death.title) : undefined;
         return <li key={arc.id} className="min-w-0 space-y-0.5 break-words rounded border border-slate-800 p-2 [overflow-wrap:anywhere]">
           <p><strong className="text-amber-100">{arc.name ?? '前卷人物姓名未详'}</strong> · {reason(arc)}</p>
           {cues.length > 0 && <p>仍可核对的场景：{cues.map((title) => `〈${title}〉`).join('、')}。</p>}

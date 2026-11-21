@@ -4,7 +4,9 @@ import type { WorldEvent } from '../types/world';
 import type { CausalChronicleView } from '../engine/chronicleCausalityEngine';
 import type { ChronicleFocusOptions, ChronicleFocusRequest } from '../engine/chronicleFocusEngine';
 import { isChronicleStoryFact, type ChronicleLead } from '../engine/chronicleLead';
-import { writeChronicleScene } from '../engine/chronicleScene';
+import { publicChronicleExcerpt, writePublicChronicleScene } from '../engine/chroniclePublicProse';
+import type { PublicDialogueProvenance } from '../engine/publicDialogueProvenance';
+import { PublicDialogueTranscript } from './PublicDialogueTranscript';
 import { DialogueTranscript } from './DialogueTranscript';
 import { ProtagonistArchive, protagonistCueTitles, type ProtagonistSuccessionView } from './ProtagonistArchive';
 
@@ -26,6 +28,7 @@ interface ChronicleFeedProps {
   causality?: (eventId: string) => CausalChronicleView | undefined;
   lead?: ChronicleLead;
   succession?: ProtagonistSuccessionView;
+  resolvePublicDialogue?: (eventId: string) => PublicDialogueProvenance | undefined;
 }
 
 const CATEGORY_BADGE: Record<
@@ -87,7 +90,7 @@ export function reopenChronicleProofs(proofs: ReadonlyMap<string, HTMLDetailsEle
 }
 
 export function ChronicleFeed({
-  events, category, onCategoryChange, focusOptions, onJump, returnPosition, onReturnHandled, focusNotice, causality, lead, succession,
+  events, category, onCategoryChange, focusOptions, onJump, returnPosition, onReturnHandled, focusNotice, causality, lead, succession, resolvePublicDialogue,
 }: ChronicleFeedProps) {
   const [localCategory, setLocalCategory] = useState<ChronicleCategoryFilter>('all');
   const filter = category ?? localCategory;
@@ -130,7 +133,7 @@ export function ChronicleFeed({
     };
   }, [returnPosition]);
 
-  const scenes = visible.map((fact) => ({ fact, scene: writeChronicleScene(fact) }));
+  const scenes = visible.map((fact) => ({ fact, scene: writePublicChronicleScene(fact) }));
   const active = filter === 'all' ? succession?.active : undefined;
   const exactLead = succession === undefined || active?.actorId === lead?.actorId ? lead : undefined;
   const leadProofs = filter === 'all' && exactLead ? (() => {
@@ -181,6 +184,8 @@ export function ChronicleFeed({
           const badge = CATEGORY_BADGE[evt.category];
           const options = onJump ? focusOptions?.(evt.id) : undefined;
           const cause = causality?.(evt.id);
+          const provenance = resolvePublicDialogue?.(evt.id);
+          const description = publicChronicleExcerpt(evt.description);
           return (
             <article key={evt.id} className="min-w-0 space-y-1 rounded-lg border border-slate-800/80 bg-slate-950/80 p-2.5">
               <h4 className="min-w-0 break-words font-serif text-sm font-semibold leading-snug text-slate-100">{scene.title}</h4>
@@ -194,7 +199,7 @@ export function ChronicleFeed({
                     <span className={`rounded border px-1.5 py-0.5 text-[10px] font-medium ${badge.className}`}>{badge.label}</span>
                     <span className="break-words text-[11px] text-slate-400">仙历 {evt.year}年{evt.month}月 · Tick #{evt.tick}</span>
                   </div>
-                  <p className="break-words"><strong>{evt.title}</strong>{evt.description && <>：{evt.description}</>}</p>
+                  <p className="break-words"><strong>{publicChronicleExcerpt(evt.title) || '原实录'}</strong>{description && <>：{description}</>}</p>
                   {options && options.links.length > 0 && <div className="flex min-w-0 flex-wrap gap-1" aria-label="可查看的纪事词条">
                     {options.links.filter((link) => link.eventId === evt.id).map(({ label, eventId, kind, targetId }) => (
                       <button type="button" key={`${kind}:${targetId}`} data-chronicle-focus
@@ -209,7 +214,8 @@ export function ChronicleFeed({
                   </div>}
                   {options?.withheld && <p className="text-xs text-slate-400">部分词条当前不可定位，不显示未核实位置。</p>}
                   {cause?.entry.eventId === evt.id && (cause.previous.length > 0 || cause.entry.outcome !== undefined) && <ChronicleCausalityReceipt view={cause} />}
-                  {evt.dialogue && <div data-chronicle-dialogue><DialogueTranscript dialogue={evt.dialogue} /></div>}
+                  {provenance && <div data-chronicle-dialogue><PublicDialogueTranscript provenance={provenance} /></div>}
+                  {!resolvePublicDialogue && evt.dialogue && <div data-chronicle-dialogue><DialogueTranscript dialogue={evt.dialogue} /></div>}
                 </div>
               </details>
             </article>

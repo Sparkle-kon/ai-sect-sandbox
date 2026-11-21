@@ -1,7 +1,7 @@
 import type { CausalChronicleKind, CausalChronicleRelation, ChronicleAnchor, ChronicleReading, Cultivator, WorldEvent, WorldState } from '../types/world';
 import { publicChronicleChapters } from './coldHistoryEngine';
 import { isChronicleStoryFact, publicChronicleSceneEvents } from './chronicleLead';
-import { writeChronicleScene } from './chronicleScene';
+import { writePublicChronicleScene } from './chroniclePublicProse';
 import { collectDigestEvidence } from './chronicleDigestEvidence';
 import { buildCausalChronicleChain } from './chronicleCausalityEngine';
 import { visibleChronicleErrata } from './chronicleErrataEngine';
@@ -71,7 +71,7 @@ function chapterEvidence(world:WorldState,viewer:Cultivator,fromTick:number,thro
   }
   return [...byId.entries()].flatMap(([id,{source,chapterNumber}])=>{
     if(conflicted.has(id))return [];
-    const scene=writeChronicleScene(source);
+    const scene=writePublicChronicleScene(source);
     const chain=activeCause.has(id)?buildCausalChronicleChain(world,id,viewer.id):undefined;
     const docket=visibleDockets.get(id);
     const interpretations=docket?.retellings.filter(row=>row.tick<=throughTick).map(row=>(

@@ -1,4 +1,6 @@
 import { llmScheduler } from './llmScheduler';
+import { publicChronicleExcerpt } from './chroniclePublicProse';
+import { createPublicDialogueResolver } from './publicDialogueProvenance';
 import type { Cultivator, DialogueExchange, DialogueTurn, LLMConfig, WorldEvent, WorldState } from '../types/world';
 
 const OPENING: Record<DialogueExchange['kind'], readonly [string, string]> = {
@@ -56,10 +58,15 @@ export function applyDialogueLanguage(events: WorldEvent[], allowedIds: string[]
 
 export async function enrichTickDialogues(world: WorldState, config: LLMConfig): Promise<WorldState> {
   if (!config.enabled || !config.apiKey.trim()) return world;
-  const exchanges = world.events.filter((event) => event.tick === world.tick && event.dialogue).slice(0, 5)
-    .flatMap((event) => event.dialogue ? [{
-      id: event.id, kind: event.dialogue.kind, outcome: event.description.slice(0, 280), turns: event.dialogue.turns,
-    }] : []);
+  const dialogue = createPublicDialogueResolver(world);
+  const exchanges = world.events.filter((event) => event.tick === world.tick && event.dialogue)
+    .flatMap((event) => {
+      const source = dialogue.event(event.id);
+      return source?.status === 'verified' ? [{
+        id: event.id, kind: source.kind, outcome: publicChronicleExcerpt(event.description).slice(0, 280),
+        turns: source.turns.map(({ speakerId, speakerName, text }) => ({ speakerId, speakerName, text })),
+      }] : [];
+    }).slice(0, 5);
   if (!exchanges.length) return world;
   try {
     const result = await llmScheduler.requestJson<WorldEvent[]>('dialogue', `${config.apiBaseUrl.replace(/\/+$/, '')}/chat/completions`, {
