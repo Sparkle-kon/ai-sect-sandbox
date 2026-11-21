@@ -1,3 +1,4 @@
+import { capturePublicWitnessFact } from './witnessEngine';
 import type { Cultivator, LLMDecisionPayload, Rumor, WorldEvent, WorldState } from '../types/world';
 
 export const RUMOR_LIMIT = 18;
@@ -17,6 +18,7 @@ function learn(cultivator: Cultivator, rumor: Rumor, tick: number): void {
 }
 
 export function witnessEvent(world: WorldState, event: WorldEvent): void {
+  capturePublicWitnessFact(world, event);
   const involved = new Set(event.actorIds);
   for (const actor of world.cultivators) {
     const present = event.locationId !== undefined && actor.locationId === event.locationId;
@@ -24,7 +26,8 @@ export function witnessEvent(world: WorldState, event: WorldEvent): void {
       learn(actor, {
         id: `rumor-${event.id}`, subject: event.title, locationId: event.locationId,
         originTick: event.tick, learnedTick: event.tick, provenance: 'witness',
-        confidence: 100, hops: 0,
+        confidence: 100, hops: 0, originEventId: event.id, originSourceCultivatorId: actor.id,
+        witnessScope: event.witnessScope,
         lead: event.id.includes('-explore') || event.id.startsWith('evt-god-treasure-'),
       }, world.tick);
     }
@@ -37,7 +40,7 @@ export function fabricateRumor(
   if (!intent || (actor.personality !== '阴险' && actor.personality !== '诡诈') ||
       !actor.alive || !listener.alive || actor.id === listener.id || actor.locationId !== listener.locationId) return;
   const existing = intent === 'EXAGGERATE' && actor.rumors
-    .filter((item) => item.locationId && item.provenance !== 'fabricated' && world.tick - item.originTick <= RUMOR_LIFETIME)
+    .filter((item) => item.locationId && item.witnessScope !== 'participants' && item.provenance !== 'fabricated' && world.tick - item.originTick <= RUMOR_LIFETIME)
     .sort(byValue)[0];
   const location = existing
     ? world.locations.find((item) => item.id === existing.locationId)
@@ -50,7 +53,7 @@ export function fabricateRumor(
   const seed: Rumor = {
     id: `rumor-forged-${world.tick}-${actor.id}-${listener.id}`,
     subject, locationId: location.id, originTick: world.tick, learnedTick: world.tick,
-    provenance: 'fabricated', confidence: 65, hops: 0, sourceCultivatorId: actor.id, lead: true,
+    provenance: 'fabricated', confidence: 65, hops: 0, sourceCultivatorId: actor.id, originSourceCultivatorId: actor.id, lead: true,
   };
   learn(actor, seed, world.tick);
   learn(listener, { ...seed, provenance: 'conversation', confidence: 55, hops: 1 }, world.tick);
@@ -60,7 +63,7 @@ export function spreadRumors(world: WorldState): void {
   const live = world.cultivators.filter((item) => item.alive);
   const snapshot = new Map(live.map((item) => {
     item.rumors = item.rumors.filter((rumor) => world.tick - rumor.originTick <= RUMOR_LIFETIME);
-    return [item.id, item.rumors.filter((rumor) => rumor.learnedTick < world.tick && rumor.hops < MAX_HOPS).sort(byValue)];
+    return [item.id, item.rumors.filter((rumor) => rumor.learnedTick < world.tick && rumor.hops < MAX_HOPS && rumor.witnessScope !== 'participants').sort(byValue)];
   }));
   // One packet per listener per month; a snapshot prevents same-month cascades.
   for (const listener of live) {

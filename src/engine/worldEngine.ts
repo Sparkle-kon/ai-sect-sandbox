@@ -1,3 +1,4 @@
+import { advanceWitnesses, resolveWitnessAction } from './witnessEngine';
 import { advanceSettlements, resolveSettlementAction } from './settlementEngine';
 import { advanceMarkets, resolveMarketAction } from './marketEngine';
 import { weatherTravelFriction } from './weatherEngine';
@@ -164,6 +165,10 @@ export function applyCultivatorBrainDecision(
     case 'BREW_PILL':
     case 'USE_PILL':
       return resolveAlchemy(world, cultivator, decision, rng);
+    case 'FILE_WITNESS_CLAIM':
+    case 'ATTEST_WITNESS':
+    case 'CHALLENGE_WITNESS':
+      return resolveWitnessAction(world, cultivator, decision);
     case 'RECRUIT_SETTLER':
     case 'DELIVER_RELIEF':
       return resolveSettlementAction(world, cultivator, decision);
@@ -644,7 +649,7 @@ export function advanceWorldTick(
     if (yearly) cultivator.reflections = synthesizeReflections(cultivator, nextState.tick);
   }
 
-  for (const event of [...advanceDiplomacy(nextState, rng), ...advanceOccasions(nextState, rng), ...advanceOaths(nextState), ...advanceMarkets(nextState), ...maintainSectPolitics(nextState), ...advanceBounties(nextState)]) {
+  for (const event of [...advanceDiplomacy(nextState, rng), ...advanceOccasions(nextState, rng), ...advanceOaths(nextState), ...advanceMarkets(nextState), ...advanceWitnesses(nextState), ...maintainSectPolitics(nextState), ...advanceBounties(nextState)]) {
     newEvents.push(event);
     witnessEvent(nextState, event);
   }

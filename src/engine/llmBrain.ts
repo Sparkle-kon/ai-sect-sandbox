@@ -1,3 +1,4 @@
+import { availableWitnessActions } from './witnessEngine';
 import { availableSettlementActions } from './settlementEngine';
 import { availableMarketActions, marketClosureReason } from './marketEngine';
 import { localQiWeather, weatherTravelFriction } from './weatherEngine';
@@ -89,6 +90,18 @@ export function computeHeuristicDecision(
       spokenLine: '天地灵气，入我丹田，破！',
     };
   }
+
+  const witnessActions = availableWitnessActions(cultivator, world);
+  const evidenceAction = witnessActions.find(({ action }) => action === 'CHALLENGE_WITNESS') ??
+    witnessActions.find(({ action }) => action === 'ATTEST_WITNESS') ??
+    (world.tick % 7 === 3 ? witnessActions.find((option) => {
+      if (option.action !== 'FILE_WITNESS_CLAIM') return false;
+      const fact = world.witnesses.facts.find(({ eventId }) => eventId === option.targetWitnessEventId);
+      if (!fact || !(fact.witnessIds.includes(cultivator.id) || fact.participantIds.includes(cultivator.id))) return false;
+      return (cultivator.personality === '阴险' || cultivator.personality === '诡诈')
+        === (option.targetCultivatorId === fact.winnerId);
+    }) : undefined);
+  if (evidenceAction) return { ...evidenceAction, chosenAction: evidenceAction.action, innerMonologue: '证言应以亲知来由或已掌握的案卷为据。' };
 
   if (world.tick >= 4 && !cultivator.guardAssignment) {
     const options = availableSettlementActions(cultivator, world);
@@ -364,6 +377,7 @@ export async function queryCultivatorLLMDecision(
   const oathOptions = availableOathActions(cultivator, world);
   const marketOptions = availableMarketActions(cultivator, world);
   const settlementOptions = availableSettlementActions(cultivator, world);
+  const witnessOptions = availableWitnessActions(cultivator, world);
   const prompt = `你是修仙沙盒世界中的修士【${cultivator.name}】（称号：${cultivator.title}）。
 【自身状态】
 - 境界：${cultivator.realm}${cultivator.realmStage}层（灵气进度：${cultivator.qiProgress}%）
@@ -389,6 +403,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 法宝状况：${JSON.stringify(cultivator.artifacts)}；本地可用炼器行动：${JSON.stringify(availableArtifactActions(cultivator, world))}
 - 丹毒：${cultivator.pillToxicity}/100；灵药包：${JSON.stringify(cultivator.herbs)}；已有丹药：${JSON.stringify(cultivator.pills)}；允许的炼丹行动：${JSON.stringify(availableAlchemy(cultivator, world))}
 - 功法熟练度：${cultivator.techniqueMastery}/100；可自创：${mayAuthorTechnique(cultivator) ? '是' : '否'}；可研习：${JSON.stringify(availableTechniques(cultivator, world))}
+- 可提出或质证的已知传闻，仅使用这些证人选项：${JSON.stringify(witnessOptions)}
 - 村镇在地赈济与本人同意的招募选项：${JSON.stringify(settlementOptions)}
 - 坊市当下可用挂单和撤单（参数必须采用给定值）：${JSON.stringify(marketOptions)}
 - 两宗契书权限（必须严格采用这些目标与条款）：${JSON.stringify(oathOptions)}
@@ -401,12 +416,14 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
 请以第一人称进行内心独白思考，并决定本回合行动。只输出合法的 JSON 对象（不要 Markdown 代码块），字段如下：
 {
   "innerMonologue": "你的第一人称内心独白（40字以内，体现你的性格与秘密目标）",
-  "chosenAction": "CULTIVATE | BREAKTHROUGH | EXPLORE | SOCIALIZE | DUEL | SCHEMING | PURSUE_SCHEME | AUTHOR_TECHNIQUE | STUDY_TECHNIQUE | GATHER_HERBS | BREW_PILL | USE_PILL | FORGE_ARTIFACT | BIND_ARTIFACT | REPAIR_ARTIFACT | AWAKEN_ARTIFACT | FACE_TRIBULATION | AMBUSH_TRIBULATION | CHALLENGE_LEADERSHIP | PLOT_COUP | BUILD_FACILITY | DISPATCH_GUARD | GUARD_DUTY | OFFER_ALLIANCE | DECLARE_WAR | DEMAND_TRIBUTE | LAUNCH_SIEGE | JOIN_OCCASION | PURSUE_BOUNTY | TAME_BEAST | TRADE | DUAL_CULTIVATE | SECT_DIPLOMACY | TEACH | ACCEPT_TUITION | DECLINE_TUITION | OFFER_OATH | ACCEPT_OATH | DECLINE_OATH | FULFILL_OATH | APPEAL_OATH | PLACE_MARKET_BUY | PLACE_MARKET_SELL | CANCEL_MARKET_ORDER | RECRUIT_SETTLER | DELIVER_RELIEF | REST 之一",
+  "chosenAction": "CULTIVATE | BREAKTHROUGH | EXPLORE | SOCIALIZE | DUEL | SCHEMING | PURSUE_SCHEME | AUTHOR_TECHNIQUE | STUDY_TECHNIQUE | GATHER_HERBS | BREW_PILL | USE_PILL | FORGE_ARTIFACT | BIND_ARTIFACT | REPAIR_ARTIFACT | AWAKEN_ARTIFACT | FACE_TRIBULATION | AMBUSH_TRIBULATION | CHALLENGE_LEADERSHIP | PLOT_COUP | BUILD_FACILITY | DISPATCH_GUARD | GUARD_DUTY | OFFER_ALLIANCE | DECLARE_WAR | DEMAND_TRIBUTE | LAUNCH_SIEGE | JOIN_OCCASION | PURSUE_BOUNTY | TAME_BEAST | TRADE | DUAL_CULTIVATE | SECT_DIPLOMACY | TEACH | ACCEPT_TUITION | DECLINE_TUITION | OFFER_OATH | ACCEPT_OATH | DECLINE_OATH | FULFILL_OATH | APPEAL_OATH | PLACE_MARKET_BUY | PLACE_MARKET_SELL | CANCEL_MARKET_ORDER | RECRUIT_SETTLER | DELIVER_RELIEF | FILE_WITNESS_CLAIM | ATTEST_WITNESS | CHALLENGE_WITNESS | REST 之一",
   "targetLocationId": "EXPLORE 可填已知地点 id（探索未知时省略）；宗门经营许可要求时填指定地点 id",
-  "targetCultivatorId": "如果 chosenAction 为 SOCIALIZE / DUEL / SCHEMING / AMBUSH_TRIBULATION / CHALLENGE_LEADERSHIP / PLOT_COUP / DISPATCH_GUARD / TRADE / DUAL_CULTIVATE / SECT_DIPLOMACY / TEACH / OFFER_OATH 则填目标修士 id，否则省略",
+  "targetCultivatorId": "如果 chosenAction 为 SOCIALIZE / DUEL / SCHEMING / AMBUSH_TRIBULATION / CHALLENGE_LEADERSHIP / PLOT_COUP / DISPATCH_GUARD / TRADE / DUAL_CULTIVATE / SECT_DIPLOMACY / TEACH / OFFER_OATH / FILE_WITNESS_CLAIM 则填目标修士 id，否则省略",
   "spokenLine": "简短台词（可选）",
   "rumorIntent": "只有阴险或诡诈角色选择 SCHEMING 时才可选填 FABRICATE 或 EXAGGERATE",
   "proposedScheme": "仅在没有进行中的谋划并选择 PURSUE_SCHEME 时，从列出的目标类别中选择一项",
+  "targetWitnessEventId": "提出证言时采用已知的公开交手事件 id",
+  "targetWitnessClaimId": "提交独立证言或申诉时采用当前可操作案卷 id",
   "targetSettlementId": "照所列村镇救济或招募 id",
   "targetVolunteerId": "招募时采用列出的合格志愿者 id；赈济时省略",
   "marketGood": "挂单时选择所列货物代码",
@@ -509,9 +526,18 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
             'CANCEL_MARKET_ORDER',
             'RECRUIT_SETTLER',
             'DELIVER_RELIEF',
+            'FILE_WITNESS_CLAIM',
+            'ATTEST_WITNESS',
+            'CHALLENGE_WITNESS',
           ];
           const chosenAction = parsed?.chosenAction;
           if (!chosenAction || !validActions.includes(chosenAction)) return undefined;
+
+          const isWitness = chosenAction === 'FILE_WITNESS_CLAIM' || chosenAction === 'ATTEST_WITNESS' || chosenAction === 'CHALLENGE_WITNESS';
+          const legalWitness = isWitness && witnessOptions.find((item) => item.action === chosenAction &&
+            item.targetWitnessEventId === parsed.targetWitnessEventId &&
+            item.targetWitnessClaimId === parsed.targetWitnessClaimId && item.targetCultivatorId === parsed.targetCultivatorId);
+          if (isWitness && !legalWitness) return undefined;
 
           const isSettlement = chosenAction === 'RECRUIT_SETTLER' || chosenAction === 'DELIVER_RELIEF';
           const legalSettlement = isSettlement && settlementOptions.find((item) => item.action === chosenAction &&
@@ -594,7 +620,7 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
               '天道无常，唯有苦修方是正途。',
             chosenAction,
             targetLocationId: typeof parsed.targetLocationId === 'string' ? parsed.targetLocationId : undefined,
-            targetCultivatorId: legalOath ? legalOath.targetCultivatorId : legalTraining ? legalTraining.targetCultivatorId
+            targetCultivatorId: legalWitness ? legalWitness.targetCultivatorId : legalOath ? legalOath.targetCultivatorId : legalTraining ? legalTraining.targetCultivatorId
               : typeof parsed.targetCultivatorId === 'string' ? parsed.targetCultivatorId : undefined,
             spokenLine: typeof parsed.spokenLine === 'string' ? parsed.spokenLine.trim().slice(0, 90) : undefined,
             facilityKind: legalInfrastructure?.facilityKind,
@@ -607,6 +633,8 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
             forgeTier: legalArtifact?.forgeTier,
             targetHerbId: legalAlchemy?.targetHerbId,
             targetPillId: legalAlchemy?.targetPillId,
+            targetWitnessEventId: legalWitness ? legalWitness.targetWitnessEventId : undefined,
+            targetWitnessClaimId: legalWitness ? legalWitness.targetWitnessClaimId : undefined,
             targetSettlementId: legalSettlement ? legalSettlement.targetSettlementId : undefined,
             targetVolunteerId: legalSettlement ? legalSettlement.targetVolunteerId : undefined,
             marketGood: legalMarket && legalMarket.action !== 'CANCEL_MARKET_ORDER' ? legalMarket.marketGood : undefined,

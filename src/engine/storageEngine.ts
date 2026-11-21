@@ -58,7 +58,7 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const marketQty = num(1,12,true), marketPrice = num(1,500,true);
@@ -97,7 +97,8 @@ const shape = structure({
     exploredTileIds:ids,artifacts:arr(700,artifact),memories:arr(160,memory),coreMemories:arr(160,memory),memorySequence:tick,
     reflections:arr(100,structure({id,tick,kind:one('belief','obsession','heart_demon'),theme:one('cultivation','conflict','community','heavenly'),intensity:num(1,10),statement:text,sourceMemoryIds:ids,source})),
     rumors:arr(200,structure({id,subject:text,locationId:oid,originTick:tick,learnedTick:tick,provenance:one('witness','conversation','flying_sword','fabricated'),
-      confidence:percentage,hops:count,sourceCultivatorId:oid,lead:optional(bool)})),
+      confidence:percentage,hops:count,sourceCultivatorId:oid,originEventId:oid,originSourceCultivatorId:oid,
+      witnessScope:optional(one('participants')),lead:optional(bool)})),
     activeScheme:optional(structure({id,kind:one('infiltration','foundation_pill','vengeance','artifact_heist'),title:text,status:one('active','completed','failed'),
       startedTick:tick,finishedTick:otick,stepIndex:count,steps:arr(32,structure({label:text,completedTick:otick})),targetCultivatorId:oid,targetLocationId:oid,artifactName:otext,outcome:otext})),
     tribulation:optional(structure({id,targetRealm:realm,startedTick:tick,stage:one('lightning','heart_demon','passed','failed'),nextWave:count,totalWaves:count,
@@ -129,6 +130,13 @@ const shape = structure({
     status:one('passed','rejected','stale'),outcome:text})),
   chronicleArchive:structure({anchors:arr(384,anchor),chapters:arr(24,structure({id,chapterNumber:tick,startTick:tick,endTick:tick,title:text,
     anchors:arr(18,anchor),biographies:arr(8,structure({actorId:id,name:id,realm,sectName:otext,anchorIds:ids})),body:strings(25_000),source}))}),
+  witnesses:structure({nextId:tick,
+    facts:arr(240,structure({eventId:id,tick,locationId:id,participantIds:arr(2,id),winnerId:id,witnessIds:ids})),
+    claims:arr(80,structure({id,sourceEventId:id,publicationEventId:id,claimantId:id,subjectId:id,locationId:id,
+      filedTick:tick,deadlineTick:tick,challengeUntilTick:tick,status:one('pending','disputed','corroborated','retracted'),
+      attestations:arr(500,structure({actorId:id,tick,verdict:one('supports','contradicts')})),
+      appeal:optional(structure({tick,actorId:id,verdict:one('upheld','rejected'),reason:text})),settledTick:otick,
+      reputationSectId:oid,reputationPenalty:percentage,reputationRestored:percentage,reason:otext}))}),
   settlements:structure({lastAdvancedTick:otick,
     villages:arr(48,structure({id,locationId:id,name:id,population:count,capacity:count,stress:percentage,
       volunteers:arr(80,structure({id,name:id,age:wealth,spiritRoot:spirit,willingness:percentage,aptitude:percentage,enlistedCultivatorId:oid})),
@@ -171,6 +179,7 @@ function verifyWorld(value: unknown): WorldState {
   const candidate = value !== null && typeof value === 'object' && !Array.isArray(value)
     ? { ...value,
       ...(!Object.hasOwn(value, 'mentorship') ? { mentorship: { offers: [], lineage: [], budgets: [] } } : {}),
+      ...(!Object.hasOwn(value, 'witnesses') ? { witnesses: { facts: [], claims: [], nextId: 1 } } : {}),
       ...(!Object.hasOwn(value, 'settlements') ? { settlements: { villages: [], records: [] } } : {}),
       ...(!Object.hasOwn(value, 'markets') ? { markets: { orders: [], shipments: [], receipts: [], nextId: 1 } } : {}),
       ...(!Object.hasOwn(value, 'oaths') ? { oaths: { contracts: [], nextId: 1 } } : {}),
@@ -217,6 +226,28 @@ function verifyWorld(value: unknown): WorldState {
   if ((w.playerAvatar.possessedId && !actor.has(w.playerAvatar.possessedId)) ||
       (w.playerAvatar.pendingOrder && w.playerAvatar.pendingOrder.actorId !== w.playerAvatar.possessedId) ||
       w.playerAvatar.transcript.some((entry) => !actor.has(entry.targetCultivatorId) || (entry.actorId && !actor.has(entry.actorId)))) fail('playerAvatar.references');
+  const factIds = unique(w.witnesses.facts, ({eventId}) => eventId, 'witnesses.facts.id');
+  unique(w.witnesses.claims, ({id}) => id, 'witnesses.claims.id');
+  for (const fact of w.witnesses.facts) {
+    if (fact.participantIds.length !== 2 || new Set(fact.participantIds).size !== 2 ||
+        !fact.participantIds.includes(fact.winnerId) || fact.participantIds.some((id) => !actor.has(id)) ||
+        new Set(fact.witnessIds).size !== fact.witnessIds.length ||
+        fact.witnessIds.some((id) => !actor.has(id) || fact.participantIds.includes(id))) fail('witnesses.facts.references');
+  }
+  for (const claim of w.witnesses.claims) {
+    if (!actor.has(claim.claimantId) || !actor.has(claim.subjectId) ||
+        (claim.settledTick === undefined && !factIds.has(claim.sourceEventId)) ||
+        (claim.reputationSectId && !sector.has(claim.reputationSectId)) || claim.reputationRestored > claim.reputationPenalty ||
+        (claim.appeal && claim.appeal.actorId !== claim.subjectId) ||
+        new Set(claim.attestations.map(({ actorId }) => actorId)).size !== claim.attestations.length ||
+        claim.attestations.some(({ actorId }) => !actor.has(actorId))) fail('witnesses.claims.references');
+  }
+  if (value !== null && typeof value === 'object' && !Object.hasOwn(value, 'witnesses')) {
+    const historicalPrivate = new Set(w.events.filter(({ witnessScope }) => witnessScope === 'participants').map(({ id }) => `rumor-${id}`));
+    for (const person of w.cultivators) for (const rumor of person.rumors) {
+      if (historicalPrivate.has(rumor.id)) rumor.witnessScope = 'participants';
+    }
+  }
   const settlementIds = unique(w.settlements.villages, ({id}) => id, 'settlements.villages.id');
   const volunteers = w.settlements.villages.flatMap((village) => village.volunteers);
   const volunteerIds = unique(volunteers, ({id}) => id, 'settlements.volunteers.id');

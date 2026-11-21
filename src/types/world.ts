@@ -69,6 +69,9 @@ export type ActionType =
   | 'CANCEL_MARKET_ORDER'
   | 'RECRUIT_SETTLER'
   | 'DELIVER_RELIEF'
+  | 'FILE_WITNESS_CLAIM'
+  | 'ATTEST_WITNESS'
+  | 'CHALLENGE_WITNESS'
   | 'GATHER_HERBS'
   | 'BREW_PILL'
   | 'USE_PILL'
@@ -200,6 +203,9 @@ export interface Rumor {
   confidence: number; // 0–100, perceived credibility, not objective truth
   hops: number;
   sourceCultivatorId?: string;
+  originEventId?: string;
+  originSourceCultivatorId?: string;
+  witnessScope?: 'participants';
   lead?: boolean;
 }
 
@@ -336,6 +342,8 @@ export interface LLMDecisionPayload {
   targetMarketOrderId?: string;
   targetSettlementId?: string;
   targetVolunteerId?: string;
+  targetWitnessEventId?: string;
+  targetWitnessClaimId?: string;
   targetTechniqueId?: string;
   targetHerbId?: HerbId;
   targetPillId?: PillId;
@@ -764,7 +772,46 @@ export interface SettlementState {
   lastAdvancedTick?: number;
 }
 
+export interface WitnessFact {
+  eventId: string;
+  tick: number;
+  locationId: string;
+  participantIds: string[];
+  winnerId: string;
+  witnessIds: string[];
+}
+export interface WitnessAttestation {
+  actorId: string;
+  tick: number;
+  verdict: 'supports' | 'contradicts';
+}
+export interface WitnessClaim {
+  id: string;
+  sourceEventId: string;
+  publicationEventId: string;
+  claimantId: string;
+  subjectId: string;
+  locationId: string;
+  filedTick: number;
+  deadlineTick: number;
+  challengeUntilTick: number;
+  status: 'pending' | 'disputed' | 'corroborated' | 'retracted';
+  attestations: WitnessAttestation[];
+  appeal?: { tick: number; actorId: string; verdict: 'upheld' | 'rejected'; reason: string };
+  settledTick?: number;
+  reputationSectId?: string;
+  reputationPenalty: number;
+  reputationRestored: number;
+  reason?: string;
+}
+export interface WitnessState {
+  facts: WitnessFact[];
+  claims: WitnessClaim[];
+  nextId: number;
+}
+
 export interface WorldState {
+  witnesses: WitnessState;
   settlements: SettlementState;
   markets: MarketState;
   oaths: OathState;
