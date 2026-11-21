@@ -1,3 +1,4 @@
+import { VILLAGE_WORK_RULES, visibleVillageWorks } from '../engine/villageWorksEngine';
 import { householdCensus } from '../engine/householdEngine';
 import { visibleLeaseMapSites } from './leaseMapView';
 import { drawFormationMapLinks, visibleFormationMapLinks } from './formationMapView';
@@ -100,6 +101,9 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const weatherAtVisibleSites = useMemo(() => new Map(seenLocations
     .filter(({ id }) => isCurrentLocation(id))
     .map((site) => [site.id, localQiWeather(world, site)])), [world, seenLocations, isCurrentLocation]);
+  const localConstruction = useMemo(() => new Map(visibleVillageWorks(world, selected)
+    .filter(({ status }) => status === 'building')
+    .map((project) => [project.settlementId, project])), [world, selected]);
   const scenarioSiteProofs = useMemo(() => {
     const audit = world.scenarioAudit;
     const results = new Map<string, { tick: number; passed: boolean; qi: number }>();
@@ -933,6 +937,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
             const leaseMark = localLeaseSites.get(location.id);
             const assessed = scenarioSiteProofs.get(location.id);
             const villageRegister = localVillage ? householdCensus(world, localVillage.id) : undefined;
+            const construction = localVillage ? localConstruction.get(localVillage.id) : undefined;
             const sanctuary = sanctuaryMarks.get(location.id);
             return (
               <li key={location.id} className="inline-flex items-center gap-1.5">
@@ -952,6 +957,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                 )}
                 {localVillage && <span className="text-lime-200">· {localVillage.name} {localVillage.population} 人</span>}
                 {!!villageRegister?.groups.length && <span className="text-lime-200">· 家户坊籍 {villageRegister.groups.length} 组（非另计人口）</span>}
+                {construction && <span className="text-lime-200">· 在建工役 {construction.laborTotal}/{VILLAGE_WORK_RULES[construction.kind].labor} 工时</span>}
                 {localWeather && <span style={{ color: WEATHER_MARK[localWeather.kind].color }}>
                   · 已观测：{localWeather.kind} {Math.round(localWeather.intensity * 100)}%
                 </span>}

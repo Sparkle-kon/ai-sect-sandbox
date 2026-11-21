@@ -1,3 +1,4 @@
+import { advanceVillageWorks, resolveVillageWorksAction } from './villageWorksEngine';
 import { advanceHouseholds, resolveGuardianAction } from './householdEngine';
 import { advanceTerritorialLeases, resolveTerritorialLeaseAction } from './territorialLeaseEngine';
 import { advanceFormations, resolveFormationAction } from './formationNetworkEngine';
@@ -210,6 +211,8 @@ export function applyCultivatorBrainDecision(
     case 'ATTEST_WITNESS':
     case 'CHALLENGE_WITNESS':
       return resolveWitnessAction(world, cultivator, decision);
+    case 'VILLAGE_WORKS':
+      return resolveVillageWorksAction(world, cultivator, decision);
     case 'HOUSEHOLD_GUARDIAN':
       return resolveGuardianAction(world, cultivator, decision);
     case 'TERRITORIAL_LEASE':
@@ -671,7 +674,7 @@ export function advanceWorldTick(
   const avatarOrder = consumeAvatarOrder(nextState);
   maintainAlchemy(nextState);
   maintainSectEconomy(nextState);
-  const newEvents: WorldEvent[] = [...advanceSanctuaries(nextState), ...advanceCeasefires(nextState), ...advanceCompetitionSeasons(nextState), ...advanceMapHazards(nextState), ...advancePilgrimages(nextState), ...advanceRelocations(nextState), ...advanceSettlements(nextState), ...advanceSpiritBeasts(nextState, rng), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...advanceHouseholds(nextState)];
+  const newEvents: WorldEvent[] = [...advanceSanctuaries(nextState), ...advanceCeasefires(nextState), ...advanceCompetitionSeasons(nextState), ...advanceMapHazards(nextState), ...advancePilgrimages(nextState), ...advanceRelocations(nextState), ...advanceSettlements(nextState), ...advanceVillageWorks(nextState), ...advanceSpiritBeasts(nextState, rng), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...advanceHouseholds(nextState)];
   for (const event of newEvents) witnessEvent(nextState, event);
 
   for (const cultivator of [...nextState.cultivators]) {

@@ -95,6 +95,7 @@ export type ActionType =
   | 'FORMATION_NETWORK'
   | 'TERRITORIAL_LEASE'
   | 'HOUSEHOLD_GUARDIAN'
+  | 'VILLAGE_WORKS'
   | 'GATHER_HERBS'
   | 'BREW_PILL'
   | 'USE_PILL'
@@ -390,6 +391,7 @@ export interface LLMDecisionPayload {
   targetHazardId?: string;
   ceasefireMove?: CeasefireMove;
   targetCeasefireId?: string;
+  villageWorkKind?: VillageWorkKind;
   guardianMove?: HouseholdGuardianMove;
   targetGuardianshipId?: string;
   leaseMove?: TerritorialLeaseMove;
@@ -1672,7 +1674,32 @@ export interface HouseholdState {
   nextId: number;
 }
 
+export type VillageWorkKind = 'well' | 'field' | 'shelter';
+export type VillageWorkEndReason = 'deadline' | 'abandoned' | 'site_lost';
+export interface VillageWorkReceipt { tick: number; labor: number; adultsAvailable: number }
+export interface VillageWorkProject {
+  id: string;
+  settlementId: string;
+  sponsorSectId: string;
+  sponsorId: string;
+  kind: VillageWorkKind;
+  startedTick: number;
+  deadlineTick: number;
+  status: 'building' | 'completed' | 'abandoned';
+  laborTotal: number;
+  stonesSpent: number;
+  rootsSpent: number;
+  receipts: VillageWorkReceipt[];
+  lastWorkedTick?: number;
+  settledTick?: number;
+  endReason?: VillageWorkEndReason;
+  capacityBefore?: number;
+  capacityAfter?: number;
+}
+export interface VillageWorksState { projects: VillageWorkProject[]; nextId: number }
+
 export interface WorldState {
+  villageWorks: VillageWorksState;
   households: HouseholdState;
   territorialLeases: TerritorialLeaseState;
   formations: FormationNetworkState;

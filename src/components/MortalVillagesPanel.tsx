@@ -1,9 +1,11 @@
 import {
   availableSettlementActions, SETTLEMENT_RELIEF, SETTLEMENT_RECRUIT_STIPEND, visibleSettlements,
 } from '../engine/settlementEngine';
+import { visibleVillageWorks } from '../engine/villageWorksEngine';
 import { visibleHouseholds } from '../engine/householdEngine';
 import type { Cultivator, WorldState } from '../types/world';
 import { createTerrainMapView } from './terrainMapView';
+import { VillageWorksPanel } from './VillageWorksPanel';
 import { HouseholdRegisterPanel } from './HouseholdRegisterPanel';
 
 type RecordEntry = WorldState['settlements']['records'][number];
@@ -20,6 +22,7 @@ export function MortalVillagesPanel({ world, cultivator }: { world: WorldState; 
   const villages = (world.settlements?.villages ?? []).filter(({ locationId }) => knownLocations.has(locationId));
   const visible = new Set(cultivator?.alive && world.settlements
     ? visibleSettlements(world, cultivator).filter(({ locationId }) => terrain.isCurrentLocation(locationId)).map(({ id }) => id) : []);
+  const worksView = cultivator && visible.size > 0 ? visibleVillageWorks(world, cultivator) : [];
   const householdView = cultivator && visible.size > 0 ? visibleHouseholds(world, cultivator) : undefined;
   const householdCensuses = new Map(householdView?.censuses.map((census) => [census.settlementId, census]));
   const options = cultivator?.alive && world.settlements ? availableSettlementActions(cultivator, world) : [];
@@ -64,6 +67,7 @@ export function MortalVillagesPanel({ world, cultivator }: { world: WorldState; 
                       {village.lastReliefTick !== undefined ? ` · 最近赈济 Tick #${village.lastReliefTick}` : ''}
                     </p>
                     {census && householdView && cultivator && <HouseholdRegisterPanel world={world} census={census} view={householdView} cultivator={cultivator} />}
+                    {worksView.length > 0 && <VillageWorksPanel world={world} village={village} projects={worksView} />}
                     <div className="space-y-1 border-t border-slate-800 pt-2">
                       <h4 className="font-semibold text-emerald-100">自愿入门 · 当前可招募 {eligible.length} 人</h4>
                       <p className="text-slate-400">宗门安家费：每位 {SETTLEMENT_RECRUIT_STIPEND} 灵石。</p>

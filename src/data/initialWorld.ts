@@ -1,3 +1,4 @@
+import { createVillageWorksState } from '../engine/villageWorksEngine';
 import { createHouseholdState, initializeHouseholds } from '../engine/householdEngine';
 import { createTerritorialLeaseState } from '../engine/territorialLeaseEngine';
 import { createFormationNetworkState } from '../engine/formationNetworkEngine';
@@ -264,6 +265,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     formations: createFormationNetworkState(),
     territorialLeases: createTerritorialLeaseState(),
     households: createHouseholdState(),
+    villageWorks: createVillageWorksState(),
     witnesses: createWitnessState(),
     estates: createEstateState(),
     decisionTrace: createDecisionTraceState(),

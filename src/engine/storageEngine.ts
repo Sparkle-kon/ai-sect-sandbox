@@ -1,3 +1,4 @@
+import { createVillageWorksState, VILLAGE_WORK_ADULTS_PER_LABOR, VILLAGE_WORK_MAX_LABOR_PER_TICK, VILLAGE_WORK_RULES } from './villageWorksEngine';
 import { createHouseholdState, HOUSEHOLD_GUARDIAN_OFFER_TICKS, initializeHouseholds } from './householdEngine';
 import { normalizeScenarioObjectives, SCENARIO_AUDIT_VERSION, SCENARIO_MAX_OBJECTIVES, SCENARIO_MAX_POPULATION_TARGET,
   SCENARIO_MAX_SITE_QI_TARGET, SCENARIO_MAX_TREASURY_TARGET, scenarioObjectivePassed } from './scenarioObjectiveEngine';
@@ -92,7 +93,7 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const marketQty = num(1,12,true), marketPrice = num(1,500,true);
@@ -224,6 +225,12 @@ const shape = structure({
       attestations:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,tick,verdict:one('supports','contradicts')})),
       appeal:optional(structure({tick,actorId:id,verdict:one('upheld','rejected'),reason:text})),settledTick:otick,
       reputationSectId:oid,reputationPenalty:percentage,reputationRestored:percentage,reason:otext}))}),
+  villageWorks:structure({nextId:num(1,100_000_000,true),projects:arr(SAVE_COLLECTION_LIMIT,structure({
+    id,settlementId:id,sponsorSectId:id,sponsorId:id,kind:one('well','field','shelter'),startedTick:tick,deadlineTick:tick,
+    status:one('building','completed','abandoned'),laborTotal:count,stonesSpent:count,rootsSpent:count,
+    receipts:arr(8,structure({tick,labor:num(1,VILLAGE_WORK_MAX_LABOR_PER_TICK,true),adultsAvailable:tick})),lastWorkedTick:otick,
+    settledTick:otick,endReason:optional(one('deadline','abandoned','site_lost')),capacityBefore:otick,capacityAfter:otick
+  }))}),
   households:structure({nextId:num(1,100_000_000,true),
     groups:arr(SAVE_COLLECTION_LIMIT,structure({id,originSettlementId:id,branch:one('first','second'),createdTick:tick,
       presences:arr(SAVE_COLLECTION_LIMIT,structure({settlementId:id,adults:tick,juvenileCohorts:arr(200,structure({bornTick:tick,count:tick})),
@@ -411,6 +418,7 @@ function verifyWorld(value: unknown): WorldState {
     ? { ...value,
       ...(!Object.hasOwn(value, 'mentorship') ? { mentorship: { offers: [], lineage: [], budgets: [] } } : {}),
       ...(!Object.hasOwn(value, 'decisionTrace') ? { decisionTrace: { records: [] } } : {}),
+      ...(!Object.hasOwn(value, 'villageWorks') ? { villageWorks: createVillageWorksState() } : {}),
       ...(!Object.hasOwn(value, 'households') ? { households: createHouseholdState() } : {}),
       ...(!Object.hasOwn(value, 'territorialLeases') ? { territorialLeases: createTerritorialLeaseState() } : {}),
       ...(!Object.hasOwn(value, 'formations') ? { formations: createFormationNetworkState() } : {}),
@@ -1267,6 +1275,36 @@ function verifyWorld(value: unknown): WorldState {
     if (!settlementIds.has(row.settlementId) || (row.targetSettlementId && !settlementIds.has(row.targetSettlementId)) ||
         (row.actorId && !actor.has(row.actorId)) || (row.sectId && !sector.has(row.sectId)) ||
         (row.volunteerId && !volunteerIds.has(row.volunteerId)) || (row.cultivatorId && !actor.has(row.cultivatorId))) fail('settlements.records.references');
+  }
+  unique(w.villageWorks.projects, ({ id }) => id, 'villageWorks.projects.id');
+  unique(w.villageWorks.projects.filter(({ status }) => status === 'building'), ({ settlementId }) => settlementId,
+    'villageWorks.projects.active_village');
+  unique(w.villageWorks.projects.filter(({ status }) => status === 'completed'),
+    ({ settlementId, kind }) => JSON.stringify([settlementId, kind]), 'villageWorks.projects.completed_kind');
+  for (const project of w.villageWorks.projects) {
+    const serial = Number(project.id.match(/^village-work-([1-9][0-9]*)$/)?.[1]);
+    const rule = VILLAGE_WORK_RULES[project.kind];
+    const complete = project.status === 'completed';
+    const building = project.status === 'building';
+    if (!Number.isSafeInteger(serial) || serial >= w.villageWorks.nextId || !sector.has(project.sponsorSectId) ||
+        !actor.has(project.sponsorId) || project.startedTick > w.tick || project.deadlineTick !== project.startedTick + rule.ticks ||
+        project.stonesSpent !== rule.stones || project.rootsSpent !== rule.roots ||
+        (building !== (project.settledTick === undefined)) ||
+        (building && (project.deadlineTick <= w.tick || !settlementIds.has(project.settlementId))) ||
+        (project.settledTick !== undefined && (project.settledTick <= project.startedTick || project.settledTick > w.tick)) ||
+        ((project.status === 'abandoned') !== (project.endReason !== undefined)) ||
+        (project.endReason === 'deadline' && project.settledTick! < project.deadlineTick)) fail('villageWorks.projects.references');
+    let total = 0, recent = project.startedTick;
+    for (const row of project.receipts) {
+      if (row.tick <= recent || row.tick >= project.deadlineTick || row.tick > (project.settledTick ?? w.tick) ||
+          row.labor > Math.floor(row.adultsAvailable / VILLAGE_WORK_ADULTS_PER_LABOR)) fail('villageWorks.projects.labor_receipt');
+      total += row.labor; recent = row.tick;
+    }
+    if (project.laborTotal !== total || total > rule.labor ||
+        (project.receipts.at(-1)?.tick !== project.lastWorkedTick) ||
+        (complete ? total !== rule.labor || project.settledTick !== project.lastWorkedTick : total >= rule.labor)) fail('villageWorks.projects.labor_total');
+    if (complete ? project.capacityBefore === undefined || project.capacityAfter !== project.capacityBefore + rule.capacityGain :
+        project.capacityBefore !== undefined || project.capacityAfter !== undefined) fail('villageWorks.projects.capacity');
   }
   if (value !== null && typeof value === 'object' && !Object.hasOwn(value, 'households')) initializeHouseholds(w);
   const groups = new Map(w.households.groups.map((row) => [row.id, row]));
