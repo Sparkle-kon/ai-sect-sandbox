@@ -38,7 +38,7 @@ function empty(villageId: string): VillageGranary {
 const live = (actor: Cultivator) => actor.alive && actor.hp > 0;
 const count = (value: number, minimum = 0) => Number.isSafeInteger(value) && value >= minimum;
 const finiteAtLeast = (value: number, minimum: number) => Number.isFinite(value) && value >= minimum;
-const exactPayload = new Set(['chosenAction','innerMonologue','granaryMove','targetSettlementId']);
+const exactPayload = new Set(['chosenAction','innerMonologue','spokenLine','granaryMove','targetSettlementId']);
 const granaryAt = (world: WorldState, villageId: string) =>
   world.villageGranaries.granaries.find(item => item.settlementId === villageId);
 

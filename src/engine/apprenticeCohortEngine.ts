@@ -3,6 +3,7 @@ import type {
   Cultivator, LLMDecisionPayload, Technique, WorldEvent, WorldState,
 } from '../types/world';
 import { mentorshipBudgetRemaining, spendMentorshipBudget } from './mentorshipEngine';
+import { hasDueObservatoryDuty } from './staffedDutyEngine';
 
 export const COHORT_MIN_INVITEES = 2;
 export const COHORT_MAX_INVITEES = 4;
@@ -68,6 +69,38 @@ function isStudent(world: WorldState,actor: Cultivator | undefined,row: Pick<App
     studiesLineage(world,actor,row.mentorId,text,row.openedTick) && physicallyPresent(world,actor,row.siteId,tick);
 }
 
+const confirmedAt = (row: ApprenticeCohort, seat: ApprenticeCohortSeat) =>
+  seat.status === 'accepted' && seat.acceptedTick === row.openedTick+1;
+function onDutyStudent(world: WorldState,actor: Cultivator|undefined,row: ApprenticeCohort,
+  text: Technique|undefined,tick: number): actor is Cultivator {
+  return isStudent(world,actor,row,text,tick) && !hasDueObservatoryDuty(world,actor,row.siteId,tick);
+}
+function onDutyMentor(world: WorldState,actor: Cultivator|undefined,row: ApprenticeCohort,
+  text: Technique|undefined,tick: number): actor is Cultivator {
+  return isMentor(world,actor,row.sectId,row.siteId,text,tick) && !hasDueObservatoryDuty(world,actor,row.siteId,tick);
+}
+const confirmedOnsiteStudent = (world: WorldState,row: ApprenticeCohort,text: Technique|undefined,tick:number) =>
+  row.seats.some(seat => confirmedAt(row,seat) && onDutyStudent(world,actorAt(world,seat.studentId),row,text,tick));
+
+/** A prospective clinic conflict is a real dated signed lesson at this site, not an invitation or generic teaching. */
+export function hasCohortStaffedDuty(world: WorldState,actor: Cultivator,siteId: string,tick: number): boolean {
+  for (const row of world.apprenticeCohorts.cohorts) {
+    if (row.siteId !== siteId || row.lessonTick !== tick || (row.status !== 'offered' && row.status !== 'held')) continue;
+    const educator = row.mentorId === actor.id;
+    const own = signedSeat(row,actor.id);
+    if (!educator && !own) continue;
+    const text = curriculum(world,row.techniqueId);
+    const mentor = educator ? actor : actorAt(world,row.mentorId);
+    if (!onDutyMentor(world,mentor,row,text,tick)) continue;
+    if (row.status === 'held') {
+      if (row.teachingTick === tick && (educator || own?.attendedTick === tick && onDutyStudent(world,actor,row,text,tick))) return true;
+    } else if (mentorshipBudgetRemaining(mentor,world,tick) > 0 &&
+      (educator ? confirmedOnsiteStudent(world,row,text,tick) : own && confirmedAt(row,own) &&
+        onDutyStudent(world,actor,row,text,tick))) return true;
+  }
+  return false;
+}
+
 function exactIds(supplied: string[] | undefined,expected: string[] | undefined) {
   return supplied === undefined || expected === undefined ? supplied === expected :
     Array.isArray(supplied) && supplied.length === expected.length && expected.every((id,index) => supplied[index] === id);
@@ -97,16 +130,16 @@ export function availableApprenticeCohortActions(actor: Cultivator,world: WorldS
     if (educator) {
       append(row,'cancel');
       if (executionTick === row.lessonTick && row.teachingTick === undefined &&
-        row.seats.some(item => item.status === 'accepted' && item.acceptedTick === row.openedTick+1) &&
-        isMentor(world,mentor,row.sectId,row.siteId,text,executionTick) &&
+        confirmedOnsiteStudent(world,row,text,executionTick) &&
+        onDutyMentor(world,mentor,row,text,executionTick) &&
         mentorshipBudgetRemaining(mentor,world,executionTick) > 0) append(row,'teach');
     } else if (seat) {
       append(row,'leave');
       if (!isMentor(world,mentor,row.sectId,row.siteId,text,executionTick) ||
         !isStudent(world,actor,row,text,executionTick)) continue;
       if (executionTick === row.openedTick+1 && seat.status === 'invited') append(row,'accept');
-      if (executionTick === row.lessonTick && seat.status === 'accepted' && seat.acceptedTick === row.openedTick+1 &&
-        seat.readyTick === undefined) append(row,'attend');
+      if (executionTick === row.lessonTick && confirmedAt(row,seat) && seat.readyTick === undefined &&
+        onDutyMentor(world,mentor,row,text,executionTick) && onDutyStudent(world,actor,row,text,executionTick)) append(row,'attend');
     }
   }
   if (current || actor.techniqueMastery < COHORT_MENTOR_MASTERY) return result;
@@ -213,11 +246,11 @@ export function advanceApprenticeCohorts(world: WorldState): WorldEvent[] {
     if (world.tick === row.lessonTick && text) for (const seat of row.seats) {
       if (seat.status !== 'accepted' || seat.acceptedTick !== row.openedTick+1 || seat.readyTick !== world.tick) continue;
       const actor = actorAt(world,seat.studentId);
-      if (isStudent(world,actor,row,text,world.tick)) attendees.push({seat,actor});
+      if (onDutyStudent(world,actor,row,text,world.tick)) attendees.push({seat,actor});
     }
     let reason: ApprenticeCohort['reason'];
     if (world.tick !== row.lessonTick || row.teachingTick !== world.tick) reason = 'missed_lesson';
-    else if (!isMentor(world,mentor,row.sectId,row.siteId,text,world.tick)) reason = 'mentor_unavailable';
+    else if (!onDutyMentor(world,mentor,row,text,world.tick)) reason = 'mentor_unavailable';
     else if (!attendees.length) reason = 'no_confirmed_attendance';
     else if (!spendMentorshipBudget(world,mentor)) reason = 'no_budget';
     if (reason) {

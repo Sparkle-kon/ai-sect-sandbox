@@ -1257,7 +1257,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                 {sanctuary !== undefined && <span className="text-cyan-200">· 本人通行权有效 · {sanctuary > 0 ? `护阵可挡 ${sanctuary} 次决斗` : '护阵已耗尽'}</span>}
                 {(localErrata.get(location.id) ?? 0) > 0 && <span className="text-amber-200">· 公开史料有待勘误 {localErrata.get(location.id)} 条</span>}
                 {habitatView && <span className="text-emerald-200">· 复育栖地 {habitatView.wildOccupancy ?? 0}/{habitatView.capacity} 野兽</span>}
-                {localClinic?.siteId === location.id && <span className="text-rose-200">· 静养床 {localClinic.capacity.available}/{localClinic.capacity.beds} 可用</span>}
+                {localClinic?.siteId === location.id && <span className="text-rose-200">· 静养床 {localClinic.capacity.available}/{localClinic.capacity.beds} 本轮可受理</span>}
                 {localCommons.has(location.id) && <span className="text-teal-200">· 中立灵地共管中 · 外来者限采储备之外的余量</span>}
                 {leaseMark && <span className="text-amber-200">· {leaseMark.role === 'owner' ? '本宗授权' : '本宗采集许可'} · 余 {leaseMark.remaining} 株</span>}
                 {assessed && <span className="text-cyan-200">· 剧本末回合 #{assessed.tick} 凭证：灵气 {assessed.qi}（{assessed.passed ? '通过' : '未通过'}）</span>}

@@ -1790,9 +1790,11 @@ export interface HabitatState {
   nextId: number;
 }
 
-export type InfirmaryMove = 'request' | 'staff' | 'accept' | 'refuse';
+export type StaffedDutyKind = 'observatory' | 'cohort';
+export type InfirmaryMove = 'request' | 'staff' | 'accept' | 'accept_handoff' | 'refuse';
 export type InfirmaryClosureReason = 'expiry' | 'ineligible' | 'recovered' | 'refused';
 export interface InfirmaryReceipt {
+  handoff?: { fromShiftId: string; duty: StaffedDutyKind };
   guardId: string;
   shiftId: string;
   tick: number;
@@ -1821,6 +1823,7 @@ export interface InfirmaryShift {
   startedTick: number;
   expiresTick: number;
   lastServedTick?: number;
+  lastWithheld?: { tick: number; duty: StaffedDutyKind };
 }
 export interface InfirmaryState {
   cases: InfirmaryCase[];

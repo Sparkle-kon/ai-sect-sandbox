@@ -506,10 +506,12 @@ const shape = structure({
       sent:optional(count),delivered:optional(count),lost:optional(count),drawn:optional(count),stonesSpent:optional(count),dissipated:optional(count)}))
   }))}),
   infirmaries:structure({nextId:num(1,100_000_000,true),
-    shifts:arr(SAVE_COLLECTION_LIMIT,structure({id,guardId:id,sectId:id,siteId:id,startedTick:tick,expiresTick:tick,lastServedTick:otick})),
+    shifts:arr(SAVE_COLLECTION_LIMIT,structure({id,guardId:id,sectId:id,siteId:id,startedTick:tick,expiresTick:tick,lastServedTick:otick,
+      lastWithheld:optional(structure({tick,duty:one('observatory','cohort')}))})),
     cases:arr(SAVE_COLLECTION_LIMIT,structure({id,patientId:id,sectId:id,siteId:id,queuedTick:tick,expiresTick:tick,
       status:one('waiting','treated','refused','closed'),settledTick:otick,reason:optional(one('expiry','ineligible','recovered','refused')),
       receipt:optional(structure({guardId:id,shiftId:id,tick,stonesSpent:count,herbsSpent:count,
+        handoff:optional(structure({fromShiftId:id,duty:one('observatory','cohort')})),
         hpRestored:num(Number.MIN_VALUE,1_000_000_000),toxicityRemoved:num(0,INFIRMARY_DETOX_MAX)}))}))}),
   habitats:structure({nextId:num(1,100_000_000,true),
     stewardships:arr(SAVE_COLLECTION_LIMIT,structure({id,siteId:id,sponsorSectId:id,stewardId:id,restoredTick:tick,expiresTick:tick,
@@ -1516,7 +1518,9 @@ function verifyWorld(value: unknown): WorldState {
     if (!actor.has(shift.guardId) || !sector.has(shift.sectId) || shift.startedTick > w.tick ||
         shift.expiresTick !== shift.startedTick + INFIRMARY_SHIFT_TICKS ||
         (shift.lastServedTick !== undefined && (shift.lastServedTick <= shift.startedTick || shift.lastServedTick >= shift.expiresTick ||
-          shift.lastServedTick > w.tick))) fail('infirmaries.shifts.references');
+          shift.lastServedTick > w.tick)) ||
+        (shift.lastWithheld && (shift.lastWithheld.tick <= shift.startedTick || shift.lastWithheld.tick >= shift.expiresTick ||
+          shift.lastWithheld.tick > w.tick || shift.lastWithheld.tick === shift.lastServedTick))) fail('infirmaries.shifts.references');
   }
   unique(w.infirmaries.cases.filter(({ status }) => status === 'waiting'), ({ patientId }) => patientId, 'infirmaries.cases.active_patient');
   const serviceUses = new Set<string>(), bedUses = new Map<string, number>();
@@ -1539,6 +1543,15 @@ function verifyWorld(value: unknown): WorldState {
     const serviceKey = JSON.stringify([receipt.shiftId, receipt.tick]);
     const bedKey = JSON.stringify([row.sectId, row.siteId, receipt.tick]);
     const uses = (bedUses.get(bedKey) ?? 0) + 1;
+    if (receipt.handoff) {
+      const primary = infirmaryShifts.get(receipt.handoff.fromShiftId);
+      if (!primary || primary.id === receipt.shiftId || primary.guardId === receipt.guardId || primary.guardId === row.patientId ||
+          primary.sectId !== row.sectId || primary.siteId !== row.siteId ||
+          receipt.tick <= primary.startedTick || receipt.tick >= primary.expiresTick ||
+          !primary.lastWithheld || primary.lastWithheld.tick < receipt.tick ||
+          (primary.lastWithheld.tick === receipt.tick && primary.lastWithheld.duty !== receipt.handoff.duty) ||
+          primary.lastServedTick === receipt.tick) fail('infirmaries.cases.handoff');
+    }
     if (!shift || receipt.guardId !== shift.guardId || receipt.guardId === row.patientId || shift.sectId !== row.sectId ||
         shift.siteId !== row.siteId || receipt.tick !== row.settledTick || receipt.tick <= row.queuedTick ||
         receipt.tick >= row.expiresTick || receipt.tick <= shift.startedTick || receipt.tick >= shift.expiresTick ||

@@ -5,7 +5,7 @@ import {
   INFIRMARY_TREATMENT_STONES,
   visibleInfirmaries,
 } from '../engine/infirmaryEngine';
-import type { Cultivator, InfirmaryCase, WorldState } from '../types/world';
+import type { Cultivator, InfirmaryCase, StaffedDutyKind, WorldState } from '../types/world';
 
 const STATUS: Record<InfirmaryCase['status'], string> = {
   waiting: '等待救治', treated: '已同意并接受救治', refused: '本人已拒绝', closed: '排队已结束',
@@ -14,11 +14,13 @@ const END: Record<NonNullable<InfirmaryCase['reason']>, string> = {
   expiry: '等候期满', ineligible: '此时已不具资格', recovered: '已无需救治', refused: '未同意救治',
 };
 
+const DUTY: Record<StaffedDutyKind, string> = { observatory: '观象实测', cohort: '合班实授' };
+
 export function InfirmaryPanel({ world, cultivator }: { world: WorldState; cultivator: Cultivator }) {
   const viewer = world.cultivators.find(({ id }) => id === cultivator.id);
   const view = visibleInfirmaries(world, viewer);
   if (!view) return null;
-  const { capacity, ownCases, ownShift, ownQueuePosition } = view;
+  const { capacity, ownCases, ownShift, ownQueuePosition, ownDutyDisposition } = view;
   if (!capacity && !ownCases.length && !ownShift) return null;
   const sect = world.sects.find(({ id }) => id === view.sectId);
   const sites = new Map(world.locations.map(({ id, name }) => [id, name]));
@@ -40,6 +42,9 @@ export function InfirmaryPanel({ world, cultivator }: { world: WorldState; culti
         {ownShift && <p>本人值守记录：{sites.get(ownShift.siteId) ?? '旧院地点未详'} · Tick #{ownShift.startedTick} 至 #{ownShift.expiresTick} 前
           {ownShift.lastServedTick !== undefined && ownShift.lastServedTick <= world.tick && ` · 最近救治 Tick #${ownShift.lastServedTick}`}
         </p>}
+        {ownShift?.lastWithheld && ownShift.lastWithheld.tick <= world.tick && <p className="text-amber-200">
+          本人值守暂缓 Tick #{ownShift.lastWithheld.tick} · 同回合另有{DUTY[ownShift.lastWithheld.duty]}职责；不记为本人已救治。
+        </p>}
         <h5 className="font-semibold text-teal-100">本人救治记录</h5>
         {ownCases.length ? (
           <ol aria-label="仅本人诊疗档案" className="max-h-[25rem] space-y-2 overflow-y-auto">
@@ -54,7 +59,15 @@ export function InfirmaryPanel({ world, cultivator }: { world: WorldState; culti
                     {entry.settledTick !== undefined && ` · 结案 Tick #${entry.settledTick}`}
                   </p>
                   {waiting && capacity && ownQueuePosition !== undefined && <p>本人当前排位：第 {ownQueuePosition} 位</p>}
+                  {waiting && !receipt && <p className="text-slate-400">
+                    {capacity && ownDutyDisposition === 'handoff_available' && '有在场候补可接手，仍须本人明确同意。'}
+                    {capacity && ownDutyDisposition === 'waiting_conflict' && '当班职责冲突，暂无可交接者，继续等候。'}
+                    尚未施治，未扣耗材。
+                  </p>}
                   {entry.reason && <p>结案原因：{END[entry.reason]}</p>}
+                  {receipt?.handoff && <p className="text-emerald-200">
+                    本人已明确同意交棒，由在场候补实际接手；原值守另有{DUTY[receipt.handoff.duty]}职责。
+                  </p>}
                   {receipt && <p className="text-emerald-200">Tick #{receipt.tick} 实际用药：{receipt.stonesSpent} 灵石、翡翠灵叶 {receipt.herbsSpent} 株 · 气血 +{receipt.hpRestored} · 丹毒 −{receipt.toxicityRemoved}</p>}
                 </li>
               );

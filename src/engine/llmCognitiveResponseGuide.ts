@@ -50,7 +50,7 @@ export const COGNITIVE_RESPONSE_GUIDE = `请以第一人称进行内心独白思
   "targetTerritorialLeaseId": "回应或交回时使用给定契约 id；offer 严格复制目标地和目标宗门",
   "formationMove": "FORMATION_NETWORK 只复制列出的 offer、accept、decline、dispatch、overload、draw 或 repair，不填写灵气数量",
   "targetFormationLinkId": "回应、主动调拨、取用或修复采用当前列出的实际阵链 id；offer 用 targetSectId",
-  "infirmaryMove": "INFIRMARY 只复制本人的 request、staff、accept 或 refuse",
+  "infirmaryMove": "INFIRMARY 只照抄本人 request、staff、accept、accept_handoff 或 refuse；accept_handoff 另同意当轮实际值守的候补，只填本人的 targetInfirmaryCaseId，不能指定医护、班次、冲突原因、费用或奖励。",
   "targetInfirmaryCaseId": "只在 accept 或 refuse 时照抄本人现有排队 id",
   "habitatMove": "HABITAT 复制 restore、release 或 survey",
   "targetBeastReleaseId": "survey 用其列出的放归回执 id；restore 使用 targetLocationId；release 使用 targetBeastId",

@@ -191,14 +191,28 @@ export function computeHeuristicDecision(
   if (clinic && (cultivator.hp <= cultivator.maxHp * .70 || world.infirmaries.cases.some((row) =>
     row.sectId === clinic.id && row.status === 'waiting'))) {
     const choices = availableInfirmaryActions(cultivator, world);
-    const offered = choices.find(({ infirmaryMove }) => infirmaryMove === 'accept');
+    const offered = choices.find(({ infirmaryMove }) => infirmaryMove === 'accept_handoff') ??
+      choices.find(({ infirmaryMove }) => infirmaryMove === 'accept');
     const staff = choices.find(({ infirmaryMove }) => infirmaryMove === 'staff');
     const request = cultivator.hp >= cultivator.maxHp * .20 ? choices.find(({ infirmaryMove }) => infirmaryMove === 'request') : undefined;
     const ownCase = world.infirmaries.cases.find((row) => row.status === 'waiting' && row.patientId === cultivator.id);
     const refuse = ownCase && world.tick - ownCase.queuedTick >= 2 && !infirmaryCapacity(world, clinic.id).available && cultivator.personality === '逍遥'
       ? choices.find(({ infirmaryMove }) => infirmaryMove === 'refuse') : undefined;
     const move = offered ?? staff ?? request ?? refuse;
-    if (move) return { ...move, chosenAction: 'INFIRMARY', innerMonologue: '是否入院由本人同意，须有当值人、空床和实物。' };
+    if (move) {
+      // Do not substitute optional clinic work for a previously signed, actually due personal duty.
+      const reading = Object.hasOwn(world.fieldObservatories.byActor, cultivator.id) ?
+        availableObservatoryActions(cultivator, world).find(({ observatoryMove }) => observatoryMove === 'measure') : undefined;
+      if (reading) return { ...reading, chosenAction: reading.action, innerMonologue: '本人已经出资预约本轮实测，先如期完成。' };
+      const dueLesson = cultivator.hp >= cultivator.maxHp * .45 && world.apprenticeCohorts.cohorts.some((row) =>
+        row.status === 'offered' && row.lessonTick === world.tick && (row.mentorId === cultivator.id ||
+          row.seats.some(({ studentId, status }) => studentId === cultivator.id && status === 'accepted')))
+        ? availableApprenticeCohortActions(cultivator, world).find(({ cohortMove }) => cohortMove === 'teach' || cohortMove === 'attend') : undefined;
+      if (dueLesson) return { ...dueLesson, chosenAction: dueLesson.action, innerMonologue: '本人已有当轮实授或到课约定，先履行本期共练。' };
+      return { chosenAction: 'INFIRMARY', infirmaryMove: move.infirmaryMove, targetInfirmaryCaseId: move.targetInfirmaryCaseId,
+        innerMonologue: move.infirmaryMove === 'accept_handoff'
+          ? '本人与实际已值守的候补核实交接；我明确同意本轮护诊。' : '是否入院由本人同意，须有当值人、空床和实物。' };
+    }
   }
   if (world.couriers.dispatches.some((row) => row.status === 'offered' && row.courierId === cultivator.id)) {
     const acceptance = availableCourierActions(cultivator, world, false).find(({ courierMove }) => courierMove === 'accept');
@@ -1004,7 +1018,8 @@ export async function requestCultivatorLLMDecision(
   const householdNameOptions = availableHouseholdNameActions(cultivator, world, requestTick);
   const leaseOptions = availableTerritorialLeaseActions(cultivator, world);
   const formationOptions = availableFormationActions(cultivator, world);
-  const infirmaryOptions = availableInfirmaryActions(cultivator, world);
+  const infirmaryOptions = availableInfirmaryActions(cultivator, world, requestTick)
+    .map(({ action, infirmaryMove, targetInfirmaryCaseId }) => ({ action, infirmaryMove, targetInfirmaryCaseId }));
   const habitatOptions = availableHabitatActions(cultivator, world);
   const chronicleErrataOptions = availableChronicleErrataActions(cultivator, world);
   const creditOptions = availableSectCreditActions(cultivator, world);
@@ -1068,7 +1083,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 家户监护只允许双方自愿，不能自填亲缘或宗籍；照抄已见的选项：${JSON.stringify(guardianOptions)}
 - 地契只按本地印契和真实所有权办理，只出租限期采集许可，不转移疆域：${JSON.stringify(leaseOptions)}
 - 阵网只用实际签约、到场与灵气选项；overload 是主动超载且必会断链，不是默认调拨：${JSON.stringify(formationOptions)}
-- 静养院只允许本人依据所列排队、值守、接受或拒绝，不填别人的病况，不改药材与床位：${JSON.stringify(infirmaryOptions)}
+- 静养院只可复制本人执行回合的 request、staff、accept、accept_handoff 或 refuse。accept_handoff 是病患另行同意真实已值守的候补，只抄本人候诊编号；不填人员、班次、病况、地名、冲突细节、费用和奖励：${JSON.stringify(infirmaryOptions)}
 - 栖息地复育与放归只用当地实际有资源的选择；记录复见必须亲眼核对同一野生灵兽：${JSON.stringify(habitatOptions)}
 - 纪事异闻只允在当地公示板提交列出的结构化说法或核证勘误，不许生成证据文字：${JSON.stringify(chronicleErrataOptions)}
 - 朝山巡礼只向在场同伴提议，两站必须是彼此知晓且可通行的地点。选择并原样复制当下巡礼选项：${JSON.stringify(pilgrimageOptions)}
@@ -1356,8 +1371,8 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
 
           const legalInfirmary = chosenAction === 'INFIRMARY' ? infirmaryOptions.find((item) =>
             item.infirmaryMove === parsed.infirmaryMove && item.targetInfirmaryCaseId === parsed.targetInfirmaryCaseId) : undefined;
-          if (chosenAction === 'INFIRMARY' && (!legalInfirmary || parsed.targetLocationId !== undefined ||
-              parsed.targetSectId !== undefined || parsed.targetCultivatorId !== undefined)) return undefined;
+          if (chosenAction === 'INFIRMARY' && (!legalInfirmary || Object.keys(parsed).some((field) =>
+            !['chosenAction', 'innerMonologue', 'spokenLine', 'infirmaryMove', 'targetInfirmaryCaseId'].includes(field)))) return undefined;
 
           const legalHabitat = chosenAction === 'HABITAT' ? habitatOptions.find((item) =>
             item.habitatMove === parsed.habitatMove && item.targetLocationId === parsed.targetLocationId &&

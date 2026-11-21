@@ -52,9 +52,10 @@ describe('local, evidence-grounded village granary choices in both brains', () =
       mock.mockImplementation(async () => respond({ ...donate, ...extra }));
       await expect(requestCultivatorLLMDecision(donor, world, config, world.tick + 1)).resolves.toBeUndefined();
     }
-    mock.mockImplementation(async () => respond(donate));
+    const naturalReply = { ...donate, spokenLine: '愿这份现存补给派得上用场。' };
+    mock.mockImplementation(async () => respond(naturalReply));
     const approved = await requestCultivatorLLMDecision(donor, world, config, world.tick + 1);
-    expect(approved).toMatchObject(donate);
+    expect(approved).toMatchObject(naturalReply);
     expect(mock.mock.calls.at(-1)?.[1]?.body).toContain('义仓仅照抄本地已有依据');
     const population = village.population;
     step();

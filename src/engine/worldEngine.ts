@@ -29,7 +29,7 @@ import { advanceVillageWorks, resolveVillageWorksAction } from './villageWorksEn
 import { advanceHouseholds, resolveGuardianAction } from './householdEngine';
 import { advanceTerritorialLeases, resolveTerritorialLeaseAction } from './territorialLeaseEngine';
 import { advanceFormations, resolveFormationAction } from './formationNetworkEngine';
-import { advanceInfirmaries, resolveInfirmaryAction } from './infirmaryEngine';
+import { advanceInfirmaries, beginClinicDutyTurn, resolveInfirmaryAction } from './infirmaryEngine';
 import { advanceHabitats, resolveHabitatAction } from './habitatEngine';
 import { advanceChronicleErrata, resolveChronicleErrataAction } from './chronicleErrataEngine';
 import { activePilgrimageForActor, advancePilgrimages, pilgrimageActedThisTick, pilgrimageCheckpoint, resolvePilgrimageAction } from './pilgrimageEngine';
@@ -774,6 +774,7 @@ export function advanceWorldTick(
   const newEvents: WorldEvent[] = [...advanceSanctuaries(nextState), ...advanceCeasefires(nextState), ...advanceCompetitionSeasons(nextState), ...advanceMapHazards(nextState), ...advanceTerrainSuccession(nextState), ...advanceRoads(nextState), ...advanceCouriers(nextState), ...advancePilgrimages(nextState), ...advanceRelocations(nextState), ...advanceSettlements(nextState), ...advanceVillageWorks(nextState), ...advanceSpiritBeasts(nextState, rng), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...advanceSharedCommons(nextState), ...advanceHouseholds(nextState)];
   for (const event of newEvents) witnessEvent(nextState, event);
   openFurnaceTurn(nextState);
+  beginClinicDutyTurn(nextState);
 
   for (const cultivator of [...nextState.cultivators]) {
     if (!cultivator.alive) continue;

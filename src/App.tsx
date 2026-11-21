@@ -103,7 +103,7 @@ const chronicleFeedFact = (entry: WorldEvent) => !entry.id.startsWith('evt-seale
   !(entry.witnessScope === 'participants' && (entry.id.startsWith('evt-sparring-') || entry.id.startsWith('evt-expedition-rescue-') ||
     entry.id.startsWith('evt-short-shift-') || entry.id.startsWith('evt-boundary-relief-') ||
     entry.id.startsWith('evt-apprentice-cohort-') || entry.id.startsWith('evt-household-name-') ||
-    entry.id.startsWith('evt-caravan-restitution-') || entry.id.startsWith('evt-village-granary-') ||
+    entry.id.startsWith('evt-caravan-restitution-') || entry.id.startsWith('evt-village-granary-') || entry.id.startsWith('evt-infirmary-') ||
     /^evt-pilgrimage-[1-9]\d*-(?:camp(?:-expiry|-interruption)?|dismantled|resumed)-\d+$/.test(entry.id)));
 type FastForwardPhase = 'idle' | 'running' | 'pausing' | 'paused' | 'staging' | 'ready' | 'error';
 type FastForwardViewState = { phase: FastForwardPhase; progress?: FastForwardProgress; notice?: string };
