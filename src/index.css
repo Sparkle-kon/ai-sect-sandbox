@@ -1,3 +1,74 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Keep the native DOM and keyboard order: only opted-in phone controls change position. */
+@media (max-width: 639.98px) and (min-height: 20rem) {
+  :is([data-controls-hand="left"], [data-controls-hand="right"]) {
+    /* Tabs have 44px targets, 8px vertical padding and a 1px rule. */
+    --control-dock-base: calc(3.8125rem + env(safe-area-inset-bottom, 0px));
+    --control-dock-step: 3.5rem;
+    --control-dock-repeat: 0rem;
+    --control-dock-map: 0rem;
+    --control-dock-back: 0rem;
+    --control-dock-top: calc(var(--control-dock-base) + var(--control-dock-repeat) + var(--control-dock-map) + var(--control-dock-back));
+    --control-dock-left: max(.625rem, env(safe-area-inset-left, 0px));
+    --control-dock-right: max(.625rem, env(safe-area-inset-right, 0px));
+    --control-dock-side: var(--control-dock-left);
+    --control-dock-opposite: auto;
+  }
+  [data-controls-hand="right"] {
+    --control-dock-side: auto;
+    --control-dock-opposite: var(--control-dock-right);
+  }
+  :is([data-controls-hand="left"], [data-controls-hand="right"])[data-controls-repeat="true"] {
+    --control-dock-repeat: var(--control-dock-step);
+  }
+  :is([data-controls-hand="left"], [data-controls-hand="right"])[data-controls-map-tools="true"] {
+    --control-dock-map: var(--control-dock-step);
+  }
+  :is([data-controls-hand="left"], [data-controls-hand="right"])[data-controls-back="true"] {
+    --control-dock-back: var(--control-dock-step);
+  }
+
+  :is([data-controls-hand="left"], [data-controls-hand="right"]) > main {
+    padding-bottom: calc(var(--control-dock-top) + .75rem);
+  }
+  :is([data-controls-hand="left"], [data-controls-hand="right"]) :is(
+    [data-control-dock="repeat"],
+    [data-control-dock="back"],
+    [data-control-dock="map-tools"],
+    [data-control-dock="map-tools"][open] > [data-control-dock-body="map-tools"]
+  ) {
+    position: fixed;
+    left: var(--control-dock-side);
+    right: var(--control-dock-opposite);
+    z-index: 26; /* The existing tabs remain above all three docks. */
+    margin: 0;
+    max-width: calc(100% - var(--control-dock-left) - var(--control-dock-right));
+    border: 1px solid #475569;
+    border-radius: .5rem;
+    background-color: #0f172a;
+    box-shadow: 0 .15rem .65rem rgb(2 6 23 / 55%);
+  }
+  :is([data-controls-hand="left"], [data-controls-hand="right"]) [data-control-dock="repeat"] {
+    bottom: var(--control-dock-base);
+    padding: .125rem;
+    flex-wrap: nowrap;
+  }
+  :is([data-controls-hand="left"], [data-controls-hand="right"]) [data-control-dock="map-tools"] {
+    bottom: calc(var(--control-dock-base) + var(--control-dock-repeat));
+  }
+  :is([data-controls-hand="left"], [data-controls-hand="right"]) [data-control-dock="back"] {
+    bottom: calc(var(--control-dock-base) + var(--control-dock-repeat) + var(--control-dock-map));
+  }
+  :is([data-controls-hand="left"], [data-controls-hand="right"]) [data-control-dock="map-tools"][open] > [data-control-dock-body="map-tools"] {
+    bottom: var(--control-dock-top);
+    width: 21rem;
+    max-height: max(0px, calc(100vh - var(--control-dock-top) - max(.5rem, env(safe-area-inset-top, 0px))));
+    max-height: max(0px, calc(100dvh - var(--control-dock-top) - max(.5rem, env(safe-area-inset-top, 0px))));
+    overflow: auto;
+    overflow-wrap: anywhere;
+    overscroll-behavior-y: contain;
+  }
+}

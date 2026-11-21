@@ -1175,7 +1175,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           <span>选择一位修士查看其当前记忆状态。</span>
         )}
       </div>
-      <details ref={toolsRef} open={toolsExpanded} className="border-t border-slate-800" aria-label="地图工具"
+      <details ref={toolsRef} open={toolsExpanded} className="border-t border-slate-800" aria-label="地图工具" data-control-dock="map-tools"
         onToggle={(event) => {
           if (event.target !== event.currentTarget) return;
           const next = event.currentTarget.open;
@@ -1187,6 +1187,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         <summary ref={(node) => { toolsSummary.current = node; }}
           onClick={() => { if (toolsRef.current?.open) disarmTools(); }}
           className="flex min-h-11 cursor-pointer items-center px-3 text-xs font-semibold text-slate-200 focus-visible:outline focus-visible:outline-amber-300">地图工具</summary>
+      <div data-control-dock-body="map-tools">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-slate-800 px-4 py-2 text-xs text-slate-300">
         <label className="inline-flex min-h-11 items-center gap-1.5">
           <input type="checkbox" checked={fog} disabled={!selected && !fog} onChange={(event) => setFog(event.currentTarget.checked)} />
@@ -1458,6 +1459,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         )}
       </details>
       </>}
+      </div>
       </details>
     </div>
   );

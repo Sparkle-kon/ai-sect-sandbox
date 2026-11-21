@@ -26,6 +26,7 @@ import { applyMapBrush } from './engine/mapBrushEngine';
 import { GodBrushKind, LLMConfig, MapPoint, WorldEvent, WorldState } from './types/world';
 import { SandboxWorkspace, WorkspaceSections } from './components/SandboxWorkspace';
 import type { WorkspaceId } from './components/SandboxWorkspace';
+import { readHandednessPreference, writeHandednessPreference, type HandednessPreference } from './components/handednessPreference';
 import { readWorkspaceFoldPreferences, resolveWorkspaceActor, writeWorkspaceFoldPreferences } from './components/workspacePreferences';
 import { annotationWriteIsCurrent } from './components/annotationUi';
 import type { NotebookStamp, NoteCommand, NoteStatus } from './components/annotationUi';
@@ -126,6 +127,7 @@ const panel = 'space-y-2 rounded-xl border border-slate-800 bg-slate-900 p-3';
 export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSection }) => {
   const [workspace, setWorkspace] = useState<WorkspaceId>(initialWorkspace);
   const [foldPreferences, setFoldPreferences] = useState(readWorkspaceFoldPreferences);
+  const [handedness, setHandedness] = useState(readHandednessPreference);
   const [rosterFocus, setRosterFocus] = useState<{ id: string; scope: string }>();
   const actorHeading = useRef<HTMLHeadingElement>(null);
   useEffect(() => writeWorkspaceFoldPreferences(foldPreferences), [foldPreferences]);
@@ -728,9 +730,18 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
     setRosterFocus({ id, scope: viewScopeKey });
   };
   const toggleAutoplay = () => { if (!fastForwardRun.current) setIsRunning((current) => !current); };
+  const changeHandedness = (value: string) => {
+    if (value !== 'default' && value !== 'left' && value !== 'right') return;
+    const next: HandednessPreference = value;
+    setHandedness(next);
+    writeHandednessPreference(next);
+  };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col pt-[env(safe-area-inset-top)]">
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col pt-[env(safe-area-inset-top)]"
+      data-controls-hand={handedness} data-controls-workspace={workspace}
+      data-controls-repeat={handedness !== 'default' || workspace === 'map' || Boolean(preview) || isRunning}
+      data-controls-map-tools={workspace === 'map' && !(trail && !focusTarget)} data-controls-back={Boolean(trail)}>
       <header className="border-b border-slate-800 bg-slate-900/80">
         <div className="mx-auto flex w-full max-w-[76rem] flex-wrap items-center justify-between gap-2 py-2 pl-[max(.75rem,env(safe-area-inset-left))] pr-[max(.75rem,env(safe-area-inset-right))] sm:pl-[max(1rem,env(safe-area-inset-left))] sm:pr-[max(1rem,env(safe-area-inset-right))]">
           <div className="flex min-w-0 items-center gap-2">
@@ -742,14 +753,15 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
               <p className="break-words text-xs text-slate-300">仙历 {visibleWorld.year}年{visibleWorld.month}月 · 在世 {aliveCount} · 已陨落 {visibleWorld.cultivators.length - aliveCount}</p>
             </div>
           </div>
-          <div aria-label="推演控制" className={`flex flex-wrap items-center gap-1.5 ${workspace !== 'map' && !preview && !isRunning ? 'max-sm:hidden' : ''}`}>
+          <div aria-label="推演控制" data-control-dock="repeat" className={`flex flex-wrap items-center gap-1.5 ${handedness === 'default' && workspace !== 'map' && !preview && !isRunning ? 'max-sm:hidden' : ''}`}>
             {preview ? (
               <><span className="text-xs text-amber-200">历史只读 · Tick #{preview.tick}</span>
                 <button type="button" onClick={() => handleTimelinePreview(null)} className={`${action} bg-amber-400/15 text-amber-100`}>回到当前</button></>
             ) : (
               <>
                 <button type="button" disabled={fastForwardLocked} onClick={toggleAutoplay}
-                  className={`${action} ${isRunning ? 'bg-amber-500 text-slate-950' : 'max-sm:hidden bg-emerald-500 text-slate-950'}`}>
+                  className={`${action} ${isRunning ? 'bg-amber-500 text-slate-950' :
+                    handedness === 'default' ? 'max-sm:hidden bg-emerald-500 text-slate-950' : 'bg-slate-800 text-emerald-100 sm:bg-emerald-500 sm:text-slate-950'}`}>
                   {isRunning ? <Pause aria-hidden="true" className="h-4 w-4" /> : <Play aria-hidden="true" className="h-4 w-4" />}
                   {isRunning ? '暂停推演' : '自动推演'}
                 </button>
@@ -765,7 +777,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
 
       <SandboxWorkspace active={workspace} onChange={openWorkspace} autoFocusTab={!(trail || chronicleReturn)}
         hideActiveContent={Boolean(trail && !focusTarget)} panelLead={trail && <div className="mb-2 flex min-w-0 flex-wrap items-center gap-2">
-          <button type="button" ref={backRef} onClick={returnToChronicle} className={`${action} bg-slate-800 text-amber-100`}>返回原纪事</button>
+          <button type="button" data-control-dock="back" ref={backRef} onClick={returnToChronicle} className={`${action} bg-slate-800 text-amber-100`}>返回原纪事</button>
           {!focusTarget && <p role="status" className="break-words text-xs text-amber-200">{CHRONICLE_FOCUS_UNAVAILABLE}</p>}
         </div>} views={{
         map: <div className="grid min-w-0 items-start gap-2.5 lg:grid-cols-[minmax(0,1fr)_17rem] lg:gap-4">
@@ -773,8 +785,8 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
             <WorldMapCanvas compact scopeKey={viewScopeKey} world={visibleWorld} selectedCultivatorId={activeActorId}
             toolsOpen={workspace === 'map' && (foldPreferences.mapTools ?? false)} onToolsOpenChange={(mapTools) =>
               setFoldPreferences((previous) => (previous.mapTools ?? false) === mapTools ? previous : { ...previous, mapTools })}
-            additionalTools={!preview && !isRunning && <button type="button" disabled={fastForwardLocked} onClick={toggleAutoplay}
-              className={`${action} bg-slate-800 text-emerald-100 sm:hidden`}><Play aria-hidden="true" className="h-4 w-4" />自动推演</button>}
+            additionalTools={handedness === 'default' && !preview && !isRunning ? <button type="button" disabled={fastForwardLocked} onClick={toggleAutoplay}
+              className={`${action} bg-slate-800 text-emerald-100 sm:hidden`}><Play aria-hidden="true" className="h-4 w-4" />自动推演</button> : undefined}
             chronicleFocus={trail?.request.kind === 'site' && focusTarget ? trail : undefined} onChronicleFocusUnavailable={reportMapFocusFailure}
             onSelectCultivator={setSelectedCultivatorId} onBrushStroke={preview ? undefined : handleBrushStroke} />
           </React.Suspense></div>
@@ -938,6 +950,13 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
                   className="min-h-11 max-w-full rounded-md border border-slate-700 bg-slate-950 px-2 text-sm text-slate-100">
                   <option value={2500}>慢速 (2.5 秒/月)</option><option value={1500}>标准 (1.5 秒/月)</option><option value={600}>极速 (0.6 秒/月)</option>
                 </select>
+                <label htmlFor="one-hand-control" className="text-xs font-semibold">单手操作</label>
+                <select id="one-hand-control" value={handedness} onChange={(event) => changeHandedness(event.currentTarget.value)}
+                  aria-describedby="one-hand-control-help"
+                  className="min-h-11 max-w-full rounded-md border border-slate-700 bg-slate-950 px-2 text-base text-slate-100 sm:text-sm">
+                  <option value="default">默认布局</option><option value="left">左手靠左</option><option value="right">右手靠右</option>
+                </select>
+                <p id="one-hand-control-help" className="sr-only">仅将窄屏的推演、返回和地图工具移到同一侧。本机保存；不改变人物、分支或键盘顺序。</p>
                 <button type="button" disabled={isStepping} onClick={handleReset} className={`${action} bg-slate-800 text-slate-200 hover:bg-slate-700`}>
                   <RotateCcw aria-hidden="true" className="h-4 w-4" />重置修仙纪元</button>
               </div>
