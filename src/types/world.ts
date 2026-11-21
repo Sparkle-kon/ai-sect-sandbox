@@ -133,6 +133,7 @@ export type ActionType =
   | 'USE_PILL'
   | 'VILLAGE_CENSUS'
   | 'FIELD_OBSERVATORY'
+  | 'ALIGNED_WEATHER'
   | 'OATH_ARBITRATION'
   | 'SEASON_REVIEW'
   | 'PROBATION'
@@ -441,6 +442,9 @@ export interface LLMDecisionPayload {
   innerMonologue: string;
   chosenAction: ActionType;
   observatoryMove?: ObservatoryMove;
+  observatoryStation?: 'edge';
+  alignedWeatherMove?: AlignedWeatherMove;
+  targetAlignedWeatherId?: string;
   targetObservatoryTick?: number;
   targetLocationId?: string;
   targetCultivatorId?: string;
@@ -2913,7 +2917,9 @@ export interface VillageCensusesState { periods: VillageCensusPeriod[] }
 
 export type ObservatoryMove = 'fund' | 'measure' | 'relay';
 export interface FieldWeatherReading { kind: '平息' | '灵潮' | '罡风' | '霜息'; intensity: number }
+export interface FieldObservatoryStation { kind: 'edge'; x: number; y: number }
 export type FieldObservatoryRun = {
+  station?: FieldObservatoryStation;
   locationId: string;
   openedTick: number;
   targetTick: number;
@@ -2928,8 +2934,27 @@ export interface FieldObservatoryInboxEntry { operatorId: string; openedTick: nu
 export interface FieldObservatoryActorState { runs: FieldObservatoryRun[]; inbox: FieldObservatoryInboxEntry[] }
 export interface FieldObservatoriesState { byActor: Record<string, FieldObservatoryActorState> }
 
+export type AlignedWeatherMove = 'offer' | 'compare' | 'decline' | 'withdraw';
+export interface AlignedWeatherReport { openedTick: number; reading: FieldWeatherReading; station?: FieldObservatoryStation }
+export interface AlignedWeatherComparison {
+  id: string;
+  siteId: string;
+  observerAId: string;
+  observerBId: string;
+  measuredTick: number;
+  offeredTick: number;
+  expiresTick: number;
+  status: 'offered' | 'compared' | 'declined' | 'withdrawn' | 'expired';
+  first: AlignedWeatherReport;
+  second?: AlignedWeatherReport;
+  settledTick?: number;
+  outcome?: 'agrees' | 'uncertain';
+}
+export interface AlignedWeatherState { comparisons: AlignedWeatherComparison[]; nextId: number }
+
 export interface WorldState {
   fieldObservatories: FieldObservatoriesState;
+  alignedWeather: AlignedWeatherState;
   villageCensuses: VillageCensusesState;
   probation: ProbationState;
   workshops: WorkshopState;

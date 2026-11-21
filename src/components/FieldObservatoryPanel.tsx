@@ -1,4 +1,6 @@
 import { OBSERVATORY_COST, OBSERVATORY_LEAD_TICKS, projectFieldObservatory } from '../engine/fieldObservatoryEngine';
+import { projectAlignedWeather } from '../engine/alignedWeatherEngine';
+import { AlignedWeatherReceipts, stationLabel } from './AlignedWeatherReceipts';
 import type { Cultivator, WorldState } from '../types/world';
 
 type View = ReturnType<typeof projectFieldObservatory>;
@@ -9,7 +11,8 @@ const describe = ({ kind, intensity }: Reading) => `${kind} · 强度 ${asDecima
 
 export function FieldObservatoryPanel({ world, cultivator }: { world: WorldState; cultivator?: Cultivator }) {
   const { runs, received, metrics } = projectFieldObservatory(world, cultivator);
-  if (runs.length === 0 && received.length === 0) return null;
+  const comparisons = projectAlignedWeather(world, cultivator);
+  if (runs.length === 0 && received.length === 0 && comparisons.length === 0) return null;
   return (
     <details className="min-w-0 rounded border border-teal-400/20 bg-slate-950/60">
       <summary className="min-h-11 cursor-pointer break-words px-3 py-2.5 text-xs font-semibold text-teal-100">观象台与区域实测校准</summary>
@@ -23,13 +26,13 @@ export function FieldObservatoryPanel({ world, cultivator }: { world: WorldState
             : <p className="text-slate-400">尚无可计分的实际读数。</p>}
           <ol className="max-h-56 space-y-1.5 overflow-y-auto">
             {runs.map((run) => <li key={`${run.locationId}:${run.openedTick}`} className="min-w-0 break-words rounded border border-slate-800 p-2">
-              <p className="font-semibold text-teal-100">{run.locationName} · 建台 Tick #{run.openedTick}</p>
+              <p className="font-semibold text-teal-100">{run.locationName} · {stationLabel(run.station)} · 建台 Tick #{run.openedTick}</p>
               <p>建台基线：{describe(run.baseline)}</p>
-              <p>目标 Tick #{run.targetTick} 的基线延续预测：{describe(run.forecast)}（非实测）</p>
+              <p>{run.station === 'edge' ? '台缘' : '目标'} Tick #{run.targetTick} 的基线延续预测：{describe(run.forecast)}（非实测）</p>
               {run.status === 'pending' && <p>等待目标回合的现场读数。</p>}
               {run.status === 'missed' && <p>目标回合漏测 · 不填补读数，不计入校准。</p>}
               {run.status === 'measured' && run.reading && <>
-                <p>目标实测 Tick #{run.targetTick}：{describe(run.reading)}</p>
+                <p>{run.station === 'edge' ? '台缘实测' : '目标实测'} Tick #{run.targetTick}：{describe(run.reading)}</p>
                 {run.kindHit !== undefined && <p>类型{run.kindHit ? '命中' : '未命中'}
                   {run.intensityErrorPp !== undefined && ` · 强度绝对误差 ${asDecimal(run.intensityErrorPp)} 个百分点`}</p>}
                 {run.relayTick !== undefined && <p>原实测已转递 · Tick #{run.relayTick}。</p>}
@@ -47,6 +50,7 @@ export function FieldObservatoryPanel({ world, cultivator }: { world: WorldState
             </li>)}
           </ol>
         </section>}
+        <AlignedWeatherReceipts comparisons={comparisons} />
       </div>
     </details>
   );

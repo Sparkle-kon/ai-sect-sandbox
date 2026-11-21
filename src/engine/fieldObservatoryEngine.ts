@@ -1,5 +1,5 @@
 import type {
-  Cultivator, FieldObservatoriesState, FieldObservatoryActorState, FieldObservatoryInboxEntry, FieldObservatoryRun,
+  Cultivator, FieldObservatoriesState, FieldObservatoryActorState, FieldObservatoryInboxEntry, FieldObservatoryRun, FieldObservatoryStation,
   FieldWeatherReading, LLMDecisionPayload, LocationNode, WorldEvent, WorldState,
 } from '../types/world';
 import { activeEscortForActor } from './escortEngine';
@@ -10,6 +10,8 @@ import { activeCourierForActor, courierActedThisTick } from './sealedCourierEngi
 import { currentVisibleTileIds, knownMapLocations, terrainTileAt } from './terrainEngine';
 import { isTribulationActive } from './tribulationEngine';
 import { localQiWeather } from './weatherEngine';
+import { observatoryEdgeStation,observatoryStationValid } from './observatoryStation';
+import { alignedWeatherPinnedRuns } from './alignedWeatherTerms';
 
 export const OBSERVATORY_COST = 5;
 export const OBSERVATORY_LEAD_TICKS = 2;
@@ -20,9 +22,9 @@ export const OBSERVATORY_INBOX_LIMIT = 3;
 export const createFieldObservatoriesState = (): FieldObservatoriesState => ({ byActor: {} });
 
 export type ObservatoryActionOption = { action: 'FIELD_OBSERVATORY'; targetLocationId: string } & (
-  | { observatoryMove: 'fund'; targetObservatoryTick?: never; targetCultivatorId?: never }
-  | { observatoryMove: 'measure'; targetObservatoryTick: number; targetCultivatorId?: never }
-  | { observatoryMove: 'relay'; targetObservatoryTick: number; targetCultivatorId: string }
+  | { observatoryMove: 'fund'; targetObservatoryTick?: never; targetCultivatorId?: never;observatoryStation?:'edge' }
+  | { observatoryMove: 'measure'; targetObservatoryTick: number; targetCultivatorId?: never;observatoryStation?:never }
+  | { observatoryMove: 'relay'; targetObservatoryTick: number; targetCultivatorId: string;observatoryStation?:never }
 );
 export interface FieldObservatoryViewRun {
   locationId: string;
@@ -36,6 +38,7 @@ export interface FieldObservatoryViewRun {
   kindHit?: boolean;
   intensityErrorPp?: number;
   relayTick?: number;
+  station:'center'|'edge';
 }
 export interface FieldObservatoryViewReceipt {
   locationId: string;
@@ -88,6 +91,19 @@ function validRecipient(world: WorldState, sender: Cultivator, site: LocationNod
   return Boolean(tile && (recipient.exploredTileIds.includes(tile.id) || currentVisibleTileIds(world, recipient).has(tile.id)));
 }
 
+function fundingChoices(world:WorldState,actor:Cultivator,site:LocationNode,runs:FieldObservatoryRun[]):ObservatoryActionOption[]{
+  if(!hasFunds(actor)||runs.some(row=>row.status==='pending'))return [];
+  const result:ObservatoryActionOption[]=[{...choice,observatoryMove:'fund',targetLocationId:site.id}];
+  if(observatoryEdgeStation(world,site))result.push({...choice,observatoryMove:'fund',targetLocationId:site.id,observatoryStation:'edge'});
+  return result;
+}
+export function availableObservatoryFundingActions(actor:Cultivator,world:WorldState,actionTick=world.tick):ObservatoryActionOption[]{
+  if((actionTick!==world.tick&&actionTick!==world.tick+1)||!alive(actor)||!world.cultivators.includes(actor))return [];
+  const site=at(world,actor.locationId);
+  if(!site||!terrainTileAt(world,site.x,site.y)||!isOnSite(world,actor,site,actionTick))return [];
+  const runs=actorBucket(world,actor.id)?.runs??[];
+  return actedAt(runs,actionTick)?[]:fundingChoices(world,actor,site,runs);
+}
 /** Offers are private to the actor, with one local relay suggestion per run. A prospective next tick affects only dates. */
 export function availableObservatoryActions(actor: Cultivator, world: WorldState, actionTick = world.tick): ObservatoryActionOption[] {
   if ((actionTick !== world.tick && actionTick !== world.tick + 1) || !alive(actor)) return [];
@@ -99,10 +115,7 @@ export function availableObservatoryActions(actor: Cultivator, world: WorldState
   if (due?.locationId === site.id) {
     return [{ ...choice, observatoryMove: 'measure', targetLocationId: site.id, targetObservatoryTick: due.openedTick }];
   }
-  const results: ObservatoryActionOption[] = [];
-  if (hasFunds(actor) && !runs.some(row => row.status === 'pending')) {
-    results.push({ ...choice, observatoryMove: 'fund', targetLocationId: site.id });
-  }
+  const results=fundingChoices(world,actor,site,runs);
   const shareable = runs.filter(row => canRelay(row, site.id, actionTick));
   if (shareable.length === 0) return results;
   let recipient: Cultivator | undefined;
@@ -116,8 +129,8 @@ export function availableObservatoryActions(actor: Cultivator, world: WorldState
   return results;
 }
 
-const weatherReading = (world: WorldState, site: LocationNode): FieldWeatherReading => {
-  const { kind, intensity } = localQiWeather(world, site);
+const weatherReading = (world: WorldState, site: LocationNode,station?:FieldObservatoryStation): FieldWeatherReading => {
+  const { kind, intensity } = localQiWeather(world, station?{...site,x:station.x,y:station.y}:site);
   return { kind, intensity };
 };
 const referenceId = (operatorId: string, openedTick: number) => `field-observatory-${operatorId}-${openedTick}`;
@@ -135,6 +148,7 @@ export function resolveObservatoryAction(world: WorldState, actor: Cultivator, d
   const site = at(world, actor.locationId);
   if (!site || !terrainTileAt(world, site.x, site.y) || !isOnSite(world, actor, site, world.tick) ||
     decision.targetLocationId !== undefined && decision.targetLocationId !== site.id) return null;
+  if(decision.observatoryStation!==undefined && (decision.observatoryMove!=='fund'||decision.observatoryStation!=='edge'))return null;
   const runs = actorBucket(world, actor.id)?.runs ?? [];
   if (actedAt(runs, world.tick)) return null;
   const due = runs.find(row => row.status === 'pending' && row.locationId === site.id && row.targetTick === world.tick);
@@ -142,11 +156,13 @@ export function resolveObservatoryAction(world: WorldState, actor: Cultivator, d
   if (decision.observatoryMove === 'fund') {
     if (decision.targetObservatoryTick !== undefined || decision.targetCultivatorId !== undefined ||
       !hasFunds(actor) || runs.some(row => row.status === 'pending')) return null;
-    const baseline = weatherReading(world, site);
+    const station=decision.observatoryStation==='edge'?observatoryEdgeStation(world,site):undefined;
+    if(decision.observatoryStation==='edge'&&!station)return null;
+    const baseline = weatherReading(world, site,station);
     // A named persistence baseline: use only the local reading that exists on the funding turn.
     const row: FieldObservatoryRun = {
       locationId: site.id, openedTick: world.tick, targetTick: world.tick + OBSERVATORY_LEAD_TICKS,
-      baseline, forecast: { ...baseline }, status: 'pending',
+      baseline, forecast: { ...baseline }, status: 'pending',...(station?{station}:{}),
     };
     actor.spiritStones -= OBSERVATORY_COST;
     ensureBucket(world, actor.id).runs.push(row);
@@ -161,8 +177,8 @@ export function resolveObservatoryAction(world: WorldState, actor: Cultivator, d
   const row = runs[rowIndex];
   if (!row) return null;
   if (decision.observatoryMove === 'measure') {
-    if (decision.targetCultivatorId !== undefined || row !== due) return null;
-    const measured: MeasuredRun = { ...row, status: 'measured', reading: weatherReading(world, site) };
+    if (decision.targetCultivatorId !== undefined || row !== due || row.station&&!observatoryStationValid(world,site,row.station)) return null;
+    const measured: MeasuredRun = { ...row, status: 'measured', reading: weatherReading(world, site,row.station) };
     runs[rowIndex] = measured;
     return event(world, actor, measured, 'measure', '于约定月份实际读数，核对封存预测');
   }
@@ -186,12 +202,15 @@ function sourceOf(world: WorldState, recipientId: string, entry: FieldObservator
 /** End of turn, after everyone had a chance to make the real target-month reading. */
 export function advanceFieldObservatories(world: WorldState): void {
   const buckets = Object.entries(world.fieldObservatories.byActor);
-  for (const [, bucket] of buckets) {
-    bucket.runs = bucket.runs.filter(row => retained(row, world.tick)).map(row =>
+  const pinned=alignedWeatherPinnedRuns(world);
+  for (const [id, bucket] of buckets) {
+    const fixed=pinned.get(id);
+    const keep=(row:FieldObservatoryRun)=>row.status==='measured'&&!!fixed?.has(row.openedTick);
+    bucket.runs = bucket.runs.filter(row => keep(row)||retained(row, world.tick)).map(row =>
       row.status === 'pending' && row.targetTick <= world.tick ? { ...row, status: 'missed' } : row);
-    const count = bucket.runs.filter(row => row.status !== 'pending').length;
+    const count = bucket.runs.filter(row => row.status !== 'pending'&&!keep(row)).length;
     let discard = Math.max(0, count - OBSERVATORY_TERMINAL_LIMIT);
-    if (discard) bucket.runs = bucket.runs.filter(row => row.status === 'pending' || discard-- <= 0);
+    if (discard) bucket.runs = bucket.runs.filter(row => row.status === 'pending'||keep(row)||discard-- <=0);
   }
   for (const [id, bucket] of buckets) {
     bucket.inbox = bucket.inbox.filter(receipt => sourceOf(world, id, receipt)).slice(-OBSERVATORY_INBOX_LIMIT);
@@ -211,7 +230,7 @@ export function projectFieldObservatory(world: WorldState, viewer?: Cultivator):
     if (!site || !retained(row, world.tick)) continue;
     const detail: FieldObservatoryViewRun = {
       locationId: site.id, locationName: site.name, openedTick: row.openedTick, targetTick: row.targetTick,
-      baseline: { ...row.baseline }, forecast: { ...row.forecast }, status: row.status,
+      baseline: { ...row.baseline }, forecast: { ...row.forecast }, status: row.status,station:row.station?.kind??'center',
     };
     if (row.status === 'measured') {
       detail.reading = { ...row.reading };

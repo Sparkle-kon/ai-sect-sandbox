@@ -1,5 +1,6 @@
 import { createCompetitionReviewState } from '../engine/seasonReviewEngine';
 import { createCausalChronicleState } from '../engine/chronicleCausalityEngine';
+import { createAlignedWeatherState } from '../engine/alignedWeatherEngine';
 import { createFieldObservatoriesState } from '../engine/fieldObservatoryEngine';
 import { createOathArbitrationState } from '../engine/oathArbitrationEngine';
 import { createVillageCensusesState } from '../engine/villageCensusEngine';
@@ -338,6 +339,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     villageCensuses: createVillageCensusesState(),
     oathArbitrations: createOathArbitrationState(),
     fieldObservatories: createFieldObservatoriesState(),
+    alignedWeather: createAlignedWeatherState(),
     competitionReviews: createCompetitionReviewState(),
     witnesses: createWitnessState(),
     estates: createEstateState(),

@@ -1,5 +1,7 @@
 import { availableSeasonReviewActions, SEASON_REVIEW_WINDOW } from './seasonReviewEngine';
-import { availableObservatoryActions } from './fieldObservatoryEngine';
+import { availableObservatoryActions, availableObservatoryFundingActions, OBSERVATORY_COST } from './fieldObservatoryEngine';
+import { availableAlignedWeatherActions } from './alignedWeatherEngine';
+import { ALIGNED_WEATHER_OFFER_TICKS, ALIGNED_WEATHER_SOURCE_MAX_AGE } from './alignedWeatherTerms';
 import { availableShortShiftActions } from './shortShiftEngine';
 import { availableCaravanRestitutionActions } from './caravanRestitutionEngine';
 import { availableVillageGranaryActions, projectVillageGranary } from './villageGranaryEngine';
@@ -146,6 +148,36 @@ function chooseLinkedToolConsent(actor: Cultivator, world: WorldState, work: Ret
   if (candidates.length !== 1 || !preferredWorkshopWork(availableWorkshopActions(actor, world, false, world.tick + 1), order.id)) return undefined;
   return { chosenAction: 'TOOL_LOAN', toolLoanMove: 'accept', targetToolLoanId: candidates[0].targetToolLoanId,
     innerMonologue: '这件委制尚有下一轮的工位许可，我愿先应允这份同单借具。' };
+}
+
+const PAIRED_OBSERVATORY_INTERVAL = 23;
+const PAIRED_OBSERVATORY_DAY = 7;
+/** Shared scarce observation day without reading another observer's measurement.
+ * Only one center and one edge station can be volunteered at a public site on this day. */
+function pairedObservatoryStation(actor: Cultivator, world: WorldState): 'center' | 'edge' | 'wait' | undefined {
+  if (world.tick < 29 || world.tick % PAIRED_OBSERVATORY_INTERVAL !== PAIRED_OBSERVATORY_DAY) return undefined;
+  const participant = (person: Cultivator) => person.alive && person.hp >= person.maxHp * .75 && !person.guardAssignment &&
+    person.locationId === actor.locationId && person.spiritStones >= OBSERVATORY_COST && (person.personality === '刚正' || person.personality === '逍遥' || person.personality === '苟道');
+  const site = world.locations.find(({ id }) => id === actor.locationId);
+  if (!site || (site.type !== 'market' && site.type !== 'sect_hq')) return undefined;
+  let center: string | undefined;
+  let edge: string | undefined;
+  let opened = 0;
+  for (const [actorId, { runs }] of Object.entries(world.fieldObservatories.byActor)) {
+    // Only the dated actual reservation consumes the pair's quota. Compare no readings from these runs.
+    const today = runs.find(({ locationId, openedTick }) => locationId === site.id && openedTick === world.tick);
+    if (!today) continue;
+    opened++;
+    if (today.station?.kind === 'edge') edge = actorId; else center = actorId;
+  }
+  if (opened >= 2) return 'wait';
+  const candidates = world.cultivators.filter(participant).sort((a,b)=>a.id<b.id?-1:a.id>b.id?1:0);
+  if (!center) center = candidates.find((person) => person.id !== edge &&
+    availableObservatoryFundingActions(person, world).some(({ observatoryStation }) => observatoryStation === undefined))?.id;
+  if (!edge) edge = candidates.find((person) => person.id !== center &&
+    availableObservatoryFundingActions(person, world).some(({ observatoryStation }) => observatoryStation === 'edge'))?.id;
+  if (!center || !edge) return opened ? 'wait' : undefined;
+  return actor.id === center ? 'center' : actor.id === edge ? 'edge' : 'wait';
 }
 
 export function computeHeuristicDecision(
@@ -362,8 +394,39 @@ export function computeHeuristicDecision(
     }
   }
 
+  const ownWeatherRuns = world.fieldObservatories.byActor[cultivator.id]?.runs;
+  if (ownWeatherRuns?.some(({ status, targetTick }) => status === 'measured' &&
+      targetTick < world.tick && targetTick >= world.tick - ALIGNED_WEATHER_SOURCE_MAX_AGE - ALIGNED_WEATHER_OFFER_TICKS)) {
+    const options = availableAlignedWeatherActions(cultivator, world);
+    const comparisons = options.filter(({ alignedWeatherMove }) => alignedWeatherMove === 'compare');
+    if (comparisons.length === 1) {
+      const choice = comparisons[0];
+      return { chosenAction: 'ALIGNED_WEATHER', alignedWeatherMove: 'compare', targetAlignedWeatherId: choice.targetAlignedWeatherId,
+        targetObservatoryTick: choice.targetObservatoryTick, innerMonologue: '只以自己实测的一份来对读，不把异读判成谁错。' };
+    }
+    const mayOffer = (world.tick + cultivator.id.charCodeAt(cultivator.id.length - 1)) % 7 === 4;
+    const commonCenter = ownWeatherRuns.find(({ status, openedTick, targetTick, station }) => status === 'measured' &&
+      openedTick % PAIRED_OBSERVATORY_INTERVAL === PAIRED_OBSERVATORY_DAY && world.tick === targetTick + 1 && station === undefined);
+    if ((mayOffer || commonCenter) && comparisons.length === 0) {
+      const offers = options.flatMap((option) => option.alignedWeatherMove === 'offer' ? [option] : []);
+      const pairedPeers = commonCenter ? offers.filter((offer) => offer.targetObservatoryTick === commonCenter.openedTick &&
+        world.fieldObservatories.byActor[offer.targetCultivatorId]?.runs.some(({ openedTick, locationId, station }) =>
+          openedTick === commonCenter.openedTick && locationId === offer.targetLocationId && station?.kind === 'edge')) : [];
+      // An actual same-date edge instrument is a plan signal, not a claim about what the peer measured.
+      const candidate = pairedPeers.length === 1 ? pairedPeers[0] : mayOffer ? offers.sort((a,b) =>
+        b.targetObservatoryTick-a.targetObservatoryTick || (a.targetCultivatorId<b.targetCultivatorId ? -1 : a.targetCultivatorId>b.targetCultivatorId ? 1 : 0))[0]
+        : undefined;
+      if (candidate) return { chosenAction: 'ALIGNED_WEATHER', alignedWeatherMove: 'offer', targetLocationId: candidate.targetLocationId,
+        targetCultivatorId: candidate.targetCultivatorId, targetObservatoryTick: candidate.targetObservatoryTick,
+        innerMonologue: '把自己在此实测的一份拿来约核；不揣测对方是否有读数。' };
+    }
+  }
+
+  const pairStation = pairedObservatoryStation(cultivator, world);
   const observe = surveyOptions.find(({ observatoryMove }) => observatoryMove === 'relay') ??
-    (mayFundWeather ? surveyOptions.find(({ observatoryMove }) => observatoryMove === 'fund') : undefined);
+    (mayFundWeather && pairStation === undefined
+      ? surveyOptions.find(({ observatoryMove, observatoryStation }) => observatoryMove === 'fund' && observatoryStation === undefined)
+      : undefined);
   if (observe) return { ...observe, chosenAction: 'FIELD_OBSERVATORY', innerMonologue: '只记录到场实测；推测另记，转给同伴的仍是当时旧读数。' };
   const arbitrationMarks = world.oathArbitrations;
   if (arbitrationMarks.cases.length || arbitrationMarks.observations.length) {
@@ -1151,6 +1214,12 @@ export function computeHeuristicDecision(
       innerMonologue: '按本人真实出诊回执预约复诊；并未占用本轮急诊。' };
   }
 
+  if (pairStation === 'center' || pairStation === 'edge') {
+    const station = pairStation === 'edge' ? 'edge' : undefined;
+    const fund = availableObservatoryFundingActions(cultivator, world).find(({ observatoryStation }) => observatoryStation === station);
+    if (fund) return { ...fund, chosenAction: 'FIELD_OBSERVATORY', innerMonologue: '只为自己实地可及的测位备仪，不代人约定读数。' };
+  }
+
   // Irreversible disposal is optional and never interrupts a scheduled duty.
   // Keep a usable alternative and leave even slightly repairable or distinctive gear alone.
   if (world.tick >= 16 && world.tick % 13 === 3 && !cultivator.guardAssignment &&
@@ -1317,6 +1386,10 @@ export async function requestCultivatorLLMDecision(
   const relocationOptions = availableRelocationActions(cultivator, world);
   const honorReviewOptions = availableSeasonReviewActions(cultivator, world);
   const observatoryOptions = availableObservatoryActions(cultivator, world, requestTick);
+  const alignedWeatherOptions = availableAlignedWeatherActions(cultivator, world, requestTick);
+  const alignedWeatherPromptOptions = alignedWeatherOptions.map(({ alignedWeatherMove, targetLocationId, targetCultivatorId,
+    targetObservatoryTick, targetAlignedWeatherId }) => ({ alignedWeatherMove, targetLocationId, targetCultivatorId,
+    targetObservatoryTick, targetAlignedWeatherId }));
   const shortShiftOptions = availableShortShiftActions(cultivator, world, requestTick);
   const censusOptions = availableVillageCensusActions(cultivator, world);
   const civicMemorialOptions = availableCivicMemorialActions(cultivator, world, requestTick)
@@ -1411,7 +1484,8 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 天下公示的大会与秘境：${JSON.stringify(world.occasions.filter((item) => item.status === 'registration' || item.status === 'running').map(({id,title,kind,locationId,status,registrationClosesTick}) => ({id,title,kind,locationId,status,registrationClosesTick})))}；可报名项目：${JSON.stringify(availableOccasionJoins(cultivator, world))}
 - 本宗邦交：${JSON.stringify(world.diplomacy.filter((relation) => relation.sectAId === cultivator.sectId || relation.sectBId === cultivator.sectId))}；公示的外事权限：${JSON.stringify(availableDiplomacyActions(cultivator, world))}
 - 赛季复核只选真实可核验收据；提交不会改写原榜：${JSON.stringify(honorReviewOptions)}
-- 临时观象只复制实际地点的 fund、到期 measure 或带原日期 relay；只能记录实测，不能填写强度：${JSON.stringify(observatoryOptions)}
+- 临时观象只复制实际地点的 fund、到期 measure 或带原日期 relay。仅 fund 任选列表中的观测位（现地中心省略、边位用 observatoryStation:'edge'）；不填写读数或强度：${JSON.stringify(observatoryOptions)}
+- 同刻异读只复制本人实际许可：offer 用自身原本的 targetLocationId、现场同行人 targetCultivatorId、本人 targetObservatoryTick；compare 用 targetAlignedWeatherId 及本人 targetObservatoryTick；decline 或 withdraw 只填 targetAlignedWeatherId。没见过的读数、强度、方位或结论不得填写：${JSON.stringify(alignedWeatherPromptOptions)}
 - 巡界换防只复制当前获准选项；offer 必须用已列真实哨位和候任修士，accept、decline、withdraw 只用换防编号。不可填写路线、灵气、地权、岗哨覆盖或其他守卫：${JSON.stringify(boundaryReliefOptions)}
 - 合班传法只用真正可执行的 offer、accept、leave、teach、attend 或 cancel。offer 原样复制功法编号与完整有序的受邀名单，其余只用班号；出席、功法熟练度与出师由实练凭据核验，不许填写这些结果：${JSON.stringify(cohortOptions)}
 - 跨宗短聘只复制现场许可的 offer、accept、decline、withdraw 或 work；offer 用已列的目标修士和真实观象日期，其他只用该短聘编号。不能填写报酬、地点、天气或宗籍：${JSON.stringify(shortShiftOptions)}
@@ -1626,6 +1700,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'VILLAGE_CENSUS',
             'CIVIC_MEMORIAL',
             'FIELD_OBSERVATORY',
+            'ALIGNED_WEATHER',
             'SEASON_REVIEW',
           ];
           const chosenAction = parsed?.chosenAction;
@@ -1942,9 +2017,32 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             honorReviewOptions.find((item) => item.targetScoreId === parsed.targetScoreId) : undefined;
           if (chosenAction === 'SEASON_REVIEW' && (!legalSeasonReview || parsed.targetLocationId !== undefined ||
               parsed.targetCultivatorId !== undefined || parsed.targetSectId !== undefined)) return undefined;
+          if (parsed.observatoryStation !== undefined && chosenAction !== 'FIELD_OBSERVATORY') return undefined;
+          const legalAligned = chosenAction === 'ALIGNED_WEATHER' ? alignedWeatherOptions.find((item) =>
+            item.alignedWeatherMove === parsed.alignedWeatherMove && item.targetAlignedWeatherId === parsed.targetAlignedWeatherId &&
+            item.targetLocationId === parsed.targetLocationId && item.targetCultivatorId === parsed.targetCultivatorId &&
+            item.targetObservatoryTick === parsed.targetObservatoryTick) : undefined;
+          if (chosenAction === 'ALIGNED_WEATHER' && (!legalAligned || Object.keys(parsed).some((field) =>
+            !['chosenAction', 'innerMonologue', 'alignedWeatherMove', ...(legalAligned.alignedWeatherMove === 'offer'
+              ? ['targetLocationId', 'targetCultivatorId', 'targetObservatoryTick']
+              : legalAligned.alignedWeatherMove === 'compare' ? ['targetAlignedWeatherId', 'targetObservatoryTick']
+              : ['targetAlignedWeatherId'])].includes(field)))) return undefined;
+          if (legalAligned) {
+            const innerMonologue = (typeof parsed.innerMonologue === 'string' && parsed.innerMonologue.trim().slice(0,160)) ||
+              cultivator.innerMonologue || '只按同刻亲历许可核验。';
+            if (legalAligned.alignedWeatherMove === 'offer') return { chosenAction:'ALIGNED_WEATHER', alignedWeatherMove:'offer',
+              targetLocationId:legalAligned.targetLocationId, targetCultivatorId:legalAligned.targetCultivatorId,
+              targetObservatoryTick:legalAligned.targetObservatoryTick, innerMonologue };
+            if (legalAligned.alignedWeatherMove === 'compare') return { chosenAction:'ALIGNED_WEATHER', alignedWeatherMove:'compare',
+              targetAlignedWeatherId:legalAligned.targetAlignedWeatherId,
+              targetObservatoryTick:legalAligned.targetObservatoryTick, innerMonologue };
+            return { chosenAction:'ALIGNED_WEATHER', alignedWeatherMove:legalAligned.alignedWeatherMove,
+              targetAlignedWeatherId:legalAligned.targetAlignedWeatherId, innerMonologue };
+          }
           const legalObservatory = chosenAction === 'FIELD_OBSERVATORY' ? observatoryOptions.find((item) =>
             item.observatoryMove === parsed.observatoryMove && item.targetLocationId === parsed.targetLocationId &&
-            item.targetObservatoryTick === parsed.targetObservatoryTick && item.targetCultivatorId === parsed.targetCultivatorId) : undefined;
+            item.targetObservatoryTick === parsed.targetObservatoryTick && item.targetCultivatorId === parsed.targetCultivatorId &&
+            item.observatoryStation === parsed.observatoryStation) : undefined;
           if (chosenAction === 'FIELD_OBSERVATORY' && (!legalObservatory || parsed.targetSectId !== undefined ||
               parsed.targetSettlementId !== undefined)) return undefined;
           const legalCivicMemorial = chosenAction === 'CIVIC_MEMORIAL' ? civicMemorialOptions.find((item) =>
@@ -2180,6 +2278,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             targetOathId: legalArbitration?.targetOathId ?? (legalOath ? legalOath.targetOathId : undefined),
             targetScoreId: legalSeasonReview?.targetScoreId,
             observatoryMove: legalObservatory?.observatoryMove,
+            observatoryStation: legalObservatory?.observatoryStation,
             targetObservatoryTick: legalShortShift?.targetObservatoryTick ?? legalObservatory?.targetObservatoryTick,
             boundaryReliefMove: legalBoundaryRelief?.boundaryReliefMove,
             targetBoundaryReliefId: legalBoundaryRelief?.targetBoundaryReliefId,

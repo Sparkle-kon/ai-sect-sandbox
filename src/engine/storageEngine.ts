@@ -1,3 +1,7 @@
+import { createAlignedWeatherState } from './alignedWeatherEngine';
+import { alignedWeatherPinnedRuns } from './alignedWeatherTerms';
+import { observatoryStationValid } from './observatoryStation';
+import { validateAlignedWeatherHistory } from './storageAlignedWeatherValidation';
 import { createCompetitionReviewState, SEASON_REVIEW_CASE_LIMIT, SEASON_REVIEW_WINDOW, seasonReviewProofId } from './seasonReviewEngine';
 import { OBSERVATORY_INBOX_LIMIT, OBSERVATORY_LEAD_TICKS, OBSERVATORY_RETENTION_TICKS, OBSERVATORY_TERMINAL_LIMIT, createFieldObservatoriesState } from './fieldObservatoryEngine';
 import { ARBITRATION_HEARING_WINDOW, ARBITRATION_JOIN_WINDOW, ARBITRATION_MAX_APPOINTMENTS_PER_SIDE, ARBITRATION_MAX_OBSERVERS, createOathArbitrationState } from './oathArbitrationEngine';
@@ -149,7 +153,7 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT SALVAGE_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY CARE_FOLLOWUP FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP FURNACE_RESERVATION FURNACE_SAFETY SPARRING EXPEDITION_RESCUE SHORT_SHIFT BOUNDARY_RELIEF APPRENTICE_COHORT HOUSEHOLD_NAME CARAVAN_RESTITUTION VILLAGE_GRANARY VILLAGE_SUPPLY ROUTE_WARNING PAVILION_LOAN WORKSHOP_CAPACITY CIVIC_MEMORIAL VILLAGE_FAIR SECT_STIPEND SEED_CULTURE TOOL_LOAN RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY SEASON_REVIEW REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT SALVAGE_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY CARE_FOLLOWUP FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP FURNACE_RESERVATION FURNACE_SAFETY SPARRING EXPEDITION_RESCUE SHORT_SHIFT BOUNDARY_RELIEF APPRENTICE_COHORT HOUSEHOLD_NAME CARAVAN_RESTITUTION VILLAGE_GRANARY VILLAGE_SUPPLY ROUTE_WARNING PAVILION_LOAN WORKSHOP_CAPACITY CIVIC_MEMORIAL VILLAGE_FAIR SECT_STIPEND SEED_CULTURE TOOL_LOAN RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY ALIGNED_WEATHER SEASON_REVIEW REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const flowGood = one('stone','jade_seed','jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
@@ -246,8 +250,11 @@ const noteTarget: Validator = (value, path) => {
 const facilityLevels = structure({qi_array:num(0,3,true),alchemy_hall:num(0,3,true),scripture_pavilion:num(0,3,true),defense_array:num(0,3,true),spirit_mine:num(0,3,true)});
 const terrainBiome = one('灵山','毒沼','剑冢','荒漠','魔渊','坊市');
 const fieldReading = structure({kind:one('平息','灵潮','罡风','霜息'),intensity:num(0,1)});
+const observatoryStation = structure({kind:one('edge'),x:num(0,1000),y:num(0,600)});
+const alignedWeatherReport=structure({openedTick:tick,reading:fieldReading,station:optional(observatoryStation)});
 const observatoryActor = structure({
-  runs:arr(OBSERVATORY_TERMINAL_LIMIT + 1,structure({
+  runs:arr(SAVE_COLLECTION_LIMIT,structure({
+    station:optional(observatoryStation),
     locationId:id,openedTick:tick,targetTick:tick,baseline:fieldReading,forecast:fieldReading,
     status:one('pending','measured','missed'),reading:optional(fieldReading),
     relay:optional(structure({recipientId:id,relayedTick:tick}))
@@ -350,6 +357,11 @@ const shape = structure({
       appeal:optional(structure({tick,actorId:id,verdict:one('upheld','rejected'),reason:text})),settledTick:otick,
       reputationSectId:oid,reputationPenalty:percentage,reputationRestored:percentage,reason:otext}))}),
   fieldObservatories:structure({byActor:observatoryActors}),
+  alignedWeather:structure({nextId:num(1,Number.MAX_SAFE_INTEGER,true),comparisons:arr(SAVE_COLLECTION_LIMIT,structure({
+    id,siteId:id,observerAId:id,observerBId:id,measuredTick:tick,offeredTick:tick,expiresTick:tick,
+    status:one('offered','compared','declined','withdrawn','expired'),first:alignedWeatherReport,
+    second:optional(alignedWeatherReport),settledTick:otick,outcome:optional(one('agrees','uncertain')),
+  }))}),
   oathArbitrations:structure({
     observations:arr(SAVE_COLLECTION_LIMIT,structure({oathId:id,tenderTick:tick,siteId:id,observerIds:arr(ARBITRATION_MAX_OBSERVERS,id)})),
     cases:arr(SAVE_COLLECTION_LIMIT,structure({
@@ -830,6 +842,7 @@ function verifyWorld(value: unknown): WorldState {
       ...(!Object.hasOwn(value, 'coldHistory') ? { coldHistory: createColdHistoryState() } : {}),
       ...(!Object.hasOwn(value, 'competitionReviews') ? { competitionReviews: createCompetitionReviewState() } : {}),
       ...(!Object.hasOwn(value, 'fieldObservatories') ? { fieldObservatories: createFieldObservatoriesState() } : {}),
+      ...(!Object.hasOwn(value, 'alignedWeather') ? { alignedWeather: createAlignedWeatherState() } : {}),
       ...(!Object.hasOwn(value, 'oathArbitrations') ? { oathArbitrations: createOathArbitrationState() } : {}),
       ...(!Object.hasOwn(value, 'villageCensuses') ? { villageCensuses: createVillageCensusesState() } : {}),
       ...(!Object.hasOwn(value, 'roads') ? { roads: createRoadState() } : {}),
@@ -956,18 +969,23 @@ function verifyWorld(value: unknown): WorldState {
         (cell.workCount > 0 && cell.lastWorkedTick === undefined)) fail('terrainSuccession.cells.references');
   }
   const fieldActorStates = new Map(Object.entries(w.fieldObservatories.byActor));
+  const pinnedWeatherRuns = alignedWeatherPinnedRuns(w);
+  const weatherSites = new Map(w.locations.map((site) => [site.id,site]));
   const readingValid = ({ kind, intensity }: { kind: string; intensity: number }) =>
     Math.abs(intensity * 100 - Math.round(intensity * 100)) <= 1e-8 &&
     (kind === '平息' ? intensity === 0 : intensity >= .05);
   for (const [operatorId, entry] of fieldActorStates) {
     if (!actor.has(operatorId) || (!entry.runs.length && !entry.inbox.length) ||
         entry.runs.filter(({ status }) => status === 'pending').length > 1 ||
-        entry.runs.filter(({ status }) => status !== 'pending').length > OBSERVATORY_TERMINAL_LIMIT)
+        entry.runs.filter(({ status, openedTick }) => status !== 'pending' &&
+          !pinnedWeatherRuns.get(operatorId)?.has(openedTick)).length > OBSERVATORY_TERMINAL_LIMIT)
       fail('fieldObservatories.byActor.references');
     unique(entry.runs, ({ openedTick }) => String(openedTick), 'fieldObservatories.runs.tick');
     unique(entry.inbox, ({ operatorId, openedTick }) => JSON.stringify([operatorId, openedTick]), 'fieldObservatories.inbox.source');
     for (const run of entry.runs) {
-      if (!locations.has(run.locationId) || run.openedTick > w.tick || run.targetTick !== run.openedTick + OBSERVATORY_LEAD_TICKS ||
+      const site = weatherSites.get(run.locationId);
+      if (!site || run.station && !observatoryStationValid(w,site,run.station) ||
+          run.openedTick > w.tick || run.targetTick !== run.openedTick + OBSERVATORY_LEAD_TICKS ||
           !readingValid(run.baseline) || run.forecast.kind !== run.baseline.kind || run.forecast.intensity !== run.baseline.intensity ||
           (run.status === 'measured' ? run.targetTick > w.tick || !run.reading || !readingValid(run.reading) :
             ('reading' in run || 'relay' in run || (run.status === 'missed' && run.targetTick > w.tick))) ||
@@ -980,6 +998,7 @@ function verifyWorld(value: unknown): WorldState {
       if (!actual || actual.status !== 'measured' || actual.relay?.recipientId !== operatorId) fail('fieldObservatories.inbox.references');
     }
   }
+  validateAlignedWeatherHistory(w, actor, fail);
   unique(w.oathArbitrations.cases, ({ oathId }) => oathId, 'oathArbitrations.cases.oath');
   const tenderKey = (oathId: string, at: number) => JSON.stringify([oathId, at]);
   unique(w.oathArbitrations.observations, ({ oathId, tenderTick }) => tenderKey(oathId, tenderTick), 'oathArbitrations.observations.tender');

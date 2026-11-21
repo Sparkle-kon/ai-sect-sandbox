@@ -180,7 +180,7 @@ describe('paid field weather evidence', () => {
     operator.id = '__proto__';
     listener.id = 'constructor';
     const start = world.tick;
-    expect(availableObservatoryActions(operator, world)).toHaveLength(1);
+    expect(availableObservatoryActions(operator, world).map(option=>option.observatoryStation)).toEqual([undefined,'edge']);
     expect(act('fund')).not.toBeNull();
     expect(Object.hasOwn(world.fieldObservatories.byActor, '__proto__')).toBe(true);
     expect(Object.getPrototypeOf(world.fieldObservatories.byActor)).toBe(Object.prototype);

@@ -3,6 +3,7 @@ import { householdCensus } from '../engine/householdEngine';
 import { visibleSharedCommonsMapSites } from './sharedCommonsMapView';
 import { visibleLeaseMapSites } from './leaseMapView';
 import { drawFormationMapLinks, visibleFormationMapLinks } from './formationMapView';
+import { projectLocalAlignedWeather } from '../engine/alignedWeatherEngine';
 import { projectLocalCareFollowupCapacity } from '../engine/careFollowupEngine';
 import { visibleInfirmaries } from '../engine/infirmaryEngine';
 import { visibleHabitats } from '../engine/habitatEngine';
@@ -250,6 +251,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     const clinic = visibleInfirmaries(world, selected);
     return clinic?.capacity && isCurrentLocation(clinic.siteId) ? { siteId: clinic.siteId, capacity: clinic.capacity } : undefined;
   }, [world, selected, isCurrentLocation]);
+  const localAlignedWeather = useMemo(() => world.alignedWeather.comparisons.length ?
+    projectLocalAlignedWeather(world, selected) : undefined, [world, selected]);
   const localFollowup = useMemo(() => {
     const summary = projectLocalCareFollowupCapacity(world, selected);
     return summary && isCurrentLocation(summary.siteId) ? summary : undefined;
@@ -589,13 +592,15 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         const stipendMarker=localStipend?.siteId===loc.id&&isCurrentLocation(loc.id)?' 俸':'';
         const seedMarker=localSeedCulture?.siteId===loc.id&&isCurrentLocation(loc.id)?(localSeedCulture.ready>0?' 收':' 苗'):'';
         const toolMarker=localToolLoans?.siteId===loc.id&&isCurrentLocation(loc.id)?(localToolLoans.awaiting>0?' 待领':' 共器'):'';
+        const alignmentMarker=localAlignedWeather?.siteId===loc.id&&isCurrentLocation(loc.id)?' 校':'';
+        const alignmentWidth=ctx.measureText(alignmentMarker).width;
         const toolWidth=ctx.measureText(toolMarker).width;
         const seedWidth=ctx.measureText(seedMarker).width;
         const stipendWidth=ctx.measureText(stipendMarker).width;
         const fairWidth=ctx.measureText(fairMarker).width;
         const memorialWidth=ctx.measureText(memorialMarker).width;
         const pavilionWidth=ctx.measureText(pavilionMarker).width;
-        const labelStart = loc.x - (placeWidth + markerWidth + scrollWidth + furnaceWidth + guardWidth + pavilionWidth + memorialWidth + fairWidth + stipendWidth + seedWidth + toolWidth) / 2;
+        const labelStart = loc.x - (placeWidth + markerWidth + scrollWidth + furnaceWidth + guardWidth + pavilionWidth + memorialWidth + fairWidth + stipendWidth + seedWidth + toolWidth + alignmentWidth) / 2;
         ctx.textAlign = 'left';
         ctx.fillStyle = '#e2e8f0';
         ctx.fillText(loc.name, labelStart, loc.y - 26);
@@ -637,6 +642,10 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         if(toolMarker){
           ctx.fillStyle='#c4b5fd';
           ctx.fillText(toolMarker,labelStart+placeWidth+markerWidth+scrollWidth+furnaceWidth+guardWidth+pavilionWidth+memorialWidth+fairWidth+stipendWidth+seedWidth,loc.y-26);
+        }
+        if(alignmentMarker){
+          ctx.fillStyle='#99f6e4';
+          ctx.fillText(alignmentMarker,labelStart+placeWidth+markerWidth+scrollWidth+furnaceWidth+guardWidth+pavilionWidth+memorialWidth+fairWidth+stipendWidth+seedWidth+toolWidth,loc.y-26);
         }
         if (occasionsByLocation.has(loc.id)) {
           ctx.font = 'bold 11px sans-serif';
@@ -843,7 +852,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener('change', stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, observedSalvageSites, localGranary, furnaceShift, localPavilionDesk, localMemorial, localVillageFair, localStipend, localSeedCulture, localToolLoans, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, observedSalvageSites, localGranary, furnaceShift, localPavilionDesk, localMemorial, localVillageFair, localStipend, localSeedCulture, localToolLoans, localAlignedWeather, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1379,6 +1388,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                 {(localErrata.get(location.id) ?? 0) > 0 && <span className="text-amber-200">· 公开史料有待勘误 {localErrata.get(location.id)} 条</span>}
                 {habitatView && <span className="text-emerald-200">· 复育栖地 {habitatView.wildOccupancy ?? 0}/{habitatView.capacity} 野兽</span>}
                 {localClinic?.siteId === location.id && <span className="text-rose-200">· 静养床 {localClinic.capacity.available}/{localClinic.capacity.beds} 本轮可受理</span>}
+                {localAlignedWeather?.siteId === location.id && isCurrentLocation(location.id) &&
+                  <span className="text-teal-200">· 本人参与的第 {localAlignedWeather.measuredTick} 轮旧观：{localAlignedWeather.outcome === 'uncertain' ? '异读未定' : '两读相合'}，非当前天象</span>}
                 {localFollowup?.siteId === location.id &&
                   <span className="text-rose-200">· 急诊优先，本轮另有 {localFollowup.available} 个复诊席位，不代表已预约或施治</span>}
                 {localCommons.has(location.id) && <span className="text-teal-200">· 中立灵地共管中 · 外来者限采储备之外的余量</span>}

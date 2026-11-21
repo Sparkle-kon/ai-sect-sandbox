@@ -1,4 +1,5 @@
 import { advanceSeasonReviews, resolveSeasonReviewAction } from './seasonReviewEngine';
+import { advanceAlignedWeather, resolveAlignedWeatherAction } from './alignedWeatherEngine';
 import { advanceFieldObservatories, resolveObservatoryAction } from './fieldObservatoryEngine';
 import { resolveOathArbitrationAction } from './oathArbitrationEngine';
 import { closeVillageCensusPeriod, resolveVillageCensusAction } from './villageCensusEngine';
@@ -352,6 +353,8 @@ export function applyCultivatorBrainDecision(
       return resolveSeasonReviewAction(world, cultivator, decision);
     case 'FIELD_OBSERVATORY':
       return resolveObservatoryAction(world, cultivator, decision);
+    case 'ALIGNED_WEATHER':
+      return resolveAlignedWeatherAction(world, cultivator, decision);
     case 'OATH_ARBITRATION':
       return resolveOathArbitrationAction(world, cultivator, decision);
     case 'VILLAGE_CENSUS':
@@ -968,6 +971,7 @@ export function advanceWorldTick(
     settleAnnualCouncilOffline(nextState);
     settleChronicleOffline(nextState);
   }
+  advanceAlignedWeather(nextState);
   advanceFieldObservatories(nextState);
   closeVillageCensusPeriod(nextState);
   settleFurnaceTurn(nextState);
