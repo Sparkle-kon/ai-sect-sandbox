@@ -1,3 +1,5 @@
+import { createResearchState, researchTechniqueId, RESEARCH_DEPOSIT, RESEARCH_PROJECT_TICKS,
+  RESEARCH_REQUIRED_RESEARCHERS, RESEARCH_REQUIRED_TURNS, RESEARCH_WORK_COST } from './researchEngine';
 import { CEASEFIRE_AID_DELAY, CEASEFIRE_BOND, CEASEFIRE_DURATION, CEASEFIRE_OFFER_TICKS, createCeasefireState } from './ceasefireEngine';
 import { ANNOTATION_MAX_BOOKMARKS, ANNOTATION_MAX_NOTES, ANNOTATION_MAX_NOTE_CHARS, ANNOTATION_MAX_TITLE_CHARS, createAnnotationState } from './annotationState';
 import { createEscortState, ESCORT_FEE, ESCORT_RATIONS } from './escortEngine';
@@ -72,7 +74,7 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const marketQty = num(1,12,true), marketPrice = num(1,500,true);
@@ -175,6 +177,12 @@ const shape = structure({
       attestations:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,tick,verdict:one('supports','contradicts')})),
       appeal:optional(structure({tick,actorId:id,verdict:one('upheld','rejected'),reason:text})),settledTick:otick,
       reputationSectId:oid,reputationPenalty:percentage,reputationRestored:percentage,reason:otext}))}),
+  research:structure({nextId:num(1,100_000_000,true),projects:arr(SAVE_COLLECTION_LIMIT,structure({id,sectId:id,topic:one('qi_foundation','warding'),
+    proposerId:id,locationId:id,startedTick:tick,deadlineTick:tick,status:one('open','completed','expired'),
+    contributors:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,joinedTick:tick,lastWorkedTick:otick,workTurns:num(0,RESEARCH_DEPOSIT.earthRoots / RESEARCH_WORK_COST.earthRoots,true),
+      escrow:structure({stones:doctrineAmount,earthRoots:count}),spent:structure({stones:doctrineAmount,earthRoots:count}),
+      withdrawnTick:otick,withdrawReason:optional(one('injury','assignment','relocation','hardship','ineligible'))})),
+    discoveryTechniqueId:oid,discoveryLocationId:oid,settledTick:otick}))}),
   ceasefires:structure({nextId:num(1,100_000_000,true),agreements:arr(SAVE_COLLECTION_LIMIT,structure({id,
     proposerSectId:id,targetSectId:id,proposerId:id,targetLeaderId:id,openedTick:tick,offerExpiresTick:tick,
     status:one('offered','active','declined','expired','fulfilled','breached'),signedTick:otick,endsTick:otick,
@@ -285,6 +293,7 @@ function verifyWorld(value: unknown): WorldState {
     ? { ...value,
       ...(!Object.hasOwn(value, 'mentorship') ? { mentorship: { offers: [], lineage: [], budgets: [] } } : {}),
       ...(!Object.hasOwn(value, 'decisionTrace') ? { decisionTrace: { records: [] } } : {}),
+      ...(!Object.hasOwn(value, 'research') ? { research: createResearchState() } : {}),
       ...(!Object.hasOwn(value, 'ceasefires') ? { ceasefires: createCeasefireState() } : {}),
       ...(!Object.hasOwn(value, 'annotations') ? { annotations: createAnnotationState() } : {}),
       ...(!Object.hasOwn(value, 'escorts') ? { escorts: createEscortState() } : {}),
@@ -556,6 +565,37 @@ function verifyWorld(value: unknown): WorldState {
         edition.kind !== active.kind || original.name !== person.technique.name || original.spiritRoot !== person.technique.spiritRoot ||
         original.authorId !== person.technique.authorId || original.createdTick !== person.technique.createdTick) {
       fail('scriptures.active.references');
+    }
+  }
+  unique(w.research.projects, ({ id }) => id, 'research.projects.id');
+  unique(w.research.projects.filter(({ status }) => status === 'open'), ({ sectId }) => sectId, 'research.projects.active');
+  unique(w.research.projects.filter(({ status }) => status === 'completed'),
+    ({ sectId, topic }) => JSON.stringify([sectId, topic]), 'research.projects.discovery');
+  for (const project of w.research.projects) {
+    unique(project.contributors, ({ actorId }) => actorId, 'research.projects.contributors');
+    const serial = Number(project.id.match(/^research-([1-9][0-9]*)$/)?.[1]);
+    const completed = project.status === 'completed';
+    if (!Number.isSafeInteger(serial) || serial >= w.research.nextId || !sector.has(project.sectId) || !actor.has(project.proposerId) ||
+        !locations.has(project.locationId) || project.startedTick > w.tick || project.deadlineTick !== project.startedTick + RESEARCH_PROJECT_TICKS ||
+        (project.status === 'open') === (project.settledTick !== undefined) ||
+        (project.settledTick !== undefined && (project.settledTick < project.startedTick || project.settledTick > w.tick)) ||
+        completed !== (project.discoveryTechniqueId !== undefined) || completed !== (project.discoveryLocationId !== undefined) ||
+        (completed && (project.discoveryTechniqueId !== researchTechniqueId(project.sectId, project.topic) ||
+          !originalById.has(project.discoveryTechniqueId ?? '') || !locations.has(project.discoveryLocationId!) ||
+          project.contributors.filter(({ workTurns }) => workTurns > 0).length < RESEARCH_REQUIRED_RESEARCHERS ||
+          project.contributors.reduce((total, row) => total + row.workTurns, 0) < RESEARCH_REQUIRED_TURNS))) fail('research.projects.references');
+    for (const row of project.contributors) {
+      const held = project.status === 'open' && row.withdrawnTick === undefined;
+      if (!actor.has(row.actorId) || row.joinedTick < project.startedTick || row.joinedTick >= project.deadlineTick || row.joinedTick > w.tick ||
+          (row.workTurns > 0) !== (row.lastWorkedTick !== undefined) ||
+          (row.lastWorkedTick !== undefined && (row.lastWorkedTick <= row.joinedTick || row.lastWorkedTick >= project.deadlineTick || row.lastWorkedTick > w.tick)) ||
+          (row.withdrawnTick !== undefined) !== (row.withdrawReason !== undefined) ||
+          (row.withdrawnTick !== undefined && (row.withdrawnTick < (row.lastWorkedTick ?? row.joinedTick) || row.withdrawnTick > w.tick))) {
+        fail('research.projects.work');
+      }
+      if (row.spent.stones !== row.workTurns * RESEARCH_WORK_COST.stones || row.spent.earthRoots !== row.workTurns * RESEARCH_WORK_COST.earthRoots ||
+          (held ? (row.escrow.stones + row.spent.stones !== RESEARCH_DEPOSIT.stones || row.escrow.earthRoots + row.spent.earthRoots !== RESEARCH_DEPOSIT.earthRoots)
+            : (row.escrow.stones !== 0 || row.escrow.earthRoots !== 0))) fail('research.projects.escrow');
     }
   }
   const fragmentById = new Map(w.relics.fragments.map((fragment) => [fragment.id, fragment]));

@@ -106,9 +106,12 @@ export function availableEscortActions(actor: Cultivator, world: WorldState): Es
       }
     }
   }
+  if (!world.mapHazards.length) return options;
+  const reportable = world.escorts.contracts.filter((contract) => contract.status === 'active' && contract.rationsEscrow > 0);
+  if (!reportable.length) return options;
   const visible = currentVisibleTileIds(world, actor);
   if (visible.size) {
-    for (const escort of world.escorts.contracts.filter((contract) => contract.status === 'active' && contract.rationsEscrow > 0)) {
+    for (const escort of reportable) {
       for (const hazard of world.mapHazards.filter((entry) => applyEligibleReport(world, escort, actor, entry, visible)).sort(byId)) {
         options.push({ action: 'ESCORT', escortMove: 'report', targetEscortId: escort.id, targetHazardId: hazard.id });
       }

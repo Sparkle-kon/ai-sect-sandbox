@@ -101,7 +101,7 @@
 
 ## Phase 9: Institutions, Stewardship & Long-Horizon Play (制度、守护与纪元经营)
 
-- [ ] **[P9-1] Research Assemblies & Shared Discoveries (论道会与共研创法)**: Let sect members pool explicitly committed time and materials on a bounded research question, attribute contributions, permit justified withdrawal, and unlock one reproducible discovery without duplicating pavilion copies.
+- [x] **[P9-1] Research Assemblies & Shared Discoveries (论道会与共研创法)**: Let sect members pool explicitly committed time and materials on a bounded research question, attribute contributions, permit justified withdrawal, and unlock one reproducible discovery without duplicating pavilion copies.
 - [ ] **[P9-2] Sanctuary Charters & Safe Conduct (避难所与通行敕令)**: Establish bounded protection for eligible visitors at specific sites, honor access independently of faction alliance, and show when and why sanctuary rights or shields expire or are violated.
 - [ ] **[P9-3] Sect Credit, Repayment & Insolvency (宗门信贷与清算)**: Keep internal loans distinct from trade and oath collateral, reject overcommitted lenders, settle repayments and bounded defaults from actual holdings exactly once, and expose the surviving exposure by sect.
 - [ ] **[P9-4] Pilgrimages & Shared Vows (朝山巡礼与共愿)**: Plan multi-stop noncombat journeys with companionship, tangible travel costs and known-route constraints. Track partial completion and relief for companions without instantly revealing undiscovered locations.
@@ -126,3 +126,18 @@
 - [ ] **[P10-8] Shared Commons and Joint Quotas (灵地公域与共管配额)**: Let several sects fund a common site through explicit agreements, allocate real harvest and maintenance by signed shares, and settle unpaid commitments without duplicating stock or forcing territorial transfer.
 - [ ] **[P10-9] Resource Flow Reconciliation (物资流向与月度对账)**: Show accountable transfers between people, sites, caravans, clan chests and escrow without counting the same goods in multiple ledgers. Distinguish production, consumption and losses in deterministic monthly receipts.
 - [ ] **[P10-10] Long-Term Terrain Recovery and Succession (地脉修复与长期演替)**: Track irreversible and recoverable ecological changes after prolonged stress. Follow bounded recovery work and terrain state transitions; prove routes remain connected or show a valid alternate route in the map index.
+
+---
+
+## Phase 11: Accountable Institutions & Resilient Play (可核查制度与耐久体验)
+
+- [ ] **[P11-1] Commissioned Workshops & Quality Receipts (工坊委制与品质交割)**: Commission bounded craft batches with actual materials, work turns and agreed quality grades. Attribute inputs and deeds, settle acceptable products once, and return unused supplies without copying failed pieces.
+- [ ] **[P11-2] Temporary Relic Exhibits & Custody (古器陈列与限期保管)**: Let a pavilion accept a real provenance-backed relic on loan. Remove it from the owner's active equipment, track consent and custody, and return possession exactly once after closure or a documented breach.
+- [ ] **[P11-3] Restorative Probation & Reinstatement (赎责见习与宗籍复核)**: Let censured or expelled characters request a finite, voluntary remedial plan. Score actual completed service and independent reviews, not model prose, before lifting specific restrictions without rewriting prior misconduct.
+- [ ] **[P11-4] Road Maintenance & Crossing Rights (驿路修缮与关津权限)**: Contract for real maintenance materials and patrol time on specific map links. Show deterioration, restored route costs and lawful crossing fees without charging twice or blocking an unrepresented alternative.
+- [ ] **[P11-5] Village Census & Count Reconciliation (坊籍核点与人口口径)**: Distinguish counted residents, sampled households and unobserved migrants. Reconcile verified births, departures and recruit rollovers by actual event evidence without setting a world population cap or leaking hidden settlements.
+- [ ] **[P11-6] Conflict-of-Interest Arbitration Panels (回避裁断与多方担保)**: Let disputants choose eligible, neutral adjudicators for real multi-party obligations; require disclosed conflicts and independently filed facts. Hold each party's assets once and apply one audited disposition.
+- [ ] **[P11-7] Field Weather Observatories (观象台与区域实测校准)**: Fund local observations and measure forecast errors against later real readings. Age and relay timestamped observations without treating stale predictions as current facts or revealing fog-hidden sites.
+- [ ] **[P11-8] Season Honor Review & Corrections (赛季荣誉复核与更正)**: Allow bounded review of a public scoring receipt using actual event evidence. Preserve the original record, publish justified corrections and move an honor at most once without rewriting private actions.
+- [ ] **[P11-9] Recoverable Save Journals (事务存档与恢复点)**: Keep a separately validated previous snapshot when a browser save is interrupted. Restore only after explicit selection and validate slot identity, version, branch and integrity without silently clearing older progress.
+- [ ] **[P11-10] Pause-Safe Long-World Fast Forward (长局快进与可取消回放)**: Advance through budgeted chunks on an isolated branch, keep pause/cancel responsive and commit only checked checkpoints. Test equivalence to ordinary ticks and compare latency on growing rosters without dropping people.

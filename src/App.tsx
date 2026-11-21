@@ -40,6 +40,7 @@ const TimelinePanel = React.lazy(async () => ({ default: (await import('./compon
 const ActorRoster = React.lazy(async () => ({ default: (await import('./components/ActorRoster')).ActorRoster }));
 const RelationshipGraph = React.lazy(async () => ({ default: (await import('./components/RelationshipGraph')).RelationshipGraph }));
 const GodConsole = React.lazy(async () => ({ default: (await import('./components/GodConsole')).GodConsole }));
+const SectResearchPanel = React.lazy(async () => ({ default: (await import('./components/SectResearchPanel')).SectResearchPanel }));
 const CeasefirePanel = React.lazy(async () => ({ default: (await import('./components/CeasefirePanel')).CeasefirePanel }));
 const SectRelocationPanel = React.lazy(async () => ({ default: (await import('./components/SectRelocationPanel')).SectRelocationPanel }));
 const SectDoctrinePanel = React.lazy(async () => ({ default: (await import('./components/SectDoctrinePanel')).SectDoctrinePanel }));
@@ -466,6 +467,9 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
           </React.Suspense> },
           { id: 'ceasefire', label: '停战与重建', content: <React.Suspense fallback={<p role="status">载入停战记录…</p>}>
             <CeasefirePanel world={visibleWorld} cultivator={selectedCultivator} />
+          </React.Suspense> },
+          { id: 'research', label: '论道会与共研创法', content: <React.Suspense fallback={<p role="status">载入论道记录…</p>}>
+            <SectResearchPanel world={visibleWorld} cultivator={selectedCultivator} />
           </React.Suspense> },
           ...(preview ? [] : [{ id: 'council', label: '长老议事厅', content: <button type="button" disabled={isStepping} onClick={() => { setCouncilOpenedBefore(true); setCouncilOpen(true); }}
             className={`${action} bg-violet-900/60 text-violet-100 hover:bg-violet-800`}>打开长老议事厅</button> }]),

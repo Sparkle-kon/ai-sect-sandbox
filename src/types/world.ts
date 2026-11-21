@@ -85,6 +85,7 @@ export type ActionType =
   | 'RANK_SEASON'
   | 'ESCORT'
   | 'CEASEFIRE'
+  | 'RESEARCH'
   | 'GATHER_HERBS'
   | 'BREW_PILL'
   | 'USE_PILL'
@@ -380,6 +381,10 @@ export interface LLMDecisionPayload {
   targetHazardId?: string;
   ceasefireMove?: CeasefireMove;
   targetCeasefireId?: string;
+  researchMove?: ResearchMove;
+  researchTopic?: ResearchTopic;
+  targetResearchId?: string;
+  researchWithdrawReason?: ResearchWithdrawalReason;
   targetTechniqueId?: string;
   targetHerbId?: HerbId;
   targetPillId?: PillId;
@@ -1240,7 +1245,41 @@ export interface CeasefireState {
   nextId: number;
 }
 
+export type ResearchTopic = 'qi_foundation' | 'warding';
+export type ResearchMove = 'propose' | 'join' | 'work' | 'withdraw';
+export type ResearchWithdrawalReason = 'injury' | 'assignment' | 'relocation' | 'hardship' | 'ineligible';
+export interface ResearchMaterialAccount { stones: number; earthRoots: number }
+export interface ResearchContribution {
+  actorId: string;
+  joinedTick: number;
+  lastWorkedTick?: number;
+  workTurns: number;
+  escrow: ResearchMaterialAccount;
+  spent: ResearchMaterialAccount;
+  withdrawnTick?: number;
+  withdrawReason?: ResearchWithdrawalReason;
+}
+export interface ResearchProject {
+  id: string;
+  sectId: string;
+  topic: ResearchTopic;
+  proposerId: string;
+  locationId: string;
+  startedTick: number;
+  deadlineTick: number;
+  status: 'open' | 'completed' | 'expired';
+  contributors: ResearchContribution[];
+  discoveryTechniqueId?: string;
+  discoveryLocationId?: string;
+  settledTick?: number;
+}
+export interface ResearchState {
+  projects: ResearchProject[];
+  nextId: number;
+}
+
 export interface WorldState {
+  research: ResearchState;
   ceasefires: CeasefireState;
   annotations: AnnotationState;
   scenarioOrigin?: ScenarioOrigin;

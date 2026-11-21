@@ -1,3 +1,4 @@
+import { createResearchState } from '../engine/researchEngine';
 import { createCeasefireState } from '../engine/ceasefireEngine';
 import { createAnnotationState } from '../engine/annotationState';
 import { createEscortState } from '../engine/escortEngine';
@@ -244,6 +245,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     escorts: createEscortState(),
     annotations: createAnnotationState(),
     ceasefires: createCeasefireState(),
+    research: createResearchState(),
     witnesses: createWitnessState(),
     estates: createEstateState(),
     decisionTrace: createDecisionTraceState(),

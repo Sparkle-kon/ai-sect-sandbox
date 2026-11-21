@@ -1,3 +1,4 @@
+import { advanceResearch } from './researchEngine';
 import { activeEscortForActor } from './escortEngine';
 import { reconcileRelicCustody } from './relicEngine';
 import { recordNewDeathsForReincarnation } from './reincarnationRuntime';
@@ -113,7 +114,7 @@ export function applyMapBrush(prev: WorldState, kind: GodBrushKind, points: MapP
       actorIds: hits.map(({ cultivatorId }) => cultivatorId), locationId, ...(hits.length ? { damage: hits } : {}),
     });
   }
-  brushEvents.push(...advanceEstates(world));
+  brushEvents.push(...advanceResearch(world), ...advanceEstates(world));
   reconcileRelicCustody(world);
   recordNewDeathsForReincarnation(prev, world, brushEvents);
   archiveChronicleEvents(world, brushEvents);
