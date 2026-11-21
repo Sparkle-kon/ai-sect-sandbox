@@ -1,3 +1,4 @@
+import { visibleHabitats } from '../engine/habitatEngine';
 import { visibleChronicleErrata } from '../engine/chronicleErrataEngine';
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { GodBrushKind, LocationNode, MapPoint, WorldEvent, WorldState } from '../types/world';
@@ -95,6 +96,10 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const weatherAtVisibleSites = useMemo(() => new Map(seenLocations
     .filter(({ id }) => isCurrentLocation(id))
     .map((site) => [site.id, localQiWeather(world, site)])), [world, seenLocations, isCurrentLocation]);
+  const localHabitat = useMemo(() => new Map(visibleHabitats(world, selected)
+    .filter((row) => row.capacity !== undefined && row.restoration && row.restoration.endedTick === undefined &&
+      row.restoration.expiresTick > world.tick && isCurrentLocation(row.siteId))
+    .map((row) => [row.siteId, row])), [world, selected, isCurrentLocation]);
   const localErrata = useMemo(() => {
     const counts = new Map<string, number>();
     for (const entry of visibleChronicleErrata(world, selected)) {
@@ -893,6 +898,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
             const localVillage = villagesAt.get(location.id);
             const localWeather = weatherAtVisibleSites.get(location.id);
             const localBeasts = beastsByLocation.get(location.id) ?? [];
+            const habitatView = localHabitat.get(location.id);
             const sanctuary = sanctuaryMarks.get(location.id);
             return (
               <li key={location.id} className="inline-flex items-center gap-1.5">
@@ -916,6 +922,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                 </span>}
                 {sanctuary !== undefined && <span className="text-cyan-200">· 本人通行权有效 · {sanctuary > 0 ? `护阵可挡 ${sanctuary} 次决斗` : '护阵已耗尽'}</span>}
                 {(localErrata.get(location.id) ?? 0) > 0 && <span className="text-amber-200">· 公开史料有待勘误 {localErrata.get(location.id)} 条</span>}
+                {habitatView && <span className="text-emerald-200">· 复育栖地 {habitatView.wildOccupancy ?? 0}/{habitatView.capacity} 野兽</span>}
                 {localCouncil && <span className="text-violet-300">· 本月议决：{localCouncil.title}</span>}
                 {besiegedLocationIds.has(location.id) && <span className="text-rose-300">· 围攻中</span>}
                 {localOccasions.map((occasion) => (

@@ -90,6 +90,7 @@ export type ActionType =
   | 'SECT_CREDIT'
   | 'PILGRIMAGE'
   | 'CHRONICLE_ERRATA'
+  | 'HABITAT'
   | 'GATHER_HERBS'
   | 'BREW_PILL'
   | 'USE_PILL'
@@ -385,6 +386,8 @@ export interface LLMDecisionPayload {
   targetHazardId?: string;
   ceasefireMove?: CeasefireMove;
   targetCeasefireId?: string;
+  habitatMove?: HabitatMove;
+  targetBeastReleaseId?: string;
   chronicleErrataMove?: ChronicleErrataMove;
   targetChronicleSourceId?: string;
   chronicleReliefReading?: ChronicleReliefReading;
@@ -1437,7 +1440,37 @@ export interface ChronicleErrataState {
   nextId: number;
 }
 
+export type HabitatMove = 'restore' | 'release' | 'survey';
+export interface HabitatStewardship {
+  id: string;
+  siteId: string;
+  sponsorSectId: string;
+  stewardId: string;
+  restoredTick: number;
+  expiresTick: number;
+  endedTick?: number;
+  endReason?: 'expiry' | 'site_lost';
+}
+export interface BeastRelease {
+  id: string;
+  beastId: string;
+  formerOwnerId: string;
+  siteId: string;
+  releasedTick: number;
+  earliestSurveyTick: number;
+  deadlineTick: number;
+  status: 'monitoring' | 'sighted' | 'unconfirmed';
+  observation?: { observerId: string; tick: number; hp: number };
+  settledTick?: number;
+}
+export interface HabitatState {
+  stewardships: HabitatStewardship[];
+  releases: BeastRelease[];
+  nextId: number;
+}
+
 export interface WorldState {
+  habitats: HabitatState;
   chronicleErrata: ChronicleErrataState;
   pilgrimages: PilgrimageState;
   credit: SectCreditState;

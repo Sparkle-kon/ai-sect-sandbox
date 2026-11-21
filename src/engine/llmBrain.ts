@@ -1,3 +1,4 @@
+import { availableHabitatActions } from './habitatEngine';
 import { availableChronicleErrataActions, pickChronicleReading } from './chronicleErrataEngine';
 import { activePilgrimageForActor, availablePilgrimageActions, pilgrimageCheckpoint } from './pilgrimageEngine';
 import { availableSectCreditActions } from './sectCreditEngine';
@@ -87,6 +88,10 @@ export function computeHeuristicDecision(
       moves.find(({ pilgrimageMove }) => pilgrimageMove === 'advance');
     if (move) return { ...move, chosenAction: 'PILGRIMAGE', innerMonologue: '只按同伴应允与实走的路程行事。' };
     if (pilgrim) return { chosenAction: 'REST', innerMonologue: '等同伴沿已知路段前行，到站再作休整。' };
+  }
+  if (world.habitats.releases.some((row) => row.status === 'monitoring' && row.siteId === cultivator.locationId)) {
+    const survey = availableHabitatActions(cultivator, world).find(({ habitatMove }) => habitatMove === 'survey');
+    if (survey) return { ...survey, chosenAction: 'HABITAT', innerMonologue: '只记录这次亲眼复见，不能用别处传闻代替。' };
   }
   const currentLocation = world.locations.find(
     (l) => l.id === cultivator.locationId
@@ -458,6 +463,12 @@ export function computeHeuristicDecision(
     if (retelling) return { ...retelling, chosenAction: 'CHRONICLE_ERRATA', innerMonologue: '异闻只记一人之言，勘误须核对原始凭据。' };
   }
 
+  if (world.tick >= 14 && world.tick % 6 === 2 && (cultivator.personality === '逍遥' || cultivator.personality === '刚正')) {
+    const options = availableHabitatActions(cultivator, world);
+    const care = options.find(({ habitatMove }) => habitatMove === 'release') ?? options.find(({ habitatMove }) => habitatMove === 'restore');
+    if (care) return { ...care, chosenAction: 'HABITAT', innerMonologue: '按本地承载量恢复栖地，实物和兽籍都须有据。' };
+  }
+
   // 5. Socialize; trust in fellowship makes seeking a partner more attractive.
   const fellowship = cultivator.reflections.some(
     (entry) => entry.kind === 'belief' && entry.theme === 'community' && entry.intensity >= 6
@@ -558,6 +569,7 @@ export async function queryCultivatorLLMDecision(
   const estateOptions = availableEstateActions(cultivator, world);
   const doctrineOptions = availableDoctrineActions(cultivator, world);
   const relocationOptions = availableRelocationActions(cultivator, world);
+  const habitatOptions = availableHabitatActions(cultivator, world);
   const chronicleErrataOptions = availableChronicleErrataActions(cultivator, world);
   const creditOptions = availableSectCreditActions(cultivator, world);
   const sanctuaryOptions = availableSanctuaryActions(cultivator, world);
@@ -592,6 +604,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 天机悬赏榜：${JSON.stringify(world.bounties.filter((item) => item.status === 'open').map(({id,targetCultivatorId,reward,reason}) => ({id,targetCultivatorId,reward,reason})))}；可接的追缉：${JSON.stringify(availableBountyHunts(cultivator, world))}
 - 天下公示的大会与秘境：${JSON.stringify(world.occasions.filter((item) => item.status === 'registration' || item.status === 'running').map(({id,title,kind,locationId,status,registrationClosesTick}) => ({id,title,kind,locationId,status,registrationClosesTick})))}；可报名项目：${JSON.stringify(availableOccasionJoins(cultivator, world))}
 - 本宗邦交：${JSON.stringify(world.diplomacy.filter((relation) => relation.sectAId === cultivator.sectId || relation.sectBId === cultivator.sectId))}；公示的外事权限：${JSON.stringify(availableDiplomacyActions(cultivator, world))}
+- 栖息地复育与放归只用当地实际有资源的选择；记录复见必须亲眼核对同一野生灵兽：${JSON.stringify(habitatOptions)}
 - 纪事异闻只允在当地公示板提交列出的结构化说法或核证勘误，不许生成证据文字：${JSON.stringify(chronicleErrataOptions)}
 - 朝山巡礼只向在场同伴提议，两站必须是彼此知晓且可通行的地点。选择并原样复制当下巡礼选项：${JSON.stringify(pilgrimageOptions)}
 - 宗门信贷为规则固定的零息本金，仅能选实际库账有据的选项：${JSON.stringify(creditOptions)}
@@ -625,7 +638,7 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
 请以第一人称进行内心独白思考，并决定本回合行动。只输出合法的 JSON 对象（不要 Markdown 代码块），字段如下：
 {
   "innerMonologue": "你的第一人称内心独白（40字以内，体现你的性格与秘密目标）",
-  "chosenAction": "CULTIVATE | BREAKTHROUGH | EXPLORE | SOCIALIZE | DUEL | SCHEMING | PURSUE_SCHEME | AUTHOR_TECHNIQUE | STUDY_TECHNIQUE | GATHER_HERBS | BREW_PILL | USE_PILL | FORGE_ARTIFACT | BIND_ARTIFACT | REPAIR_ARTIFACT | AWAKEN_ARTIFACT | FACE_TRIBULATION | AMBUSH_TRIBULATION | CHALLENGE_LEADERSHIP | PLOT_COUP | BUILD_FACILITY | DISPATCH_GUARD | GUARD_DUTY | OFFER_ALLIANCE | DECLARE_WAR | DEMAND_TRIBUTE | LAUNCH_SIEGE | JOIN_OCCASION | PURSUE_BOUNTY | TAME_BEAST | TRADE | DUAL_CULTIVATE | SECT_DIPLOMACY | TEACH | ACCEPT_TUITION | DECLINE_TUITION | OFFER_OATH | ACCEPT_OATH | DECLINE_OATH | FULFILL_OATH | APPEAL_OATH | PLACE_MARKET_BUY | PLACE_MARKET_SELL | CANCEL_MARKET_ORDER | RECRUIT_SETTLER | DELIVER_RELIEF | FILE_WITNESS_CLAIM | ATTEST_WITNESS | CHALLENGE_WITNESS | NAME_HEIR | CLAIM_ESTATE | HOLD_MEMORIAL | DOCTRINE | RELOCATE | RECOLLECT | RELIC | SCRIPTURE | RANK_SEASON | ESCORT | CEASEFIRE | RESEARCH | SANCTUARY | SECT_CREDIT | PILGRIMAGE | CHRONICLE_ERRATA | REST 之一",
+  "chosenAction": "CULTIVATE | BREAKTHROUGH | EXPLORE | SOCIALIZE | DUEL | SCHEMING | PURSUE_SCHEME | AUTHOR_TECHNIQUE | STUDY_TECHNIQUE | GATHER_HERBS | BREW_PILL | USE_PILL | FORGE_ARTIFACT | BIND_ARTIFACT | REPAIR_ARTIFACT | AWAKEN_ARTIFACT | FACE_TRIBULATION | AMBUSH_TRIBULATION | CHALLENGE_LEADERSHIP | PLOT_COUP | BUILD_FACILITY | DISPATCH_GUARD | GUARD_DUTY | OFFER_ALLIANCE | DECLARE_WAR | DEMAND_TRIBUTE | LAUNCH_SIEGE | JOIN_OCCASION | PURSUE_BOUNTY | TAME_BEAST | TRADE | DUAL_CULTIVATE | SECT_DIPLOMACY | TEACH | ACCEPT_TUITION | DECLINE_TUITION | OFFER_OATH | ACCEPT_OATH | DECLINE_OATH | FULFILL_OATH | APPEAL_OATH | PLACE_MARKET_BUY | PLACE_MARKET_SELL | CANCEL_MARKET_ORDER | RECRUIT_SETTLER | DELIVER_RELIEF | FILE_WITNESS_CLAIM | ATTEST_WITNESS | CHALLENGE_WITNESS | NAME_HEIR | CLAIM_ESTATE | HOLD_MEMORIAL | DOCTRINE | RELOCATE | RECOLLECT | RELIC | SCRIPTURE | RANK_SEASON | ESCORT | CEASEFIRE | RESEARCH | SANCTUARY | SECT_CREDIT | PILGRIMAGE | CHRONICLE_ERRATA | HABITAT | REST 之一",
   "targetLocationId": "EXPLORE 可填已知地点 id（探索未知时省略）；宗门经营、迁宗或新设避难所只能填所列地点 id",
   "targetCultivatorId": "如果 chosenAction 为 SOCIALIZE / DUEL / SCHEMING / AMBUSH_TRIBULATION / CHALLENGE_LEADERSHIP / PLOT_COUP / DISPATCH_GUARD / TRADE / DUAL_CULTIVATE / SECT_DIPLOMACY / TEACH / OFFER_OATH / FILE_WITNESS_CLAIM / NAME_HEIR 则填目标修士 id；DOCTRINE 仅在所选事务列出该字段时填写；其余省略",
   "spokenLine": "简短台词（可选）",
@@ -642,6 +655,8 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
   "targetMarketOrderId": "撤单时选择自己仍可撤的挂单 id",
   "targetOathId": "回应、履行或申诉契书时，指定可用契书 id",
   "oathTerm": "提出契书时选择给定条款 foundation_pill 或 jade_herb",
+  "habitatMove": "HABITAT 复制 restore、release 或 survey",
+  "targetBeastReleaseId": "survey 用其列出的放归回执 id；restore 使用 targetLocationId；release 使用 targetBeastId",
   "chronicleErrataMove": "CHRONICLE_ERRATA 用列出的 retell 或 correct",
   "targetChronicleSourceId": "只复制当前公示板选项对应的史源事件 id",
   "chronicleReliefReading": "转述赈济时照抄 full_supplies 或 unfunded；转述斗法时改用该选项的 targetCultivatorId；勘误不自选结论",
@@ -789,11 +804,18 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
             'SECT_CREDIT',
             'PILGRIMAGE',
             'CHRONICLE_ERRATA',
+            'HABITAT',
           ];
           const chosenAction = parsed?.chosenAction;
           if (!chosenAction || !validActions.includes(chosenAction)) return undefined;
 
           if (activeVow && chosenAction !== 'PILGRIMAGE' && (chosenAction !== 'REST' || onPilgrimagePath)) return undefined;
+          const legalHabitat = chosenAction === 'HABITAT' ? habitatOptions.find((item) =>
+            item.habitatMove === parsed.habitatMove && item.targetLocationId === parsed.targetLocationId &&
+            item.targetBeastId === parsed.targetBeastId && item.targetBeastReleaseId === parsed.targetBeastReleaseId) : undefined;
+          if (chosenAction === 'HABITAT' && (!legalHabitat || parsed.targetSectId !== undefined ||
+              parsed.targetCultivatorId !== undefined)) return undefined;
+
           const legalChronicleErrata = chosenAction === 'CHRONICLE_ERRATA' ? chronicleErrataOptions.find((item) =>
             item.chronicleErrataMove === parsed.chronicleErrataMove && item.targetChronicleSourceId === parsed.targetChronicleSourceId &&
             item.chronicleReliefReading === parsed.chronicleReliefReading && item.targetCultivatorId === parsed.targetCultivatorId) : undefined;
@@ -969,12 +991,14 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
             targetSectId: legalCredit?.targetSectId ?? legalCeasefire?.targetSectId ?? legalForeign?.targetSectId,
             targetOccasionId: legalOccasion?.targetOccasionId,
             targetBountyId: legalHunt?.targetBountyId,
-            targetBeastId: legalBeast?.targetBeastId,
+            targetBeastId: legalHabitat?.targetBeastId ?? legalBeast?.targetBeastId,
             tribulationStance: chosenAction === 'FACE_TRIBULATION' && validStance ? stance : undefined,
             targetArtifactId: legalArtifact?.targetArtifactId,
             forgeTier: legalArtifact?.forgeTier,
             targetHerbId: legalAlchemy?.targetHerbId,
             targetPillId: legalAlchemy?.targetPillId,
+            habitatMove: legalHabitat?.habitatMove,
+            targetBeastReleaseId: legalHabitat?.targetBeastReleaseId,
             chronicleErrataMove: legalChronicleErrata?.chronicleErrataMove,
             targetChronicleSourceId: legalChronicleErrata?.targetChronicleSourceId,
             chronicleReliefReading: legalChronicleErrata?.chronicleReliefReading,

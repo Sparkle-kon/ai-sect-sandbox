@@ -1,3 +1,4 @@
+import { advanceHabitats, resolveHabitatAction } from './habitatEngine';
 import { advanceChronicleErrata, resolveChronicleErrataAction } from './chronicleErrataEngine';
 import { activePilgrimageForActor, advancePilgrimages, pilgrimageActedThisTick, pilgrimageCheckpoint, resolvePilgrimageAction } from './pilgrimageEngine';
 import { advanceSectCredit, resolveSectCreditAction } from './sectCreditEngine';
@@ -205,6 +206,8 @@ export function applyCultivatorBrainDecision(
     case 'ATTEST_WITNESS':
     case 'CHALLENGE_WITNESS':
       return resolveWitnessAction(world, cultivator, decision);
+    case 'HABITAT':
+      return resolveHabitatAction(world, cultivator, decision);
     case 'CHRONICLE_ERRATA':
       return resolveChronicleErrataAction(world, cultivator, decision);
     case 'PILGRIMAGE':
@@ -656,7 +659,7 @@ export function advanceWorldTick(
   const avatarOrder = consumeAvatarOrder(nextState);
   maintainAlchemy(nextState);
   maintainSectEconomy(nextState);
-  const newEvents: WorldEvent[] = [...advanceSanctuaries(nextState), ...advanceCeasefires(nextState), ...advanceCompetitionSeasons(nextState), ...advanceMapHazards(nextState), ...advancePilgrimages(nextState), ...advanceRelocations(nextState), ...advanceSettlements(nextState), ...advanceSpiritBeasts(nextState, rng)];
+  const newEvents: WorldEvent[] = [...advanceSanctuaries(nextState), ...advanceCeasefires(nextState), ...advanceCompetitionSeasons(nextState), ...advanceMapHazards(nextState), ...advancePilgrimages(nextState), ...advanceRelocations(nextState), ...advanceSettlements(nextState), ...advanceSpiritBeasts(nextState, rng), ...advanceHabitats(nextState)];
   for (const event of newEvents) witnessEvent(nextState, event);
 
   for (const cultivator of [...nextState.cultivators]) {
@@ -774,7 +777,7 @@ export function advanceWorldTick(
     if (yearly) cultivator.reflections = synthesizeReflections(cultivator, nextState.tick);
   }
 
-  for (const event of [...advanceDiplomacy(nextState, rng), ...advanceOccasions(nextState, rng), ...advanceOaths(nextState), ...advanceMarkets(nextState), ...advanceWitnesses(nextState), ...maintainSectPolitics(nextState), ...advanceBounties(nextState), ...advanceResearch(nextState), ...advanceEstates(nextState), ...advanceDoctrines(nextState), ...advanceSectCredit(nextState), ...advanceSanctuaries(nextState), ...advancePilgrimages(nextState)]) {
+  for (const event of [...advanceDiplomacy(nextState, rng), ...advanceOccasions(nextState, rng), ...advanceOaths(nextState), ...advanceMarkets(nextState), ...advanceWitnesses(nextState), ...maintainSectPolitics(nextState), ...advanceBounties(nextState), ...advanceResearch(nextState), ...advanceEstates(nextState), ...advanceDoctrines(nextState), ...advanceSectCredit(nextState), ...advanceSanctuaries(nextState), ...advancePilgrimages(nextState), ...advanceHabitats(nextState)]) {
     newEvents.push(event);
     witnessEvent(nextState, event);
   }

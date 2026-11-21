@@ -1,3 +1,4 @@
+import { createHabitatState } from '../engine/habitatEngine';
 import { createChronicleErrataState } from '../engine/chronicleErrataEngine';
 import { createPilgrimageState } from '../engine/pilgrimageEngine';
 import { createSectCreditState } from '../engine/sectCreditEngine';
@@ -254,6 +255,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     credit: createSectCreditState(),
     pilgrimages: createPilgrimageState(),
     chronicleErrata: createChronicleErrataState(),
+    habitats: createHabitatState(),
     witnesses: createWitnessState(),
     estates: createEstateState(),
     decisionTrace: createDecisionTraceState(),

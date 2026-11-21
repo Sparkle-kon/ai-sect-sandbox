@@ -1,10 +1,12 @@
-import type { Cultivator, LocationNode, SpiritBeast } from '../types/world';
+import type { Cultivator, LocationNode, SpiritBeast, WorldState } from '../types/world';
+import { HabitatStewardshipPanel } from './HabitatStewardshipPanel';
 import { BEAST_COLORS, isLivingBeast } from './spiritBeastView';
 
-export function SpiritBeastPanel({ cultivator, location, beasts }: {
+export function SpiritBeastPanel({ cultivator, location, beasts, world }: {
   cultivator: Cultivator;
   location: LocationNode | undefined;
   beasts: SpiritBeast[];
+  world?: WorldState;
 }) {
   const living = beasts.filter(isLivingBeast);
   const pets = living.filter(({ tamedBy }) => tamedBy === cultivator.id);
@@ -48,6 +50,7 @@ export function SpiritBeastPanel({ cultivator, location, beasts }: {
           )}
         </details>
       ) : <p className="text-[11px] text-slate-400">无可查看的当前地点野兽记录。</p>}
+      {world && <HabitatStewardshipPanel world={world} cultivator={cultivator} />}
     </section>
   );
 }

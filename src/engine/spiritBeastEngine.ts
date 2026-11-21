@@ -1,3 +1,5 @@
+import { habitatCanReceiveWildBeast, isRewildingAcclimating } from './habitatEngine';
+import { pilgrimageCheckpoint } from './pilgrimageEngine';
 import { weatherHabitatScore } from './weatherEngine';
 import type { Cultivator, LLMDecisionPayload, LocationNode, SpiritBeast, WorldEvent, WorldState } from '../types/world';
 import { activeSiegeForActor } from './diplomacyEngine';
@@ -43,7 +45,7 @@ function feed(actor: Cultivator, beast: SpiritBeast): 'jade_leaf' | 'star_bloom'
 export function availableBeastTames(actor: Cultivator, world: WorldState): Array<{ action: 'TAME_BEAST'; targetBeastId: string }> {
   if (!live(actor) || actor.hp / Math.max(1, actor.maxHp) < .25 || occupied(world, actor) || ownerPet(world, actor) ||
       !world.locations.some(({ id }) => id === actor.locationId)) return [];
-  return world.spiritBeasts.filter((beast) => beast.alive && beast.hp > 0 && !beast.tamedBy && beast.locationId === actor.locationId &&
+  return world.spiritBeasts.filter((beast) => beast.alive && beast.hp > 0 && !beast.tamedBy && beast.locationId === actor.locationId && !isRewildingAcclimating(world, beast.id) &&
     (beast.kind !== '凶兽' || (actor.realm !== '练气' && actor.realm !== '筑基')) && feed(actor, beast))
     .map(({ id }) => ({ action: 'TAME_BEAST', targetBeastId: id }));
 }
@@ -109,7 +111,10 @@ export function advanceSpiritBeasts(world: WorldState, rng: () => number): World
     } else {
       if (beast.tamedBy) delete beast.tamedBy;
       if (sites.length && !sites.some(({ id }) => id === beast.locationId)) {
-        beast.locationId = sites.find(({ id }) => id === beast.homeLocationId)?.id ?? sites[0].id;
+        const capacity = sites.filter(({ id }) => habitatCanReceiveWildBeast(world, id, beast.id));
+        // When every habitat is full, an orphan remains a real wild animal at its last known site.
+        const refuge = capacity.find(({ id }) => id === beast.homeLocationId) ?? capacity[0];
+        if (refuge) beast.locationId = refuge.id;
       }
     }
     let place = world.locations.find(({ id }) => id === beast.locationId);
@@ -121,8 +126,8 @@ export function advanceSpiritBeasts(world: WorldState, rng: () => number): World
     beast.cultivation = clamp(beast.cultivation + (place.spiritQi >= 65 ? 4 : 2), 0, 100);
     beast.power = RULES[beast.kind].power + 2 * beast.cultivation;
     beast.hp = Math.min(beast.maxHp, beast.hp + (owner ? 16 : 10));
-    if (owner) continue;
-    const target = world.cultivators.filter((actor) => live(actor) && actor.locationId === beast.locationId &&
+    if (owner || isRewildingAcclimating(world, beast.id)) continue;
+    const target = world.cultivators.filter((actor) => live(actor) && actor.locationId === beast.locationId && !pilgrimageCheckpoint(world, actor) &&
       (actor.realm === '练气' || actor.realm === '筑基') && !occupied(world, actor))
       .sort((a, b) => a.combatPower - b.combatPower || a.id.localeCompare(b.id))[0];
     if (target && RULES[beast.kind].risk > 0 && rng() < RULES[beast.kind].risk) {
@@ -144,9 +149,11 @@ export function advanceSpiritBeasts(world: WorldState, rng: () => number): World
     }
     if (sites.length <= 1 || rng() >= .45) continue;
     const previous = place;
-    place = sites.filter(({ id }) => id !== previous.id)
+    const destination = sites.filter(({ id }) => id !== previous.id && habitatCanReceiveWildBeast(world, id, beast.id))
       .sort((a, b) => weatherHabitatScore(world, previous, b, beast.kind) - weatherHabitatScore(world, previous, a, beast.kind) ||
         Math.hypot(a.x - previous.x, a.y - previous.y) - Math.hypot(b.x - previous.x, b.y - previous.y) || a.id.localeCompare(b.id))[0];
+    if (!destination) continue;
+    place = destination;
     beast.locationId = place.id;
     results.push(event(world, `roam-${beast.id}`, '妖兽游踪', `${beast.name}离开原处，在${place.name}附近出没。`, [], place.id));
   }

@@ -1,3 +1,5 @@
+import { createHabitatState, HABITAT_MIN_HEALTH, HABITAT_RESTORATION_TICKS,
+  HABITAT_SURVEY_DELAY, HABITAT_SURVEY_WINDOW } from './habitatEngine';
 import { CHRONICLE_ERRATA_MAX_RETELLINGS, CHRONICLE_ERRATA_WINDOW, createChronicleErrataState } from './chronicleErrataEngine';
 import { terrainTileAt } from './terrainEngine';
 import { createPilgrimageState, PILGRIMAGE_ACTIVE_TICKS, PILGRIMAGE_LEG_COST, PILGRIMAGE_OFFER_TICKS, PILGRIMAGE_RELIEF_HP } from './pilgrimageEngine';
@@ -81,7 +83,7 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const marketQty = num(1,12,true), marketPrice = num(1,500,true);
@@ -196,6 +198,12 @@ const shape = structure({
       attestations:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,tick,verdict:one('supports','contradicts')})),
       appeal:optional(structure({tick,actorId:id,verdict:one('upheld','rejected'),reason:text})),settledTick:otick,
       reputationSectId:oid,reputationPenalty:percentage,reputationRestored:percentage,reason:otext}))}),
+  habitats:structure({nextId:num(1,100_000_000,true),
+    stewardships:arr(SAVE_COLLECTION_LIMIT,structure({id,siteId:id,sponsorSectId:id,stewardId:id,restoredTick:tick,expiresTick:tick,
+      endedTick:otick,endReason:optional(one('expiry','site_lost'))})),
+    releases:arr(SAVE_COLLECTION_LIMIT,structure({id,beastId:id,formerOwnerId:id,siteId:id,releasedTick:tick,earliestSurveyTick:tick,
+      deadlineTick:tick,status:one('monitoring','sighted','unconfirmed'),
+      observation:optional(structure({observerId:id,tick,hp:num(Number.MIN_VALUE,1_000_000)})),settledTick:otick}))}),
   chronicleErrata:structure({nextId:num(1,100_000_000,true),
     sources:arr(SAVE_COLLECTION_LIMIT,errataSourceFact),
     retellings:arr(SAVE_COLLECTION_LIMIT,structure({id,sourceEventId:id,authorId:id,tick,reading:chronicleReading})),
@@ -341,6 +349,7 @@ function verifyWorld(value: unknown): WorldState {
     ? { ...value,
       ...(!Object.hasOwn(value, 'mentorship') ? { mentorship: { offers: [], lineage: [], budgets: [] } } : {}),
       ...(!Object.hasOwn(value, 'decisionTrace') ? { decisionTrace: { records: [] } } : {}),
+      ...(!Object.hasOwn(value, 'habitats') ? { habitats: createHabitatState() } : {}),
       ...(!Object.hasOwn(value, 'chronicleErrata') ? { chronicleErrata: createChronicleErrataState() } : {}),
       ...(!Object.hasOwn(value, 'pilgrimages') ? { pilgrimages: createPilgrimageState() } : {}),
       ...(!Object.hasOwn(value, 'credit') ? { credit: createSectCreditState() } : {}),
@@ -377,6 +386,47 @@ function verifyWorld(value: unknown): WorldState {
   const sector = unique(w.sects, (item) => item.id, 'sects.id');
   const locations = unique(w.locations, (item) => item.id, 'locations.id');
   const map = unique(w.terrain.tiles, (item) => item.id, 'terrain.tiles.id');
+  const habitatSerials = new Set<number>();
+  const habitatBeasts = new Map(w.spiritBeasts.map((animal) => [animal.id, animal]));
+  const habitatSites = new Map(w.locations.map((site) => [site.id, site]));
+  const habitatSerial = (id: string, kind: 'restoration' | 'release') => {
+    const serial = Number(id.match(new RegExp('^habitat-' + kind + '-([1-9][0-9]*)$'))?.[1]);
+    if (!Number.isSafeInteger(serial) || serial >= w.habitats.nextId || habitatSerials.has(serial)) fail('habitats.nextId');
+    habitatSerials.add(serial);
+  };
+  unique(w.habitats.stewardships.filter(({ endedTick }) => endedTick === undefined),
+    ({ siteId }) => siteId, 'habitats.stewardships.active_site');
+  for (const row of w.habitats.stewardships) {
+    habitatSerial(row.id, 'restoration');
+    const site = habitatSites.get(row.siteId);
+    if (!actor.has(row.stewardId) || !sector.has(row.sponsorSectId) || row.restoredTick > w.tick ||
+        row.expiresTick !== row.restoredTick + HABITAT_RESTORATION_TICKS ||
+        ((row.endedTick === undefined) !== (row.endReason === undefined)) ||
+        (row.endedTick === undefined && (row.expiresTick <= w.tick || site?.type !== 'spirit_vein' ||
+          Boolean(site.ownerSectId && site.ownerSectId !== row.sponsorSectId) ||
+          w.sects.some(({ headquartersId }) => headquartersId === row.siteId))) ||
+        (row.endedTick !== undefined && (row.endedTick < row.restoredTick || row.endedTick > w.tick ||
+          (row.endReason === 'expiry' ? row.endedTick < row.expiresTick : row.endedTick >= row.expiresTick)))) {
+      fail('habitats.stewardships.references');
+    }
+  }
+  unique(w.habitats.releases.filter(({ status }) => status === 'monitoring'),
+    ({ beastId }) => beastId, 'habitats.releases.monitoring_beast');
+  for (const row of w.habitats.releases) {
+    habitatSerial(row.id, 'release');
+    const beast = habitatBeasts.get(row.beastId);
+    if (!beast || !actor.has(row.formerOwnerId) || row.releasedTick > w.tick ||
+        row.earliestSurveyTick !== row.releasedTick + HABITAT_SURVEY_DELAY || row.deadlineTick !== row.releasedTick + HABITAT_SURVEY_WINDOW ||
+        (row.status === 'monitoring' && (row.settledTick !== undefined || row.deadlineTick <= w.tick)) ||
+        (row.status !== 'monitoring' && (row.settledTick === undefined || row.settledTick > w.tick)) ||
+        (row.status === 'unconfirmed' && row.settledTick! < row.deadlineTick)) fail('habitats.releases.references');
+    const eye = row.observation;
+    const maxBeastHp = beast?.maxHp ?? 0;
+    if ((row.status === 'sighted') !== (eye !== undefined) ||
+        (eye && (eye.observerId === row.formerOwnerId || !actor.has(eye.observerId) || eye.tick !== row.settledTick ||
+          eye.tick < row.earliestSurveyTick || eye.tick >= row.deadlineTick || eye.hp > maxBeastHp ||
+          eye.hp < maxBeastHp * HABITAT_MIN_HEALTH))) fail('habitats.releases.sighting');
+  }
   unique(w.chronicleErrata.sources, ({ sourceEventId }) => sourceEventId, 'chronicleErrata.sources.id');
   const errataSources = new Map(w.chronicleErrata.sources.map((row) => [row.sourceEventId, row]));
   const errataVenues = new Map(w.locations.map(({ id, type }) => [id, type]));
