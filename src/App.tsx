@@ -51,8 +51,10 @@ import { isWorldSeed } from './engine/worldRandom';
 import { isWorldgenProfileId } from './engine/worldgenProfiles';
 import { createDecisionReplayTape, replayOneTurn } from './engine/decisionTraceEngine';
 import type { DecisionReplayTape, DecisionReplayResult } from './engine/decisionTraceEngine';
-import { createTimeline, forkTimeline, readTimelineHead, readTimelineSnapshot, recordTimelineWorld, selectTimelineBranch, forkTimelineCheckpoint, TIMELINE_MAX_BRANCHES } from './engine/timelineEngine';
-import type { WorldTimeline } from './engine/timelineEngine';
+import { createTimeline, forkTimeline, readTimelineHead, readTimelineSnapshot, recordTimelineWorld, selectTimelineBranch, forkTimelineCheckpoint, forkTimelineAvatarEntry, TIMELINE_MAX_BRANCHES } from './engine/timelineEngine';
+import type { TimelineSnapshot, WorldTimeline } from './engine/timelineEngine';
+import {findEraEntryCandidate,projectEraEntryCandidates} from './engine/eraEntryCandidates';
+import {createTerrainMapView} from './components/terrainMapView';
 import { possessAvatar, queueAvatarOrder, queueAvatarSalvage } from './engine/avatarEngine';
 import type { ArtifactSalvageControls } from './components/ArtifactPanel';
 import { resolveAvatarSnapshot } from './engine/avatarRuntime';
@@ -103,6 +105,7 @@ const CaravanRestitutionPanel = React.lazy(async () => ({ default: (await import
 const MortalVillagesPanel = React.lazy(async () => ({ default: (await import('./components/MortalVillagesPanel')).MortalVillagesPanel }));
 const HouseholdNamePanel = React.lazy(async () => ({ default: (await import('./components/HouseholdNamePanel')).HouseholdNamePanel }));
 const DecisionTracePanel = React.lazy(async () => ({ default: (await import('./components/DecisionTracePanel')).DecisionTracePanel }));
+const EraEntryPanel = React.lazy(async()=>({default:(await import('./components/EraEntryPanel')).EraEntryPanel}));
 const PossessionPanel = React.lazy(async () => ({ default: (await import('./components/PossessionPanel')).PossessionPanel }));
 const EstateMemorialPanel = React.lazy(async () => ({ default: (await import('./components/EstateMemorialPanel')).EstateMemorialPanel }));
 const ScenarioPanel = React.lazy(async () => ({ default: (await import('./components/ScenarioPanel')).ScenarioPanel }));
@@ -222,6 +225,9 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
   const [councilOpenedBefore, setCouncilOpenedBefore] = useState(false);
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
   const [avatarNotice, setAvatarNotice] = useState<string>();
+  const [eraEntryNotice,setEraEntryNotice]=useState<{scope:string;text:string}>();
+  const [eraEntryReturn,setEraEntryReturn]=useState<{from:string;entered:string;epoch:number;sourceFrame:TimelineSnapshot}>();
+
   const [lastManualCouncilId, setLastManualCouncilId] = useState<string>();
   const [tickIntervalMs, setTickIntervalMs] = useState(1500);
   const [llmConfig, setLlmConfig] = useState<LLMConfig>({
@@ -834,6 +840,77 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
   };
   const clearChronicleReturn = (token: number) => setChronicleReturn((previous) => previous?.token === token ? undefined : previous);
   const opened = (view: WorkspaceId, fallback?: string) => (initialWorkspace ?? 'map') === view ? initialSection ?? fallback : fallback;
+  const eraFrame=timeline.branches.find(branch=>branch.id===timeline.activeBranchId)?.snapshots
+    .find(({tick})=>tick===visibleWorld.tick);
+  const eraRevision=saveContextVersion.current;
+  const eraEntrySites=useMemo(()=>{
+    if(!readingChronicle||!selectedCultivator?.alive)return [];
+    const map=createTerrainMapView(visibleWorld,selectedCultivator,true);
+    return map.seenLocations.filter(site=>site.type!=='secret_realm'&&site.type!=='abyss'&&map.isCurrentLocation(site.id))
+      .map(({id,name})=>({id,name}));
+  },[readingChronicle,visibleWorld,selectedCultivator]);
+  const eraViewingAuthority=(actorId?:string,siteId?:string)=>{
+    if(!eraFrame||history.current!==timeline||saveContextVersion.current!==eraRevision||stepInFlight.current||
+        fastForwardRun.current||campaignGuard.current||Boolean(preview)!==browsing.current||
+        (preview?preview.world!==visibleWorld||preview.tick!==eraFrame.tick:authority.current!==visibleWorld))return false;
+    return !actorId || !!siteId&&eraEntrySites.some(({id})=>id===siteId)&&
+      Boolean(findEraEntryCandidate(visibleWorld,siteId,activeActorId??undefined,actorId));
+  };
+  const eraEntryFeedback=(text:string)=>setEraEntryNotice({scope:viewScopeKey,text});
+  const eraObserve=()=>{
+    if(!eraViewingAuthority()){eraEntryFeedback('所选年代已变化，请重新选择。');return;}
+    setIsRunning(false);setPersonalStoryChoice(undefined);
+    rememberFold('chronicle','feed');setWorkspace('chronicle');
+  };
+  const eraFollow=(siteId:string,actorId:string)=>{
+    if(!eraViewingAuthority(actorId,siteId)){eraEntryFeedback('所选人物已不在这个见闻范围内。');return;}
+    setIsRunning(false);setSelectedCultivatorId(actorId);
+    setPersonalStoryChoice({actorId,scope:viewScopeKey});
+    rememberFold('chronicle','feed');setWorkspace('chronicle');
+  };
+  const eraPossess=(siteId:string,actorId:string)=>{
+    if(!activeActorId||!eraFrame||!eraViewingAuthority(actorId,siteId)){
+      eraEntryFeedback('所选年代或人物已变化，没有附身。');return;
+    }
+    const exact={siteId,viewerId:activeActorId,actorId};
+    try {
+      if(preview){
+        const next=forkTimelineAvatarEntry(timeline,timeline.activeBranchId,eraFrame.tick,eraFrame,exact);
+        const incoming=readTimelineHead(next);
+        if(!incoming)throw Error('未找到新分支的实际人物状态。');
+        setEraEntryReturn({from:timeline.activeBranchId,entered:next.activeBranchId,epoch:viewEpoch,sourceFrame:eraFrame});
+        activateTimeline(next,incoming);
+      }else{
+        setIsRunning(false);
+        const changed=updateWorld(current=>{
+          if(current!==visibleWorld||findEraEntryCandidate(current,siteId,activeActorId,actorId)?.decision.kind!=='rest_or_cultivate')
+            return current;
+          const copy=structuredClone(current);
+          return possessAvatar(copy,actorId)?copy:current;
+        });
+        if(changed===visibleWorld)throw Error('当事人已不能在此时附身，原状态未改变。');
+        setEraEntryReturn(undefined);
+      }
+      setSelectedCultivatorId(actorId);setAvatarNotice('已按实际资格附身，尚未排定修炼或休整。');
+      rememberFold('people','possession');setWorkspace('people');
+    }catch(error){eraEntryFeedback(error instanceof Error?error.message:'这次无法附身，原线不变。');}
+  };
+  const canReturnEraEntry=eraEntryReturn?.entered===timeline.activeBranchId&&eraEntryReturn.epoch===viewEpoch&&
+    timeline.branches.some(branch=>branch.id===eraEntryReturn.from&&branch.snapshots.includes(eraEntryReturn.sourceFrame));
+  const returnEraEntry=()=>{
+    if(!canReturnEraEntry||!eraEntryReturn||stepInFlight.current||campaignGuard.current||fastForwardRun.current||
+        history.current!==timeline)return;
+    const {from,sourceFrame}=eraEntryReturn;
+    const next=selectTimelineBranch(timeline,from),incoming=readTimelineHead(next);
+    const former=readTimelineSnapshot(next,sourceFrame.tick,from);
+    if(!incoming||!former||next.activeBranchId!==from)return;
+    activateTimeline(next,incoming);
+    discardChronicleContext();
+    browsing.current=true;
+    setPreview({tick:sourceFrame.tick,world:former});
+    setTimelineNotice(undefined);setEraEntryReturn(undefined);
+    rememberFold('chronicle','timeline');setWorkspace('chronicle');
+  };
   const ordinaryChronicleFold = foldPreferences.sections.chronicle === undefined
     ? opened('chronicle', 'feed') : foldPreferences.sections.chronicle;
   const rememberFold = (view: Exclude<WorkspaceId, 'map'>, id: string | null) => {
@@ -989,6 +1066,8 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
               <DecisionTracePanel world={visibleWorld} cultivator={selectedCultivator} busy={isStepping} historical={!!preview} onReplay={compareDecision} />
             </React.Suspense> },
             ...(preview ? [] : [{ id: 'possession', label: '化身临世与古戒', content: <React.Suspense fallback={<p role="status">载入化身面板…</p>}>
+              {canReturnEraEntry && <button type="button" disabled={isStepping||fastForwardLocked} onClick={returnEraEntry}
+                className={`${action} bg-slate-800 text-amber-100`}>返回入世前的年代</button>}
               <PossessionPanel world={world} selectedCultivatorId={activeActorId} busy={isStepping}
                 modelReady={llmConfig.enabled && Boolean(llmConfig.apiKey.trim())} notice={avatarNotice}
                 onPossess={handlePossess} onOrder={handleAvatarOrder} onSpeak={(request) => void handleAvatarSpeak(request)} />
@@ -1023,6 +1102,12 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
           </React.Suspense> },
           { id: 'timeline', label: '原始时间线与分支', content: <React.Suspense fallback={<p role="status">载入时间线…</p>}>
             <TimelinePanel timeline={timeline} previewTick={preview?.tick ?? null} busy={isStepping}
+              eraEntry={eraFrame && <React.Suspense fallback={null}><EraEntryPanel
+                date={visibleWorld} scopeKey={`${viewScopeKey}:${activeActorId??''}`} snapshotKey={eraFrame}
+                sites={eraEntrySites} readCandidates={siteId=>projectEraEntryCandidates(visibleWorld,siteId,activeActorId??undefined)}
+                disabled={isStepping||fastForwardLocked} canPossess={!preview||timeline.branches.length<TIMELINE_MAX_BRANCHES}
+                historical={Boolean(preview)} notice={eraEntryNotice?.scope===viewScopeKey?eraEntryNotice.text:undefined}
+                onObserve={eraObserve} onFollow={eraFollow} onPossess={eraPossess} /></React.Suspense>}
               comparisonViewerId={activeActorId ?? undefined} comparisonScopeKey={viewScopeKey}
               verificationSource={{world:visibleWorld,branchId:timeline.activeBranchId,scopeKey:viewScopeKey,
                 busy:isStepping || isRunning || fastForwardLocked}}

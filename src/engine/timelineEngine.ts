@@ -1,4 +1,6 @@
 import { cloneWorldWithColdHistory } from './coldHistoryEngine';
+import { activeAvatar, possessAvatar } from './avatarEngine';
+import { findEraEntryCandidate } from './eraEntryCandidates';
 import { sameGeneratedWorld } from './worldIdentity';
 import type { WorldState } from '../types/world';
 import { executeGodIntervention } from './worldEngine';
@@ -26,7 +28,7 @@ export interface WorldTimeline {
   readonly nextBranchNumber: number;
 }
 export class TimelineError extends Error {
-  constructor(readonly code: 'branch_limit' | 'missing_snapshot' | 'invalid_intervention' | 'invalid_checkpoint', message: string) {
+  constructor(readonly code: 'branch_limit' | 'missing_snapshot' | 'invalid_intervention' | 'invalid_checkpoint' | 'invalid_avatar_entry', message: string) {
     super(message); this.name = 'TimelineError';
   }
 }
@@ -116,6 +118,37 @@ export function forkTimeline(timeline: WorldTimeline, tick: number, command: God
     label: (typeof label === 'string' && cut(label, TIMELINE_MAX_LABEL)) || `支线 ${number}` },
     [...base.snapshots.slice(0, index), saveSnapshot(changed)]);
   return Object.freeze({ activeBranchId: newBranch.id, nextBranchNumber: number + 1, branches: Object.freeze([...timeline.branches, newBranch]) });
+}
+
+export interface TimelineAvatarSelection {
+  readonly siteId:string;
+  readonly viewerId:string;
+  readonly actorId:string;
+}
+
+/** Enter one exact retained month by native possession; never touch the original branch or advance time. */
+export function forkTimelineAvatarEntry(timeline:WorldTimeline,sourceBranchId:string,sourceTick:number,
+  expectedSnapshot:TimelineSnapshot,selection:TimelineAvatarSelection,label?:string):WorldTimeline {
+  if(timeline.branches.length>=TIMELINE_MAX_BRANCHES)
+    throw new TimelineError('branch_limit','时间线已满，不会删除已有分支。');
+  if(timeline.activeBranchId!==sourceBranchId||!Number.isSafeInteger(sourceTick)||sourceTick<0)
+    throw new TimelineError('missing_snapshot','现在选中的支线已不是这段历史。');
+  const source=branchOf(timeline,sourceBranchId);
+  const matching=source?.snapshots.filter(snapshot=>snapshot.tick===sourceTick)??[];
+  const historical=matching.length===1?matching[0]:undefined;
+  if(!source||!historical||historical!==expectedSnapshot||historical.world.tick!==sourceTick)
+    throw new TimelineError('missing_snapshot','所选历史快照已变化，没有入世。');
+  const {siteId,viewerId,actorId}=selection;
+  const invalid=()=>new TimelineError('invalid_avatar_entry','所选的人在这个年月不符合附身资格。原支线没有改变。');
+  const candidate=findEraEntryCandidate(historical.world,siteId,viewerId,actorId);
+  if(candidate?.decision.kind!=='rest_or_cultivate')throw invalid();
+  const changed=cloneWorldWithColdHistory(historical.world);
+  if(!possessAvatar(changed,actorId)||activeAvatar(changed)?.id!==actorId)throw invalid();
+  const number=timeline.nextBranchNumber;
+  const branch=immutableBranch({id:`branch-${number}`,parentBranchId:source.id,forkTick:sourceTick,
+    label:(typeof label==='string'&&cut(label,TIMELINE_MAX_LABEL))||`入世支线 ${number}`},
+    [...source.snapshots.slice(0,source.snapshots.indexOf(historical)),saveSnapshot(changed)]);
+  return Object.freeze({activeBranchId:branch.id,nextBranchNumber:number+1,branches:Object.freeze([...timeline.branches,branch])});
 }
 
 /** Only after the entire durable campaign and the original live source have been separately verified. */

@@ -1,3 +1,4 @@
+import type {ReactNode} from 'react';
 import { useState } from 'react';
 import { TIMELINE_MAX_BRANCHES, TIMELINE_MAX_TICKS } from '../engine/timelineEngine';
 import type { WorldTimeline } from '../engine/timelineEngine';
@@ -51,12 +52,13 @@ export interface TimelinePanelProps {
   comparisonViewerId?: string;
   comparisonScopeKey?: string;
   verificationSource?: ReplayVerificationSource;
+  eraEntry?:ReactNode;
 }
 
 const control = 'rounded border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-100 disabled:opacity-40';
 const button = 'rounded border border-violet-500/50 bg-violet-950/50 px-2 py-1.5 text-xs text-violet-100 disabled:opacity-40';
 
-export function TimelinePanel({ timeline, previewTick, busy, onPreview, onSelectBranch, onFork, notice, fastForward, comparisonViewerId, comparisonScopeKey, verificationSource }: TimelinePanelProps) {
+export function TimelinePanel({ timeline, previewTick, busy, onPreview, onSelectBranch, onFork, notice, fastForward, comparisonViewerId, comparisonScopeKey, verificationSource,eraEntry }: TimelinePanelProps) {
   const [requestedBranch, setRequestedBranch] = useState<string>();
   const [intervention, setIntervention] = useState<Intervention>('SPAWN_TREASURE');
   const [target, setTarget] = useState<string>();
@@ -181,6 +183,7 @@ export function TimelinePanel({ timeline, previewTick, busy, onPreview, onSelect
           </div>
         </section>
       )}
+      {eraEntry}
       <BranchComparisonPanel timeline={timeline} viewerId={comparisonViewerId} scopeKey={comparisonScopeKey} preferredTick={previewTick} />
       <ReplayReceiptPanel source={verificationSource} />
       {fastForward && <FastForwardPanel controls={fastForward} timeline={timeline} branchLimit={!canFork} blocked={busy || previewTick !== null || !!pending} />}
