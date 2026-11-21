@@ -4,6 +4,7 @@ import {
   SCENARIO_MAX_BYTES, SCENARIO_MAX_COMMANDS, SCENARIO_MAX_TICKS, ScenarioError,
 } from '../engine/scenarioEngine';
 import { WORLDGEN_PROFILES, isWorldgenProfileId } from '../engine/worldgenProfiles';
+import { EraDesignPanel } from './EraDesignPanel';
 import { ScenarioAuditCards, ScenarioObjectiveEditor } from './ScenarioObjectives';
 import type { ScenarioObjective, WorldgenProfileId, WorldState } from '../types/world';
 
@@ -263,6 +264,7 @@ export function ScenarioPanel({ world, busy, onApply }: { world: WorldState; bus
       <ScenarioObjectiveEditor key={`${draft.seed}:${draft.profileId}`} objectives={draft.objectives ?? []} catalog={catalog}
         onChange={(objectives) => updateDraft((previous) => ({ ...previous, objectives }))} />
       <ScenarioAuditCards world={world} />
+      <EraDesignPanel world={world} />
       <div className={`${panel} space-y-1.5`}>
         <p className="text-xs text-slate-400">剧本文件只有谱系、种子、时限、预设指令与可选目标，不含存档数据、聊天原文或模型服务凭证。</p>
         <label className="grid min-w-0 gap-1 text-xs text-slate-300">导入剧本 JSON（最大 {kb} KiB）
