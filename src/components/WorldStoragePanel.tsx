@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import {copyWorldSeed,drawWorldSeed} from './worldSeedDraw';
 import type { WorldgenProfileId, WorldState } from '../types/world';
 import {
   decodeWorldSave, encodeWorldSave, decodeEraWorldSave, encodeEraWorldSave, WORLD_SAVE_MAX_BYTES, WORLD_SAVE_MAX_SLOTS, worldSaveStore,
@@ -128,6 +129,10 @@ export function WorldStoragePanel({ world, busy, readOnly = false, eraBlocked = 
   const [slotId, setSlotId] = useState(defaultSlots[0].id);
   const [label, setLabel] = useState('');
   const [seedText, setSeedText] = useState<string>();
+  const [seedNotice,setSeedNotice]=useState<{value:string; text:string}>();
+  const seedField=useRef<HTMLInputElement>(null);
+  const seedWork=useRef(0);
+
   const [profileDraft, setProfileDraft] = useState<WorldgenProfileId>();
   const [staged, setStaged] = useState<Staged>();
   const [status, setStatus] = useState('');
@@ -173,6 +178,30 @@ export function WorldStoragePanel({ world, busy, readOnly = false, eraBlocked = 
   const stillHere = (stamp: ContextStamp) => mounted.current && observed.current.store === store && sameStorageContext(stamp, observed.current);
   const authority = (stamp: ContextStamp) => stillHere(stamp) && !observed.current.busy && !observed.current.readOnly &&
     (canUseContext?.(stamp.world, stamp.version) ?? true);
+  const editSeed=(value:string)=>{
+    ++seedWork.current;
+    setSeedText(value);setSeedNotice(undefined);
+  };
+  const randomSeed=()=>{
+    if(blocked||!authority(context))return;
+    const result=drawWorldSeed();
+    if(result===undefined){
+      setSeedNotice({value:seedInput,text:'此浏览器暂不能抽种，仍可手填。'});return;
+    }
+    const value=String(result);
+    editSeed(value);
+    setSeedNotice({value,text:'已抽取种子，世界尚未更换。'});
+  };
+  const copySeed=async()=>{
+    if(blocked||seed===undefined||!authority(context))return;
+    const job=++seedWork.current;
+    let clipboard:Clipboard|undefined;
+    try {clipboard=globalThis.navigator?.clipboard;}catch{/* use manual copying below */}
+    const copied=await copyWorldSeed(seed,clipboard);
+    if(job!==seedWork.current||!authority(context))return;
+    if(!copied)seedField.current?.select();
+    setSeedNotice({value:seedInput,text:copied?'已复制种子。':'未能直接复制，可长按或手动复制种子。'});
+  };
   const stage = (action: Confirmation) => {
     if (authority(context)) setStaged({ action, stamp: context, store });
   };
@@ -652,9 +681,15 @@ export function WorldStoragePanel({ world, busy, readOnly = false, eraBlocked = 
           if (!blocked && staged) stage(staged);
         }}>
           <label className="grid min-w-0 gap-1 text-xs text-slate-300">世界种子（0 至 4294967295）
-            <input type="text" inputMode="numeric" className={field} value={seedInput}
-              onChange={(event) => setSeedText(event.currentTarget.value)} />
+            <input ref={seedField} type="text" inputMode="numeric" className={field} value={seedInput}
+              onChange={(event) => editSeed(event.currentTarget.value)} />
           </label>
+          <div className="flex min-w-0 flex-wrap gap-1.5">
+            <button type="button" className={`${button} min-h-11`} onClick={randomSeed}>随机抽种</button>
+            <button type="button" className={`${button} min-h-11`} disabled={seed===undefined} onClick={()=>void copySeed()}>复制种子</button>
+          </div>
+          {seedNotice?.value===seedInput&&<p role="status" className="break-words text-xs text-sky-200">{seedNotice.text}</p>}
+          <p className="break-words text-xs text-slate-400">同一规则、种子、谱系和干预可重演离线推演；现场模型回复不作相同保证。</p>
           <label className="grid min-w-0 gap-1 text-xs text-slate-300">世界生成谱系
             <select className={`${field} min-h-11 w-full`} value={profileId} onChange={(event) => {
               if (isWorldgenProfileId(event.currentTarget.value)) setProfileDraft(event.currentTarget.value);
