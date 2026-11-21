@@ -1,3 +1,4 @@
+import { grantExpeditionRelic } from './relicEngine';
 import type { Cultivator, LLMDecisionPayload, WorldEvent, WorldOccasion, WorldState } from '../types/world';
 import { artifactPowerMultiplier, wearArtifact } from './artifactEngine';
 import { activeSiegeForActor } from './diplomacyEngine';
@@ -167,7 +168,12 @@ export function advanceOccasions(world: WorldState, rng: () => number): WorldEve
     }
     recordMemory(explorer, world.tick, description, outcome === 'escaped' ? 5 : 9, 'heavenly', outcome === 'loot' ? 5 : -3);
     occasion.expeditions.push({ cultivatorId: explorer.id, tick: world.tick, outcome, description });
-    results.push(event(world, occasion, `expedition-${explorer.id}`, '秘境传来消息', description, [explorer.id], outcome === 'death' ? 'death' : 'heavenly'));
+    const report = event(world, occasion, `expedition-${explorer.id}`, '秘境传来消息', description, [explorer.id], outcome === 'death' ? 'death' : 'heavenly');
+    results.push(report);
+    if (outcome === 'loot') {
+      const relic = grantExpeditionRelic(world, occasion, explorer, report);
+      if (relic) results.push(relic);
+    }
     if (!occasion.remainingIds.length) results.push(finish(world, occasion));
   }
   return results;

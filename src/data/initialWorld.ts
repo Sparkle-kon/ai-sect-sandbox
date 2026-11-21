@@ -1,3 +1,4 @@
+import { createRelicState } from '../engine/relicEngine';
 import { createReincarnationState } from '../engine/reincarnationEngine';
 import { createRelocationState } from '../engine/relocationEngine';
 import { initializeWorldProfile } from '../engine/worldgenEngine';
@@ -232,6 +233,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     doctrines: createDoctrineState(),
     relocations: createRelocationState(),
     reincarnation: createReincarnationState(),
+    relics: createRelicState(locations, seed),
     witnesses: createWitnessState(),
     estates: createEstateState(),
     decisionTrace: createDecisionTraceState(),

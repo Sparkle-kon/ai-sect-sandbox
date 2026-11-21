@@ -1,3 +1,4 @@
+import { createRelicState } from './relicEngine';
 import { createReincarnationState, MORTAL_MATURITY_TICKS } from './reincarnationEngine';
 import { createRelocationState } from './relocationEngine';
 import { isWorldgenProfileId } from './worldgenProfiles';
@@ -66,13 +67,14 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const marketQty = num(1,12,true), marketPrice = num(1,500,true);
 const pills = structure({foundation:count,golden:count,barrier:count,heart_poison:count});
 const technique = structure({id:oid,authorId:oid,createdTick:otick,name:id,spiritRoot:spirit});
-const artifact = structure({id:oid,tier:optional(one('法器','灵器','法宝','通天灵宝')),durability:optional(wealth),maxDurability:optional(wealth),boundTo:oid,
+const relicSet = one('star-balance');
+const artifact = structure({relicSetId:optional(relicSet),relicFragmentIds:optional(arr(2,id)),id:oid,tier:optional(one('法器','灵器','法宝','通天灵宝')),durability:optional(wealth),maxDurability:optional(wealth),boundTo:oid,
   soul:optional(structure({name:id,experience:percentage})),resonance:optional(percentage),name:id,spiritRoot:spirit});
 const eligibility = { actorId:id,basis:one('nomination','bond','sect'),strength:num(0,10_000) };
 const memory = structure({id,tick,content:text,importance:num(1,10),emotionalValence:num(-5,5),decayRate:num(0,10),
@@ -160,6 +162,9 @@ const shape = structure({
       attestations:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,tick,verdict:one('supports','contradicts')})),
       appeal:optional(structure({tick,actorId:id,verdict:one('upheld','rejected'),reason:text})),settledTick:otick,
       reputationSectId:oid,reputationPenalty:percentage,reputationRestored:percentage,reason:otext}))}),
+  relics:structure({fragments:arr(SAVE_COLLECTION_LIMIT,structure({id,setId:relicSet,slot:one('frame','core'),
+    source:structure({kind:one('wild_cache','expedition'),locationId:id,tick,eventId:oid,occasionId:oid}),
+    holder:structure({kind:one('site','actor','estate','consumed'),id})}))}),
   reincarnation:structure({
     cases:arr(SAVE_COLLECTION_LIMIT,structure({id,deceasedId:id,deathEventId:id,deathTick:tick,expiresTick:tick,
       status:one('awaiting_birth','reserved','volunteer','recruited','expired'),settlementId:oid,birthTick:otick,
@@ -235,6 +240,7 @@ function verifyWorld(value: unknown): WorldState {
     ? { ...value,
       ...(!Object.hasOwn(value, 'mentorship') ? { mentorship: { offers: [], lineage: [], budgets: [] } } : {}),
       ...(!Object.hasOwn(value, 'decisionTrace') ? { decisionTrace: { records: [] } } : {}),
+      ...(!Object.hasOwn(value, 'relics') ? { relics: { fragments: [] } } : {}),
       ...(!Object.hasOwn(value, 'reincarnation') ? { reincarnation: createReincarnationState() } : {}),
       ...(!Object.hasOwn(value, 'relocations') ? { relocations: createRelocationState() } : {}),
       ...(!Object.hasOwn(value, 'doctrines') ? { doctrines: createDoctrineState() } : {}),
@@ -249,6 +255,9 @@ function verifyWorld(value: unknown): WorldState {
   if (!w.cultivators.length || !w.locations.length) fail('world.minimum_entities');
   if (value !== null && typeof value === 'object' && !Object.hasOwn(value, 'settlements')) {
     w.settlements = createSettlementState(w.locations, w.random.seed);
+  }
+  if (value !== null && typeof value === 'object' && !Object.hasOwn(value, 'relics')) {
+    w.relics = createRelicState(w.locations, w.random.seed);
   }
   const actor = unique(w.cultivators, (item) => item.id, 'cultivators.id');
   const sector = unique(w.sects, (item) => item.id, 'sects.id');
@@ -365,6 +374,39 @@ function verifyWorld(value: unknown): WorldState {
   for (const row of w.relocations.abandonedSites) {
     if (!sector.has(row.sectId) || !locations.has(row.originId) || !locations.has(row.destinationId) ||
         row.originId === row.destinationId || row.tick > w.tick || row.arrayHp > row.arrayMaxHp) fail('relocations.abandonedSites.references');
+  }
+  const fragmentById = new Map(w.relics.fragments.map((fragment) => [fragment.id, fragment]));
+  unique(w.relics.fragments, ({ id }) => id, 'relics.fragments.id');
+  const estateIds = new Set(w.estates.entries.map(({ id }) => id));
+  const relicArtifacts = new Set<string>();
+  const usedFragments = new Set<string>();
+  for (const item of [...w.cultivators.flatMap((person) => person.artifacts),
+      ...w.estates.entries.flatMap((estate) => estate.holdings.artifacts)]) {
+    if (item.relicSetId === undefined && item.relicFragmentIds === undefined) continue;
+    const [frame, core] = item.relicFragmentIds ?? [];
+    if (!item.relicSetId || !item.id || !frame || !core || frame === core || relicArtifacts.has(item.id) ||
+        usedFragments.has(frame) || usedFragments.has(core)) return fail('relics.artifact.references');
+    for (const [fragmentId, slot] of [[frame, 'frame'], [core, 'core']] as const) {
+      const fragment = fragmentById.get(fragmentId);
+      if (!fragment || fragment.slot !== slot || fragment.setId !== item.relicSetId ||
+          fragment.holder.kind !== 'consumed' || fragment.holder.id !== item.id) fail('relics.artifact.parts');
+      usedFragments.add(fragmentId);
+    }
+    relicArtifacts.add(item.id);
+  }
+  const expeditionProofs = new Set<string>();
+  for (const fragment of w.relics.fragments) {
+    const { source, holder } = fragment;
+    if (source.tick > w.tick ||
+        (source.kind === 'wild_cache' && (!locations.has(source.locationId) || source.eventId !== undefined || source.occasionId !== undefined)) ||
+        (holder.kind === 'site' && !locations.has(holder.id)) ||
+        (holder.kind === 'actor' && !actor.has(holder.id)) ||
+        (holder.kind === 'estate' && !estateIds.has(holder.id)) ||
+        (holder.kind === 'consumed' && (!relicArtifacts.has(holder.id) || !usedFragments.has(fragment.id)))) fail('relics.fragments.references');
+    if (source.kind === 'expedition') {
+      if (!source.eventId || !source.occasionId || expeditionProofs.has(source.eventId)) return fail('relics.fragments.provenance');
+      expeditionProofs.add(source.eventId);
+    }
   }
   const doctrineSchoolById = new Map(w.doctrines.schools.map((school) => [school.id, school]));
   unique(w.doctrines.schools, ({ id }) => id, 'doctrines.schools.id');

@@ -19,7 +19,6 @@ import { WorldOccasionsPanel } from './components/WorldOccasionsPanel';
 import { WorldMapCanvas } from './components/WorldMapCanvas';
 import { AgentInspector } from './components/AgentInspector';
 import { BountyBoard } from './components/BountyBoard';
-import { SectCouncilModal } from './components/SectCouncilModal';
 import { llmScheduler } from './engine/llmScheduler';
 import { settleChronicleOnline } from './engine/chronicleRuntime';
 import { availableCouncilPlans } from './engine/councilEngine';
@@ -53,6 +52,7 @@ const DecisionTracePanel = React.lazy(async () => ({ default: (await import('./c
 const PossessionPanel = React.lazy(async () => ({ default: (await import('./components/PossessionPanel')).PossessionPanel }));
 const EstateMemorialPanel = React.lazy(async () => ({ default: (await import('./components/EstateMemorialPanel')).EstateMemorialPanel }));
 const WorldStoragePanel = React.lazy(async () => ({ default: (await import('./components/WorldStoragePanel')).WorldStoragePanel }));
+const SectCouncilModal = React.lazy(async () => ({ default: (await import('./components/SectCouncilModal')).SectCouncilModal }));
 const AnalyticsModal = React.lazy(async () => ({ default: (await import('./components/AnalyticsModal')).AnalyticsModal }));
 
 interface AppProps { initialWorkspace?: WorkspaceId; initialSection?: string }
@@ -100,6 +100,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
   const [isStepping, setIsStepping] = useState(false);
   const stepInFlight = useRef(false);
   const [councilOpen, setCouncilOpen] = useState(false);
+  const [councilOpenedBefore, setCouncilOpenedBefore] = useState(false);
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
   const [avatarNotice, setAvatarNotice] = useState<string>();
   const [lastManualCouncilId, setLastManualCouncilId] = useState<string>();
@@ -436,7 +437,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
           { id: 'relocation', label: '山门迁移与旧址', content: <React.Suspense fallback={<p role="status">载入迁移记录…</p>}>
             <SectRelocationPanel world={visibleWorld} cultivator={selectedCultivator} />
           </React.Suspense> },
-          ...(preview ? [] : [{ id: 'council', label: '长老议事厅', content: <button type="button" disabled={isStepping} onClick={() => setCouncilOpen(true)}
+          ...(preview ? [] : [{ id: 'council', label: '长老议事厅', content: <button type="button" disabled={isStepping} onClick={() => { setCouncilOpenedBefore(true); setCouncilOpen(true); }}
             className={`${action} bg-violet-900/60 text-violet-100 hover:bg-violet-800`}>打开长老议事厅</button> }]),
         ]} />,
         world: <WorkspaceSections label="世界与设置" initialOpen={opened('world')} sections={[
@@ -474,7 +475,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
       {analyticsOpen && <React.Suspense fallback={<span role="status">载入天道观测…</span>}>
         <AnalyticsModal world={visibleWorld} history={visibleHistory} open onClose={() => setAnalyticsOpen(false)} />
       </React.Suspense>}
-      <SectCouncilModal
+      {councilOpenedBefore && <React.Suspense fallback={<span role="status">载入议事厅…</span>}><SectCouncilModal
         world={world}
         open={councilOpen && !preview}
         busy={isStepping}
@@ -482,7 +483,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
         onConvene={(plan) => void handleConveneCouncil(plan)}
         notice={!isStepping && lastManualCouncilId && !world.councils.some((record) => record.id === lastManualCouncilId)
           ? '世界已发生变化，本次议事未结算。' : undefined}
-      />
+      /></React.Suspense>}
     </div>
   );
 };

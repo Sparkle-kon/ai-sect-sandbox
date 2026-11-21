@@ -1,3 +1,4 @@
+import { reconcileRelicCustody } from './relicEngine';
 import { recordNewDeathsForReincarnation } from './reincarnationRuntime';
 import { activeRelocationForActor } from './relocationEngine';
 import { advanceEstates } from './estateEngine';
@@ -112,6 +113,7 @@ export function applyMapBrush(prev: WorldState, kind: GodBrushKind, points: MapP
     });
   }
   brushEvents.push(...advanceEstates(world));
+  reconcileRelicCustody(world);
   recordNewDeathsForReincarnation(prev, world, brushEvents);
   archiveChronicleEvents(world, brushEvents);
   world.events = [...brushEvents, ...world.events].slice(0, 120);

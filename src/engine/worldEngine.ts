@@ -1,3 +1,4 @@
+import { reconcileRelicCustody, resolveRelicAction, transferLootedRelics } from './relicEngine';
 import { advanceReincarnation, resolveRecollectionAction } from './reincarnationEngine';
 import { recordNewDeathsForReincarnation } from './reincarnationRuntime';
 import { activeRelocationForActor, advanceRelocations, resolveRelocationAction } from './relocationEngine';
@@ -181,6 +182,8 @@ export function applyCultivatorBrainDecision(
     case 'ATTEST_WITNESS':
     case 'CHALLENGE_WITNESS':
       return resolveWitnessAction(world, cultivator, decision);
+    case 'RELIC':
+      return resolveRelicAction(world, cultivator, decision);
     case 'RECOLLECT':
       return resolveRecollectionAction(world, cultivator, decision);
     case 'RELOCATE':
@@ -506,7 +509,7 @@ export function applyCultivatorBrainDecision(
           10,
           'combat', 4
         );
-        return {
+        const lethalEvent: WorldEvent = {
           id: `evt-${world.tick}-${cultivator.id}-kill`,
           tick: world.tick,
           year: world.year,
@@ -520,6 +523,9 @@ export function applyCultivatorBrainDecision(
           dialogue: scriptedDialogue('combat', cultivator, defender, `${winner.name}胜出，${loser.name}当场陨落。`, decision.spokenLine),
           locationId: cultivator.locationId,
         };
+        const fragments = transferLootedRelics(world, winner, loser, lethalEvent);
+        if (fragments) lethalEvent.description += `另有${fragments}枚古器碎片循实账随战利品转移。`;
+        return lethalEvent;
       }
 
       recordMemory(
@@ -696,6 +702,7 @@ export function advanceWorldTick(
   for (const actor of nextState.cultivators) if (actor.alive) noteTerrainVisit(nextState, actor);
   maintainPlayerAvatar(nextState);
   spreadRumors(nextState);
+  reconcileRelicCustody(nextState);
   advanceReincarnation(nextState);
   recordNewDeathsForReincarnation(prevState, nextState, newEvents);
   archiveChronicleEvents(nextState, newEvents);
@@ -852,6 +859,7 @@ export function executeGodIntervention(
   if (head && head.id !== prevState.events[0]?.id) {
     witnessEvent(nextState, head);
     recordNewDeathsForReincarnation(prevState, nextState, [head]);
+    if (head.category === 'death') reconcileRelicCustody(nextState);
     archiveChronicleEvents(nextState, [head]);
     nextState.events = nextState.events.slice(0, 120);
     nextState.mapPresentation = deriveMapPresentation(prevState, nextState, [head]);

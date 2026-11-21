@@ -21,6 +21,8 @@ export interface Artifact {
   boundTo?: string;
   soul?: { name: string; experience: number };
   resonance?: number;
+  relicSetId?: RelicSetId;
+  relicFragmentIds?: [string, string];
   name: string;
   spiritRoot: SpiritRoot;
 }
@@ -78,6 +80,7 @@ export type ActionType =
   | 'DOCTRINE'
   | 'RELOCATE'
   | 'RECOLLECT'
+  | 'RELIC'
   | 'GATHER_HERBS'
   | 'BREW_PILL'
   | 'USE_PILL'
@@ -359,6 +362,9 @@ export interface LLMDecisionPayload {
   relocationMove?: RelocationMove;
   targetRelocationId?: string;
   recollectionMove?: RecollectionMove;
+  relicMove?: RelicMove;
+  targetRelicFragmentId?: string;
+  targetRelicSetId?: RelicSetId;
   targetTechniqueId?: string;
   targetHerbId?: HerbId;
   targetPillId?: PillId;
@@ -1027,7 +1033,28 @@ export interface ReincarnationState {
   echoes: RecollectionEcho[];
 }
 
+export type RelicSetId = 'star-balance';
+export type RelicSlot = 'frame' | 'core';
+export type RelicMove = 'recover' | 'assemble';
+export interface RelicFragment {
+  readonly id: string;
+  readonly setId: RelicSetId;
+  readonly slot: RelicSlot;
+  readonly source: Readonly<{
+    kind: 'wild_cache' | 'expedition';
+    locationId: string;
+    tick: number;
+    eventId?: string;
+    occasionId?: string;
+  }>;
+  holder: { kind: 'site' | 'actor' | 'estate' | 'consumed'; id: string };
+}
+export interface RelicState {
+  fragments: RelicFragment[];
+}
+
 export interface WorldState {
+  relics: RelicState;
   reincarnation: ReincarnationState;
   relocations: RelocationState;
   worldgen?: WorldGeneration;

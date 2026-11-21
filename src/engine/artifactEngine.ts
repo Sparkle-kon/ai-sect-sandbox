@@ -48,9 +48,21 @@ export function equippedArtifact(actor: Cultivator): Artifact | undefined {
     usable.reduce<Artifact | undefined>((best, item) => !best || power(item, actor) > power(best, actor) ? item : best, undefined);
 }
 
+export const RELIC_RESONANCE_BONUS = .12;
+function equippedSetBonus(actor: Cultivator, artifact: Artifact | undefined): number {
+  const pieces = artifact?.relicFragmentIds;
+  return artifact?.relicSetId === 'star-balance' && artifact.boundTo === actor.id && pieces?.length === 2 &&
+    Boolean(pieces[0] && pieces[1] && pieces[0] !== pieces[1]) ? RELIC_RESONANCE_BONUS : 0;
+}
+
+export function activeRelicResonance(actor: Cultivator): number {
+  if (!actor.alive || actor.hp <= 0) return 0;
+  return equippedSetBonus(actor, equippedArtifact(actor));
+}
+
 export function artifactPowerMultiplier(actor: Cultivator): number {
   const artifact = equippedArtifact(actor);
-  return artifact ? 1 + power(artifact, actor) : 1;
+  return artifact ? 1 + power(artifact, actor) + (actor.alive && actor.hp > 0 ? equippedSetBonus(actor, artifact) : 0) : 1;
 }
 
 export function wearArtifact(actor: Cultivator, won: boolean): void {

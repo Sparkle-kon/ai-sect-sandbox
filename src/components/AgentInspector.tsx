@@ -9,6 +9,7 @@ import { SchemePanel } from './SchemePanel';
 import { SpiritRootBadge } from './SpiritRootBadge';
 import { TechniquePanel } from './TechniquePanel';
 import { AlchemyPanel } from './AlchemyPanel';
+import { heldRelicFragments } from '../engine/relicEngine';
 import { ArtifactPanel } from './ArtifactPanel';
 import { TribulationPanel } from './TribulationPanel';
 import { SectHierarchyPanel } from './SectHierarchyPanel';
@@ -17,6 +18,8 @@ import { SectDiplomacyPanel } from './SectDiplomacyPanel';
 import { WorldOccasionsPanel } from './WorldOccasionsPanel';
 import { BOUNTY_STATUS, relevantBounty } from './BountyBoard';
 import { SpiritBeastPanel } from './SpiritBeastPanel';
+
+const RelicSetPanel = React.lazy(async () => ({ default: (await import('./RelicSetPanel')).RelicSetPanel }));
 
 interface AgentInspectorProps {
   world: WorldState;
@@ -45,6 +48,8 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
   const cultivation = !workspaceSection || workspaceSection === 'cultivation';
   const mind = !workspaceSection || workspaceSection === 'mind';
   const sectDetails = !workspaceSection || workspaceSection === 'sect';
+  const showsRelic = cultivation && (cultivator.artifacts.some(({ relicSetId }) => relicSetId !== undefined) ||
+    !!world.relics && heldRelicFragments(world, cultivator.id).length > 0);
 
   return (
     <div className="min-w-0 rounded-xl border border-slate-800 bg-slate-900/60 p-3.5 space-y-3.5 break-words">
@@ -188,6 +193,9 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
           </div>
         </div>
         <ArtifactPanel cultivator={cultivator} cultivators={world.cultivators} />
+        {showsRelic && <React.Suspense fallback={<p role="status" className="text-xs text-slate-400">载入套装记录…</p>}>
+          <RelicSetPanel world={world} actor={cultivator} />
+        </React.Suspense>}
       </section>}
 
       {profile && <p aria-label="业力与悬赏摘要" className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-400">
