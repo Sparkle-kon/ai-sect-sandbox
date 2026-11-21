@@ -39,7 +39,7 @@ export interface WorldStoragePanelProps {
   canUseContext?: (world: WorldState, version: number) => boolean;
   timeline?: WorldTimeline;
   onArchiveNarrative?: (plan: NarrativeArchivePlan, expected: WorldState, contextVersion: number, sourceBranch?: SaveBranchSource) => Promise<boolean>;
-  onRestore: (incoming: WorldState, expected: WorldState, contextVersion?: number) => boolean;
+  onRestore: (incoming: WorldState, expected: WorldState, contextVersion?: number, verifiedSource?: SaveBranchSource) => boolean;
   onNewWorld: (seed: number, profileId: WorldgenProfileId, expected: WorldState, contextVersion?: number) => boolean;
   store?: Storage;
 }
@@ -286,8 +286,11 @@ export function WorldStoragePanel({ world, busy, readOnly = false, sourceBranch,
         return;
       }
       let incoming: WorldState | undefined;
-      if (action.kind === 'restore') incoming = await store.loadSelected(action.info.selection);
-      else if (action.kind === 'import') incoming = action.world;
+      let verifiedSource: SaveBranchSource | undefined;
+      if (action.kind === 'restore') {
+        incoming = await store.loadSelected(action.info.selection);
+        verifiedSource = action.info.selection.sourceBranch;
+      } else if (action.kind === 'import') incoming = action.world;
       else if (action.kind === 'restore_compare') {
         setResumeReview(undefined);
         const candidate = action.review[action.side];
@@ -300,11 +303,13 @@ export function WorldStoragePanel({ world, busy, readOnly = false, sourceBranch,
           return;
         }
         incoming = compared.world;
+        verifiedSource = compared.selection.sourceBranch;
       }
       if (!authority(stamp)) { setStatus('世界或分支在读取期间变化，当前进度未覆盖。请重新核验。'); return; }
       const accepted = action.kind === 'new'
         ? onNewWorld(action.seed, action.profileId, stamp.world, stamp.version)
-        : incoming !== undefined && onRestore(incoming, stamp.world, stamp.version);
+        : incoming !== undefined && (verifiedSource ?
+          onRestore(incoming, stamp.world, stamp.version, verifiedSource) : onRestore(incoming, stamp.world, stamp.version));
       if (!accepted) {
         setStatus('当前世界已变化或正在推进，未覆盖。请暂停推演后重新核验。');
         return;

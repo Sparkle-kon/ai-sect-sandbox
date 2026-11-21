@@ -53,6 +53,7 @@ import { resolveAvatarSnapshot } from './engine/avatarRuntime';
 import { CHRONICLE_FOCUS_UNAVAILABLE, createChronicleFocusResolver } from './engine/chronicleFocusEngine';
 import type { ChronicleFocusRequest } from './engine/chronicleFocusEngine';
 import type { ChronicleCategoryFilter, ChronicleFeedPosition, ChronicleFeedReturn } from './components/ChronicleFeed';
+import type { ChronicleReadingContext } from './engine/chronicleReadingMark';
 import { FocusedSectSummary } from './components/FocusedSectSummary';
 import { visibleCausalChronicle } from './engine/chronicleCausalityEngine';
 import { commitFairModelTurn, createFairModelTurnState, longestModelWait } from './engine/fairModelTurnEngine';
@@ -170,6 +171,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
     modelStepAbort.current?.abort();
   }, []);
   const [saveTimelineId, setSaveTimelineId] = useState(saveTimelineIdentity);
+  const [restoredReadingOrigin, setRestoredReadingOrigin] = useState<{ world:WorldState; timelineId:string; branchId:string; restoredBranchId:string }>();
   const authority = useRef(world);
   const [timeline, setTimeline] = useState(() => createTimeline(world));
   const history = useRef(timeline);
@@ -451,13 +453,16 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
     !stepInFlight.current && !browsing.current && authority.current === expected &&
     (contextVersion === undefined || contextVersion === saveContextVersion.current);
 
-  const replaceWorld = (next: WorldState, expected: WorldState, expectedContextVersion?: number): boolean => {
+  const replaceWorld = (next: WorldState, expected: WorldState, expectedContextVersion?: number, verifiedSource?: SaveBranchSource): boolean => {
     if (!canUseSaveContext(expected, expectedContextVersion)) return false;
+    const nextTimeline = createTimeline(next);
+    setRestoredReadingOrigin(verifiedSource?.timelineId ?
+      {world:next,timelineId:verifiedSource.timelineId,branchId:verifiedSource.branchId,restoredBranchId:nextTimeline.activeBranchId} : undefined);
     replayTapes.current.clear();
     fairTurns.current.clear();
     setSaveTimelineId(saveTimelineIdentity());
     setViewEpoch((previous) => previous + 1);
-    activateTimeline(createTimeline(next), next);
+    activateTimeline(nextTimeline, next);
     return true;
   };
 
@@ -488,6 +493,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
     const next = createInitialWorld(active.random.seed, active.worldgen?.profileId ?? 'classic');
     replayTapes.current.clear();
     fairTurns.current.clear();
+    setRestoredReadingOrigin(undefined);
     // Emergency reset invalidates an in-flight model tick, which cannot commit afterward.
     setSaveTimelineId(saveTimelineIdentity());
     setViewEpoch((previous) => previous + 1);
@@ -660,6 +666,17 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
     setPersonalStoryChoice((previous) => previous && mayReadPersonal && previous.actorId === activeActorId &&
       previous.scope === viewScopeKey ? previous : undefined);
   }, [activeActorId,viewScopeKey,mayReadPersonal]);
+  const readingContext: ChronicleReadingContext | undefined = saveTimelineId ? {
+    world:visibleWorld,scope:{ timelineId:saveTimelineId,branchId:timeline.activeBranchId,viewerId:activeActorId,
+      previewTick:preview?.tick ?? null },
+  } : undefined;
+  const readingRevision = saveContextVersion.current;
+  // Only the freshly opened exact native saved frame may try its verified origin; new writes always use the new timeline.
+  const readingSaveOrigin: ChronicleReadingContext | undefined = restoredReadingOrigin && !preview &&
+    restoredReadingOrigin.restoredBranchId === timeline.activeBranchId && restoredReadingOrigin.world === visibleWorld ? {
+      world:visibleWorld,scope:{timelineId:restoredReadingOrigin.timelineId,branchId:restoredReadingOrigin.branchId,
+        viewerId:activeActorId,previewTick:null},
+    } : undefined;
   const selectedSettlementId = visibleWorld.settlements.villages.find((village) => village.locationId === selectedCultivator?.locationId)?.id;
   useEffect(() => {
     if (selectedCultivatorId !== activeActorId) setSelectedCultivatorId(activeActorId);
@@ -918,6 +935,10 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
               events={chronicleScenes} lead={chronicleLead} succession={succession} resolvePublicDialogue={publicDialogue?.event}
               category={chronicleFilter} onCategoryChange={setChronicleFilter} focusOptions={resolver?.build}
               causality={(eventId) => chronicleCauses?.get(eventId)}
+              reading={readingContext && !chronicleReturn ? {context:readingContext,saveOrigin:readingSaveOrigin,
+                scopeKey:`${viewScopeKey}:${activeActorId ?? ''}`,
+                isCurrent:() => saveContextVersion.current === readingRevision && history.current.activeBranchId === timeline.activeBranchId &&
+                  (preview ? browsing.current : !browsing.current && authority.current === world) } : undefined}
               onJump={followChronicle} returnPosition={chronicleReturn} onReturnHandled={clearChronicleReturn} focusNotice={focusNotice} />}
           </React.Suspense> },
           { id: 'library', label: '藏书阁与故事', content: <React.Suspense fallback={<p role="status">载入藏书阁…</p>}><ChronicleLibraryPanel world={visibleWorld} cultivator={selectedCultivator} scopeKey={viewScopeKey} /></React.Suspense> },
