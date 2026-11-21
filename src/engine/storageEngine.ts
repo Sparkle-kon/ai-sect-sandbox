@@ -26,6 +26,8 @@ import { validateVillageSupplyHistory } from './storageVillageSupplyValidation';
 import { createRouteWarningsState } from './routeWarningEngine';
 import { createPavilionLoansState } from './pavilionLoanEngine';
 import { validatePavilionLoanHistory } from './storagePavilionLoanValidation';
+import { effectiveWorkshopDeadline, effectiveWorkshopQuantity } from './workshopCapacityTerms';
+import { validateWorkshopCapacityClauses } from './storageWorkshopCapacityValidation';
 import { validateRouteWarningHistory } from './storageRouteWarningValidation';
 import { createVillageGranariesState, VILLAGE_GRANARY_CAPACITY, VILLAGE_GRANARY_RECEIPT_LIMIT } from './villageGranaryEngine';
 import { createCaravanRestitutionState } from './caravanRestitutionEngine';
@@ -134,7 +136,7 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT SALVAGE_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP FURNACE_RESERVATION FURNACE_SAFETY SPARRING EXPEDITION_RESCUE SHORT_SHIFT BOUNDARY_RELIEF APPRENTICE_COHORT HOUSEHOLD_NAME CARAVAN_RESTITUTION VILLAGE_GRANARY VILLAGE_SUPPLY ROUTE_WARNING PAVILION_LOAN RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY SEASON_REVIEW REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT SALVAGE_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP FURNACE_RESERVATION FURNACE_SAFETY SPARRING EXPEDITION_RESCUE SHORT_SHIFT BOUNDARY_RELIEF APPRENTICE_COHORT HOUSEHOLD_NAME CARAVAN_RESTITUTION VILLAGE_GRANARY VILLAGE_SUPPLY ROUTE_WARNING PAVILION_LOAN WORKSHOP_CAPACITY RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY SEASON_REVIEW REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const flowGood = one('stone','jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
@@ -381,6 +383,9 @@ const shape = structure({
       'recalled','host_closed','term_complete','host_breach')),custody:optional(artifact)
   }))}),
   workshops:structure({nextId:num(1,100_000_000,true),orders:arr(SAVE_COLLECTION_LIMIT,structure({
+    capacityOffer:optional(structure({caseId:id,damagedTick:tick,blankTick:tick,makerId:id,offeredTick:tick})),
+    capacityAmendment:optional(structure({acceptedTick:tick,patronId:id,releasedQuantity:one(1),keptQuantity:one(1),
+      workUntilTick:tick,releasedStones:count,releasedHerbs:count})),
     id,patronId:id,makerId:id,siteId:id,tier:one('法器','灵器'),quantity:one(1,2),qualityFloor:one('standard','fine'),
     status:one('offered','active','completed','cancelled','declined','expired'),
     offeredTick:tick,offerExpiresTick:tick,acceptedTick:otick,deadlineTick:otick,settledTick:otick,
@@ -1130,23 +1135,26 @@ function verifyWorld(value: unknown): WorldState {
     const settled = order.settledTick;
     const live = order.status === 'offered' || order.status === 'active';
     const terms = workshopTerms(order.tier, order.quantity);
+    const effectiveQuantity = effectiveWorkshopQuantity(order);
+    const effectiveDeadline = effectiveWorkshopDeadline(order);
     if (!Number.isSafeInteger(serial) || serial >= w.workshops.nextId || order.patronId === order.makerId ||
         !actor.has(order.patronId) || !actor.has(order.makerId) || (live && !locations.has(order.siteId)) ||
         order.offeredTick > w.tick || order.offerExpiresTick !== order.offeredTick + WORKSHOP_OFFER_TICKS ||
         (live && (settled !== undefined || order.closeReason !== undefined)) ||
         (!live && (settled === undefined || settled < (accepted ?? order.offeredTick) || settled > w.tick)) ||
-        (order.status === 'completed' && (order.closeReason !== undefined || order.work.length !== order.quantity * 2)) ||
+        (order.status === 'completed' && (order.closeReason !== undefined || order.work.length !== effectiveQuantity * 2)) ||
         (order.status === 'declined' && (order.closeReason !== undefined || (settled ?? 0) >= order.offerExpiresTick)) ||
         (order.status === 'cancelled' && (order.closeReason === undefined || order.closeReason === 'offer_expired' || order.closeReason === 'work_expired')) ||
         (order.status === 'expired' && (accepted === undefined ?
           order.closeReason !== 'offer_expired' || (settled ?? 0) < order.offerExpiresTick :
-          order.closeReason !== 'work_expired' || (settled ?? 0) < (order.deadlineTick ?? Infinity))) ||
-        (order.status === 'active' && (accepted === undefined || order.work.length >= order.quantity * 2)) ||
+          order.closeReason !== 'work_expired' || (settled ?? 0) < (effectiveDeadline ?? Infinity))) ||
+        (order.status === 'active' && (accepted === undefined || order.work.length >= effectiveQuantity * 2)) ||
         ((order.status === 'offered' || order.status === 'declined') && accepted !== undefined) ||
         (accepted === undefined && (order.deadlineTick !== undefined || order.work.length !== 0 || order.status === 'completed')) ||
         (accepted !== undefined && (accepted < order.offeredTick || accepted >= order.offerExpiresTick || accepted > w.tick ||
           order.deadlineTick !== accepted + WORKSHOP_ACTIVE_TICKS)) ||
-        (live && (order.refundedStones !== 0 || order.refundedHerbs !== 0)) ||
+        (live && (order.refundedStones !== (order.capacityAmendment?.releasedStones ?? 0) ||
+          order.refundedHerbs !== (order.capacityAmendment?.releasedHerbs ?? 0))) ||
         (!live && (order.escrowStones !== 0 || order.escrowHerbs !== 0))) fail('workshops.orders.references');
     let usedStones = 0;
     let usedHerbs = 0;
@@ -1156,8 +1164,8 @@ function verifyWorld(value: unknown): WorldState {
       const piece = Math.floor(index / 2) + 1;
       const workKey = JSON.stringify([receipt.makerId, receipt.tick]);
       if (receipt.makerId !== order.makerId || makerWorkTicks.has(workKey) ||
-          receipt.tick <= previousWorkTick || receipt.tick > w.tick || receipt.tick >= (order.deadlineTick ?? 0) ||
-          (settled !== undefined && receipt.tick > settled) || receipt.piece !== piece || piece > order.quantity ||
+          receipt.tick <= previousWorkTick || receipt.tick > w.tick || receipt.tick >= (effectiveDeadline ?? 0) ||
+          (settled !== undefined && receipt.tick > settled) || receipt.piece !== piece || piece > effectiveQuantity ||
           receipt.stage !== (blank ? 'blank' : 'finish') || receipt.herbsUsed !== 1 ||
           receipt.stonesUsed !== (blank ? terms.blankFuel : terms.finishFuel)) fail('workshops.work.sequence');
       makerWorkTicks.add(workKey);
@@ -1181,6 +1189,7 @@ function verifyWorld(value: unknown): WorldState {
         order.escrowHerbs + order.refundedHerbs + usedHerbs !== (accepted === undefined ? 0 : terms.totalHerbs))
       fail('workshops.orders.custody');
   }
+  validateWorkshopCapacityClauses(w,fail);
   validateWorkshopInstitutionHistory(w, actor, sector, locations, fail);
   const furnace = w.furnaceReservations;
   unique(furnace.reservations, ({ id }) => id, 'furnaceReservations.reservations.id');

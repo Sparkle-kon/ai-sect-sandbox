@@ -1,3 +1,4 @@
+import { effectiveWorkshopDeadline,effectiveWorkshopQuantity } from './workshopCapacityTerms';
 import type { Artifact, ArtifactSalvageState, Cultivator, LLMDecisionPayload, WorkshopArtifactOrigin, WorkshopOrder,
   WorldEvent, WorldState } from '../types/world';
 import { ARTIFACT_RULES } from './artifactEngine';
@@ -13,7 +14,8 @@ const acceptedFields=new Set(['action','chosenAction','innerMonologue','spokenLi
 const workshopTier=(tier:Artifact['tier']):tier is '法器'|'灵器' => tier==='法器' || tier==='灵器';
 
 function realOrigin(order:WorkshopOrder,id:string,piece:1|2,worldTick:number):WorkshopArtifactOrigin|undefined {
-  if(piece>order.quantity || order.acceptedTick===undefined || order.deadlineTick===undefined) return undefined;
+  const deadline=effectiveWorkshopDeadline(order);
+  if(piece>effectiveWorkshopQuantity(order) || order.acceptedTick===undefined || deadline===undefined) return undefined;
   const blank=order.work[(piece-1)*2], finish=order.work[(piece-1)*2+1];
   const terms=workshopTerms(order.tier,order.quantity);
   if(!blank || !finish || blank.stage!=='blank' || finish.stage!=='finish' || finish.artifactId!==id ||
@@ -22,7 +24,7 @@ function realOrigin(order:WorkshopOrder,id:string,piece:1|2,worldTick:number):Wo
     finish.stonesUsed!==terms.finishFuel || finish.feePaid!==terms.feePerPiece ||
     finish.qualityScore===undefined || workshopGradeForScore(finish.qualityScore)!==finish.quality ||
     (finish.quality!=='fine' && (finish.quality!=='standard' || order.qualityFloor!=='standard')) ||
-    order.acceptedTick>=blank.tick || blank.tick>=finish.tick || finish.tick>=order.deadlineTick || finish.tick>worldTick) return undefined;
+    order.acceptedTick>=blank.tick || blank.tick>=finish.tick || finish.tick>=deadline || finish.tick>worldTick) return undefined;
   return {orderId:order.id,piece,makerId:order.makerId,siteId:order.siteId,blankTick:blank.tick,finishedTick:finish.tick};
 }
 

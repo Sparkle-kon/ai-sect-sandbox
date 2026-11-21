@@ -16,7 +16,7 @@ const REASONS: Readonly<Record<string, string>> = {
   oath_funded: '天道契书托管', oath_paid: '契书价金支付', oath_refunded: '契书托管退款', oath_forfeited: '契书抵押罚没',
   oath_goods: '契书实物交付', commons_upkeep: '中立灵地共管维护', terrain_recovery: '地脉修复实耗',
   workshop_deposit: '委制备料入库', workshop_fuel: '工坊实耗炉钱', workshop_material: '工坊实耗材料',
-  workshop_wage: '合格成品工钱', workshop_refund: '工坊退还未用款料',
+  workshop_wage: '合格成品工钱', workshop_refund: '工坊退还未用款料', workshop_capacity_release: '容量变动后实退未开工一件备料',
   road_charter: '驿路开工实际支出', road_maintenance: '驿路修缮实耗', road_crossing: '实际启程通行费',
   observatory_instrument: '临时观象实付仪料',
   pilgrimage_camp_provision: '途中留宿实耗玄土根',

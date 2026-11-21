@@ -1,9 +1,11 @@
 import type {
-  CultivationRealm, Cultivator, LLMDecisionPayload, LocationNode, WorkshopCloseReason, WorkshopMove, WorkshopOrder,
+  CultivationRealm, Cultivator, LLMDecisionPayload, LocationNode, WorkshopCloseReason, WorkshopCapacityMove, WorkshopMove, WorkshopOrder,
   WorkshopInstitutionClosure, WorkshopOutputGrade, WorkshopQualityFloor, WorkshopState, WorkshopTier, WorkshopWorkReceipt, WorldEvent, WorldState,
 } from '../types/world';
 import { ARTIFACT_RULES } from './artifactEngine';
 import { canUseFurnace, claimFurnaceUse } from './furnaceReservationEngine';
+import { isFurnaceSafetyClosed } from './furnaceSafetyEngine';
+import { effectiveWorkshopDeadline,effectiveWorkshopQuantity,WORKSHOP_CAPACITY_RECOVERY_TICKS } from './workshopCapacityTerms';
 import { activeEscortForActor } from './escortEngine';
 import { pilgrimageCheckpoint } from './pilgrimageEngine';
 import { activeRelocationForActor } from './relocationEngine';
@@ -51,7 +53,7 @@ const participant = (actor: Cultivator, order: WorkshopOrder) => actor.id === or
 const person = (world: WorldState, id: string) => world.cultivators.find(actor => actor.id === id);
 const at = (world: WorldState, id: string) => world.locations.find(site => site.id === id);
 const active = (world: WorldState, order: WorkshopOrder) => order.status === 'active' &&
-  (order.acceptedTick ?? Infinity) <= world.tick && world.tick < (order.deadlineTick ?? 0);
+  (order.acceptedTick ?? Infinity) <= world.tick && world.tick < (effectiveWorkshopDeadline(order) ?? 0);
 const offered = (world: WorldState, order: WorkshopOrder) => order.status === 'offered' &&
   order.offeredTick <= world.tick && world.tick < order.offerExpiresTick;
 function institutionEpoch(world:WorldState,sectId:string,siteId:string,tick:number):NonNullable<WorkshopOrder['institution']> {
@@ -120,8 +122,8 @@ export function availableWorkshopActions(actor: Cultivator, world: WorldState, i
     if (active(world, order)) {
       result.push(choice('cancel', order.id));
       if (actor.id !== order.makerId || makerWorked || executionTick <= (order.acceptedTick ?? Infinity) ||
-          executionTick >= (order.deadlineTick ?? -Infinity) ||
-          !makerEligible(world, actor, site, order.tier) || !availableAt(world, patron, site) || order.work.length >= order.quantity * 2) continue;
+          executionTick >= (effectiveWorkshopDeadline(order) ?? -Infinity) ||
+          !makerEligible(world, actor, site, order.tier) || !availableAt(world, patron, site) || order.work.length >= effectiveWorkshopQuantity(order) * 2 || (order.capacityAmendment && order.work.length!==1)) continue;
       const finish = order.work.length % 2 === 1;
       const terms = workshopTerms(order.tier, order.quantity);
       if (order.escrowHerbs < 1 || order.escrowStones < (finish ? terms.finishFuel + terms.feePerPiece : terms.blankFuel)) continue;
@@ -160,18 +162,18 @@ function event(world: WorldState, order: WorkshopOrder, phase: string, title: st
 
 const visibility = (order: WorkshopOrder) => ({ kind: 'participants' as const, actorIds: [order.patronId, order.makerId] });
 
-function refund(world: WorldState, order: WorkshopOrder, patron: Cultivator) {
-  const { escrowStones, escrowHerbs } = order;
-  patron.spiritStones += escrowStones;
-  patron.herbs[WORKSHOP_HERB] += escrowHerbs;
-  const fields = { kind: 'transfer' as const, from: flowWorkshop(order.id), to: flowActor(order.patronId),
-    visibility: visibility(order), refId: order.id, reason: 'workshop_refund', mechanism: 'workshop' as const };
-  recordResourceFlow(world, { ...fields, good: 'stone', amount: escrowStones });
-  recordResourceFlow(world, { ...fields, good: WORKSHOP_HERB, amount: escrowHerbs });
-  order.refundedStones += escrowStones;
-  order.refundedHerbs += escrowHerbs;
-  order.escrowStones = 0;
-  order.escrowHerbs = 0;
+function refund(world:WorldState,order:WorkshopOrder,patron:Cultivator,stones=order.escrowStones,herbs=order.escrowHerbs,
+  reason:'workshop_refund'|'workshop_capacity_release'='workshop_refund'){
+  patron.spiritStones+=stones;
+  patron.herbs[WORKSHOP_HERB]+=herbs;
+  const fields={kind:'transfer' as const,from:flowWorkshop(order.id),to:flowActor(order.patronId),
+    visibility:visibility(order),refId:order.id,reason,mechanism:'workshop' as const};
+  recordResourceFlow(world,{...fields,good:'stone',amount:stones});
+  recordResourceFlow(world,{...fields,good:WORKSHOP_HERB,amount:herbs});
+  order.refundedStones+=stones;
+  order.refundedHerbs+=herbs;
+  order.escrowStones-=stones;
+  order.escrowHerbs-=herbs;
 }
 
 function settle(world: WorldState, order: WorkshopOrder, status: Exclude<WorkshopOrder['status'], 'active' | 'offered'>,
@@ -235,9 +237,11 @@ function work(world: WorldState, order: WorkshopOrder, maker: Cultivator, rng: (
     recordResourceFlow(world, { kind: 'transfer', good: 'stone', amount: terms.feePerPiece, from: flowWorkshop(order.id), to: flowActor(maker.id),
       mechanism: 'workshop', refId: order.id, reason: 'workshop_wage', visibility: visibility(order) });
   }
-  if (piece === order.quantity) settle(world, order, 'completed');
+  if (piece === effectiveWorkshopQuantity(order)) settle(world, order, 'completed');
   const outcome = row.artifactId ? `已实际交付，支付${row.feePaid}灵石工钱` : '未达契约门槛，无成品也无工钱';
-  const suffix = order.status === 'completed' ? `；结案实退${order.refundedStones}灵石、${order.refundedHerbs}份余料` : '';
+  const suffix=order.status==='completed' ?
+    (order.capacityAmendment?`；按补签完成保留工序，原承诺尚有一件已授权不再制作；累计实退${order.refundedStones}灵石、${order.refundedHerbs}份余料`:
+      `；结案实退${order.refundedStones}灵石、${order.refundedHerbs}份余料`):'';
   return event(world, order, `finish-${piece}`, row.artifactId ? '工坊验收交割' : '工坊验收未过',
     `第${piece}件实测${qualityScore}分（${qualityNames[quality]}），${outcome}${suffix}。`);
 }
@@ -287,6 +291,89 @@ export function resolveWorkshopAction(world: WorldState, actor: Cultivator, payl
   }
   settle(world, order, 'cancelled', actor.id === order.patronId ? 'patron_cancelled' : 'maker_cancelled');
   return event(world, order, 'cancel', '工坊委制中止', `只退实余${order.refundedStones}灵石、${order.refundedHerbs}份玄土根；已耗用料不退。`);
+}
+
+export interface WorkshopCapacityOption{
+  action:'WORKSHOP_CAPACITY';
+  workshopCapacityMove:WorkshopCapacityMove;
+  targetWorkshopId:string;
+}
+const exactCapacityFields=new Set(['action','chosenAction','innerMonologue','spokenLine','workshopCapacityMove','targetWorkshopId']);
+
+function stillThere(world:WorldState,actor:Cultivator|undefined,site:LocationNode|undefined,tick:number):actor is Cultivator{
+  if(!availableAt(world,actor,site))return false;
+  const id=actor.id;
+  return !world.couriers.dispatches.some(row=>row.courierId===id&&(row.acceptedTick===tick||row.lastAdvancedTick===tick||row.settledTick===tick))&&
+    !world.pilgrimages.journeys.some(row=>(row.organizerId===id||row.companionId===id)&&
+      (row.status==='active'&&(row.expiresTick??Infinity)>tick||row.lastMovedTick===tick||row.startedTick===tick||
+        row.camps?.some(camp=>camp.openedTick===tick||camp.closedTick===tick)))&&
+    !world.boundaryReliefs.cases.some(row=>row.incomingId===id&&(row.status==='travelling'||row.status==='returning'))&&
+    !world.sieges.some(row=>row.participantIds.includes(id)&&(row.status==='marching'||row.status==='sieging'))&&
+    !world.occasions.some(row=>row.participantIds.includes(id)&&(row.status==='registration'||row.status==='running')&&
+      !world.expeditionRescues.requests.some(rescue=>rescue.occasionId===row.id&&rescue.arrivedIds?.includes(id)));
+}
+
+function capacityLoss(world:WorldState,order:WorkshopOrder,tick:number){
+  if(order.institution||order.capacityAmendment||order.status!=='active'||order.quantity!==2||
+    order.work.length!==1||order.acceptedTick===undefined||order.deadlineTick===undefined||tick>=order.deadlineTick)return undefined;
+  const blank=order.work[0];
+  const terms=workshopTerms(order.tier,2);
+  if(blank.stage!=='blank'||blank.piece!==1||blank.makerId!==order.makerId||blank.tick<=order.acceptedTick||
+    blank.stonesUsed!==terms.blankFuel||blank.herbsUsed!==1||blank.artifactId!==undefined||
+    order.escrowStones!==terms.totalStones-blank.stonesUsed||order.escrowHerbs!==terms.totalHerbs-blank.herbsUsed||
+    order.refundedStones!==0||order.refundedHerbs!==0)return undefined;
+  const site=at(world,order.siteId);
+  const maker=person(world,order.makerId),patron=person(world,order.patronId);
+  if(!site||!site.furnaceGrade||!stillThere(world,maker,site,tick)||!stillThere(world,patron,site,tick)||
+    !isFurnaceSafetyClosed(world,site.id,tick))return undefined;
+  const damage=[...world.furnaceSafety.cases].reverse().find(row=>row.siteId===site.id&&row.damagedTick<=tick);
+  if(!damage||damage.damagedTick<=blank.tick)return undefined;
+  return {damage,blank,maker,patron,deadline:order.deadlineTick};
+}
+function refundFits(patron:Cultivator,stones:number,herbs:number){
+  return Number.isFinite(patron.spiritStones)&&patron.spiritStones>=0&&patron.spiritStones+stones<=1_000_000_000&&
+    Number.isSafeInteger(patron.herbs[WORKSHOP_HERB])&&patron.herbs[WORKSHOP_HERB]>=0&&patron.herbs[WORKSHOP_HERB]+herbs<=10_000;
+}
+
+/** Only the original payer and maker may renegotiate an actually funded and later changed capacity. */
+export function availableWorkshopCapacityActions(actor:Cultivator,world:WorldState,executionTick=world.tick):WorkshopCapacityOption[]{
+  if((executionTick!==world.tick&&executionTick!==world.tick+1)||!alive(actor)||!world.cultivators.includes(actor))return [];
+  const options:WorkshopCapacityOption[]=[];
+  for(const order of world.workshops.orders){
+    if(order.status!=='active'||!participant(actor,order))continue;
+    const activeCase=capacityLoss(world,order,executionTick);
+    if(!activeCase)continue;
+    const offer=order.capacityOffer;
+    const perPiece=workshopTerms(order.tier,1);
+    if(!refundFits(activeCase.patron,perPiece.totalStones,perPiece.totalHerbs))continue;
+    if(!offer&&actor===activeCase.maker&&executionTick+1<activeCase.deadline)options.push({
+      action:'WORKSHOP_CAPACITY',workshopCapacityMove:'offer',targetWorkshopId:order.id});
+    if(offer&&actor===activeCase.patron&&offer.offeredTick<executionTick&&offer.caseId===activeCase.damage.id&&
+      offer.makerId===activeCase.maker.id&&offer.damagedTick===activeCase.damage.damagedTick&&offer.blankTick===activeCase.blank.tick)
+      options.push({action:'WORKSHOP_CAPACITY',workshopCapacityMove:'accept',targetWorkshopId:order.id});
+  }
+  return options;
+}
+
+export function resolveWorkshopCapacityAction(world:WorldState,actor:Cultivator,decision:LLMDecisionPayload):WorldEvent|null{
+  if(decision.chosenAction!=='WORKSHOP_CAPACITY'||Object.entries(decision).some(([key,value])=>value!==undefined&&
+    (!exactCapacityFields.has(key)||key==='action'&&value!=='WORKSHOP_CAPACITY')))return null;
+  const option=availableWorkshopCapacityActions(actor,world).find(row=>row.workshopCapacityMove===decision.workshopCapacityMove&&
+    row.targetWorkshopId===decision.targetWorkshopId);
+  if(!option)return null;
+  const order=world.workshops.orders.find(row=>row.id===option.targetWorkshopId)!;
+  const current=capacityLoss(world,order,world.tick);
+  if(!current)return null;
+  if(option.workshopCapacityMove==='offer'){
+    order.capacityOffer={caseId:current.damage.id,damagedTick:current.damage.damagedTick,blankTick:current.blank.tick,
+      makerId:actor.id,offeredTick:world.tick};
+    return event(world,order,'capacity-offer','炉位实损后提议减做一件','尚未改动实存托管、原约件数或原截止日。');
+  }
+  const {totalStones,totalHerbs}=workshopTerms(order.tier,1);
+  order.capacityAmendment={acceptedTick:world.tick,patronId:actor.id,keptQuantity:1,releasedQuantity:1,
+    workUntilTick:current.deadline+WORKSHOP_CAPACITY_RECOVERY_TICKS,releasedStones:totalStones,releasedHerbs:totalHerbs};
+  refund(world,order,current.patron,totalStones,totalHerbs,'workshop_capacity_release');
+  return event(world,order,'capacity-accepted','双签释放未动工的一件',`退回第二件实托${totalStones}灵石及${totalHerbs}份玄土根；首坯留存，原约与补签截止日分别记账。`);
 }
 
 /** Shutter one actual old charter, never a nearby or successor workshop and never an expired obligation. */
@@ -354,7 +441,7 @@ export function advanceWorkshops(world: WorldState): WorldEvent[] {
     const reason: WorkshopCloseReason | undefined = !alive(patron) ? 'patron_unavailable' : !alive(maker) ? 'maker_unavailable' :
       !at(world, order.siteId) ? 'site_unavailable' :
       order.status === 'offered' && world.tick >= order.offerExpiresTick ? 'offer_expired' :
-      order.status === 'active' && world.tick >= (order.deadlineTick ?? Infinity) ? 'work_expired' : undefined;
+      order.status === 'active' && world.tick >= (effectiveWorkshopDeadline(order) ?? Infinity) ? 'work_expired' : undefined;
     if (!reason) continue; // Temporary absence/furnace downgrade leaves the agreement paused until a real deadline.
     const timedOut = reason === 'offer_expired' || reason === 'work_expired';
     if (settle(world, order, timedOut ? 'expired' : 'cancelled', reason)) {
@@ -362,11 +449,11 @@ export function advanceWorkshops(world: WorldState): WorldEvent[] {
         `已核实并退回实余${order.refundedStones}灵石、${order.refundedHerbs}份玄土根；已付工钱及已耗投入不重复结算。`));
     }
   }
-  const terminal = world.workshops.orders.filter(order => order.settledTick !== undefined)
+  const terminal = world.workshops.orders.filter(order => order.settledTick !== undefined && !order.capacityAmendment)
     .sort((a, b) => (b.settledTick! - a.settledTick!) || Number(b.id.slice(11)) - Number(a.id.slice(11)))
     .slice(0, WORKSHOP_TERMINAL_LIMIT);
   const retain = new Set(terminal.map(({ id }) => id));
-  world.workshops.orders = world.workshops.orders.filter(order => order.settledTick === undefined || retain.has(order.id));
+  world.workshops.orders = world.workshops.orders.filter(order => order.settledTick === undefined || !!order.capacityAmendment || retain.has(order.id));
   return events;
 }
 

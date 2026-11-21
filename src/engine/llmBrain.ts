@@ -11,7 +11,7 @@ import { availableVillageCensusActions } from './villageCensusEngine';
 import { availableRoadActions } from './roadEngine';
 import { availableProbationActions, probationReliefTargets } from './probationEngine';
 import { availableRelicExhibitActions } from './relicExhibitEngine';
-import { availableWorkshopActions } from './workshopEngine';
+import { availableWorkshopActions, availableWorkshopCapacityActions } from './workshopEngine';
 import { availableSparringActions, sparringLocksActor, SPARRING_QI_COST } from './sparringEngine';
 import { availableExpeditionRescueActions, EXPEDITION_RESCUE_DISTRESS_HP } from './expeditionRescueEngine';
 import { availableFurnaceReservationActions, heldFurnaceReservation } from './furnaceReservationEngine';
@@ -422,10 +422,23 @@ export function computeHeuristicDecision(
     }
   }
   const mayCommission = world.tick >= 28 && (world.tick + cultivator.id.charCodeAt(cultivator.id.length - 1)) % 13 === 6;
-  if (mayCommission || workshopState.some((order) => (order.status === 'offered' || order.status === 'active') && order.makerId === cultivator.id)) {
+  const hasCapacityCommitment = workshopState.some((order) => order.status === 'active' && order.quantity === 2 &&
+    order.work.length === 1 && (order.makerId === cultivator.id || order.patronId === cultivator.id) && order.siteId === cultivator.locationId);
+  if (mayCommission || hasCapacityCommitment ||
+      workshopState.some((order) => (order.status === 'offered' || order.status === 'active') && order.makerId === cultivator.id)) {
     const orders = availableWorkshopActions(cultivator, world, mayCommission);
-    const work = orders.find(({ workshopMove }) => workshopMove === 'work') ??
-      orders.find(({ workshopMove }) => workshopMove === 'accept') ??
+    const dueWork = orders.find(({ workshopMove }) => workshopMove === 'work');
+    if (!dueWork && hasCapacityCommitment && cultivator.hp >= cultivator.maxHp * .65) {
+      const changes = availableWorkshopCapacityActions(cultivator, world);
+      const consent = changes.filter(({ workshopCapacityMove }) => workshopCapacityMove === 'accept');
+      const offers = changes.filter(({ workshopCapacityMove }) => workshopCapacityMove === 'offer');
+      const choice = consent.length === 1 ? consent[0] : consent.length === 0 && offers.length === 1 ? offers[0] : undefined;
+      if (choice) return { chosenAction: 'WORKSHOP_CAPACITY', workshopCapacityMove: choice.workshopCapacityMove,
+        targetWorkshopId: choice.targetWorkshopId, innerMonologue: choice.workshopCapacityMove === 'accept'
+          ? '由我本人应允释放从未起工的余项，保留已起工的正项。'
+          : '开炉无期，且请原委托人自行应允；提议还没有动款。' };
+    }
+    const work = dueWork ?? orders.find(({ workshopMove }) => workshopMove === 'accept') ??
       (mayCommission ? orders.find(({ workshopMove, workshopQuantity, workshopQualityFloor }) =>
         workshopMove === 'offer' && workshopQuantity === 1 && workshopQualityFloor === 'standard') : undefined);
     if (work) {
@@ -1141,6 +1154,8 @@ export async function requestCultivatorLLMDecision(
   const probationOptions = availableProbationActions(cultivator, world);
   const exhibitOptions = availableRelicExhibitActions(cultivator, world);
   const workshopOptions = availableWorkshopActions(cultivator, world, true, requestTick);
+  const capacityOptions = availableWorkshopCapacityActions(cultivator, world, requestTick)
+    .map(({ workshopCapacityMove, targetWorkshopId }) => ({ workshopCapacityMove, targetWorkshopId }));
   const mayAcceptCharteredWorkshop = workshopOptions.some(({ workshopMove, targetWorkshopId }) => workshopMove === 'accept' &&
     world.workshops.orders.some((order) => order.id === targetWorkshopId && order.makerId === cultivator.id && order.institution));
   // Workshop provenance is custody evidence, not an actor's new knowledge of earlier people or places.
@@ -1223,6 +1238,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 古器陈列只能由真实双方当面应允；复制许可参数，不改写原件持有史：${JSON.stringify(exhibitOptions)}
 - 工坊委制只复制现有许可；须双方同意，按实际加工与质量交付：${JSON.stringify(workshopOptions)}${mayAcceptCharteredWorkshop ?
     '\n- 本人可接受的一份章程内委制：如这座旧工坊实际因迁宗撤并，实余资财退原委托人，已付或已耗不重算；新址不自动接约。这不是另一个行动。' : ''}
+- 工坊容量调整只抄自己可用的 offer 或 accept 和 targetWorkshopId。停炉后已起工的仍记原账，未起工余项只由原委托人本人另行同意释放；不得填写款料、期限、数量、人物、炉况或假称已交付：${JSON.stringify(capacityOptions)}
 - 地脉恢复只可使用现地列出的地格，按实付收费，永久伤痕不能用普通工作抹掉：${JSON.stringify(recoveryOptions)}
 - 共管不会改变地权；只复制实际列出的三方提议或对本宗邀请的选择：${JSON.stringify(commonsOptions)}
 - 公职退居和复出须本人同意，只复制所列动作；复出仅恢复任职资格：${JSON.stringify(serviceOptions)}
@@ -1396,6 +1412,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'SHARED_COMMONS',
             'TERRAIN_RECOVERY',
             'WORKSHOP',
+            'WORKSHOP_CAPACITY',
             'FURNACE_RESERVATION',
             'FURNACE_SAFETY',
             'SPARRING',
@@ -1493,6 +1510,11 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             item.targetObservatoryTick === parsed.targetObservatoryTick && item.targetShortShiftId === parsed.targetShortShiftId) : undefined;
           if (chosenAction === 'SHORT_SHIFT' && (!legalShortShift || Object.keys(parsed).some((field) =>
             !['chosenAction', 'innerMonologue', 'spokenLine', 'shortShiftMove', 'targetCultivatorId', 'targetObservatoryTick', 'targetShortShiftId'].includes(field)))) return undefined;
+          const legalWorkshopCapacity = chosenAction === 'WORKSHOP_CAPACITY' ? capacityOptions.find((item) =>
+            item.workshopCapacityMove === parsed.workshopCapacityMove && item.targetWorkshopId === parsed.targetWorkshopId) : undefined;
+          if (chosenAction === 'WORKSHOP_CAPACITY' && (!legalWorkshopCapacity || Object.keys(parsed).some((field) =>
+            !['chosenAction', 'innerMonologue', 'workshopCapacityMove', 'targetWorkshopId'].includes(field)))) return undefined;
+
           const legalWorkshop = chosenAction === 'WORKSHOP' ? workshopOptions.find((item) =>
             item.workshopMove === parsed.workshopMove && item.targetWorkshopId === parsed.targetWorkshopId &&
             item.targetCultivatorId === parsed.targetCultivatorId && item.workshopTier === parsed.workshopTier &&
@@ -1791,6 +1813,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             exhibitMove: legalExhibit?.exhibitMove,
             targetRelicExhibitId: legalExhibit?.targetRelicExhibitId,
             workshopMove: legalWorkshop?.workshopMove,
+            workshopCapacityMove: legalWorkshopCapacity?.workshopCapacityMove,
             sparringMove: legalSparring?.sparringMove,
             targetSparringId: legalSparring?.targetSparringId,
             sparringRounds: legalSparring?.sparringRounds,
@@ -1798,7 +1821,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             targetFurnaceReservationId: legalFurnace?.targetFurnaceReservationId,
             furnaceSafetyMove: legalFurnaceSafety?.furnaceSafetyMove,
             targetFurnaceSafetyId: legalFurnaceSafety?.targetFurnaceSafetyId,
-            targetWorkshopId: legalFurnace?.targetWorkshopId ?? legalWorkshop?.targetWorkshopId,
+            targetWorkshopId: legalWorkshopCapacity?.targetWorkshopId ?? legalFurnace?.targetWorkshopId ?? legalWorkshop?.targetWorkshopId,
             workshopTier: legalWorkshop?.workshopTier,
             workshopQuantity: legalWorkshop?.workshopQuantity,
             workshopQualityFloor: legalWorkshop?.workshopQualityFloor,

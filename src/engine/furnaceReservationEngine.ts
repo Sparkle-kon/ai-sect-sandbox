@@ -1,3 +1,4 @@
+import { effectiveWorkshopDeadline } from './workshopCapacityTerms';
 import type {
   Cultivator, FurnaceReservation, FurnaceReservationState, FurnaceUseKind, FurnaceUseReceipt, LLMDecisionPayload,
   LocationNode, WorldEvent, WorldState,
@@ -58,7 +59,7 @@ function physicallyAt(world: WorldState, actor: Cultivator | undefined, siteId: 
 
 const workshopActive = (world: WorldState, actorId: string, siteId: string, orderId: string, tick: number) =>
   world.workshops.orders.some(row => row.id === orderId && row.makerId === actorId && row.siteId === siteId &&
-    row.status === 'active' && (row.acceptedTick ?? Infinity) <= tick && (row.deadlineTick ?? 0) > tick &&
+    row.status === 'active' && (row.acceptedTick ?? Infinity) <= tick && (effectiveWorkshopDeadline(row) ?? 0) > tick &&
     isLive(world.cultivators.find(actor => actor.id === row.patronId)));
 
 function unavailable(world: WorldState, row: FurnaceReservation, tick: number, site: LocationNode | undefined, actor?: Cultivator): FurnaceReason | undefined {

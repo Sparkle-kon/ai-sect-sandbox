@@ -1,4 +1,5 @@
 import { visibleWorkshopOrders, workshopTerms } from '../engine/workshopEngine';
+import { WORKSHOP_CAPACITY_RECOVERY_TICKS } from '../engine/workshopCapacityTerms';
 import { knownMapLocations } from '../engine/terrainEngine';
 import type { Cultivator, WorldState } from '../types/world';
 
@@ -28,6 +29,40 @@ function ClosureReceipt({ world, order, patron }: { world: WorldState; order: Or
         : <p>未耗余料退给原委托方，不归承制人。</p>}
       <p>已实际完成的工序、已付工钱与已交割器物保留，不重复结算。</p>
     </> : <p className="text-slate-400">目前没有可核验的本单撤并款物凭据。</p>}
+  </div>;
+}
+
+function CapacityReceipt({ order, tick, patron, receipts }: {
+  order: Order; tick: number; patron: boolean; receipts: Order['work'];
+}) {
+  const { capacityOffer: offer, capacityAmendment: amendment, acceptedTick, deadlineTick } = order;
+  if (order.institution || order.quantity !== 2 || acceptedTick === undefined || deadlineTick === undefined ||
+      !offer || offer.makerId !== order.makerId || offer.offeredTick > tick || offer.offeredTick >= deadlineTick ||
+      offer.damagedTick <= offer.blankTick || offer.damagedTick > offer.offeredTick || offer.blankTick <= acceptedTick ||
+      !receipts.some(({ stage, piece, makerId, tick: blankTick }) =>
+        stage === 'blank' && piece === 1 && makerId === offer.makerId && blankTick === offer.blankTick)) return null;
+
+  const amended = amendment && amendment.patronId === order.patronId &&
+    amendment.acceptedTick > offer.offeredTick && amendment.acceptedTick < deadlineTick && amendment.acceptedTick <= tick;
+  const closed = order.settledTick !== undefined && order.settledTick <= tick;
+  const delivered = receipts.some(({ stage, piece, artifactId }) =>
+    stage === 'finish' && piece === 1 && artifactId !== undefined);
+
+  return <div aria-label="停炉改约凭据" className="space-y-1 rounded border border-amber-400/25 p-2">
+    <h6 className="font-semibold text-amber-200">停炉改约</h6>
+    <p>原约 2 件 · 原截止 Tick #{deadlineTick}（该轮起不再按原约开工）。</p>
+    <p>先于 Tick #{offer.blankTick} 实制首坯；炉位于 Tick #{offer.damagedTick} 受损，工匠在 Tick #{offer.offeredTick} 提议减做一件。</p>
+    {!amended ? <p>
+      {closed ? '结案前未见原委托方同意，未据此退款、减件或延长工期。'
+        : '仅为提议。最早下一轮由原委托方同意，生效前不会据此退款、减件或延长工期。'}
+    </p> : <>
+      <p>原委托方于 Tick #{amendment.acceptedTick} 同意。第 2 件未动工，已解除；
+        {patron ? '退回本人' : '退给原委托方'} {amendment.releasedStones} 灵石、玄土根 {amendment.releasedHerbs} 株（已计入累计实退）。</p>
+      <p>原先的首坯保留，只续制第 1 件。补签截止 Tick #{amendment.workUntilTick}（仅首件延后 {WORKSHOP_CAPACITY_RECOVERY_TICKS} 轮，该轮起不能续作）。</p>
+      <p>按原约已交割 {delivered ? 1 : 0}/2 件；补签保留件已交割 {delivered ? 1 : 0}/1 件。解除件不等于仍欠交割。</p>
+      {closed && (order.refundedStones > amendment.releasedStones || order.refundedHerbs > amendment.releasedHerbs) &&
+        <p>结案另实退首件未耗余料：{order.refundedStones - amendment.releasedStones} 灵石、玄土根 {order.refundedHerbs - amendment.releasedHerbs} 株。</p>}
+    </>}
   </div>;
 }
 
@@ -70,6 +105,7 @@ export function WorkshopPanel({ world, cultivator }: { world: WorldState; cultiv
                   <p>实际工序 {receipts.length}/{order.quantity * 2} · 已验质 {completedPieces}/{order.quantity} 件 · 实际交割 {delivered} 件</p>
                 </> : <p className="text-slate-400">没有已同意的承制记录，未开工。</p>}
                 {order.closeReason !== 'institution_closed' && <p>当前托管 {order.escrowStones} 灵石与玄土根 {order.escrowHerbs} 株 · 已实退 {order.refundedStones} 灵石与玄土根 {order.refundedHerbs} 株</p>}
+                <CapacityReceipt order={order} tick={world.tick} patron={patron} receipts={receipts} />
                 {order.closeReason && (order.closeReason !== 'institution_closed' || institutionClosed) &&
                   <p>结案：{CLOSE[order.closeReason]}{order.settledTick !== undefined && ` · Tick #${order.settledTick}`}</p>}
                 {institutionClosed && <ClosureReceipt world={world} order={order} patron={patron} />}

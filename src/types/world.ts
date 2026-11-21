@@ -149,6 +149,7 @@ export type ActionType =
   | 'VILLAGE_SUPPLY'
   | 'ROUTE_WARNING'
   | 'PAVILION_LOAN'
+  | 'WORKSHOP_CAPACITY'
   | 'FORGE_ARTIFACT'
   | 'BIND_ARTIFACT'
   | 'REPAIR_ARTIFACT'
@@ -550,6 +551,7 @@ export interface LLMDecisionPayload {
   villageSupplyMove?: VillageSupplyMove;
   routeWarningMove?: RouteWarningMove;
   pavilionLoanMove?: PavilionLoanMove;
+  workshopCapacityMove?: WorkshopCapacityMove;
   targetPavilionLoanId?: string;
   targetRouteObservationId?: string;
   targetRouteWarningId?: string;
@@ -2262,7 +2264,26 @@ export interface WorkshopWorkReceipt {
   artifactId?: string;
   feePaid?: number;
 }
+export type WorkshopCapacityMove = 'offer'|'accept';
+export interface WorkshopCapacityOffer {
+  caseId:string;
+  damagedTick:number;
+  blankTick:number;
+  makerId:string;
+  offeredTick:number;
+}
+export interface WorkshopCapacityAmendment {
+  acceptedTick:number;
+  patronId:string;
+  releasedQuantity:1;
+  keptQuantity:1;
+  workUntilTick:number;
+  releasedStones:number;
+  releasedHerbs:number;
+}
 export interface WorkshopOrder {
+  capacityOffer?: WorkshopCapacityOffer;
+  capacityAmendment?: WorkshopCapacityAmendment;
   id: string;
   patronId: string;
   makerId: string;

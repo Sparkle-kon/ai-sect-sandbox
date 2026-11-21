@@ -5,7 +5,7 @@ import { closeVillageCensusPeriod, resolveVillageCensusAction } from './villageC
 import { advanceRoads, resolveRoadAction } from './roadEngine';
 import { advanceProbation, resolveProbationAction } from './probationEngine';
 import { advanceRelicExhibits, resolveRelicExhibitAction } from './relicExhibitEngine';
-import { advanceWorkshopInstitutionClosures, advanceWorkshops, resolveWorkshopAction } from './workshopEngine';
+import { advanceWorkshopInstitutionClosures, advanceWorkshops, resolveWorkshopAction, resolveWorkshopCapacityAction } from './workshopEngine';
 import { openFurnaceTurn, resolveFurnaceReservationAction, settleFurnaceTurn } from './furnaceReservationEngine';
 import { advanceSparring, resolveSparringAction, sparringLocksActor } from './sparringEngine';
 import { resolveExpeditionRescueAction } from './expeditionRescueEngine';
@@ -291,6 +291,8 @@ export function applyCultivatorBrainDecision(
       return resolveApprenticeCohortAction(world, cultivator, decision);
     case 'HOUSEHOLD_NAME':
       return resolveHouseholdNameAction(world, cultivator, decision);
+    case 'WORKSHOP_CAPACITY':
+      return resolveWorkshopCapacityAction(world, cultivator, decision);
     case 'PAVILION_LOAN':
       return resolvePavilionLoanAction(world, cultivator, decision);
     case 'ROUTE_WARNING':

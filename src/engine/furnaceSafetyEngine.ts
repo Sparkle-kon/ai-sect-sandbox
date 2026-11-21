@@ -76,7 +76,8 @@ function compactCases(world:WorldState) {
   for(const row of state.cases) latest.set(row.siteId,row);
   const previous=state.cases.filter(row=>latest.get(row.siteId)!==row);
   const keep=new Set(previous.slice(-FURNACE_SAFETY_HISTORY_LIMIT));
-  state.cases=state.cases.filter(row=>latest.get(row.siteId)===row || keep.has(row));
+  const cited = new Set(world.workshops.orders.flatMap((order)=>order.capacityOffer ? [order.capacityOffer.caseId] : []));
+  state.cases=state.cases.filter(row=>latest.get(row.siteId)===row || keep.has(row) || cited.has(row.id));
 }
 
 /** Called from the actual map hazard hook before that turn has granted any furnace capacity. */

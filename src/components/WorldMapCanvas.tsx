@@ -163,6 +163,9 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     (row.hostId === selected.id || row.workerId === selected.id)) : undefined;
   const furnaceShift = useMemo(() => selected
     ? availableFurnaceSlotSummary(world, selected, selected.locationId) : undefined, [world, selected]);
+  const ownWorkshopCapacity=useMemo(()=>furnaceShift&&selected ? world.workshops.orders.find((order)=>
+    order.status==='active' && order.capacityAmendment && order.siteId===selected.locationId &&
+    (order.patronId===selected.id || order.makerId===selected.id)) : undefined,[world,selected,furnaceShift]);
   const localPavilionDesk=useMemo(()=>projectLocalPavilionDesk(world,selected),[world,selected]);
   const ownCurrentFurnaceRecovery = useMemo(() => furnaceShift && selected && world.artifactSalvages.receipts.some((receipt) =>
     receipt.ownerId === selected.id && receipt.siteId === selected.locationId && receipt.tick === world.tick) ?
@@ -1283,6 +1286,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                 {fog && (visibleActorsAtSite.get(location.id) ?? 0) > 0 &&
                   <span className="text-slate-300">· 可见修士 {visibleActorsAtSite.get(location.id)} 位（山河索引可查）</span>}
                 {location.furnaceGrade > 0 && <span className="text-emerald-300">· {location.furnaceGrade} 阶丹炉</span>}
+                {location.id===ownWorkshopCapacity?.siteId && isCurrentLocation(location.id) &&
+                  <span className="text-amber-200">· 本人委制只留首件，第二件已解除；首件在第 {ownWorkshopCapacity.capacityAmendment?.workUntilTick} 轮前收尾</span>}
                 {location.id===localPavilionDesk?.siteId && isCurrentLocation(location.id) &&
                   <span className="text-amber-200">· 藏经阁{localPavilionDesk.staffed?'本轮有值守':'本轮未见值守'}，在架 {localPavilionDesk.availableCopies} 册、持有未归 {localPavilionDesk.heldCopies} 册</span>}
                 {location.id === locallyObservedWorkshopClosure?.originId &&
