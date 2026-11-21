@@ -205,6 +205,7 @@ const shape = structure({
       departedTick:otick,settledTick:otick,lastAdvancedTick:otick,reason:otext})),
     abandonedSites:arr(SAVE_COLLECTION_LIMIT,structure({id,planId:id,sectId:id,originId:id,destinationId:id,tick,
       originalType:locationKind,facilities:facilityLevels,arrayHp:wealth,arrayMaxHp:wealth}))}),
+  scenarioOrigin:optional(structure({version:one(1),ruleset:one(1),id:strings(100,1),endTick:num(1,120,true)})),
   worldgen:optional(structure({algorithm:one(1),profileId:one('classic','spirit-bloom','fractured-frontier'),
     seed:unsigned32,birthTick:one(1),resources:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,locationId:id,pathSteps:num(0,6402,true)}))})),
   doctrines:structure({nextId:num(1,100_000_000,true),
@@ -295,6 +296,8 @@ function verifyWorld(value: unknown): WorldState {
   const sector = unique(w.sects, (item) => item.id, 'sects.id');
   const locations = unique(w.locations, (item) => item.id, 'locations.id');
   const map = unique(w.terrain.tiles, (item) => item.id, 'terrain.tiles.id');
+  if (w.scenarioOrigin && (w.scenarioOrigin.endTick > w.tick || !w.worldgen ||
+      !/^scenario-[0-9a-f]{32}$/.test(w.scenarioOrigin.id))) fail('scenarioOrigin.references');
   if (w.worldgen) {
     const birthActors = unique(w.worldgen.resources, (item) => item.actorId, 'worldgen.resources.actorId');
     if (w.worldgen.seed !== w.random.seed || w.worldgen.birthTick > w.tick ||

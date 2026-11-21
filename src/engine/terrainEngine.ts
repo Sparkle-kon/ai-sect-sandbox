@@ -68,7 +68,18 @@ export function currentVisibleTileIds(world: WorldState, actor: Cultivator): Set
   const focus = terrainTileAt(world, site.x, site.y);
   if (!focus) return new Set();
   const radius = actor.realm === '练气' || actor.realm === '筑基' ? 2 : actor.realm === '金丹' || actor.realm === '元婴' ? 3 : 4;
-  return new Set(world.terrain.tiles.filter(({ col, row }) => (col - focus.col) ** 2 + (row - focus.row) ** 2 <= radius ** 2).map(({ id }) => id));
+  // The saved/generated grid is row-major; visit only the observed neighborhood, not every tile for every person.
+  const { rows, columns, tiles } = world.terrain;
+  const visible = new Set<string>();
+  for (let row = Math.max(0, focus.row - radius); row <= Math.min(rows - 1, focus.row + radius); row++) {
+    for (let col = Math.max(0, focus.col - radius); col <= Math.min(columns - 1, focus.col + radius); col++) {
+      if ((col - focus.col) ** 2 + (row - focus.row) ** 2 <= radius ** 2) {
+        const tile = tiles[row * columns + col];
+        if (tile) visible.add(tile.id);
+      }
+    }
+  }
+  return visible;
 }
 
 export function noteTerrainVisit(world: WorldState, actor: Cultivator): void {

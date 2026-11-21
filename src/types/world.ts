@@ -1181,7 +1181,15 @@ export interface EscortState {
   reports: EscortReport[];
 }
 
+export interface ScenarioOrigin {
+  version: 1;
+  ruleset: 1;
+  id: string;
+  endTick: number;
+}
+
 export interface WorldState {
+  scenarioOrigin?: ScenarioOrigin;
   escorts: EscortState;
   competitions: CompetitionState;
   scriptures: ScriptureState;

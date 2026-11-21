@@ -52,6 +52,7 @@ const MortalVillagesPanel = React.lazy(async () => ({ default: (await import('./
 const DecisionTracePanel = React.lazy(async () => ({ default: (await import('./components/DecisionTracePanel')).DecisionTracePanel }));
 const PossessionPanel = React.lazy(async () => ({ default: (await import('./components/PossessionPanel')).PossessionPanel }));
 const EstateMemorialPanel = React.lazy(async () => ({ default: (await import('./components/EstateMemorialPanel')).EstateMemorialPanel }));
+const ScenarioPanel = React.lazy(async () => ({ default: (await import('./components/ScenarioPanel')).ScenarioPanel }));
 const WorldStoragePanel = React.lazy(async () => ({ default: (await import('./components/WorldStoragePanel')).WorldStoragePanel }));
 const SectCouncilModal = React.lazy(async () => ({ default: (await import('./components/SectCouncilModal')).SectCouncilModal }));
 const AnalyticsModal = React.lazy(async () => ({ default: (await import('./components/AnalyticsModal')).AnalyticsModal }));
@@ -460,6 +461,9 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
               <React.Suspense fallback={<p role="status">载入天道控制台…</p>}><GodConsole world={world} selectedCultivatorId={activeActorId} llmConfig={llmConfig}
                 onUpdateLLMConfig={setLlmConfig} onIntervene={handleGodIntervene} /></React.Suspense>
             </div> },
+            { id: 'scenario', label: '剧本编辑与复演', content: <React.Suspense fallback={<p role="status">载入剧本编辑器…</p>}>
+              <ScenarioPanel world={world} busy={isStepping} onApply={replaceWorld} />
+            </React.Suspense> },
             { id: 'settings', label: '存档、世界种子与推演速度', content: <div className="space-y-2.5">
               <div className={`${panel} flex flex-wrap items-center gap-x-2 gap-y-1.5`}>
                 <label htmlFor="world-tick-interval" className="text-xs font-semibold">推演速度</label>
