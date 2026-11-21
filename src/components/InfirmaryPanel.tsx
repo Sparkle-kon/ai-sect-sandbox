@@ -8,6 +8,8 @@ import {
 import { projectCareFollowups, projectLocalCareFollowupCapacity } from '../engine/careFollowupEngine';
 import type { Cultivator, InfirmaryCase, StaffedDutyKind, WorldState } from '../types/world';
 import { CareFollowupReceipts } from './CareFollowupReceipts';
+import { projectDanxiaShortages } from '../engine/danxiaShortageEngine';
+import { DanxiaShortageReceipts } from './DanxiaShortageReceipts';
 
 const STATUS: Record<InfirmaryCase['status'], string> = {
   waiting: '等待救治', treated: '已同意并接受救治', refused: '本人已拒绝', closed: '排队已结束',
@@ -22,9 +24,10 @@ export function InfirmaryPanel({ world, cultivator }: { world: WorldState; culti
   const viewer = world.cultivators.find(({ id }) => id === cultivator.id);
   const view = visibleInfirmaries(world, viewer);
   const followups = projectCareFollowups(world, viewer);
+  const shortages = projectDanxiaShortages(world, viewer);
   const { capacity, ownCases = [], ownShift, ownQueuePosition, ownDutyDisposition } = view ?? {};
   const followupCapacity = capacity ? projectLocalCareFollowupCapacity(world, viewer) : undefined;
-  if (!capacity && !ownCases.length && !ownShift && !followups.length) return null;
+  if (!capacity && !ownCases.length && !ownShift && !followups.length && !shortages.length) return null;
   const sect = world.sects.find(({ id }) => id === view?.sectId);
   const sites = new Map(world.locations.map(({ id, name }) => [id, name]));
 
@@ -32,7 +35,7 @@ export function InfirmaryPanel({ world, cultivator }: { world: WorldState; culti
     <details className="min-w-0 rounded border border-teal-400/25 bg-slate-950/55">
       <summary className="min-h-11 cursor-pointer break-words px-3 py-2.5 text-xs font-semibold text-teal-100">宗门静养院与救治调度</summary>
       <div className="space-y-2 px-3 pb-3 text-xs leading-relaxed text-slate-300">
-        <p className="break-words">{sect?.name ?? '宗门未详'} · 静养院 · Tick #{world.tick}。此处只读，不显示其他病患资料。</p>
+        <p className="break-words">{sect?.name ?? '宗门未详'} · 静养院 · Tick #{world.tick}。此处只读，仅显示当前人物有权查看的记录。</p>
         {capacity ? (
           <dl className="grid grid-cols-2 gap-2 rounded border border-slate-800 p-2 sm:grid-cols-4" aria-label="当前诊台汇总">
             <div><dt className="text-slate-400">床位上限</dt><dd>{capacity.beds}</dd></div>
@@ -79,6 +82,7 @@ export function InfirmaryPanel({ world, cultivator }: { world: WorldState; culti
           </ol>
         ) : <p className="text-slate-400">暂无本人救治记录。</p>}
         <CareFollowupReceipts appointments={followups} tick={world.tick} />
+        <DanxiaShortageReceipts rows={shortages} />
       </div>
     </details>
   );

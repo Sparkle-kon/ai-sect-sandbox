@@ -54,6 +54,8 @@ import { createSeedCultureState } from './seedCultureEngine';
 import { SEED_GROW_TICKS, SEED_LOT_UNITS, SEED_SAMPLE_UNITS } from './seedCultureTerms';
 import { validateSeedCultureHistory } from './storageSeedCultureValidation';
 import { createCareFollowupsState } from './careFollowupEngine';
+import { createDanxiaShortagesState } from './danxiaShortageEngine';
+import { validateDanxiaShortageHistory } from './storageDanxiaShortageValidation';
 import { validateCareFollowupHistory } from './storageCareFollowupValidation';
 import { createToolLoansState } from './toolLoanEngine';
 import { validateToolLoanHistory } from './storageToolLoanValidation';
@@ -710,6 +712,13 @@ const shape = structure({
       kind:one('dispatch','overload','draw','repair','dissipate'),actorId:oid,fromSiteId:oid,toSiteId:oid,
       sent:optional(count),delivered:optional(count),lost:optional(count),drawn:optional(count),stonesSpent:optional(count),dissipated:optional(count)}))
   }))}),
+  danxiaShortages:structure({cases:arr(SAVE_COLLECTION_LIMIT,structure({
+    id,siteId:id,openedTick:tick,discipleId:id,patientId:id,settlementId:id,householdId:id,volunteerId:id,
+    appointmentId:id,sourceCaseId:id,demandIds:ids,requiredLeaves:num(1,SAVE_COLLECTION_LIMIT,true),availableLeaves:count,
+    regrowth:structure({tick,siteId:id,kind:one('霜息'),intensity:num(0,1),before:count,grown:one(0),capacity:count}),
+    status:one('open','closed'),resolution:optional(structure({tick,reason:one('adequate_stock','commitment_ended','authority_lost'),
+      requiredLeaves:num(0,SAVE_COLLECTION_LIMIT,true),availableLeaves:count})),
+  }))}),
   careFollowups:structure({nextId:num(1,Number.MAX_SAFE_INTEGER,true),appointments:arr(SAVE_COLLECTION_LIMIT,structure({
     id,sourceCaseId:id,sourceShiftId:id,sourceGuardId:id,dischargedTick:tick,patientId:id,sectId:id,siteId:id,scheduledTick:tick,dueTick:tick,expiresTick:tick,
     status:one('scheduled','attended','closed','withdrawn'),settledTick:otick,
@@ -955,6 +964,7 @@ function verifyWorld(value: unknown): WorldState {
       ...(!Object.hasOwn(value, 'territorialLeases') ? { territorialLeases: createTerritorialLeaseState() } : {}),
       ...(!Object.hasOwn(value, 'formations') ? { formations: createFormationNetworkState() } : {}),
       ...(!Object.hasOwn(value, 'infirmaries') ? { infirmaries: createInfirmaryState() } : {}),
+      ...(!Object.hasOwn(value, 'danxiaShortages') ? { danxiaShortages: createDanxiaShortagesState() } : {}),
       ...(!Object.hasOwn(value, 'careFollowups') ? { careFollowups: createCareFollowupsState() } : {}),
       ...(!Object.hasOwn(value, 'habitats') ? { habitats: createHabitatState() } : {}),
       ...(!Object.hasOwn(value, 'chronicleErrata') ? { chronicleErrata: createChronicleErrataState() } : {}),
@@ -1839,6 +1849,7 @@ function verifyWorld(value: unknown): WorldState {
     bedUses.set(bedKey, uses);
   }
   validateCareFollowupHistory(w, serviceUses, bedUses, fail);
+  validateDanxiaShortageHistory(w, actor, fail);
   const habitatSerials = new Set<number>();
   const habitatBeasts = new Map(w.spiritBeasts.map((animal) => [animal.id, animal]));
   const habitatSites = new Map(w.locations.map((site) => [site.id, site]));

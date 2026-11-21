@@ -3125,6 +3125,7 @@ export interface AlignedWeatherState { comparisons: AlignedWeatherComparison[]; 
 
 export interface WorldState {
   fieldObservatories: FieldObservatoriesState;
+  danxiaShortages: DanxiaShortagesState;
   expeditionOmens: ExpeditionOmensState;
   alignedWeather: AlignedWeatherState;
   villageCensuses: VillageCensusesState;
@@ -3228,3 +3229,11 @@ export interface ExpeditionOmen {
   opening?:{tick:number;qi:number;reading:FieldWeatherReading;occasionId:string};
 }
 export interface ExpeditionOmensState { rows: ExpeditionOmen[]; lastCalendarTick?:number }
+
+export interface DanxiaRegrowthSample extends FieldWeatherReading { tick:number;siteId:string;before:number;grown:number;capacity:number }
+export interface DanxiaShortage {
+  id:string;siteId:string;openedTick:number;regrowth:DanxiaRegrowthSample;discipleId:string;patientId:string;settlementId:string;
+  householdId:string;volunteerId:string;appointmentId:string;sourceCaseId:string;demandIds:string[];requiredLeaves:number;availableLeaves:number;
+  status:'open'|'closed';resolution?:{tick:number;reason:'adequate_stock'|'commitment_ended'|'authority_lost';requiredLeaves:number;availableLeaves:number};
+}
+export interface DanxiaShortagesState { cases:DanxiaShortage[] }

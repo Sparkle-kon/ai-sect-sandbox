@@ -1,11 +1,13 @@
 import { flowActor, flowSite, recordResourceFlow } from './resourceFlowEngine';
 import { commonsHarvestLimit, settleCommonsHarvest } from './sharedCommonsEngine';
 import { authorizedHerbHarvestLimit, settleLeasedHerbHarvest } from './territorialLeaseEngine';
-import { weatherHerbRegrowth } from './weatherEngine';
+import { localQiWeather, weatherHerbRegrowth } from './weatherEngine';
 import type { Cultivator, HerbId, LLMDecisionPayload, PillId, WorldEvent, WorldState } from '../types/world';
 import { recordMemory } from './memoryEngine';
 import { guardingHerbBeast } from './spiritBeastEngine';
 import { canUseFurnace, claimFurnaceUse } from './furnaceReservationEngine';
+
+import { DANXIA_REGROWTH_CADENCE, danxiaMedicineSite, type DanxiaRegrowthSample } from './danxiaShortageTerms';
 
 export const HERB_LABELS: Record<HerbId, string> = {
   jade_leaf: '翡翠灵叶', earth_root: '玄土根', star_bloom: '星露花', shadow_moss: '幽影苔',
@@ -171,16 +173,22 @@ export function resolveAlchemy(world: WorldState, actor: Cultivator, decision: L
 }
 
 /** Called once per world tick before agent decisions. No RNG: deterministic regrowth and detox. */
-export function maintainAlchemy(world: WorldState): void {
+export function maintainAlchemy(world: WorldState): DanxiaRegrowthSample | undefined {
+  const observed = world.tick % DANXIA_REGROWTH_CADENCE === 0 ? danxiaMedicineSite(world) : undefined;
+  let sample: DanxiaRegrowthSample | undefined;
   for (const place of world.locations) {
     for (const herb of HERBS) {
-      const increment = weatherHerbRegrowth(world, place, herb, 3);
+      const increment = weatherHerbRegrowth(world, place, herb, DANXIA_REGROWTH_CADENCE);
+      const before = place.herbs[herb];
       if (increment > 0) {
-        const before = place.herbs[herb];
         const after = clamp(before + increment, 0, place.herbCapacity[herb]);
         place.herbs[herb] = after;
         if (after > before) recordResourceFlow(world, { kind: 'production', mechanism: 'alchemy', refId: place.id,
           reason: 'herb_regrowth', to: flowSite(place.id), good: herb, amount: after - before, visibility: { kind: 'known_sites', siteIds: [place.id] } });
+      }
+      if (place === observed && herb === 'jade_leaf') {
+        const {kind,intensity} = localQiWeather(world, place);
+        sample = {tick:world.tick,siteId:place.id,kind,intensity,before,grown:place.herbs.jade_leaf-before,capacity:place.herbCapacity.jade_leaf};
       }
     }
   }
@@ -192,4 +200,5 @@ export function maintainAlchemy(world: WorldState): void {
     }
     actor.pillToxicity = clamp(actor.pillToxicity - 2, 0, 100);
   }
+  return sample;
 }
