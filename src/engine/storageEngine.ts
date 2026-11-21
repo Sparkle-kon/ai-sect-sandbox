@@ -1,3 +1,4 @@
+import { WORKSHOP_ACTIVE_TICKS, WORKSHOP_MAX_WORK_RECEIPTS, WORKSHOP_OFFER_TICKS, createWorkshopState, workshopGradeForScore, workshopTerms } from './workshopEngine';
 import { createTerrainSuccessionState, TERRAIN_QUIET_CAP, TERRAIN_RECOVERY_LIMIT } from './terrainSuccessionEngine';
 import { createResourceFlowState, RESOURCE_FLOW_DETAIL_LIMIT, RESOURCE_FLOW_MONTH_LIMIT, RESOURCE_FLOW_REASON, sameFlowAccount } from './resourceFlowEngine';
 import { COMMONS_MAINTENANCE_UNIT, COMMONS_MAX_RESERVE, COMMONS_OFFER_TICKS, COMMONS_ROUND_TICKS, COMMONS_TERM_TICKS, commonsQuotaShares, createSharedCommonsState } from './sharedCommonsEngine';
@@ -101,13 +102,13 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const flowGood = one('stone','jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const flowMeasure = num(0,Number.MAX_SAFE_INTEGER);
 const flowSerial = num(1,Number.MAX_SAFE_INTEGER,true);
-const flowAccount = structure({kind:one('actor','site','sect','order','shipment','oath','relocation'),id,
+const flowAccount = structure({kind:one('actor','site','sect','order','shipment','oath','relocation','workshop'),id,
   pocket:optional(one('payment','collateral'))});
 const flowScope = structure({kind:one('observer','known_sites','participants'),siteIds:optional(arr(8,id)),actorIds:optional(arr(8,id))});
 const marketQty = num(1,12,true), marketPrice = num(1,500,true);
@@ -254,11 +255,22 @@ const shape = structure({
       attestations:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,tick,verdict:one('supports','contradicts')})),
       appeal:optional(structure({tick,actorId:id,verdict:one('upheld','rejected'),reason:text})),settledTick:otick,
       reputationSectId:oid,reputationPenalty:percentage,reputationRestored:percentage,reason:otext}))}),
+  workshops:structure({nextId:num(1,100_000_000,true),orders:arr(SAVE_COLLECTION_LIMIT,structure({
+    id,patronId:id,makerId:id,siteId:id,tier:one('法器','灵器'),quantity:one(1,2),qualityFloor:one('standard','fine'),
+    status:one('offered','active','completed','cancelled','declined','expired'),
+    offeredTick:tick,offerExpiresTick:tick,acceptedTick:otick,deadlineTick:otick,settledTick:otick,
+    closeReason:optional(one('patron_cancelled','maker_cancelled','offer_expired','work_expired',
+      'patron_unavailable','maker_unavailable','site_unavailable')),
+    escrowStones:count,escrowHerbs:count,refundedStones:count,refundedHerbs:count,
+    work:arr(WORKSHOP_MAX_WORK_RECEIPTS,structure({tick,makerId:id,piece:one(1,2),stage:one('blank','finish'),
+      stonesUsed:count,herbsUsed:count,quality:optional(one('failed','standard','fine')),
+      qualityScore:optional(num(0,100,true)),artifactId:oid,feePaid:optional(count)}))
+  }))}),
   resourceFlow:structure({nextId:flowSerial,months:arr(RESOURCE_FLOW_MONTH_LIMIT,structure({
     tick,year:tick,month,totalEntries:num(0,Number.MAX_SAFE_INTEGER,true),
     totals:arr(9,structure({good:flowGood,transfer:flowMeasure,production:flowMeasure,consumption:flowMeasure,loss:flowMeasure})),
     entries:arr(RESOURCE_FLOW_DETAIL_LIMIT,structure({
-      id:flowSerial,tick,mechanism:one('alchemy','market','sect_economy','oath','commons','relocation','terrain'),
+      id:flowSerial,tick,mechanism:one('alchemy','market','sect_economy','oath','commons','relocation','terrain','workshop'),
       refId:id,reason:strings(40,1),good:flowGood,amount:flowMeasure,visibility:flowScope,
       kind:one('transfer','production','consumption','loss'),from:optional(flowAccount),to:optional(flowAccount)
     }))
@@ -484,6 +496,7 @@ function verifyWorld(value: unknown): WorldState {
       ...(!Object.hasOwn(value, 'mentorship') ? { mentorship: { offers: [], lineage: [], budgets: [] } } : {}),
       ...(!Object.hasOwn(value, 'decisionTrace') ? { decisionTrace: { records: [] } } : {}),
       ...(!Object.hasOwn(value, 'coldHistory') ? { coldHistory: createColdHistoryState() } : {}),
+      ...(!Object.hasOwn(value, 'workshops') ? { workshops: createWorkshopState() } : {}),
       ...(!Object.hasOwn(value, 'terrainSuccession') ? { terrainSuccession: createTerrainSuccessionState() } : {}),
       ...(!Object.hasOwn(value, 'resourceFlow') ? { resourceFlow: createResourceFlowState() } : {}),
       ...(!Object.hasOwn(value, 'sharedCommons') ? { sharedCommons: createSharedCommonsState() } : {}),
@@ -542,6 +555,68 @@ function verifyWorld(value: unknown): WorldState {
         (cell.lastWorkedTick === undefined) !== (cell.lastWorkedBy === undefined) ||
         (cell.lastWorkedBy !== undefined && !actor.has(cell.lastWorkedBy)) ||
         (cell.workCount > 0 && cell.lastWorkedTick === undefined)) fail('terrainSuccession.cells.references');
+  }
+  unique(w.workshops.orders, ({ id }) => id, 'workshops.orders.id');
+  const activeWorkshops = w.workshops.orders.filter(({ status }) => status === 'active');
+  unique(activeWorkshops, ({ makerId }) => makerId, 'workshops.orders.activeMaker');
+  unique(activeWorkshops, ({ siteId }) => siteId, 'workshops.orders.activeSite');
+  const makerWorkTicks = new Set<string>();
+  for (const order of w.workshops.orders) {
+    const serial = Number(order.id.match(/^commission-([1-9][0-9]*)$/)?.[1]);
+    const accepted = order.acceptedTick;
+    const settled = order.settledTick;
+    const live = order.status === 'offered' || order.status === 'active';
+    const terms = workshopTerms(order.tier, order.quantity);
+    if (!Number.isSafeInteger(serial) || serial >= w.workshops.nextId || order.patronId === order.makerId ||
+        !actor.has(order.patronId) || !actor.has(order.makerId) || (live && !locations.has(order.siteId)) ||
+        order.offeredTick > w.tick || order.offerExpiresTick !== order.offeredTick + WORKSHOP_OFFER_TICKS ||
+        (live && (settled !== undefined || order.closeReason !== undefined)) ||
+        (!live && (settled === undefined || settled < (accepted ?? order.offeredTick) || settled > w.tick)) ||
+        (order.status === 'completed' && (order.closeReason !== undefined || order.work.length !== order.quantity * 2)) ||
+        (order.status === 'declined' && (order.closeReason !== undefined || (settled ?? 0) >= order.offerExpiresTick)) ||
+        (order.status === 'cancelled' && (order.closeReason === undefined || order.closeReason === 'offer_expired' || order.closeReason === 'work_expired')) ||
+        (order.status === 'expired' && (accepted === undefined ?
+          order.closeReason !== 'offer_expired' || (settled ?? 0) < order.offerExpiresTick :
+          order.closeReason !== 'work_expired' || (settled ?? 0) < (order.deadlineTick ?? Infinity))) ||
+        (order.status === 'active' && (accepted === undefined || order.work.length >= order.quantity * 2)) ||
+        ((order.status === 'offered' || order.status === 'declined') && accepted !== undefined) ||
+        (accepted === undefined && (order.deadlineTick !== undefined || order.work.length !== 0 || order.status === 'completed')) ||
+        (accepted !== undefined && (accepted < order.offeredTick || accepted >= order.offerExpiresTick || accepted > w.tick ||
+          order.deadlineTick !== accepted + WORKSHOP_ACTIVE_TICKS)) ||
+        (live && (order.refundedStones !== 0 || order.refundedHerbs !== 0)) ||
+        (!live && (order.escrowStones !== 0 || order.escrowHerbs !== 0))) fail('workshops.orders.references');
+    let usedStones = 0;
+    let usedHerbs = 0;
+    let previousWorkTick = accepted ?? Infinity;
+    for (const [index, receipt] of order.work.entries()) {
+      const blank = index % 2 === 0;
+      const piece = Math.floor(index / 2) + 1;
+      const workKey = JSON.stringify([receipt.makerId, receipt.tick]);
+      if (receipt.makerId !== order.makerId || makerWorkTicks.has(workKey) ||
+          receipt.tick <= previousWorkTick || receipt.tick > w.tick || receipt.tick >= (order.deadlineTick ?? 0) ||
+          (settled !== undefined && receipt.tick > settled) || receipt.piece !== piece || piece > order.quantity ||
+          receipt.stage !== (blank ? 'blank' : 'finish') || receipt.herbsUsed !== 1 ||
+          receipt.stonesUsed !== (blank ? terms.blankFuel : terms.finishFuel)) fail('workshops.work.sequence');
+      makerWorkTicks.add(workKey);
+      previousWorkTick = receipt.tick;
+      usedStones += receipt.stonesUsed;
+      usedHerbs += receipt.herbsUsed;
+      if (blank) {
+        if (receipt.quality !== undefined || receipt.qualityScore !== undefined || receipt.artifactId !== undefined ||
+            receipt.feePaid !== undefined) fail('workshops.work.blank');
+      } else {
+        const score = receipt.qualityScore;
+        const grade = score === undefined ? undefined : workshopGradeForScore(score);
+        const passed = grade === 'fine' || (grade === 'standard' && order.qualityFloor === 'standard');
+        if (grade === undefined || grade !== receipt.quality ||
+            (passed ? receipt.artifactId !== `workshop-artifact-${order.id}-${piece}` || receipt.feePaid !== terms.feePerPiece :
+              receipt.artifactId !== undefined || (receipt.feePaid !== undefined && receipt.feePaid !== 0))) fail('workshops.work.quality');
+        usedStones += receipt.feePaid ?? 0;
+      }
+    }
+    if (order.escrowStones + order.refundedStones + usedStones !== (accepted === undefined ? 0 : terms.totalStones) ||
+        order.escrowHerbs + order.refundedHerbs + usedHerbs !== (accepted === undefined ? 0 : terms.totalHerbs))
+      fail('workshops.orders.custody');
   }
   let previousFlowTick = -1;
   let previousFlowId = 0;

@@ -1,3 +1,4 @@
+import { availableWorkshopActions } from './workshopEngine';
 import { COGNITIVE_RESPONSE_GUIDE } from './llmCognitiveResponseGuide';
 import { availableTerrainRecoveryActions } from './terrainSuccessionEngine';
 import { availableSharedCommonsActions } from './sharedCommonsEngine';
@@ -140,6 +141,16 @@ export function computeHeuristicDecision(
       (cultivator.personality === '刚正' || cultivator.personality === '逍遥')) {
     const work = availableTerrainRecoveryActions(cultivator, world)[0];
     if (work) return { ...work, chosenAction: 'TERRAIN_RECOVERY', innerMonologue: '只修脚下已退灾的实地，付出实物，不抹去永久伤痕。' };
+  }
+  const workshopState = world.workshops.orders;
+  const mayCommission = world.tick >= 28 && (world.tick + cultivator.id.charCodeAt(cultivator.id.length - 1)) % 13 === 6;
+  if (mayCommission || workshopState.some((order) => (order.status === 'offered' || order.status === 'active') && order.makerId === cultivator.id)) {
+    const orders = availableWorkshopActions(cultivator, world, mayCommission);
+    const work = orders.find(({ workshopMove }) => workshopMove === 'work') ??
+      orders.find(({ workshopMove }) => workshopMove === 'accept') ??
+      (mayCommission ? orders.find(({ workshopMove, workshopQuantity, workshopQualityFloor }) =>
+        workshopMove === 'offer' && workshopQuantity === 1 && workshopQualityFloor === 'standard') : undefined);
+    if (work) return { ...work, chosenAction: 'WORKSHOP', innerMonologue: '各自应允，按工序实耗和实测质量交付，未用料退回。' };
   }
   const mayOpenCommons = world.tick >= 30 && world.tick % 12 === 8;
   if (mayOpenCommons || world.sharedCommons.pacts.some((pact) => pact.status === 'offered' &&
@@ -673,6 +684,7 @@ export async function queryCultivatorLLMDecision(
   const estateOptions = availableEstateActions(cultivator, world);
   const doctrineOptions = availableDoctrineActions(cultivator, world);
   const relocationOptions = availableRelocationActions(cultivator, world);
+  const workshopOptions = availableWorkshopActions(cultivator, world);
   const recoveryOptions = availableTerrainRecoveryActions(cultivator, world);
   const commonsOptions = availableSharedCommonsActions(cultivator, world);
   const serviceOptions = availableServiceRetirementActions(cultivator, world);
@@ -719,6 +731,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 天机悬赏榜：${JSON.stringify(world.bounties.filter((item) => item.status === 'open').map(({id,targetCultivatorId,reward,reason}) => ({id,targetCultivatorId,reward,reason})))}；可接的追缉：${JSON.stringify(availableBountyHunts(cultivator, world))}
 - 天下公示的大会与秘境：${JSON.stringify(world.occasions.filter((item) => item.status === 'registration' || item.status === 'running').map(({id,title,kind,locationId,status,registrationClosesTick}) => ({id,title,kind,locationId,status,registrationClosesTick})))}；可报名项目：${JSON.stringify(availableOccasionJoins(cultivator, world))}
 - 本宗邦交：${JSON.stringify(world.diplomacy.filter((relation) => relation.sectAId === cultivator.sectId || relation.sectBId === cultivator.sectId))}；公示的外事权限：${JSON.stringify(availableDiplomacyActions(cultivator, world))}
+- 工坊委制只复制现有许可；须双方同意，按实际加工与质量交付：${JSON.stringify(workshopOptions)}
 - 地脉恢复只可使用现地列出的地格，按实付收费，永久伤痕不能用普通工作抹掉：${JSON.stringify(recoveryOptions)}
 - 共管不会改变地权；只复制实际列出的三方提议或对本宗邀请的选择：${JSON.stringify(commonsOptions)}
 - 公职退居和复出须本人同意，只复制所列动作；复出仅恢复任职资格：${JSON.stringify(serviceOptions)}
@@ -871,11 +884,18 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'SECT_SERVICE',
             'SHARED_COMMONS',
             'TERRAIN_RECOVERY',
+            'WORKSHOP',
           ];
           const chosenAction = parsed?.chosenAction;
           if (!chosenAction || !validActions.includes(chosenAction)) return undefined;
 
           if (activeVow && chosenAction !== 'PILGRIMAGE' && (chosenAction !== 'REST' || onPilgrimagePath)) return undefined;
+          const legalWorkshop = chosenAction === 'WORKSHOP' ? workshopOptions.find((item) =>
+            item.workshopMove === parsed.workshopMove && item.targetWorkshopId === parsed.targetWorkshopId &&
+            item.targetCultivatorId === parsed.targetCultivatorId && item.workshopTier === parsed.workshopTier &&
+            item.workshopQuantity === parsed.workshopQuantity && item.workshopQualityFloor === parsed.workshopQualityFloor) : undefined;
+          if (chosenAction === 'WORKSHOP' && (!legalWorkshop || parsed.targetLocationId !== undefined ||
+              parsed.targetSectId !== undefined)) return undefined;
           const legalRecovery = chosenAction === 'TERRAIN_RECOVERY' ?
             recoveryOptions.find((item) => item.targetTerrainTileId === parsed.targetTerrainTileId) : undefined;
           if (chosenAction === 'TERRAIN_RECOVERY' && (!legalRecovery || parsed.targetCultivatorId !== undefined ||
@@ -1098,7 +1118,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             chosenAction,
             targetLocationId: legalSanctuary ? legalSanctuary.targetLocationId : legalRelocation ? legalRelocation.targetLocationId :
               chosenAction !== 'DOCTRINE' && typeof parsed.targetLocationId === 'string' ? parsed.targetLocationId : undefined,
-            targetCultivatorId: legalDoctrine ? legalDoctrine.targetCultivatorId : legalEstate ? legalEstate.targetCultivatorId : legalWitness ? legalWitness.targetCultivatorId : legalOath ? legalOath.targetCultivatorId : legalTraining ? legalTraining.targetCultivatorId
+            targetCultivatorId: legalWorkshop ? legalWorkshop.targetCultivatorId : legalDoctrine ? legalDoctrine.targetCultivatorId : legalEstate ? legalEstate.targetCultivatorId : legalWitness ? legalWitness.targetCultivatorId : legalOath ? legalOath.targetCultivatorId : legalTraining ? legalTraining.targetCultivatorId
               : typeof parsed.targetCultivatorId === 'string' ? parsed.targetCultivatorId : undefined,
             spokenLine: typeof parsed.spokenLine === 'string' ? parsed.spokenLine.trim().slice(0, 90) : undefined,
             facilityKind: legalInfrastructure?.facilityKind,
@@ -1111,6 +1131,11 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             forgeTier: legalArtifact?.forgeTier,
             targetHerbId: legalCommons?.targetHerbId ?? legalAlchemy?.targetHerbId,
             targetPillId: legalAlchemy?.targetPillId,
+            workshopMove: legalWorkshop?.workshopMove,
+            targetWorkshopId: legalWorkshop?.targetWorkshopId,
+            workshopTier: legalWorkshop?.workshopTier,
+            workshopQuantity: legalWorkshop?.workshopQuantity,
+            workshopQualityFloor: legalWorkshop?.workshopQualityFloor,
             targetTerrainTileId: legalRecovery?.targetTerrainTileId,
             commonsMove: legalCommons?.commonsMove,
             targetCommonsId: legalCommons?.targetCommonsId,

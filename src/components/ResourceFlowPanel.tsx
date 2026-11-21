@@ -15,6 +15,8 @@ const REASONS: Readonly<Record<string, string>> = {
   treasury_upkeep: '宗门维护', treasury_overflow: '库容溢出', facility_construction: '设施建设',
   oath_funded: '天道契书托管', oath_paid: '契书价金支付', oath_refunded: '契书托管退款', oath_forfeited: '契书抵押罚没',
   oath_goods: '契书实物交付', commons_upkeep: '中立灵地共管维护', terrain_recovery: '地脉修复实耗',
+  workshop_deposit: '委制备料入库', workshop_fuel: '工坊实耗炉钱', workshop_material: '工坊实耗材料',
+  workshop_wage: '合格成品工钱', workshop_refund: '工坊退还未用款料',
   order_deposit: '挂单托管', order_release: '撤单或到期退回', price_improvement: '限价差退回',
   local_fill: '现场交割', shipment_departure: '商队启程转入保管', shipment_delivery: '商队到货交割',
   shipment_return: '商队退运退款退货', shipment_refund: '货损退款', shipment_loss: '实际货损',
@@ -50,6 +52,7 @@ export function ResourceFlowMonth({ ledger, world, scope, visibleSiteIds }: {
       case 'order': return '坊市挂单托管';
       case 'shipment': return '商队在途保管';
       case 'relocation': return '迁址在途公库';
+      case 'workshop': return '工坊备料托管';
     }
   };
 

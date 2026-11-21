@@ -13,6 +13,7 @@ import { visibleScriptureEditions } from '../engine/scriptureEngine';
 import { TechniquePanel } from './TechniquePanel';
 import { AlchemyPanel } from './AlchemyPanel';
 import { heldRelicFragments } from '../engine/relicEngine';
+import { WorkshopPanel } from './WorkshopPanel';
 import { ArtifactPanel } from './ArtifactPanel';
 import { TribulationPanel } from './TribulationPanel';
 import { SectHierarchyPanel } from './SectHierarchyPanel';
@@ -198,6 +199,7 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
           </div>
         </div>
         <ArtifactPanel cultivator={cultivator} cultivators={world.cultivators} />
+        <WorkshopPanel world={world} cultivator={cultivator} />
         {showsRelic && <React.Suspense fallback={<p role="status" className="text-xs text-slate-400">载入套装记录…</p>}>
           <RelicSetPanel world={world} actor={cultivator} />
         </React.Suspense>}

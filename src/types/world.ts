@@ -103,6 +103,7 @@ export type ActionType =
   | 'GATHER_HERBS'
   | 'BREW_PILL'
   | 'USE_PILL'
+  | 'WORKSHOP'
   | 'FORGE_ARTIFACT'
   | 'BIND_ARTIFACT'
   | 'REPAIR_ARTIFACT'
@@ -436,6 +437,11 @@ export interface LLMDecisionPayload {
   targetPillId?: PillId;
   targetArtifactId?: string;
   forgeTier?: ArtifactTier;
+  workshopMove?: WorkshopMove;
+  targetWorkshopId?: string;
+  workshopTier?: WorkshopTier;
+  workshopQuantity?: 1 | 2;
+  workshopQualityFloor?: WorkshopQualityFloor;
   tribulationStance?: TribulationStance;
   facilityKind?: FacilityKind;
   targetSectId?: string;
@@ -1846,9 +1852,9 @@ export interface SharedCommonsPact {
 export interface SharedCommonsState { pacts: SharedCommonsPact[]; nextId: number }
 
 export type ResourceFlowGood = 'stone' | MarketGood;
-export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation' | 'terrain';
+export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation' | 'terrain' | 'workshop';
 export type ResourceFlowAccount =
-  | { kind: 'actor' | 'site' | 'sect' | 'order' | 'shipment' | 'relocation'; id: string }
+  | { kind: 'actor' | 'site' | 'sect' | 'order' | 'shipment' | 'relocation' | 'workshop'; id: string }
   | { kind: 'oath'; id: string; pocket: 'payment' | 'collateral' };
 export type ResourceFlowVisibility =
   | { kind: 'observer' }
@@ -1885,7 +1891,51 @@ export interface ResourceFlowMonth {
 }
 export interface ResourceFlowState { nextId: number; months: ResourceFlowMonth[] }
 
+export type WorkshopMove = 'offer' | 'accept' | 'work' | 'cancel' | 'decline';
+export type WorkshopTier = '法器' | '灵器';
+export type WorkshopQualityFloor = 'standard' | 'fine';
+export type WorkshopOutputGrade = 'failed' | WorkshopQualityFloor;
+export type WorkshopStatus = 'offered' | 'active' | 'completed' | 'cancelled' | 'declined' | 'expired';
+export type WorkshopCloseReason = 'patron_cancelled' | 'maker_cancelled' | 'offer_expired' |
+  'work_expired' | 'patron_unavailable' | 'maker_unavailable' | 'site_unavailable';
+
+export interface WorkshopWorkReceipt {
+  tick: number;
+  makerId: string;
+  piece: 1 | 2;
+  stage: 'blank' | 'finish';
+  stonesUsed: number;
+  herbsUsed: number;
+  quality?: WorkshopOutputGrade;
+  qualityScore?: number;
+  artifactId?: string;
+  feePaid?: number;
+}
+export interface WorkshopOrder {
+  id: string;
+  patronId: string;
+  makerId: string;
+  siteId: string;
+  tier: WorkshopTier;
+  quantity: 1 | 2;
+  qualityFloor: WorkshopQualityFloor;
+  status: WorkshopStatus;
+  offeredTick: number;
+  offerExpiresTick: number;
+  acceptedTick?: number;
+  deadlineTick?: number;
+  settledTick?: number;
+  closeReason?: WorkshopCloseReason;
+  escrowStones: number;
+  escrowHerbs: number;
+  refundedStones: number;
+  refundedHerbs: number;
+  work: WorkshopWorkReceipt[];
+}
+export interface WorkshopState { orders: WorkshopOrder[]; nextId: number }
+
 export interface WorldState {
+  workshops: WorkshopState;
   resourceFlow: ResourceFlowState;
   sharedCommons: SharedCommonsState;
   serviceRetirement: ServiceRetirementState;

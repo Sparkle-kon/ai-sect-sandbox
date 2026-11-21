@@ -1,3 +1,4 @@
+import { advanceWorkshops } from './workshopEngine';
 import { rebaselineTerrainPaint, recordTerrainMeteor } from './terrainSuccessionEngine';
 import { cloneWorldWithColdHistory } from './coldHistoryEngine';
 import { courierCheckpoint, reconcileCourierDeaths } from './sealedCourierEngine';
@@ -123,7 +124,7 @@ export function applyMapBrush(prev: WorldState, kind: GodBrushKind, points: MapP
       actorIds: hits.map(({ cultivatorId }) => cultivatorId), locationId, ...(hits.length ? { damage: hits } : {}),
     });
   }
-  brushEvents.push(...advanceSanctuaries(world), ...advanceResearch(world), ...advancePilgrimages(world), ...reconcileCourierDeaths(world), ...advanceHouseholds(world), ...advanceEstates(world));
+  brushEvents.push(...advanceSanctuaries(world), ...advanceResearch(world), ...advancePilgrimages(world), ...reconcileCourierDeaths(world), ...advanceHouseholds(world), ...advanceWorkshops(world), ...advanceEstates(world));
   reconcileRelicCustody(world);
   recordNewDeathsForReincarnation(prev, world, brushEvents);
   archiveChronicleEvents(world, brushEvents);
