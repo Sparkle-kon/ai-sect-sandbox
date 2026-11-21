@@ -5,6 +5,10 @@ import {
 } from '../engine/storageEngine';
 import type { SaveBranchSource, SavePointInfo, SaveSlotInspection, SaveSlotSummary } from '../engine/storageEngine';
 import { measureSaveCapacity, prepareArchiveOptimization, type NarrativeArchivePlan, type SaveCapacityReport } from '../engine/saveCapacityEngine';
+import {
+  buildConfirmedShareSave, inspectShareSavePrivacy, prepareShareSavePrivacy,
+  type ShareSavePrivacyInspection, type ShareSavePrivacyReview,
+} from '../engine/shareSavePrivacy';
 import type { WorldTimeline } from '../engine/timelineEngine';
 import { isWorldgenProfileId, WORLDGEN_PROFILES } from '../engine/worldgenProfiles';
 
@@ -99,7 +103,10 @@ export function WorldStoragePanel({ world, busy, readOnly = false, sourceBranch,
   const [profileDraft, setProfileDraft] = useState<WorldgenProfileId>();
   const [staged, setStaged] = useState<Staged>();
   const [status, setStatus] = useState('');
-  const [preflight, setPreflight] = useState<SnapshotReview<SaveCapacityReport>>();
+  const [preflight, setPreflight] = useState<SnapshotReview<{
+    capacity: SaveCapacityReport; privacy?: ShareSavePrivacyInspection;
+  }>>();
+  const [shareReview, setShareReview] = useState<SnapshotReview<ShareSavePrivacyReview>>();
   const [archiveReview, setArchiveReview] = useState<SnapshotReview<NarrativeArchivePlan>>();
   const [working, setWorking] = useState(false);
   const inFlight = useRef(false);
@@ -121,6 +128,7 @@ export function WorldStoragePanel({ world, busy, readOnly = false, sourceBranch,
     sameStorageContext(inspection.stamp, context) ? inspection.review : undefined;
   const blocked = busy || working || confirmation !== undefined;
   const currentPreflight = sameStorageReview(preflight, context, timeline) ? preflight : undefined;
+  const currentShareReview = sameStorageReview(shareReview, context, timeline) ? shareReview : undefined;
   const currentArchive = sameStorageReview(archiveReview, context, timeline) ? archiveReview : undefined;
   const writeAllowed = loaded && capabilities?.writable === true && !readOnly;
   const stillHere = (stamp: ContextStamp) => mounted.current && observed.current.store === store && sameStorageContext(stamp, observed.current);
@@ -251,16 +259,20 @@ export function WorldStoragePanel({ world, busy, readOnly = false, sourceBranch,
 
   useEffect(() => {
     if (preflight && !currentPreflight) setPreflight(undefined);
+    if (shareReview && !currentShareReview) setShareReview(undefined);
     if (archiveReview && !currentArchive) setArchiveReview(undefined);
-  }, [preflight, currentPreflight, archiveReview, currentArchive]);
+  }, [preflight, currentPreflight, shareReview, currentShareReview, archiveReview, currentArchive]);
 
   const inspectCapacity = () => {
     if (blocked || inFlight.current || !stillHere(context)) return;
-    setPreflight({ stamp: context, timeline, result: measureSaveCapacity(world, timeline) });
+    const capacity = measureSaveCapacity(world, timeline);
+    let privacy: ShareSavePrivacyInspection | undefined;
+    try { privacy = inspectShareSavePrivacy(world); } catch { /* Ordinary export remains independent. */ }
+    setShareReview(undefined);
+    setPreflight({ stamp: context, timeline, result: { capacity, privacy } });
   };
 
-  const downloadWorld = (snapshot: WorldState, prefix = 'ai-sect', reviewedBytes?: number) => {
-    const payload = encodeWorldSave(snapshot);
+  const downloadJson = (payload: string, filename: string, reviewedBytes?: number) => {
     const blob = new Blob([payload], { type: 'application/json' });
     if (reviewedBytes !== undefined && blob.size !== reviewedBytes) throw new Error('JSON 大小已变化，未下载。请重新预检。');
     if (oldDownload.current) URL.revokeObjectURL(oldDownload.current);
@@ -268,21 +280,61 @@ export function WorldStoragePanel({ world, busy, readOnly = false, sourceBranch,
     oldDownload.current = url;
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${prefix}-seed-${snapshot.random.seed}-tick-${snapshot.tick}.json`;
+    link.download = filename;
     document.body.appendChild(link);
     link.click();
     link.remove();
   };
 
+  const downloadWorld = (snapshot: WorldState, prefix = 'ai-sect', reviewedBytes?: number) =>
+    downloadJson(encodeWorldSave(snapshot), `${prefix}-seed-${snapshot.random.seed}-tick-${snapshot.tick}.json`, reviewedBytes);
+
   const exportFile = () => {
-    if (blocked || !currentPreflight || !canDownloadPreparedSave(currentPreflight.result)) return;
+    if (blocked || !currentPreflight || !canDownloadPreparedSave(currentPreflight.result.capacity)) return;
     void work(async () => {
       if (!stillHere(currentPreflight.stamp) || !sameStorageReview(currentPreflight, observed.current, observed.current.timeline)) {
         setStatus('世界、分支或快照在预检后已变化，未下载。请重新预检。');
         return;
       }
-      downloadWorld(currentPreflight.stamp.world, 'ai-sect', currentPreflight.result.jsonBytes ?? undefined);
+      downloadWorld(currentPreflight.stamp.world, 'ai-sect', currentPreflight.result.capacity.jsonBytes ?? undefined);
       setStatus('已交给浏览器下载 JSON；请检查浏览器下载目录。');
+    });
+  };
+
+  const exactShareReview = <T,>(review: SnapshotReview<T>) =>
+    stillHere(review.stamp) && !observed.current.busy && sameStorageReview(review, observed.current, observed.current.timeline) &&
+    (canUseContext?.(review.stamp.world, review.stamp.version) ?? true);
+
+  const prepareShare = () => {
+    if (blocked || !currentPreflight?.result.privacy || !exactShareReview(currentPreflight)) return;
+    void work(async () => {
+      try {
+        const result = prepareShareSavePrivacy(currentPreflight.stamp.world);
+        if (!exactShareReview(currentPreflight)) return;
+        setShareReview({ stamp: currentPreflight.stamp, timeline: currentPreflight.timeline, result });
+      } catch {
+        setStatus('无法校验脱敏副本，未下载，也未更改原档。');
+      }
+    });
+  };
+
+  const confirmShare = () => {
+    if (blocked || !currentShareReview || !canDownloadShareSave(currentShareReview.result) || !exactShareReview(currentShareReview)) return;
+    void work(async () => {
+      if (!exactShareReview(currentShareReview)) return;
+      setShareReview(undefined);
+      try {
+        const { stamp, result } = currentShareReview;
+        const payload = buildConfirmedShareSave(stamp.world, result);
+        if (!payload || payload.bytes !== result.redactedBytes || !exactShareReview(currentShareReview)) {
+          setStatus('副本或世界在确认前已变化，未下载。请重新预检。');
+          return;
+        }
+        downloadJson(payload.json, `ai-sect-share-seed-${stamp.world.random.seed}-tick-${stamp.world.tick}.json`, payload.bytes);
+        setStatus('已交给浏览器下载脱敏副本；未上传，也未更改原档。');
+      } catch {
+        setStatus('未能下载已校验的脱敏副本；未更改原档。');
+      }
     });
   };
 
@@ -382,7 +434,7 @@ export function WorldStoragePanel({ world, busy, readOnly = false, sourceBranch,
       </fieldset>
       <fieldset disabled={blocked} className="min-w-0 space-y-2 rounded border border-slate-800 p-2">
         <legend className="px-1 text-xs font-semibold text-slate-200">JSON 文件</legend>
-        <p className="text-xs leading-relaxed text-amber-200">存档与导出的 JSON 可能包含私密游戏对话。不会导出应用中的模型服务凭证或配置，但聊天原文会保留，请勿在对话中写入密钥；分享前请检查。</p>
+        <p className="text-xs leading-relaxed text-amber-200">存档与完整导出的 JSON 可能包含私密游戏对话。不会导出应用中的模型服务凭证或配置，但完整副本保留聊天原文，请勿在对话中写入密钥；分享前请检查。</p>
         <div className="flex flex-wrap items-end gap-2">
           <button type="button" className={button} onClick={inspectCapacity}>预检当前世界 JSON</button>
           <label className="grid min-w-0 gap-1 text-xs text-slate-300">
@@ -400,7 +452,14 @@ export function WorldStoragePanel({ world, busy, readOnly = false, sourceBranch,
           </label>
         </div>
         <p className="text-xs text-slate-400">预检测量导出 JSON 的 UTF-8 字节数，不下载文件，也不是浏览器内存占用。</p>
-        {currentPreflight && <SaveCapacityResult report={currentPreflight.result} onDownload={exportFile} />}
+        {currentPreflight && <>
+          <SaveCapacityResult report={currentPreflight.result.capacity} onDownload={exportFile} />
+          {currentPreflight.result.privacy
+            ? <ShareSavePrivacySummary inspection={currentPreflight.result.privacy} onPrepare={currentShareReview ? undefined : prepareShare} />
+            : <p className="text-xs text-slate-400">暂无法统计隐私字段；未显示原文，也不提供脱敏副本。</p>}
+          {currentShareReview && <ShareSavePrivacyConfirmation review={currentShareReview.result}
+            onConfirm={confirmShare} onCancel={() => setShareReview(undefined)} />}
+        </>}
         {onArchiveNarrative && !readOnly && <div className="space-y-2 border-t border-slate-800 pt-2">
           <button type="button" className={button} onClick={stageArchive}>预览旧章归档</button>
           {currentArchive && <ArchiveOptimizationReview plan={currentArchive.result} onApply={confirmArchive}
@@ -457,6 +516,62 @@ export function SaveCapacityResult({ report, onDownload }: { report: SaveCapacit
     </p>}
     {canDownloadPreparedSave(report) && <button type="button" className={button} onClick={onDownload}>下载已预检 JSON</button>}
   </div>;
+}
+
+const privacyLabels: Record<keyof ShareSavePrivacyInspection['counts'], string> = {
+  privateNotes: '地图私密批注',
+  avatarTranscriptFields: '化身私聊字段',
+  actorThoughtFields: '角色心声与私人目标字段',
+  whisperMemoryFields: '传音记忆字段',
+  participantEventFields: '仅参与者可见的事件字段',
+  eventDialogueBlocks: '事件对话块',
+  archiveDialogueBlocks: '史库对话块',
+  councilDialogueFields: '议事发言字段',
+  chapterProseFields: '热、冷档章节正文',
+};
+
+export function ShareSavePrivacySummary({ inspection, onPrepare }: {
+  inspection: ShareSavePrivacyInspection; onPrepare?: () => void;
+}) {
+  return <div aria-label="分享隐私计数" className="min-w-0 space-y-1.5 rounded border border-slate-800 p-2 text-xs text-slate-300">
+    <h4 className="font-semibold text-slate-100">分享隐私 · 只看数量</h4>
+    <p>不显示原文。世界 JSON 不含时间线分支名称；本机存档槽可以另有来源标签。</p>
+    <dl className="grid gap-x-4 gap-y-1 sm:grid-cols-2">
+      {(Object.keys(privacyLabels) as Array<keyof typeof privacyLabels>).map((key) =>
+        <div key={key} className="flex min-w-0 flex-wrap gap-x-1.5">
+          <dt>{privacyLabels[key]}：</dt><dd>{inspection.counts[key]}</dd>
+        </div>)}
+    </dl>
+    <p>脱敏副本只处理以上项目，不是匿名档。人物名称、流言、封缄记录、章节标题及其他叙事文字可能仍在；分享前请检查。它也不保证复演出相同行动。</p>
+    {onPrepare && <button type="button" className={button} onClick={onPrepare}>准备脱敏分享副本</button>}
+  </div>;
+}
+
+export const canDownloadShareSave = (review: ShareSavePrivacyReview): boolean =>
+  review.status === 'ready' && review.protectedStateVerified && review.redactedBytes !== null &&
+  review.redactedBytes > 0 && review.redactedBytes <= review.limitBytes;
+
+export function ShareSavePrivacyConfirmation({ review, onConfirm, onCancel }: {
+  review: ShareSavePrivacyReview; onConfirm: () => void; onCancel: () => void;
+}) {
+  const ready = canDownloadShareSave(review);
+  const protectedCounts = review.protectedCounts;
+  return <section aria-label="确认脱敏分享副本" className="min-w-0 space-y-1.5 rounded border border-amber-500/50 p-2 text-xs text-amber-100">
+    <h4 className="font-semibold">脱敏副本预览（不显示原文）</h4>
+    <p className="break-words">第 {review.tick} 轮 · 原档 {bytes(review.originalBytes)} · 脱敏副本 {bytes(review.redactedBytes)} · 上限 {bytes(review.limitBytes)}。</p>
+    {ready ? <>
+      <p>已校验人物、地点、宗门、村镇计数，以及化身绑定、待执行指令和仍在托管的款物均未改变。</p>
+      <p>{protectedCounts.cultivators} 人（在世 {protectedCounts.livingCultivators}） · {protectedCounts.locations} 处地点 · {protectedCounts.sects} 个宗门 · {protectedCounts.settlements} 个村镇。</p>
+      <p>化身绑定：{protectedCounts.avatarBound ? '有' : '无'} · 待执行指令：{protectedCounts.avatarOrderPending ? '有' : '无'}。</p>
+      <p>只下载新副本到本机，不上传，也不更改当前世界、存档槽或分支。</p>
+    </> : <p role="status">{review.status === 'invalid_source' ? '原档未通过校验，未生成可下载副本。'
+      : review.redactedBytes !== null && review.redactedBytes > review.limitBytes ? '副本超过文件上限，不提供下载。'
+        : '副本未通过完整性或隐私核验，不提供下载。'}</p>}
+    <div className="flex flex-wrap gap-1.5">
+      {ready && <button type="button" className={confirmButton} onClick={onConfirm}>确认并下载脱敏副本</button>}
+      <button type="button" className={button} onClick={onCancel}>取消脱敏副本预览</button>
+    </div>
+  </section>;
 }
 
 export function ArchiveOptimizationReview({ plan, onApply, onCancel }: { plan: NarrativeArchivePlan; onApply: () => void; onCancel: () => void }) {
