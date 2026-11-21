@@ -1,3 +1,4 @@
+import { courierCheckpoint } from './sealedCourierEngine';
 import { pilgrimageCheckpoint } from './pilgrimageEngine';
 import { activeEscortForActor } from './escortEngine';
 import { activeRelocationForActor } from './relocationEngine';
@@ -11,10 +12,10 @@ type EncounterAction = 'TRADE' | 'DUAL_CULTIVATE' | 'SECT_DIPLOMACY';
 export const ARTIFACT_TRADE_PRICE = 120;
 
 export function availableEncounters(actor: Cultivator, world: WorldState) {
-  if (activeRelocationForActor(world, actor) || activeEscortForActor(world, actor) || pilgrimageCheckpoint(world, actor)) return [];
+  if (activeRelocationForActor(world, actor) || activeEscortForActor(world, actor) || pilgrimageCheckpoint(world, actor) || courierCheckpoint(world, actor)) return [];
   const location = world.locations.find((place) => place.id === actor.locationId);
   return world.cultivators.filter((other) => other.alive && other.id !== actor.id &&
-    other.locationId === actor.locationId && !activeRelocationForActor(world, other) && !activeEscortForActor(world, other) && !pilgrimageCheckpoint(world, other)).flatMap((other) => {
+    other.locationId === actor.locationId && !activeRelocationForActor(world, other) && !activeEscortForActor(world, other) && !pilgrimageCheckpoint(world, other) && !courierCheckpoint(world, other)).flatMap((other) => {
     const edge = world.relationships.find((item) =>
       (item.fromId === actor.id && item.toId === other.id) || (item.toId === actor.id && item.fromId === other.id));
     const affinity = edge?.affinity ?? 0;

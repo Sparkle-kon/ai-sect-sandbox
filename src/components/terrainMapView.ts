@@ -1,3 +1,4 @@
+import { courierCheckpoint } from '../engine/sealedCourierEngine';
 import { pilgrimageCheckpoint } from '../engine/pilgrimageEngine';
 import type { Cultivator, LocationNode, MapPoint, MapTile, TerrainBiome, WorldState } from '../types/world';
 import { currentVisibleTileIds, terrainTileAt } from '../engine/terrainEngine';
@@ -25,7 +26,7 @@ export function createTerrainMapView(world: WorldState, viewer: Cultivator | und
   const trailPositions = new Map<string, MapPoint>();
   const liveActors = world.cultivators.filter((actor) => {
     if (!actor.alive) return false;
-    const checkpoint = pilgrimageCheckpoint(world, actor);
+    const checkpoint = courierCheckpoint(world, actor) ?? pilgrimageCheckpoint(world, actor);
     if (!checkpoint) return isCurrentLocation(actor.locationId);
     if (current && !current.has(terrainTileAt(world, checkpoint.x, checkpoint.y)?.id ?? '')) return false;
     trailPositions.set(actor.id, checkpoint);

@@ -1,3 +1,4 @@
+import { createSealedCourierState } from '../engine/sealedCourierEngine';
 import { createWatchlistState } from '../engine/watchlistEngine';
 import { createVillageWorksState } from '../engine/villageWorksEngine';
 import { createHouseholdState, initializeHouseholds } from '../engine/householdEngine';
@@ -268,6 +269,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     households: createHouseholdState(),
     villageWorks: createVillageWorksState(),
     watchlists: createWatchlistState(),
+    couriers: createSealedCourierState(),
     witnesses: createWitnessState(),
     estates: createEstateState(),
     decisionTrace: createDecisionTraceState(),

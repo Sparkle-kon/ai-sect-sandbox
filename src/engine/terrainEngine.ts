@@ -1,3 +1,4 @@
+import { courierCheckpoint } from './sealedCourierEngine';
 import { pilgrimageCheckpoint } from './pilgrimageEngine';
 import type { Cultivator, LocationNode, MapTile, TerrainBiome, WorldState, WorldTerrain } from '../types/world';
 
@@ -64,7 +65,7 @@ export function terrainTileAt(world: WorldState, x: number, y: number): MapTile 
 }
 
 export function currentVisibleTileIds(world: WorldState, actor: Cultivator): Set<string> {
-  const site = pilgrimageCheckpoint(world, actor) ?? world.locations.find(({ id }) => id === actor.locationId);
+  const site = courierCheckpoint(world, actor) ?? pilgrimageCheckpoint(world, actor) ?? world.locations.find(({ id }) => id === actor.locationId);
   if (!actor.alive || !site) return new Set();
   const focus = terrainTileAt(world, site.x, site.y);
   if (!focus) return new Set();

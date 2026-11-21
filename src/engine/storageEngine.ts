@@ -1,3 +1,4 @@
+import { COURIER_OFFER_TICKS, COURIER_ROUTE_TICKS, COURIER_SERVICE_FEE, createSealedCourierState } from './sealedCourierEngine';
 import { createWatchlistState, WATCHLIST_BUCKET_MAX_COUNT, WATCHLIST_MAX_DIGESTS,
   WATCHLIST_MAX_LABEL_CHARS, WATCHLIST_MAX_WATCHES } from './watchlistEngine';
 import { createVillageWorksState, VILLAGE_WORK_ADULTS_PER_LABOR, VILLAGE_WORK_MAX_LABOR_PER_TICK, VILLAGE_WORK_RULES } from './villageWorksEngine';
@@ -95,7 +96,7 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const marketQty = num(1,12,true), marketPrice = num(1,500,true);
@@ -118,6 +119,12 @@ const scenarioObjective: Validator = (value, path) => {
   if (kind === 'living_population') return structure({kind:one(kind),minimum:num(1,SCENARIO_MAX_POPULATION_TARGET,true)})(value,path);
   if (kind === 'site_qi') return structure({kind:one(kind),locationId:id,minimum:num(0,SCENARIO_MAX_SITE_QI_TARGET,true)})(value,path);
   if (kind === 'sect_treasury') return structure({kind:one(kind),sectId:id,minimum:num(0,SCENARIO_MAX_TREASURY_TARGET,true)})(value,path);
+  fail(path);
+};
+const dispatchPayload: Validator = (value, path) => {
+  const kind = (value as {kind?:unknown} | null)?.kind;
+  if (kind === 'private_cue') return structure({kind:one(kind),cue:one('request_audience','offer_relief')})(value,path);
+  if (kind === 'public_relief') return structure({kind:one(kind),sourceEventId:id,settlementId:id,stones:count,herbs:count})(value,path);
   fail(path);
 };
 const scenarioEvidence: Validator = (value, path) => {
@@ -227,6 +234,13 @@ const shape = structure({
       attestations:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,tick,verdict:one('supports','contradicts')})),
       appeal:optional(structure({tick,actorId:id,verdict:one('upheld','rejected'),reason:text})),settledTick:otick,
       reputationSectId:oid,reputationPenalty:percentage,reputationRestored:percentage,reason:otext}))}),
+  couriers:structure({nextId:num(1,100_000_000,true),dispatches:arr(SAVE_COLLECTION_LIMIT,structure({
+    id,senderId:id,recipientId:id,courierId:id,originId:id,destinationId:id,openedTick:tick,offerExpiresTick:tick,
+    status:one('offered','in_transit','returning','delivered','returned','lost','declined','expired'),sealed:dispatchPayload,
+    acceptedTick:otick,deadlineTick:otick,settledTick:otick,deliveredTick:otick,lastAdvancedTick:otick,
+    path:arr(6402,structure({x:num(0,1000),y:num(0,600)})),pathIndex:num(0,6401,true),feePaid:num(0,COURIER_SERVICE_FEE,true),
+    reason:optional(one('recipient_absent','recipient_unavailable','hazard','courier_death','route_lost','deadline','declined','offer_expiry'))
+  }))}),
   watchlists:structure({nextId:num(1,100_000_000,true),lastCapturedTick:otick,
     watches:arr(WATCHLIST_MAX_WATCHES,structure({id,observerId:id,target:structure({kind:one('actor','site','sect'),id}),label:strings(WATCHLIST_MAX_LABEL_CHARS,1),
       createdTick:tick,readThroughTick:tick})),
@@ -424,6 +438,7 @@ function verifyWorld(value: unknown): WorldState {
     ? { ...value,
       ...(!Object.hasOwn(value, 'mentorship') ? { mentorship: { offers: [], lineage: [], budgets: [] } } : {}),
       ...(!Object.hasOwn(value, 'decisionTrace') ? { decisionTrace: { records: [] } } : {}),
+      ...(!Object.hasOwn(value, 'couriers') ? { couriers: createSealedCourierState() } : {}),
       ...(!Object.hasOwn(value, 'watchlists') ? { watchlists: createWatchlistState() } : {}),
       ...(!Object.hasOwn(value, 'villageWorks') ? { villageWorks: createVillageWorksState() } : {}),
       ...(!Object.hasOwn(value, 'households') ? { households: createHouseholdState() } : {}),
@@ -467,6 +482,64 @@ function verifyWorld(value: unknown): WorldState {
   const sector = unique(w.sects, (item) => item.id, 'sects.id');
   const locations = unique(w.locations, (item) => item.id, 'locations.id');
   const map = unique(w.terrain.tiles, (item) => item.id, 'terrain.tiles.id');
+  unique(w.couriers.dispatches, ({ id }) => id, 'couriers.dispatches.id');
+  unique(w.couriers.dispatches.filter(({ status }) => status === 'in_transit' || status === 'returning'),
+    ({ courierId }) => courierId, 'couriers.dispatches.active_courier');
+  const courierSites = new Map(w.locations.map((site) => [site.id, site]));
+  for (const row of w.couriers.dispatches) {
+    const serial = Number(row.id.match(/^sealed-dispatch-([1-9][0-9]*)$/)?.[1]);
+    const traveling = row.status === 'in_transit' || row.status === 'returning';
+    const open = row.status === 'offered' || traveling;
+    const accepted = row.acceptedTick !== undefined;
+    const delivered = row.status === 'delivered';
+    const allowedReason = row.status === 'declined' ? row.reason === 'declined' :
+      row.status === 'expired' ? row.reason === 'offer_expiry' || row.reason === 'courier_death' :
+      row.status === 'returned' ? ['recipient_absent','recipient_unavailable','route_lost'].some((reason) => reason === row.reason) :
+      row.status === 'returning' ?
+        ['recipient_absent','recipient_unavailable','hazard','route_lost'].some((reason) => reason === row.reason) :
+      row.status === 'lost' ? ['hazard','courier_death','route_lost','deadline'].some((reason) => reason === row.reason) :
+      row.reason === undefined;
+    if (!Number.isSafeInteger(serial) || serial >= w.couriers.nextId || row.originId === row.destinationId ||
+        new Set([row.senderId,row.recipientId,row.courierId]).size !== 3 ||
+        [row.senderId,row.recipientId,row.courierId].some((id) => !actor.has(id)) ||
+        row.openedTick > w.tick || row.offerExpiresTick !== row.openedTick + COURIER_OFFER_TICKS ||
+        ((row.status === 'offered' || row.status === 'declined' || row.status === 'expired') && accepted) ||
+        ((traveling || delivered || row.status === 'returned') && !accepted) ||
+        (row.status === 'offered' && row.offerExpiresTick <= w.tick) ||
+        (accepted !== (row.deadlineTick !== undefined)) || row.feePaid !== (accepted ? COURIER_SERVICE_FEE : 0) ||
+        (row.acceptedTick !== undefined && (row.acceptedTick < row.openedTick || row.acceptedTick >= row.offerExpiresTick ||
+          row.acceptedTick > w.tick || row.deadlineTick !== row.acceptedTick + COURIER_ROUTE_TICKS)) ||
+        (open !== (row.settledTick === undefined)) ||
+        (row.settledTick !== undefined && (row.settledTick > w.tick || row.settledTick < (row.acceptedTick ?? row.openedTick))) ||
+        (row.status === 'expired' && row.reason === 'offer_expiry' && row.settledTick! < row.offerExpiresTick) ||
+        (row.status === 'declined' && row.settledTick! >= row.offerExpiresTick) ||
+        (traveling && row.deadlineTick! <= w.tick) || !allowedReason ||
+        (delivered !== (row.deliveredTick !== undefined)) ||
+        (delivered && (row.deliveredTick !== row.settledTick || row.deliveredTick !== row.lastAdvancedTick ||
+          row.deliveredTick! >= row.deadlineTick!)) ||
+        (row.lastAdvancedTick !== undefined && (!accepted || row.lastAdvancedTick <= row.acceptedTick! ||
+          row.lastAdvancedTick > (row.settledTick ?? w.tick)))) fail('couriers.dispatches.references');
+    if (traveling) {
+      const start = courierSites.get(row.originId), end = courierSites.get(row.destinationId);
+      if (row.path.length < 2 || row.pathIndex >= row.path.length || (!start && !end)) fail('couriers.dispatches.path');
+      const first = row.path[0], last = row.path.at(-1)!;
+      if (start && (first.x !== start.x || first.y !== start.y) ||
+          end && (last.x !== end.x || last.y !== end.y)) fail('couriers.dispatches.path_ends');
+      const tiles = row.path.map((p) => terrainTileAt(w, p.x, p.y));
+      if (tiles.some((tile, i) => !tile || (i > 0 && (!tiles[i - 1] ||
+        Math.abs(tile.col - tiles[i - 1]!.col) + Math.abs(tile.row - tiles[i - 1]!.row) > 1)))) fail('couriers.dispatches.path_tiles');
+    } else if (row.path.length || row.pathIndex !== 0) fail('couriers.dispatches.path_closed');
+    if (row.sealed.kind === 'public_relief') {
+      const stamp = row.sealed;
+      const sourceTick = Number(stamp.sourceEventId.match(/^evt-settlement-(\d+)-relief-/)?.[1]);
+      const record = w.settlements.records.find(({ id }) => 'evt-' + id === stamp.sourceEventId);
+      if (!Number.isSafeInteger(sourceTick) || sourceTick > row.openedTick ||
+          stamp.sourceEventId !== 'evt-settlement-' + sourceTick + '-relief-' + stamp.settlementId + '-' + row.senderId ||
+          stamp.stones !== SETTLEMENT_RELIEF.stones || stamp.herbs !== SETTLEMENT_RELIEF.jade_leaf ||
+          (record && (record.tick !== sourceTick || record.kind !== 'relief' || record.settlementId !== stamp.settlementId ||
+            record.actorId !== row.senderId || record.stones !== stamp.stones || record.herbs !== stamp.herbs))) fail('couriers.dispatches.public_proof');
+    }
+  }
   unique(w.watchlists.watches, ({ id }) => id, 'watchlists.watches.id');
   unique(w.watchlists.watches, ({ observerId, target }) => JSON.stringify([observerId, target.kind, target.id]), 'watchlists.watches.target');
   const watchById = new Map(w.watchlists.watches.map((row) => [row.id, row]));

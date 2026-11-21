@@ -1,3 +1,4 @@
+import { activeCourierForActor } from './sealedCourierEngine';
 import type { Cultivator, LLMDecisionPayload, LocationNode, MapPoint, RelocationMove, RelocationPlan, RelocationState,
   Sect, WorldEvent, WorldState } from '../types/world';
 import { findMapPath } from './mapMotionEngine';
@@ -68,7 +69,7 @@ function availablePerson(world: WorldState, actor: Cultivator): boolean {
     siege.participantIds.includes(actor.id)) &&
     !world.occasions.some((occasion) => (occasion.status === 'registration' || occasion.status === 'running') &&
       occasion.participantIds.includes(actor.id)) &&
-    !isTribulationActive(actor) && !activeRelocationForActor(world, actor);
+    !isTribulationActive(actor) && !activeCourierForActor(world, actor) && !activeRelocationForActor(world, actor);
 }
 
 function eligibleVoters(world: WorldState, sect: Sect, originId: string): Cultivator[] {

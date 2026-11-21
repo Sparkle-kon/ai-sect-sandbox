@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createInitialWorld } from '../src/data/initialWorld';
 import { computeHeuristicDecision, queryCultivatorLLMDecision } from '../src/engine/llmBrain';
+import { encodeWorldSave } from '../src/engine/storageEngine';
 import { advanceWorldTick } from '../src/engine/worldEngine';
 import type { LLMConfig, LLMDecisionPayload, WorldState } from '../src/types/world';
 
@@ -49,5 +50,24 @@ describe('calendar occasions in both brains', () => {
     world = advanceWorldTick(world, { ...rest(world), [actor.id]: choice }, () => 0.2);
     expect(world.occasions[0].participantIds).toContain(actor.id);
     expect(response.mock.calls[1][1].body).toEqual(expect.stringContaining('天下公示的大会与秘境'));
+  });
+  it('evacuates a real companion with its owner when a temporary expedition gate closes', () => {
+    let world = createInitialWorld();
+    world.tick = 59;
+    world = advanceWorldTick(world, rest(world), () => .95);
+    const expedition = world.occasions.find(({ kind }) => kind === 'expedition')!;
+    expect(expedition).toBeDefined();
+    const ownerId = world.cultivators[0].id;
+    const id = world.spiritBeasts[0].id;
+    world.cultivators[0].locationId = expedition.locationId;
+    Object.assign(world.spiritBeasts[0], { locationId: expedition.locationId, tamedBy: ownerId });
+    while (world.locations.some(({ id: siteId }) => siteId === expedition.locationId)) {
+      world = advanceWorldTick(world, rest(world), () => .95);
+      expect(world.tick).toBeLessThan(68);
+    }
+    const survivor = world.spiritBeasts.find((beast) => beast.id === id)!;
+    expect(survivor).toMatchObject({ alive: true, tamedBy: ownerId,
+      locationId: world.cultivators.find(({ id: personId }) => personId === ownerId)?.locationId });
+    expect(() => encodeWorldSave(world)).not.toThrow();
   });
 });

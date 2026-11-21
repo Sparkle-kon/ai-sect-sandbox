@@ -1,3 +1,4 @@
+import { courierCheckpoint, reconcileCourierDeaths } from './sealedCourierEngine';
 import { advanceHouseholds } from './householdEngine';
 import { advancePilgrimages, pilgrimageCheckpoint } from './pilgrimageEngine';
 import { advanceSanctuaries } from './sanctuaryEngine';
@@ -28,7 +29,7 @@ function peopleAtTile(world: WorldState, tileId: string): Cultivator[] {
   return world.cultivators.filter((person) => {
     if (!person.alive || person.hp <= 0) return false;
     const convoy = activeRelocationForActor(world, person) ?? activeEscortForActor(world, person);
-    const checkpoint = convoy?.path[convoy.pathIndex] ?? pilgrimageCheckpoint(world, person);
+    const checkpoint = convoy?.path[convoy.pathIndex] ?? pilgrimageCheckpoint(world, person) ?? courierCheckpoint(world, person);
     return checkpoint ? terrainTileAt(world, checkpoint.x, checkpoint.y)?.id === tileId : matching.has(person.locationId);
   });
 }
@@ -117,7 +118,7 @@ export function applyMapBrush(prev: WorldState, kind: GodBrushKind, points: MapP
       actorIds: hits.map(({ cultivatorId }) => cultivatorId), locationId, ...(hits.length ? { damage: hits } : {}),
     });
   }
-  brushEvents.push(...advanceSanctuaries(world), ...advanceResearch(world), ...advancePilgrimages(world), ...advanceHouseholds(world), ...advanceEstates(world));
+  brushEvents.push(...advanceSanctuaries(world), ...advanceResearch(world), ...advancePilgrimages(world), ...reconcileCourierDeaths(world), ...advanceHouseholds(world), ...advanceEstates(world));
   reconcileRelicCustody(world);
   recordNewDeathsForReincarnation(prev, world, brushEvents);
   archiveChronicleEvents(world, brushEvents);

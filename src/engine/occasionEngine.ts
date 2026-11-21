@@ -72,6 +72,16 @@ function finish(world: WorldState, occasion: WorldOccasion, cancelled = false): 
       (occasion.kind === 'tournament' ? occasion.locationId : exit?.id ?? occasion.locationId);
   }
   if (occasion.kind === 'expedition' && temp && exit) {
+    const validSites = new Set(permanent.map(({ id }) => id));
+    for (const beast of world.spiritBeasts) {
+      if (beast.locationId !== temp.id && beast.homeLocationId !== temp.id) continue;
+      const owner = beast.tamedBy ? world.cultivators.find(({ id, alive, hp }) => id === beast.tamedBy && alive && hp > 0) : undefined;
+      if (beast.homeLocationId === temp.id) beast.homeLocationId = exit.id;
+      if (beast.locationId === temp.id) {
+        beast.locationId = owner && validSites.has(owner.locationId) ? owner.locationId :
+          validSites.has(beast.homeLocationId) ? beast.homeLocationId : exit.id;
+      }
+    }
     exit.inheritanceScrolls.push(...temp.inheritanceScrolls);
     world.locations = permanent;
   }

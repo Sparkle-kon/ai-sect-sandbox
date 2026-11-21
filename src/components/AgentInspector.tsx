@@ -4,6 +4,7 @@ import { Cultivator, WorldState } from '../types/world';
 import { MemoryPanel } from './MemoryPanel';
 import { RecollectionPanel } from './RecollectionPanel';
 import { ReflectionPanel } from './ReflectionPanel';
+import { SealedCourierPanel } from './SealedCourierPanel';
 import { RumorPanel } from './RumorPanel';
 import { SchemePanel } from './SchemePanel';
 import { SpiritRootBadge } from './SpiritRootBadge';
@@ -225,6 +226,7 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
       <RecollectionPanel world={world} actorId={cultivator.id} />
       <ReflectionPanel cultivator={cultivator} />
       <RumorPanel cultivator={cultivator} locations={world.locations} cultivators={world.cultivators} />
+      <SealedCourierPanel world={world} cultivator={cultivator} />
       <SchemePanel cultivator={cultivator} locations={world.locations} cultivators={world.cultivators} />
 
       {/* Both banks are the engine's current state, not a separate UI cache. */}

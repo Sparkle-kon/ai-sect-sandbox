@@ -1,4 +1,5 @@
 import type { Cultivator, MapPoint, PlayerWatch, WatchDigest, WatchlistState, WatchTarget, WorldEvent, WorldState } from '../types/world';
+import { courierCheckpoint } from './sealedCourierEngine';
 import { pilgrimageCheckpoint } from './pilgrimageEngine';
 import { terrainTileAt } from './terrainEngine';
 
@@ -26,6 +27,8 @@ const labelFor = (value: string, kind: WatchTarget['kind']): string =>
   ({ actor: '修士', site: '地点', sect: '宗门' } as const)[kind];
 
 function actualPoint(world: WorldState, actor: Cultivator, sites: ReadonlyMap<string, MapPoint>): MapPoint | undefined {
+  const inCourier = courierCheckpoint(world, actor);
+  if (inCourier) return inCourier;
   const pilgrimage = pilgrimageCheckpoint(world, actor);
   if (pilgrimage) return pilgrimage;
   const convoy = world.relocations.plans.find((plan) => plan.status === 'in_transit' && plan.garrisonIds.includes(actor.id)) ??

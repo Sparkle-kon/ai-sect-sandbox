@@ -96,6 +96,7 @@ export type ActionType =
   | 'TERRITORIAL_LEASE'
   | 'HOUSEHOLD_GUARDIAN'
   | 'VILLAGE_WORKS'
+  | 'SEALED_COURIER'
   | 'GATHER_HERBS'
   | 'BREW_PILL'
   | 'USE_PILL'
@@ -391,6 +392,11 @@ export interface LLMDecisionPayload {
   targetHazardId?: string;
   ceasefireMove?: CeasefireMove;
   targetCeasefireId?: string;
+  courierMove?: CourierMove;
+  targetCourierId?: string;
+  targetDispatchId?: string;
+  targetDispatchSourceId?: string;
+  dispatchCue?: DispatchCue;
   villageWorkKind?: VillageWorkKind;
   guardianMove?: HouseholdGuardianMove;
   targetGuardianshipId?: string;
@@ -1719,7 +1725,37 @@ export interface WatchlistState {
   lastCapturedTick?: number;
 }
 
+export type CourierMove = 'send' | 'accept' | 'decline';
+export type DispatchCue = 'request_audience' | 'offer_relief';
+export type DispatchPayload = { kind: 'private_cue'; cue: DispatchCue } |
+  { kind: 'public_relief'; sourceEventId: string; settlementId: string; stones: number; herbs: number };
+export type DispatchReason = 'recipient_absent' | 'recipient_unavailable' | 'hazard' | 'courier_death' |
+  'route_lost' | 'deadline' | 'declined' | 'offer_expiry';
+export interface SealedDispatch {
+  id: string;
+  senderId: string;
+  recipientId: string;
+  courierId: string;
+  originId: string;
+  destinationId: string;
+  openedTick: number;
+  offerExpiresTick: number;
+  status: 'offered' | 'in_transit' | 'returning' | 'delivered' | 'returned' | 'lost' | 'declined' | 'expired';
+  sealed: DispatchPayload;
+  acceptedTick?: number;
+  deadlineTick?: number;
+  settledTick?: number;
+  deliveredTick?: number;
+  lastAdvancedTick?: number;
+  path: MapPoint[];
+  pathIndex: number;
+  feePaid: number;
+  reason?: DispatchReason;
+}
+export interface SealedCourierState { dispatches: SealedDispatch[]; nextId: number }
+
 export interface WorldState {
+  couriers: SealedCourierState;
   watchlists: WatchlistState;
   villageWorks: VillageWorksState;
   households: HouseholdState;

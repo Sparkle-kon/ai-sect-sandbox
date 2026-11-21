@@ -1,3 +1,4 @@
+import { activeCourierForActor } from './sealedCourierEngine';
 import { activeCeasefireBetween } from './ceasefireEngine';
 import { activeEscortForActor } from './escortEngine';
 import { activeRelocationForActor, activeRelocationForSect } from './relocationEngine';
@@ -42,7 +43,7 @@ const isAlly = (world: WorldState, a: string, b: string) => a === b || sectRelat
 
 function forceCandidates(world: WorldState, attacker: Sect, defender: Sect, actor: Cultivator): Cultivator[] {
   const candidates = world.cultivators.filter((person) => live(person) && isAlly(world, attacker.id, person.sectId) &&
-    person.sectId !== defender.id && !isAlly(world, defender.id, person.sectId) && !activeRelocationForActor(world, person) && !activeEscortForActor(world, person) && !activeSiegeForActor(world, person) &&
+    person.sectId !== defender.id && !isAlly(world, defender.id, person.sectId) && !activeRelocationForActor(world, person) && !activeEscortForActor(world, person) && !activeCourierForActor(world, person) && !activeSiegeForActor(world, person) &&
     !world.occasions.some((item) => (item.status === 'registration' || item.status === 'running') && item.participantIds.includes(person.id)) &&
     person.tribulation?.stage !== 'lightning' && person.tribulation?.stage !== 'heart_demon')
     .sort((a, b) => Number(b.id === actor.id) - Number(a.id === actor.id) || Number(b.sectId === attacker.id) - Number(a.sectId === attacker.id) ||
@@ -180,7 +181,7 @@ export function advanceDiplomacy(world: WorldState, rng: () => number): WorldEve
     const raiders = [...new Set(siege.participantIds)].map((id) => world.cultivators.find((person) => person.id === id))
       .filter((person): person is Cultivator => Boolean(person && live(person) && isAlly(world, person.sectId, attacker.id)));
     const defenders = world.cultivators.filter((person) => live(person) && !siege.participantIds.includes(person.id) &&
-      person.locationId === siege.destinationId && isAlly(world, defender.id, person.sectId));
+      person.locationId === siege.destinationId && !activeCourierForActor(world, person) && isAlly(world, defender.id, person.sectId));
     if (raiders.length < MIN_FORCE || sectRelation(world, attacker.id, defender.id)?.pact !== 'war') {
       events.push(settleSiege(world, siege, attacker, defender, raiders, defenders, false)); continue;
     }

@@ -1,3 +1,4 @@
+import { courierCheckpoint } from './engine/sealedCourierEngine';
 import { applyWatchMutation, captureWatchDigests } from './engine/watchlistEngine';
 import type { WatchlistCommand, WatchlistMutationResult } from './engine/watchlistEngine';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -443,7 +444,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
               <button type="button" onClick={() => openWorkspace('people')} className={`${action} bg-slate-800 text-slate-100 hover:bg-slate-700`}>人物详情</button>
             </div>
             {selectedCultivator && <p className="break-words text-xs leading-relaxed text-slate-300">
-              {selectedCultivator.realm} {selectedCultivator.realmStage}层 · {selectedCultivator.alive ? `气血 ${selectedCultivator.hp}/${selectedCultivator.maxHp}` : '已陨落'} · {characterLocation?.name ?? '所在地点未详'}
+              {selectedCultivator.realm} {selectedCultivator.realmStage}层 · {selectedCultivator.alive ? `气血 ${selectedCultivator.hp}/${selectedCultivator.maxHp}` : '已陨落'} · {courierCheckpoint(visibleWorld, selectedCultivator) ? '信使途中' : characterLocation?.name ?? '所在地点未详'}
             </p>}
           </aside>
         </div>,
@@ -473,7 +474,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
           ]} />
         </div>,
         chronicle: <WorkspaceSections label="纪事与历史" initialOpen={opened('chronicle', 'feed')} sections={[
-          { id: 'feed', label: '当世纪事', content: <React.Suspense fallback={<p role="status">载入当世纪事…</p>}><ChronicleFeed events={visibleWorld.events} /></React.Suspense> },
+          { id: 'feed', label: '当世纪事', content: <React.Suspense fallback={<p role="status">载入当世纪事…</p>}><ChronicleFeed events={visibleWorld.events.filter((entry) => !entry.id.startsWith('evt-sealed-dispatch-'))} /></React.Suspense> },
           { id: 'library', label: '藏书阁与史书', content: <React.Suspense fallback={<p role="status">载入藏书阁…</p>}><ChronicleLibraryPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense> },
           { id: 'notebook', label: '书签与地图批注', content: <React.Suspense fallback={<p role="status">载入分支记录…</p>}>
             <ChronicleNotebookPanel key={`${timeline.activeBranchId}:${preview?.tick ?? 'live'}:${activeActorId ?? ''}`}

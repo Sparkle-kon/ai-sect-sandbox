@@ -1,3 +1,4 @@
+import { courierCheckpoint } from './sealedCourierEngine';
 import { habitatCanReceiveWildBeast, isRewildingAcclimating } from './habitatEngine';
 import { pilgrimageCheckpoint } from './pilgrimageEngine';
 import { weatherHabitatScore } from './weatherEngine';
@@ -127,7 +128,7 @@ export function advanceSpiritBeasts(world: WorldState, rng: () => number): World
     beast.power = RULES[beast.kind].power + 2 * beast.cultivation;
     beast.hp = Math.min(beast.maxHp, beast.hp + (owner ? 16 : 10));
     if (owner || isRewildingAcclimating(world, beast.id)) continue;
-    const target = world.cultivators.filter((actor) => live(actor) && actor.locationId === beast.locationId && !pilgrimageCheckpoint(world, actor) &&
+    const target = world.cultivators.filter((actor) => live(actor) && actor.locationId === beast.locationId && !pilgrimageCheckpoint(world, actor) && !courierCheckpoint(world, actor) &&
       (actor.realm === '练气' || actor.realm === '筑基') && !occupied(world, actor))
       .sort((a, b) => a.combatPower - b.combatPower || a.id.localeCompare(b.id))[0];
     if (target && RULES[beast.kind].risk > 0 && rng() < RULES[beast.kind].risk) {

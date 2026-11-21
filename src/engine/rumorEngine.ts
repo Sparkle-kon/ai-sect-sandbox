@@ -1,3 +1,4 @@
+import { courierCheckpoint } from './sealedCourierEngine';
 import { captureChronicleErrataSource } from './chronicleErrataEngine';
 import { capturePublicWitnessFact } from './witnessEngine';
 import type { Cultivator, LLMDecisionPayload, Rumor, WorldEvent, WorldState } from '../types/world';
@@ -23,7 +24,7 @@ export function witnessEvent(world: WorldState, event: WorldEvent): void {
   if (event.duelWinnerId || event.id.startsWith('evt-settlement-')) captureChronicleErrataSource(world, event);
   const involved = new Set(event.actorIds);
   for (const actor of world.cultivators) {
-    const present = event.locationId !== undefined && actor.locationId === event.locationId;
+    const present = event.locationId !== undefined && actor.locationId === event.locationId && !courierCheckpoint(world, actor);
     if (actor.alive && (involved.has(actor.id) || (present && event.witnessScope !== 'participants'))) {
       learn(actor, {
         id: `rumor-${event.id}`, subject: event.title, locationId: event.locationId,

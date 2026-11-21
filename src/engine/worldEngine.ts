@@ -1,3 +1,4 @@
+import { activeCourierForActor, advanceCouriers, courierActedThisTick, courierCheckpoint, reconcileCourierDeaths, resolveCourierAction } from './sealedCourierEngine';
 import { captureWatchDigests } from './watchlistEngine';
 import { advanceVillageWorks, resolveVillageWorksAction } from './villageWorksEngine';
 import { advanceHouseholds, resolveGuardianAction } from './householdEngine';
@@ -150,6 +151,11 @@ export function applyCultivatorBrainDecision(
     cultivator.innerMonologue = forced ? '天劫未止，无暇旁顾，先守住雷心。' : decision.innerMonologue;
     return resolveTribulation(world, cultivator, stance, rng);
   }
+  if (activeCourierForActor(world, cultivator) || courierActedThisTick(world, cultivator)) {
+    cultivator.currentAction = 'SEALED_COURIER';
+    cultivator.innerMonologue = '信使正沿实路前进，本轮不能在旧站另作行动。';
+    return null;
+  }
   if (decision.chosenAction !== 'PILGRIMAGE' && (pilgrimageActedThisTick(world, cultivator) ||
       (activePilgrimageForActor(world, cultivator) && (decision.chosenAction !== 'REST' || pilgrimageCheckpoint(world, cultivator))))) {
     cultivator.currentAction = 'PILGRIMAGE';
@@ -212,6 +218,8 @@ export function applyCultivatorBrainDecision(
     case 'ATTEST_WITNESS':
     case 'CHALLENGE_WITNESS':
       return resolveWitnessAction(world, cultivator, decision);
+    case 'SEALED_COURIER':
+      return resolveCourierAction(world, cultivator, decision);
     case 'VILLAGE_WORKS':
       return resolveVillageWorksAction(world, cultivator, decision);
     case 'HOUSEHOLD_GUARDIAN':
@@ -435,7 +443,7 @@ export function applyCultivatorBrainDecision(
 
     case 'SOCIALIZE': {
       const target = world.cultivators.find((c) =>
-        c.alive && c.id !== cultivator.id && c.locationId === cultivator.locationId && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) &&
+        c.alive && c.id !== cultivator.id && c.locationId === cultivator.locationId && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) && !courierCheckpoint(world, c) &&
         (decision.targetCultivatorId === undefined || c.id === decision.targetCultivatorId)
       );
       if (!target) return null;
@@ -472,7 +480,7 @@ export function applyCultivatorBrainDecision(
 
     case 'SCHEMING': {
       const target = world.cultivators.find((c) =>
-        c.alive && c.id !== cultivator.id && c.locationId === cultivator.locationId && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) &&
+        c.alive && c.id !== cultivator.id && c.locationId === cultivator.locationId && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) && !courierCheckpoint(world, c) &&
         (decision.targetCultivatorId === undefined || c.id === decision.targetCultivatorId)
       );
       if (!target) return null;
@@ -523,7 +531,7 @@ export function applyCultivatorBrainDecision(
 
     case 'DUEL': {
       const defender = world.cultivators.find((c) =>
-        c.alive && c.id !== cultivator.id && c.locationId === cultivator.locationId && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) &&
+        c.alive && c.id !== cultivator.id && c.locationId === cultivator.locationId && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) && !courierCheckpoint(world, c) &&
         (decision.targetCultivatorId === undefined || c.id === decision.targetCultivatorId)
       );
       if (!defender) return null;
@@ -676,7 +684,7 @@ export function advanceWorldTick(
   const avatarOrder = consumeAvatarOrder(nextState);
   maintainAlchemy(nextState);
   maintainSectEconomy(nextState);
-  const newEvents: WorldEvent[] = [...advanceSanctuaries(nextState), ...advanceCeasefires(nextState), ...advanceCompetitionSeasons(nextState), ...advanceMapHazards(nextState), ...advancePilgrimages(nextState), ...advanceRelocations(nextState), ...advanceSettlements(nextState), ...advanceVillageWorks(nextState), ...advanceSpiritBeasts(nextState, rng), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...advanceHouseholds(nextState)];
+  const newEvents: WorldEvent[] = [...advanceSanctuaries(nextState), ...advanceCeasefires(nextState), ...advanceCompetitionSeasons(nextState), ...advanceMapHazards(nextState), ...advanceCouriers(nextState), ...advancePilgrimages(nextState), ...advanceRelocations(nextState), ...advanceSettlements(nextState), ...advanceVillageWorks(nextState), ...advanceSpiritBeasts(nextState, rng), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...advanceHouseholds(nextState)];
   for (const event of newEvents) witnessEvent(nextState, event);
 
   for (const cultivator of [...nextState.cultivators]) {
@@ -705,6 +713,12 @@ export function advanceWorldTick(
         witnessEvent(nextState, death);
         continue;
       }
+    }
+
+    if (activeCourierForActor(nextState, cultivator) || courierActedThisTick(nextState, cultivator)) {
+      cultivator.currentAction = 'SEALED_COURIER';
+      cultivator.innerMonologue = '沿实际关口投递或折返，本轮不另作行动。';
+      continue;
     }
 
     if (activeEscortForActor(nextState, cultivator)) {
@@ -794,7 +808,7 @@ export function advanceWorldTick(
     if (yearly) cultivator.reflections = synthesizeReflections(cultivator, nextState.tick);
   }
 
-  for (const event of [...advanceDiplomacy(nextState, rng), ...advanceOccasions(nextState, rng), ...advanceOaths(nextState), ...advanceMarkets(nextState), ...advanceWitnesses(nextState), ...maintainSectPolitics(nextState), ...advanceBounties(nextState), ...advanceResearch(nextState), ...advanceEstates(nextState), ...advanceDoctrines(nextState), ...advanceSectCredit(nextState), ...advanceSanctuaries(nextState), ...advancePilgrimages(nextState), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...advanceHouseholds(nextState)]) {
+  for (const event of [...advanceDiplomacy(nextState, rng), ...advanceOccasions(nextState, rng), ...advanceOaths(nextState), ...advanceMarkets(nextState), ...advanceWitnesses(nextState), ...maintainSectPolitics(nextState), ...advanceBounties(nextState), ...advanceResearch(nextState), ...advanceEstates(nextState), ...advanceDoctrines(nextState), ...advanceSectCredit(nextState), ...advanceSanctuaries(nextState), ...advancePilgrimages(nextState), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...reconcileCourierDeaths(nextState), ...advanceHouseholds(nextState)]) {
     newEvents.push(event);
     witnessEvent(nextState, event);
   }
@@ -843,7 +857,7 @@ export function executeGodIntervention(
       loc.spiritQi = clamp(loc.spiritQi + 20, 10, 150);
 
       const luckyOnes = nextState.cultivators.filter(
-        (c) => c.alive && c.locationId === loc.id && !activeRelocationForActor(nextState, c) && !activeEscortForActor(nextState, c) && !pilgrimageCheckpoint(nextState, c)
+        (c) => c.alive && c.locationId === loc.id && !activeRelocationForActor(nextState, c) && !activeEscortForActor(nextState, c) && !pilgrimageCheckpoint(nextState, c) && !courierCheckpoint(nextState, c)
       );
       for (const c of luckyOnes) {
         c.qiProgress = clamp(c.qiProgress + 30, 0, 100);
