@@ -21,13 +21,15 @@ import { drawTerrain, EXPLORED_TERRAIN_SHADE } from './terrainMapDraw';
 import { drawMapConvoys, mapTransitActorIds, visibleMapConvoys, visibleMapEscort } from './mapConvoyView';
 import { buildMapPresentation, MAP_EFFECT_LABELS, MOTION_MS } from './mapPresentationView';
 import { drawFlights, drawMapEffects } from './mapPresentationDraw';
-import { centerCamera, clientToMapViewport, closestViewportTarget, DEFAULT_CAMERA, MAP_HEIGHT, MAP_WIDTH, MAX_ZOOM, panCamera, screenToMap, viewportPixelDistance, zoomCamera } from './mapCamera';
+import { centerCamera, clientToMapViewport, closestViewportTarget, DEFAULT_CAMERA, MAP_HEIGHT, MAP_WIDTH, MAX_ZOOM, screenToMap, zoomCamera } from './mapCamera';
 import type { CameraPoint, MapCamera } from './mapCamera';
 import { CLUSTER_RADIUS_PX, mapActorPage, pickActorMarker, planActorMarkers, visibleMarkerMembers } from './mapActorClusters';
 import type { MapActorMarker, MarkerViewport } from './mapActorClusters';
 import { focusMapPoint, mapCameraCommand, mapKeyboardCommand, shouldAnimateMap } from './mapKeyboard';
 import type { MapCameraCommand } from './mapKeyboard';
-import { BRUSH_LABELS, brushPoint, drawHazards, getVisibleHazards } from './mapBrushView';
+import { beginMapGesture, cancelMapGesture, endMapGesture, IDLE_MAP_GESTURE, invalidateMapGesture, moveMapGesture } from './mapTouchGesture';
+import type { MapGestureContact, MapGestureFrame, MapGestureState, MapGestureTransition } from './mapTouchGesture';
+import { BRUSH_LABELS, drawHazards, getVisibleHazards } from './mapBrushView';
 import { BEAST_COLORS, visibleBeastsByLocation } from './spiritBeastView';
 import { activeAvatar } from '../engine/avatarEngine';
 import { localQiWeather } from '../engine/weatherEngine';
@@ -90,10 +92,15 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const manualCamera = (next: MapCamera) => { setFollowsSelection(false); updateCamera(next); };
   const [brush, setBrush] = useState<GodBrushKind | 'browse'>('browse');
   const [preview, setPreview] = useState<MapPoint[]>([]);
-  const gesture = useRef<{
-    pointer: number; initial: CameraPoint; previous: CameraPoint; moved: boolean; isTouch: boolean;
-    brush?: GodBrushKind; points: MapPoint[];
-  } | undefined>();
+  const gesture = useRef<MapGestureState>(IDLE_MAP_GESTURE);
+  const documentGesture = useRef<(event: PointerEvent, down: boolean) => void>();
+  const abandonGesture = () => {
+    const interrupted = invalidateMapGesture(gesture.current);
+    gesture.current = interrupted.state;
+    if (interrupted.preview !== undefined) setPreview(interrupted.preview);
+    if (interrupted.disarmBrush) setBrush('browse');
+  };
+  const commandCamera = (next: MapCamera) => { abandonGesture(); manualCamera(next); };
   const [fog, setFog] = useState(false);
   const [cluster, setCluster] = useState<{ marker: Extract<MapActorMarker, { kind: 'cluster' }>; scope: string; tick: number }>();
   const [clusterSearch, setClusterSearch] = useState('');
@@ -153,6 +160,9 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const hazards = useMemo(() => getVisibleHazards(world, mapView), [world, mapView]);
   const beastsByLocation = useMemo(() => visibleBeastsByLocation(world, mapView), [world, mapView]);
   const armedBrush = !fog && onBrushStroke && brush !== 'browse' ? brush : undefined;
+  const gestureScope = `${clusterScope}|${selectedCultivatorId ?? ''}|${world.tick}|${world.interventionSequence}|${onBrushStroke ? 'live' : 'read'}`;
+  useEffect(() => { abandonGesture(); }, [gestureScope]);
+
   const actorPositions = useMemo(() => mapActorPositions(seenLocations, liveActors, mapView.trailPositions), [seenLocations, liveActors, mapView.trailPositions]);
   const selectedPoint = actorPositions.find(({ actor }) => actor.id === selectedCultivatorId);
   const followedActorId = selectedPoint?.actor.id;
@@ -621,7 +631,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     const canvas = canvasRef.current;
     if (!canvas) return;
     const wheel = (event: WheelEvent) => {
-      if (gesture.current) return;
+      if (gesture.current.phase !== 'idle') return;
       const screen = clientToMapViewport(canvas.getBoundingClientRect(), { x: event.clientX, y: event.clientY });
       if (!screen) return;
       const currentCamera = cameraRef.current;
@@ -636,58 +646,21 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   }, []);
 
   const centerOfMap = { x: MAP_WIDTH / 2, y: MAP_HEIGHT / 2 };
-  const getPointer = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    const point = clientToMapViewport(event.currentTarget.getBoundingClientRect(), { x: event.clientX, y: event.clientY });
-    return point && point.x >= 0 && point.x <= MAP_WIDTH && point.y >= 0 && point.y <= MAP_HEIGHT ? point : undefined;
-  };
+  const frameFor = (canvas: HTMLCanvasElement): MapGestureFrame => ({
+    camera: cameraRef.current, rect: canvas.getBoundingClientRect(), scope: gestureScope,
+    allowSingleTouchPan: touchPan || !compact, brush: armedBrush,
+  });
+  const contactFor = (event: Pick<PointerEvent, 'pointerId' | 'pointerType' | 'clientX' | 'clientY'>): MapGestureContact => ({
+    id: event.pointerId, pointerType: event.pointerType, client: { x: event.clientX, y: event.clientY },
+  });
 
-  const startGesture = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    if (event.button !== 0 || gesture.current) return;
-    const screen = getPointer(event);
-    if (!screen) return;
-    event.currentTarget.setPointerCapture(event.pointerId);
-    const points = armedBrush ? brushPoint([], screenToMap(cameraRef.current, screen)) : [];
-    gesture.current = { pointer: event.pointerId, initial: screen, previous: screen, moved: false,
-      isTouch: event.pointerType === 'touch', brush: armedBrush, points };
-    if (armedBrush) setPreview(points);
-  };
-  const updateGesture = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    const active = gesture.current;
-    if (!active || active.pointer !== event.pointerId) return;
-    const screen = getPointer(event);
-    if (!screen) return;
-    const currentCamera = cameraRef.current;
-    if (active.brush) {
-      const next = brushPoint(active.points, screenToMap(currentCamera, screen));
-      if (next !== active.points) { active.points = next; setPreview(next); }
-    } else if (active.moved || viewportPixelDistance(screen, active.initial, event.currentTarget.getBoundingClientRect()) >= (active.isTouch ? 9 : 5)) {
-      if (!active.moved) active.previous = active.initial;
-      active.moved = true;
-      if (!active.isTouch || touchPan || !compact) {
-        manualCamera(panCamera(currentCamera, { x: screen.x - active.previous.x, y: screen.y - active.previous.y }));
-      }
-    }
-    active.previous = screen;
-  };
-  const endGesture = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    const active = gesture.current;
-    if (!active || active.pointer !== event.pointerId) return;
-    gesture.current = undefined;
-    const screen = getPointer(event);
-    const position = screen ? screenToMap(cameraRef.current, screen) : undefined;
-    if (active.brush) {
-      setPreview([]);
-      const points = position ? brushPoint(active.points, position, true) : active.points;
-      if (active.brush === armedBrush && points.length > 0) onBrushStroke?.(active.brush, points);
-      return;
-    }
-    const size = event.currentTarget.getBoundingClientRect();
-    if (!screen || active.moved || viewportPixelDistance(screen, active.initial, size) >= (active.isTouch ? 9 : 5)) return;
-    const radius = active.isTouch ? 22 : Math.max(10, cameraRef.current.zoom * 20 * size.width / MAP_WIDTH);
+  const useTap = (screen: CameraPoint, isTouch: boolean, canvas: HTMLCanvasElement) => {
+    const size = canvas.getBoundingClientRect();
+    const radius = isTouch ? 22 : Math.max(10, cameraRef.current.zoom * 20 * size.width / MAP_WIDTH);
     const painted = paintedActors.current;
     if (!painted || painted.scope !== clusterScope || painted.positions !== actorPositions || painted.camera !== cameraRef.current ||
         painted.size.width !== size.width || painted.size.height !== size.height) return;
-    const picked = pickActorMarker(painted.markers, { x: screen.x * size.width / MAP_WIDTH, y: screen.y * size.height / MAP_HEIGHT }, active.isTouch);
+    const picked = pickActorMarker(painted.markers, { x: screen.x * size.width / MAP_WIDTH, y: screen.y * size.height / MAP_HEIGHT }, isTouch);
     if (picked) {
       const members = visibleMarkerMembers(picked, actorById);
       if (picked.kind === 'actor' && members[0]) {
@@ -705,17 +678,58 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       cameraRef.current, screen, size, radius);
     if (clickedLocation) focusSite(clickedLocation);
   };
-  const cancelGesture = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    if (gesture.current?.pointer !== event.pointerId) return;
-    gesture.current = undefined;
-    setPreview([]);
+  const adoptGesture = (transition: MapGestureTransition, canvas?: HTMLCanvasElement) => {
+    gesture.current = transition.state;
+    if (transition.preview !== undefined) setPreview(transition.preview);
+    if (transition.disarmBrush) setBrush('browse');
+    if (transition.camera) manualCamera(transition.camera);
+    if (transition.finished?.kind === 'stroke' && transition.finished.brush === armedBrush) {
+      onBrushStroke?.(transition.finished.brush, transition.finished.points);
+    } else if (transition.finished?.kind === 'tap' && canvas) {
+      useTap(transition.finished.screen, transition.finished.isTouch, canvas);
+    }
   };
+  const startGesture = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (event.button !== 0 && gesture.current.phase === 'idle') return;
+    const canvas = event.currentTarget;
+    const result = beginMapGesture(gesture.current, contactFor(event), frameFor(canvas));
+    adoptGesture(result);
+    if (result.state.phase !== 'idle') {
+      try { canvas.setPointerCapture(event.pointerId); }
+      catch { /* The document-level cancel path still prevents an off-map release from painting. */ }
+    }
+  };
+  const updateGesture = (event: React.PointerEvent<HTMLCanvasElement>) =>
+    adoptGesture(moveMapGesture(gesture.current, contactFor(event), frameFor(event.currentTarget)));
+  const endGesture = (event: React.PointerEvent<HTMLCanvasElement>) =>
+    adoptGesture(endMapGesture(gesture.current, contactFor(event), frameFor(event.currentTarget)), event.currentTarget);
+  const cancelGesture = (event: React.PointerEvent<HTMLCanvasElement>) =>
+    adoptGesture(cancelMapGesture(gesture.current, event.pointerId));
+
+  documentGesture.current = (event, down) => {
+    const canvas = canvasRef.current;
+    if (!canvas || gesture.current.phase === 'idle' || event.composedPath().includes(canvas)) return;
+    if (down) adoptGesture(beginMapGesture(gesture.current, contactFor(event), frameFor(canvas), false));
+    else adoptGesture(cancelMapGesture(gesture.current, event.pointerId));
+  };
+  useEffect(() => {
+    const down = (event: PointerEvent) => documentGesture.current?.(event, true);
+    const finish = (event: PointerEvent) => documentGesture.current?.(event, false);
+    document.addEventListener('pointerdown', down, true);
+    document.addEventListener('pointerup', finish, true);
+    document.addEventListener('pointercancel', finish, true);
+    return () => {
+      document.removeEventListener('pointerdown', down, true);
+      document.removeEventListener('pointerup', finish, true);
+      document.removeEventListener('pointercancel', finish, true);
+    };
+  }, []);
   const minViewport = screenToMap(camera, { x: 0, y: 0 });
   const maxViewport = screenToMap(camera, { x: MAP_WIDTH, y: MAP_HEIGHT });
   const focusSite = (site: LocationNode) => {
     const visible = seenLocations.find(({ id }) => id === site.id);
     if (!visible) return;
-    manualCamera(focusMapPoint(cameraRef.current, visible));
+    commandCamera(focusMapPoint(cameraRef.current, visible));
     if (isCurrentLocation(visible.id)) onSelectLocation?.(visible);
     setFocusMessage(`地图已定位：${visible.name}`);
   };
@@ -723,12 +737,12 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     const point = actorPositions.find(({ actor }) => actor.id === id);
     if (!point) return;
     onSelectCultivator(id);
-    manualCamera(focusMapPoint(cameraRef.current, point));
+    commandCamera(focusMapPoint(cameraRef.current, point));
     setFocusMessage(`地图已定位：${point.actor.name}`);
   };
   const activateCamera = (command: MapCameraCommand) => {
     if (command === 'selected' && selectedPoint) setFocusMessage(`地图已定位：${selectedPoint.actor.name}`);
-    manualCamera(mapCameraCommand(cameraRef.current, command, selectedPoint));
+    commandCamera(mapCameraCommand(cameraRef.current, command, selectedPoint));
   };
 
   return (
@@ -761,7 +775,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         <button type="button" className="min-h-11 rounded border border-slate-700 px-2 disabled:opacity-40"
           disabled={camera.zoom === 1} onClick={() => activateCamera('home')}>复位</button>
         <span className="tabular-nums">{Math.round(camera.zoom * 100)}%</span>
-        <button type="button" aria-pressed={touchPan} onClick={() => setTouchPan((enabled) => !enabled)}
+        <button type="button" aria-pressed={touchPan} onClick={() => { abandonGesture(); setTouchPan((enabled) => !enabled); }}
           className={`min-h-11 rounded border px-2 sm:hidden ${touchPan ? 'border-sky-400 text-sky-100' : 'border-slate-700 text-slate-200'}`}>
           {touchPan ? '拖图开启' : '拖图'}
         </button>
@@ -798,14 +812,14 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         <span className="px-1 tabular-nums">{Math.round(camera.zoom * 100)}%</span>
         <label className="inline-flex items-center gap-1">
           天道画笔
-          <select value={fog ? 'browse' : brush} disabled={fog || !onBrushStroke} onChange={(event) => setBrush(event.currentTarget.value as GodBrushKind | 'browse')}
+          <select value={fog ? 'browse' : brush} disabled={fog || !onBrushStroke} onChange={(event) => { abandonGesture(); setBrush(event.currentTarget.value as GodBrushKind | 'browse'); }}
             className="rounded border border-slate-700 bg-slate-900 px-1.5 py-1 disabled:opacity-40">
             <option value="browse">浏览／选择</option>
             {(Object.entries(BRUSH_LABELS) as [GodBrushKind, string][]).map(([kind, label]) => <option key={kind} value={kind}>{label}</option>)}
           </select>
         </label>
         <span className="text-slate-400">
-          {fog ? '修士视野中不可使用天道画笔。' : armedBrush ? '点击或拖笔，松开时应用一笔。' : '滚轮缩放，拖动平移，点击选择。'}
+          {fog ? '修士视野中不可使用天道画笔。' : armedBrush ? '单指松开才落笔；双指或中断会取消此笔。' : compact ? '双指缩放；单指上下滚动，选拖图后可单指平移。' : '滚轮或双指缩放，拖动平移，点击选择。'}
         </span>
       </div>
       </details>
@@ -841,7 +855,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           onClick={(event) => {
             const point = event.detail === 0 ? centerOfMap
               : clientToMapViewport(event.currentTarget.getBoundingClientRect(), { x: event.clientX, y: event.clientY });
-            if (point) manualCamera(centerCamera(cameraRef.current, point));
+            if (point) commandCamera(centerCamera(cameraRef.current, point));
           }}
         >
           <svg viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`} aria-hidden="true" className="block w-full">
@@ -895,7 +909,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           <MapKeyboardExplorer world={world} view={mapView} actorPositions={actorPositions} presentation={presentation}
             selected={selectedPoint?.actor} follows={followsSelection} zoom={camera.zoom} onCamera={activateCamera}
             onActor={(actor) => locateActor(actor.id)} onSite={focusSite}
-            onFollow={() => setFollowsSelection((current) => !current)}
+            onFollow={() => { abandonGesture(); setFollowsSelection((current) => !current); }}
             onFocusLost={() => { if (explorerSummary.current?.getClientRects().length) explorerSummary.current.focus({ preventScroll: true }); }} />
         </React.Suspense>}
       </details>
@@ -991,7 +1005,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         <ul className="max-h-40 space-y-1 overflow-y-auto">
           {convoys.map((convoy) => <li key={convoy.id}>
             <button type="button" className="min-h-11 rounded border border-slate-700 px-2 text-left"
-              onClick={() => { manualCamera(focusMapPoint(cameraRef.current, convoy.marker)); setFocusMessage(`地图已定位：${convoy.sectName}迁移车队`); }}>
+              onClick={() => { commandCamera(focusMapPoint(cameraRef.current, convoy.marker)); setFocusMessage(`地图已定位：${convoy.sectName}迁移车队`); }}>
               {convoy.sectName}迁移车队 · 第 {convoy.row} 行，第 {convoy.col} 列
             </button>
           </li>)}
@@ -999,7 +1013,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       </details>}
       {pilgrimageMark && <p className="sr-only">所选修士正沿巡礼路段行进：第 {pilgrimageMark.row} 行，第 {pilgrimageMark.col} 列。</p>}
       {escortedCaravan && <div className="border-t border-slate-800/80 px-3 text-xs text-sky-200">
-        <button type="button" className="min-h-11 text-left" onClick={() => manualCamera(focusMapPoint(cameraRef.current, escortedCaravan.marker))}>
+        <button type="button" className="min-h-11 text-left" onClick={() => commandCamera(focusMapPoint(cameraRef.current, escortedCaravan.marker))}>
           定位所选护镖车队 · 第 {escortedCaravan.row} 行，第 {escortedCaravan.col} 列
         </button>
       </div>}
@@ -1007,7 +1021,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         <summary className="flex min-h-11 cursor-pointer items-center">可见地图批注 · {annotationPins.length} 条</summary>
         <ul className="max-h-44 space-y-1 overflow-y-auto pb-2">
           {annotationPins.map(({ note, point }) => <li key={note.id}>
-            <button type="button" className="min-h-11 break-words text-left" onClick={() => manualCamera(focusMapPoint(cameraRef.current, point))}>{note.text}</button>
+            <button type="button" className="min-h-11 break-words text-left" onClick={() => commandCamera(focusMapPoint(cameraRef.current, point))}>{note.text}</button>
           </li>)}
         </ul>
       </details>}
