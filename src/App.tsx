@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Play, Pause, FastForward, RotateCcw, Sparkles } from 'lucide-react';
+import { Play, Pause, FastForward, RotateCcw, Sparkles, BarChart3 } from 'lucide-react';
 import { createInitialWorld } from './data/initialWorld';
 import {
   advanceWorldTick,
@@ -31,6 +31,7 @@ import { PossessionPanel } from './components/PossessionPanel';
 import { WorldStoragePanel } from './components/WorldStoragePanel';
 import { isWorldSeed } from './engine/worldRandom';
 import { TimelinePanel } from './components/TimelinePanel';
+import { AnalyticsModal } from './components/AnalyticsModal';
 import { createTimeline, forkTimeline, readTimelineHead, readTimelineSnapshot, recordTimelineWorld, selectTimelineBranch } from './engine/timelineEngine';
 import type { WorldTimeline } from './engine/timelineEngine';
 import { activeAvatar, possessAvatar, queueAvatarOrder } from './engine/avatarEngine';
@@ -65,6 +66,7 @@ export const App: React.FC = () => {
   const [isStepping, setIsStepping] = useState(false);
   const stepInFlight = useRef(false);
   const [councilOpen, setCouncilOpen] = useState(false);
+  const [analyticsOpen, setAnalyticsOpen] = useState(false);
   const [avatarNotice, setAvatarNotice] = useState<string>();
   const [lastManualCouncilId, setLastManualCouncilId] = useState<string>();
   const [tickIntervalMs, setTickIntervalMs] = useState(1800);
@@ -279,6 +281,7 @@ export const App: React.FC = () => {
   };
 
   const visibleWorld = preview?.world ?? world;
+  const visibleHistory = timeline.branches.find(({ id }) => id === timeline.activeBranchId)?.snapshots;
   const selectedCultivator =
     visibleWorld.cultivators.find((c) => c.id === selectedCultivatorId) ??
     visibleWorld.cultivators[0];
@@ -307,6 +310,10 @@ export const App: React.FC = () => {
         <div className="flex flex-wrap items-center gap-2">
           <LlmTelemetryPanel scheduler={llmScheduler} configured={llmConfig.enabled}
             hasCredential={Boolean(llmConfig.apiKey.trim())} model={llmConfig.model || 'gpt-4o-mini'} />
+          <button type="button" onClick={() => setAnalyticsOpen(true)}
+            className="flex items-center gap-1 rounded-lg bg-sky-900/60 px-3 py-1.5 text-xs font-medium text-sky-100 hover:bg-sky-800">
+            <BarChart3 aria-hidden="true" className="h-4 w-4" /> 天道观测
+          </button>
           <button
             type="button"
             disabled={!!preview}
@@ -410,6 +417,7 @@ export const App: React.FC = () => {
           />
         </div>
       </main>
+      <AnalyticsModal world={visibleWorld} history={visibleHistory} open={analyticsOpen} onClose={() => setAnalyticsOpen(false)} />
       <SectCouncilModal
         world={world}
         open={councilOpen && !preview}
