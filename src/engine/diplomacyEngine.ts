@@ -1,3 +1,4 @@
+import {isSectActive} from './sectActivity';
 import { activeCourierForActor } from './sealedCourierEngine';
 import { activeCeasefireBetween } from './ceasefireEngine';
 import { recordCausalChronicleNode } from './chronicleCausalityEngine';
@@ -54,11 +55,11 @@ function forceCandidates(world: WorldState, attacker: Sect, defender: Sect, acto
 
 export function availableDiplomacyActions(actor: Cultivator, world: WorldState): DiplomaticOption[] {
   const own = world.sects.find(({ id }) => id === actor.sectId);
-  if (!own || !live(actor) || own.leaderId !== actor.id || actor.locationId !== own.headquartersId || activeRelocationForSect(world, own.id) || activeSiegeForActor(world, actor)) return [];
+  if (!isSectActive(own) || !live(actor) || own.leaderId !== actor.id || actor.locationId !== own.headquartersId || activeRelocationForSect(world, own.id) || activeSiegeForActor(world, actor)) return [];
   if (!world.locations.some((site) => site.id === own.headquartersId && (!site.ownerSectId || site.ownerSectId === own.id))) return [];
   const result: DiplomaticOption[] = [];
   for (const target of world.sects) {
-    if (target.id === own.id || activeRelocationForSect(world, target.id)) continue;
+    if (!isSectActive(target)||target.id === own.id || activeRelocationForSect(world, target.id)) continue;
     const protectedByTruce = Boolean(activeCeasefireBetween(world, own.id, target.id));
     const relation = sectRelation(world, own.id, target.id);
     const affinity = relation?.affinity ?? 0;

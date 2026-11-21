@@ -1,7 +1,11 @@
-import {activeAvatar,canQueueAvatarSalvage,queueAvatarDanxiaMedicine,queueAvatarDanxiaReview} from './engine/avatarEngine';
+import {activeAvatar,canQueueAvatarSalvage,queueAvatarDanxiaMedicine,queueAvatarDanxiaReview,queueAvatarDoctrineFounding,queueAvatarDoctrineMaturity} from './engine/avatarEngine';
 import {availableDanxiaMedicineActions,type DanxiaMedicineOption} from './engine/danxiaMedicineEngine';
 import type {DanxiaMedicineControlsProps} from './components/DanxiaMedicineControls';
 import {availableDanxiaReviewActions,type DanxiaReviewOption} from './engine/danxiaSeasonReviewEngine';
+import {availableDoctrineFoundingActions,type DoctrineFoundingOption} from './engine/doctrineFoundingEngine';
+import {availableDoctrineMaturityActions,type DoctrineMaturityOption} from './engine/doctrineMaturityEngine';
+import type {DoctrineMaturityControlsProps} from './components/DoctrineMaturityControls';
+import type {DoctrineFoundingControlsProps} from './components/DoctrineFoundingControls';
 import type {DanxiaSeasonReviewControlsProps} from './components/DanxiaSeasonReviewControls';
 import { StoryFirstHome } from './components/StoryFirstHome';
 import { PlayerStoryEntry } from './components/PlayerStoryEntry';
@@ -853,6 +857,44 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
         donor?`${donor.name}实赈`:undefined,relief?`第 ${relief.tick} 轮`:undefined].filter(Boolean).join(' · ')};
     }),
   }:undefined;
+  const queueDoctrineFounding=(option:DoctrineFoundingOption)=>{
+    if(!medicineAvatar||browsing.current||stepInFlight.current||fastForwardRun.current||campaignGuard.current||
+      history.current!==timeline||authority.current!==world||saveContextVersion.current!==medicineContextVersion)return false;
+    const updated=updateWorld(current=>{
+      const next=structuredClone(current);
+      return queueAvatarDoctrineFounding(next,medicineAvatar.id,option)?next:current;
+    });
+    if(updated!==world)setIsRunning(false);
+    return updated!==world;
+  };
+  const foundingControls:DoctrineFoundingControlsProps|undefined=medicineControls&&medicineAvatar?{
+    scopeKey:medicineControls.scopeKey,revisionKey:visibleWorld,disabled:medicineControls.disabled,onQueue:queueDoctrineFounding,
+    choices:availableDoctrineFoundingActions(medicineAvatar,world,world.tick+1).map(option=>{
+      const row=option.targetDoctrineFoundingId?world.doctrineFoundings.foundings.find(item=>item.id===option.targetDoctrineFoundingId):undefined;
+      const plan=option.targetRelocationId?world.relocations.plans.find(item=>item.id===option.targetRelocationId):undefined;
+      const place=world.locations.find(item=>item.id===(row?.oldSiteId??plan?.originId));
+      return {option,label:[row?.independentName,place?.name].filter(Boolean).join(' · ')};
+    }),
+  }:undefined;
+  const queueDoctrineMaturity=(option:DoctrineMaturityOption)=>{
+    if(!medicineAvatar||browsing.current||stepInFlight.current||fastForwardRun.current||campaignGuard.current||
+      history.current!==timeline||authority.current!==world||saveContextVersion.current!==medicineContextVersion)return false;
+    const updated=updateWorld(current=>{
+      const next=structuredClone(current);
+      return queueAvatarDoctrineMaturity(next,medicineAvatar.id,option)?next:current;
+    });
+    if(updated!==world)setIsRunning(false);
+    return updated!==world;
+  };
+  const maturityControls:DoctrineMaturityControlsProps|undefined=medicineControls&&medicineAvatar?{
+    scopeKey:medicineControls.scopeKey,revisionKey:visibleWorld,disabled:medicineControls.disabled,onQueue:queueDoctrineMaturity,
+    choices:availableDoctrineMaturityActions(medicineAvatar,world,world.tick+1).map(option=>{
+      const charter=world.doctrineFoundings.foundings.find(item=>item.id===option.targetDoctrineFoundingId);
+      const proof=charter?.maturity?.support;
+      return {option,label:charter?.independentName,
+        ...(proof?{proof:{kind:proof.kind,observedTick:proof.observedTick}}:{})};
+    }),
+  }:undefined;
   const inspect = (workspaceSection: 'profile' | 'cultivation' | 'mind' | 'sect') => <React.Suspense fallback={<p role="status">载入修士档案…</p>}>
     <AgentInspector world={visibleWorld} cultivator={selectedCultivator} onSelectCultivator={setSelectedCultivatorId} workspaceSection={workspaceSection} medicineControls={workspaceSection==='sect'?medicineControls:undefined}
       seasonReviewControls={workspaceSection==='sect'?seasonReviewControls:undefined}
@@ -1237,7 +1279,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
             </div> },
           { id: 'oaths', label: '天道契书与宗门仲裁', content: <React.Suspense fallback={<p role="status">载入契书记录…</p>}><OathContractsPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense> },
           { id: 'doctrine', label: '道统与分合', content: <React.Suspense fallback={<p role="status">载入道统记录…</p>}>
-            <SectDoctrinePanel world={visibleWorld} cultivator={selectedCultivator} />
+            <SectDoctrinePanel world={visibleWorld} cultivator={selectedCultivator} foundingControls={foundingControls} maturityControls={maturityControls} />
           </React.Suspense> },
           { id: 'relocation', label: '山门迁移与旧址', content: <React.Suspense fallback={<p role="status">载入迁移记录…</p>}>
             <SectRelocationPanel world={visibleWorld} cultivator={selectedCultivator} />

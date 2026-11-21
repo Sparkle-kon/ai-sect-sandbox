@@ -39,6 +39,7 @@ export default defineConfig({
           'agreement-rules': ['./src/engine/oathEngine.ts', './src/engine/oathArbitrationEngine.ts'],
           'cognitive-protocol': ['./src/engine/llmCognitiveResponseGuide.ts', './src/engine/llmScheduler.ts', './src/engine/fairModelTurnEngine.ts'],
           'furnace-rules': ['./src/engine/furnaceReservationEngine.ts'],
+          'institution-terms': ['./src/engine/sectActivity.ts','./src/engine/sectCreditTerms.ts'],
           'institution-rules': ['./src/engine/estateEngine.ts', './src/engine/sectCreditEngine.ts', './src/engine/serviceRetirementEngine.ts', './src/engine/relicExhibitEngine.ts'],
           // Both native settlement and portable scenario verification use the same small leaf proofs.
           'danxia-review-proof': ['./src/engine/danxiaSeasonTerms.ts','./src/engine/danxiaMedicineTerms.ts',

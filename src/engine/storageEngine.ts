@@ -58,6 +58,9 @@ import { createDanxiaShortagesState } from './danxiaShortageEngine';
 import { DANXIA_MEDICINE_MAX_STEPS } from './danxiaMedicineTerms';
 import { validateVillageEvolutionHistory } from './storageVillageEvolutionValidation';
 import { VILLAGE_EVOLUTION_MAX_ADULTS_PER_MOVE,VILLAGE_EVOLUTION_SAMPLE_COUNT } from './villageEvolutionTerms';
+import { validateDoctrineFoundingHistory } from './storageDoctrineFoundingValidation';
+import {validateDoctrineMaturityHistory} from './storageDoctrineMaturityValidation';
+import {DOCTRINE_MATURITY_HAZARD_TICKS} from './doctrineMaturityTerms';
 import { validateDanxiaSeasonReviewHistory } from './storageDanxiaSeasonReviewValidation';
 import { validateDanxiaMedicineHistory } from './storageDanxiaMedicineValidation';
 import { validateDanxiaShortageHistory } from './storageDanxiaShortageValidation';
@@ -176,7 +179,7 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT SALVAGE_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY CARE_FOLLOWUP DANXIA_MEDICINE DANXIA_REVIEW FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER COURIER_HANDOFF SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP FURNACE_RESERVATION FURNACE_SAFETY DAMAGE_ASSURANCE SPARRING EXPEDITION_RESCUE SHORT_SHIFT BOUNDARY_RELIEF MENTOR_TRANSFER APPRENTICE_COHORT SEASONAL_HOUSING HOUSEHOLD_NAME CARAVAN_RESTITUTION VILLAGE_GRANARY VILLAGE_SUPPLY ROUTE_WARNING PAVILION_LOAN WORKSHOP_CAPACITY CIVIC_MEMORIAL VILLAGE_FAIR SECT_STIPEND SEED_CULTURE TOOL_LOAN RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY ALIGNED_WEATHER SEASON_REVIEW REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT SALVAGE_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE DOCTRINE_FOUNDING DOCTRINE_MATURITY RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY CARE_FOLLOWUP DANXIA_MEDICINE DANXIA_REVIEW FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER COURIER_HANDOFF SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP FURNACE_RESERVATION FURNACE_SAFETY DAMAGE_ASSURANCE SPARRING EXPEDITION_RESCUE SHORT_SHIFT BOUNDARY_RELIEF MENTOR_TRANSFER APPRENTICE_COHORT SEASONAL_HOUSING HOUSEHOLD_NAME CARAVAN_RESTITUTION VILLAGE_GRANARY VILLAGE_SUPPLY ROUTE_WARNING PAVILION_LOAN WORKSHOP_CAPACITY CIVIC_MEMORIAL VILLAGE_FAIR SECT_STIPEND SEED_CULTURE TOOL_LOAN RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY ALIGNED_WEATHER SEASON_REVIEW REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const flowGood = one('stone','jade_seed','jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
@@ -193,6 +196,28 @@ const granaryReceipt: Validator = (value, path) => {
 };
 const villageSupplySigner = structure({actorId:id,donationTick:tick,donationKind:one('donate','donate_roots','donate_stones')});
 const villageSupplyHazard = structure({id,kind:one('meteor','beast_tide','cursed_miasma'),tileId:id,createdTick:tick,expiresTick:tick,intensity:one(1,2,3)});
+const maturityHazardSample=structure({tick,siteId:id,hazard:villageSupplyHazard});
+const maturityHazards=arr(DOCTRINE_MATURITY_HAZARD_TICKS,maturityHazardSample);
+const maturitySupport:Validator=(value,path)=>{
+  const support=value as {kind?: unknown}|null;
+  return support?.kind==='sustained_hazard'?
+    structure({kind:one('sustained_hazard'),observedTick:tick,siteId:id,samples:maturityHazards})(value,path):
+    structure({kind:one('title_lost'),observedTick:tick,siteId:id,previousTick:tick,currentOwnerSectId:oid})(value,path);
+};
+const doctrineMaturityMove=one('offer_merge','accept_merge','approve_member','decline_merge','withdraw_merge','finalize_merge');
+const doctrineMaturity=structure({
+  latestHazards:maturityHazards,lastTitle:optional(structure({siteId:id,tick})),support:optional(maturitySupport),
+  offers:arr(SAVE_COLLECTION_LIMIT,structure({
+    openedTick:tick,expiresTick:tick,outgoingLeaderId:id,receivingLeaderId:id,receivingSiteId:id,memberIds:ids,
+    wallet:wealth,scriptureId:id,support:maturitySupport,
+    consents:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,tick})),acceptedTick:otick,
+    status:one('offered','declined','withdrawn','expired','invalidated','merged'),closedTick:otick,closedById:oid,
+  })),
+  settlement:optional(structure({
+    kind:one('merged','dispersed'),tick,siteId:id,receivingSectId:oid,memberIds:ids,transferredStones:wealth,
+    retainedStones:wealth,releasedTileId:oid,transferredScriptureId:oid,scriptureAlreadyHeld:optional(bool),
+  })),
+});
 const supplyCheckpoint = num(0,VILLAGE_SUPPLY_MAX_ROUTE_TILES-1,true);
 const routeWarningObservation = structure({
   id,actorId:id,journeyId:id,partyIds:arr(2,id),legIndex:tick,fromPathIndex:tick,toPathIndex:tick,fromTileId:id,toTileId:id,
@@ -310,8 +335,8 @@ const locationKind = one('sect_hq','spirit_vein','secret_realm','market','abyss'
 const shape = structure({
   tick, interventionSequence:tick, year:tick, month,
   random:structure({algorithm:one('mulberry32-v1'),seed:unsigned32,state:unsigned32}),
-  sects:arr(48,structure({id,name:id,alignment:one('正道','魔道','中立'),color:strings(80),doctrine:text,reputation:num(-1_000_000,1_000_000),spiritStones:wealth,headquartersId:id,
-    pavilion:arr(350,technique),leaderId:oid, arrayHp:wealth,arrayMaxHp:wealth,
+  sects:arr(SAVE_COLLECTION_LIMIT,structure({id,name:id,alignment:one('正道','魔道','中立'),color:strings(80),doctrine:text,reputation:num(-1_000_000,1_000_000),spiritStones:wealth,headquartersId:id,
+    pavilion:arr(350,technique),leaderId:oid,inactiveSinceTick:otick, arrayHp:wealth,arrayMaxHp:wealth,
     facilities:facilityLevels,
     officeVacancy:optional(structure({eventId:id,tick})),
     succession:optional(structure({tick,method:one('election','challenge','coup'),previousLeaderId:oid,leaderId:id,supporterIds:ids})),
@@ -880,9 +905,19 @@ const shape = structure({
     evaluatedTick:num(1,120,true),cards:arr(SCENARIO_MAX_OBJECTIVES,structure({id,objective:scenarioObjective,passed:bool,evidence:scenarioEvidence}))})),
   worldgen:optional(structure({algorithm:one(1),profileId:one('classic','spirit-bloom','fractured-frontier'),
     seed:unsigned32,birthTick:one(1),resources:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,locationId:id,pathSteps:num(0,6402,true)}))})),
+  doctrineFoundings:structure({foundings:arr(SAVE_COLLECTION_LIMIT,structure({
+    id,schoolId:id,parentSectId:id,independentSectId:id,oldSiteId:id,relocationPlanId:id,abandonedSiteId:id,
+    autonomyProposalId:id,scriptureId:id,founderId:id,independentName:id,schoolTreasury:wealth,proposedTick:tick,expiresTick:tick,
+    status:one('proposed','established','declined','withdrawn','expired','invalidated'),
+    authorization:optional(structure({actorId:id,tick,siteId:id})),
+    consents:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,tick,withdrawnTick:otick})),
+    settlement:optional(structure({tick,actorId:oid,memberIds:optional(ids),transferredStones:optional(wealth)})),
+    continuity:optional(structure({tick,previousLeaderId:id,successorId:id,eventId:id,cause:one('native_succession')})),
+    maturity:optional(doctrineMaturity),
+  }))}),
   doctrines:structure({nextId:num(1,100_000_000,true),
     schools:arr(SAVE_COLLECTION_LIMIT,structure({id,parentSectId:id,theme:doctrineTheme,founderId:id,stewardId:oid,
-      foundedTick:tick,status:one('attached','autonomous','reconciled'),memberIds:ids,treasury:doctrineAmount,
+      foundedTick:tick,status:one('attached','autonomous','reconciled'),memberIds:ids,treasury:doctrineAmount,foundedSectId:oid,
       lastChangeTick:otick,lastTrainingTick:otick})),
     endorsements:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,sectId:id,schoolId:id,theme:doctrineTheme,tick,
       evidenceCount:num(1,100,true),score:num(0,10_000)})),
@@ -943,10 +978,19 @@ const shape = structure({
       lesson:optional(structure({tick,masteryBefore:num(0,100),masteryAfter:num(0,100),instructionSpent:num(1,1,true)}))}))}),
   playerAvatar:structure({possessedId:oid,possessionUntilTick:otick,switchAvailableTick:tick,essence:percentage,lastRefreshTick:tick,
     pendingOrder:optional((value,path) => {
-      const order = value as {action?:unknown;danxiaMedicineMove?:unknown;danxiaReviewMove?:unknown} | null;
+      const order = value as {action?:unknown;danxiaMedicineMove?:unknown;danxiaReviewMove?:unknown;doctrineFoundingMove?:unknown} | null;
       const fixed = {actorId:id,queuedTick:tick};
       if(order?.action==='SALVAGE_ARTIFACT')
         return structure({...fixed,action:one('SALVAGE_ARTIFACT'),targetArtifactId:id,targetLocationId:id})(value,path);
+      if(order?.action==='DOCTRINE_MATURITY')return structure({...fixed,action:one('DOCTRINE_MATURITY'),
+        doctrineMaturityMove,targetDoctrineFoundingId:id})(value,path);
+      if(order?.action==='DOCTRINE_FOUNDING'){
+        const base={...fixed,action:one('DOCTRINE_FOUNDING')};
+        if(order.doctrineFoundingMove==='propose')return structure({...base,doctrineFoundingMove:one('propose'),
+          targetDoctrineSchoolId:id,targetRelocationId:id})(value,path);
+        return structure({...base,doctrineFoundingMove:one('join','authorize','decline','withdraw','establish'),
+          targetDoctrineFoundingId:id})(value,path);
+      }
       if(order?.action==='DANXIA_REVIEW'){
         const base={...fixed,action:one('DANXIA_REVIEW'),targetDanxiaReviewId:id};
         if(order.danxiaReviewMove==='propose_switch')return structure({...base,danxiaReviewMove:one('propose_switch'),
@@ -1044,6 +1088,7 @@ function verifyWorld(value: unknown): WorldState {
       ...(!Object.hasOwn(value, 'relics') ? { relics: { fragments: [] } } : {}),
       ...(!Object.hasOwn(value, 'reincarnation') ? { reincarnation: createReincarnationState() } : {}),
       ...(!Object.hasOwn(value, 'relocations') ? { relocations: createRelocationState() } : {}),
+      ...(!Object.hasOwn(value, 'doctrineFoundings') ? {doctrineFoundings:{foundings:[]}} : {}),
       ...(!Object.hasOwn(value, 'doctrines') ? { doctrines: createDoctrineState() } : {}),
       ...(!Object.hasOwn(value, 'estates') ? { estates: { entries: [] } } : {}),
       ...(!Object.hasOwn(value, 'witnesses') ? { witnesses: { facts: [], claims: [], nextId: 1 } } : {}),
@@ -2636,6 +2681,8 @@ function verifyWorld(value: unknown): WorldState {
     }
   }
   const doctrineSchoolById = new Map(w.doctrines.schools.map((school) => [school.id, school]));
+  validateDoctrineFoundingHistory(w,actor,fail);
+  validateDoctrineMaturityHistory(w,fail);
   unique(w.doctrines.schools, ({ id }) => id, 'doctrines.schools.id');
   unique(w.doctrines.schools, ({ parentSectId, theme }) => JSON.stringify([parentSectId, theme]), 'doctrines.schools.theme');
   unique(w.doctrines.endorsements, ({ actorId }) => actorId, 'doctrines.endorsements.actorId');

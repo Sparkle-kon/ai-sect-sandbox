@@ -1,3 +1,4 @@
+import {isSectActive} from './sectActivity';
 import { isRetiredFromService } from './serviceRetirementEngine';
 import { REALM_ORDER } from '../data/initialWorld';
 import type { Cultivator, LLMDecisionPayload, Sect, SectRank, SectSuccession, WorldEvent, WorldState } from '../types/world';
@@ -68,6 +69,7 @@ function appoint(world: WorldState, sect: Sect, candidate: Cultivator, method: S
 export function maintainSectPolitics(world: WorldState): WorldEvent[] {
   const results: WorldEvent[] = [];
   for (const sect of world.sects) {
+    if(!isSectActive(sect))continue;
     const members = liveMembers(world, sect);
     const incumbent = members.find((person) => person.id === sect.leaderId);
     for (const person of world.cultivators) {

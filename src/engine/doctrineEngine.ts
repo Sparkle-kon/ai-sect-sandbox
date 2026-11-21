@@ -1,3 +1,4 @@
+import {doctrineFoundingPinnedAutonomyIds} from './doctrineFoundingTerms';
 import { isRetiredFromService } from './serviceRetirementEngine';
 import type { Cultivator, DoctrineEndorsement, DoctrineHistory, DoctrineMove, DoctrineProposal, DoctrineSchool, DoctrineState,
   LLMDecisionPayload, MemoryEntry, ReflectionTheme, Sect, WorldEvent, WorldState } from '../types/world';
@@ -73,7 +74,7 @@ export function doctrineSupport(world: WorldState, school: DoctrineSchool): {
 }
 
 function charterMember(world: WorldState, actorId: string): DoctrineSchool | undefined {
-  return world.doctrines.schools.find((school) => school.status === 'autonomous' && school.memberIds.includes(actorId));
+  return world.doctrines.schools.find((school) => school.status === 'autonomous' && !school.foundedSectId && school.memberIds.includes(actorId));
 }
 
 function stewardFor(world: WorldState, school: DoctrineSchool, sect: Sect): string | undefined {
@@ -134,12 +135,13 @@ export function availableDoctrineActions(actor: Cultivator, world: WorldState): 
   const existing = world.doctrines.endorsements.find(({ actorId }) => actorId === actor.id);
   if (!existing || world.tick - existing.tick >= ENDORSEMENT_COOLDOWN) {
     for (const theme of THEMES) {
-      if ((!charter || charter.theme === theme) && endorsementEvidence(world, actor, theme)) {
+      if ((!charter || charter.theme === theme) && !world.doctrines.schools.some(school=>school.parentSectId===sect.id&&school.theme===theme&&school.foundedSectId) &&
+          endorsementEvidence(world, actor, theme)) {
         add({ doctrineMove: 'endorse', doctrineTheme: theme });
       }
     }
   }
-  const schools = world.doctrines.schools.filter(({ parentSectId }) => parentSectId === sect.id)
+  const schools = world.doctrines.schools.filter(({ parentSectId,foundedSectId }) => parentSectId === sect.id&&!foundedSectId)
     .sort((a, b) => a.id.localeCompare(b.id));
   for (const school of schools) {
     const proposal = pendingFor(world, school);
@@ -268,6 +270,7 @@ export function advanceDoctrines(world: WorldState): WorldEvent[] {
   world.doctrines.endorsements = world.doctrines.endorsements.filter((row) =>
     now - row.tick <= ENDORSEMENT_WINDOW && livingActor(world, row.actorId)?.sectId === row.sectId);
   for (const school of world.doctrines.schools) {
+    if(school.foundedSectId)continue;
     const sect = world.sects.find(({ id }) => id === school.parentSectId);
     if (!sect) continue;
     if (school.status === 'autonomous') {
@@ -281,6 +284,7 @@ export function advanceDoctrines(world: WorldState): WorldEvent[] {
       '签署资格、支持门槛或资金条件已经变化，议约撤销，未划拨财物。', []));
   }
   const terminal = new Set(world.doctrines.proposals.filter(({ status }) => status !== 'pending').slice(-64));
-  world.doctrines.proposals = world.doctrines.proposals.filter((row) => row.status === 'pending' || terminal.has(row));
+  const historical=doctrineFoundingPinnedAutonomyIds(world);
+  world.doctrines.proposals = world.doctrines.proposals.filter((row) => row.status === 'pending' || terminal.has(row)||historical.has(row.id));
   return result;
 }

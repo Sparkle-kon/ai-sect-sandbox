@@ -1,3 +1,5 @@
+import {availableDoctrineMaturityActions,type DoctrineMaturityOption} from './doctrineMaturityEngine';
+import {availableDoctrineFoundingActions,type DoctrineFoundingOption} from './doctrineFoundingEngine';
 import { availableDanxiaMedicineActions } from './danxiaMedicineEngine';
 import {availableDanxiaReviewActions,type DanxiaReviewOption} from './danxiaSeasonReviewEngine';
 import { activeDanxiaMedicineEscort,danxiaMedicineActedThisTick } from './danxiaMedicineTerms';
@@ -129,6 +131,29 @@ export function queueAvatarDanxiaReview(world:WorldState,actorId:string,option:D
   return true;
 }
 
+export function queueAvatarDoctrineFounding(world:WorldState,actorId:string,option:DoctrineFoundingOption):boolean {
+  const host=activeAvatar(world);
+  if(!host||!canQueueAvatarSalvage(world,actorId))return false;
+  const exact=availableDoctrineFoundingActions(host,world,world.tick+1).find(row=>row.doctrineFoundingMove===option.doctrineFoundingMove&&
+    row.targetDoctrineFoundingId===option.targetDoctrineFoundingId&&row.targetDoctrineSchoolId===option.targetDoctrineSchoolId&&
+    row.targetRelocationId===option.targetRelocationId);
+  if(!exact)return false;
+  world.playerAvatar.essence-=AVATAR_ORDER_COST;
+  world.playerAvatar.pendingOrder={actorId,queuedTick:world.tick,...exact};
+  return true;
+}
+
+export function queueAvatarDoctrineMaturity(world:WorldState,actorId:string,option:DoctrineMaturityOption):boolean {
+  const host=activeAvatar(world);
+  if(!host||!canQueueAvatarSalvage(world,actorId))return false;
+  const exact=availableDoctrineMaturityActions(host,world,world.tick+1).find(row=>row.doctrineMaturityMove===option.doctrineMaturityMove&&
+    row.targetDoctrineFoundingId===option.targetDoctrineFoundingId);
+  if(!exact)return false;
+  world.playerAvatar.essence-=AVATAR_ORDER_COST;
+  world.playerAvatar.pendingOrder={actorId,queuedTick:world.tick,...exact};
+  return true;
+}
+
 export function consumeAvatarOrder(world: WorldState): { actorId: string; decision: LLMDecisionPayload } | undefined {
   const state = world.playerAvatar;
   const order = state?.pendingOrder;
@@ -140,7 +165,11 @@ export function consumeAvatarOrder(world: WorldState): { actorId: string; decisi
     order.action==='DANXIA_MEDICINE'?{danxiaMedicineMove:order.danxiaMedicineMove,targetDanxiaShortageId:order.targetDanxiaShortageId,
       targetDanxiaMedicineId:order.targetDanxiaMedicineId,targetCultivatorId:order.targetCultivatorId}:
     order.action==='DANXIA_REVIEW'?{danxiaReviewMove:order.danxiaReviewMove,targetDanxiaReviewId:order.targetDanxiaReviewId,
-      targetSettlementRecordId:order.targetSettlementRecordId}:{};
+      targetSettlementRecordId:order.targetSettlementRecordId}:
+    order.action==='DOCTRINE_FOUNDING'?{doctrineFoundingMove:order.doctrineFoundingMove,
+      targetDoctrineFoundingId:order.targetDoctrineFoundingId,targetDoctrineSchoolId:order.targetDoctrineSchoolId,
+      targetRelocationId:order.targetRelocationId}:
+    order.action==='DOCTRINE_MATURITY'?{doctrineMaturityMove:order.doctrineMaturityMove,targetDoctrineFoundingId:order.targetDoctrineFoundingId}:{};
 
   return { actorId: order.actorId, decision: { chosenAction: order.action, innerMonologue: '遵化身指令行动', ...targets } };
 }

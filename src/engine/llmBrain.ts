@@ -1,3 +1,5 @@
+import {availableDoctrineMaturityActions} from './doctrineMaturityEngine';
+import {availableDoctrineFoundingActions} from './doctrineFoundingEngine';
 import {availableDanxiaMedicineActions} from './danxiaMedicineEngine';
 import {availableDanxiaReviewActions} from './danxiaSeasonReviewEngine';
 import {activeDanxiaMedicineEscort,danxiaMedicineActedThisTick} from './danxiaMedicineTerms';
@@ -926,6 +928,23 @@ export function computeHeuristicDecision(
     if (move) return { ...move, chosenAction: 'RELOCATE', innerMonologue: '宗门危势须核实，迁徙按议约和实际补给行事。' };
   }
 
+  if(world.doctrineFoundings.foundings.length){
+    const next=availableDoctrineMaturityActions(cultivator,world);
+    const reticent=cultivator.personality==='诡诈'||cultivator.personality==='阴险';
+    const choice=next.find(option=>option.doctrineMaturityMove==='finalize_merge')??
+      (reticent?next.find(option=>option.doctrineMaturityMove==='decline_merge'):
+        next.find(option=>option.doctrineMaturityMove==='accept_merge')??next.find(option=>option.doctrineMaturityMove==='approve_member'))??
+      (!reticent?next.find(option=>option.doctrineMaturityMove==='offer_merge'):undefined);
+    if(choice)return {...choice,chosenAction:choice.action,innerMonologue:'旧地确受困，仍要我方、对方和每个同门分别决定。'};
+  }
+  if(world.relocations.abandonedSites.length||world.doctrineFoundings.foundings.length){
+    const choices=availableDoctrineFoundingActions(cultivator,world);
+    const hesitant=cultivator.personality==='阴险'||cultivator.personality==='诡诈';
+    const response=choices.find(row=>row.doctrineFoundingMove===(hesitant?'decline':'authorize'));
+    const action=choices.find(row=>row.doctrineFoundingMove==='establish')??response??
+      (!hesitant?choices.find(row=>row.doctrineFoundingMove==='join')??choices.find(row=>row.doctrineFoundingMove==='propose'):undefined);
+    if(action)return {...action,chosenAction:action.action,innerMonologue:'原山门、本人许可和实有钱库要一项项核对。'};
+  }
   if (world.tick >= 13 && !cultivator.guardAssignment &&
       (world.tick % 4 === 0 || world.doctrines.proposals.some(({ status }) => status === 'pending'))) {
     const options = availableDoctrineActions(cultivator, world);
@@ -1659,6 +1678,8 @@ export async function requestCultivatorLLMDecision(
   const witnessOptions = availableWitnessActions(cultivator, world);
   const estateOptions = availableEstateActions(cultivator, world);
   const doctrineOptions = availableDoctrineActions(cultivator, world);
+  const foundingOptions=availableDoctrineFoundingActions(cultivator,world,requestTick);
+  const maturityOptions=availableDoctrineMaturityActions(cultivator,world,requestTick);
   const relocationOptions = availableRelocationActions(cultivator, world);
   const honorReviewOptions = availableSeasonReviewActions(cultivator, world);
   const observatoryOptions = availableObservatoryActions(cultivator, world, requestTick);
@@ -1826,6 +1847,8 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 自身残响仅为未证实的主观感受，不提供事件、前人或地点事实：${JSON.stringify(ownEcho ? { theme: ownEcho.theme, confidence: ownEcho.confidence, status: ownEcho.status } : null)}；可选的审视方式：${JSON.stringify(recollectionOptions)}
 - 迁宗议约可用选项（只能按列出的地点或动议选择）：${JSON.stringify(relocationOptions)}
 - 道统当前可用事务（只能照抄一个列出的选项，不可自行转移账款）：${JSON.stringify(doctrineOptions)}
+- 另立宗门只可照抄本人有权核对的事项；不能替他人签字，更不能自订疆土、钱量、债务或典籍继承：${JSON.stringify(foundingOptions)}
+- 并宗只有核对本人现场和全部未结职责之后才有资格；单人签字不同于结案，不可写新资金或强行迁人：${JSON.stringify(maturityOptions)}
 - 宗门经营许可：${JSON.stringify(availableSectEconomyActions(cultivator, world))}；巡守派任：${JSON.stringify(cultivator.guardAssignment ?? null)}
 - 宗门职位：${cultivator.sectRank}；贡献：${cultivator.contribution}；当前可行的宗门权力行动：${JSON.stringify(availableLeadershipActions(cultivator, world))}
 - 自身天劫：${JSON.stringify(isTribulationActive(cultivator) ? cultivator.tribulation : null)}；如果正在应劫，须选择 FACE_TRIBULATION；同地可袭扰的仇敌：${JSON.stringify(availableAmbushTargets(cultivator, world).map((target) => ({ id: target.id, name: target.name })))}
@@ -1913,6 +1936,8 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'CLAIM_ESTATE',
             'HOLD_MEMORIAL',
             'DOCTRINE',
+            'DOCTRINE_FOUNDING',
+            'DOCTRINE_MATURITY',
             'RELOCATE',
             'RECOLLECT',
             'RELIC',
@@ -2320,6 +2345,24 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             item.targetRelocationId === parsed.targetRelocationId) : undefined;
           if (chosenAction === 'RELOCATE' && !legalRelocation) return undefined;
 
+          if(chosenAction==='DOCTRINE_MATURITY'){
+            const option=maturityOptions.find(row=>row.doctrineMaturityMove===parsed.doctrineMaturityMove&&
+              row.targetDoctrineFoundingId===parsed.targetDoctrineFoundingId);
+            if(!option||Object.keys(parsed).some(key=>!['chosenAction','innerMonologue','doctrineMaturityMove','targetDoctrineFoundingId'].includes(key)))return undefined;
+            const {action,...safe}=option;
+            const phrase=typeof parsed.innerMonologue==='string'?parsed.innerMonologue.trim().slice(0,160):'';
+            return {...safe,chosenAction:action,innerMonologue:phrase||'按已知困境和本人资格处理。'};
+          }
+          if(chosenAction==='DOCTRINE_FOUNDING'){
+            const option=foundingOptions.find(row=>row.doctrineFoundingMove===parsed.doctrineFoundingMove&&
+              row.targetDoctrineFoundingId===parsed.targetDoctrineFoundingId&&row.targetDoctrineSchoolId===parsed.targetDoctrineSchoolId&&
+              row.targetRelocationId===parsed.targetRelocationId);
+            if(!option||Object.keys(parsed).some(key=>!['chosenAction','innerMonologue','doctrineFoundingMove',
+              ...(option.doctrineFoundingMove==='propose'?['targetDoctrineSchoolId','targetRelocationId']:['targetDoctrineFoundingId'])].includes(key)))return undefined;
+            const {action,...safe}=option;
+            const phrase=typeof parsed.innerMonologue==='string'?parsed.innerMonologue.trim().slice(0,160):'';
+            return {...safe,chosenAction:action,innerMonologue:phrase||'照本人许可和现存实据行事。'};
+          }
           const legalDoctrine = chosenAction === 'DOCTRINE' ? doctrineOptions.find((item) =>
             item.doctrineMove === parsed.doctrineMove && item.doctrineTheme === parsed.doctrineTheme &&
             item.targetDoctrineSchoolId === parsed.targetDoctrineSchoolId &&

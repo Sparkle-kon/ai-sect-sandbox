@@ -1,4 +1,10 @@
 import { DOCTRINE_LABELS, doctrineSupport } from '../engine/doctrineEngine';
+import { projectDoctrineFoundings } from '../engine/doctrineFoundingEngine';
+import { DoctrineFoundingReceipts } from './DoctrineFoundingReceipts';
+import { DoctrineFoundingControls, type DoctrineFoundingControlsProps } from './DoctrineFoundingControls';
+import { projectDoctrineMaturity } from '../engine/doctrineMaturityEngine';
+import { DoctrineMaturityControls, type DoctrineMaturityControlsProps } from './DoctrineMaturityControls';
+import { DoctrineMaturityReceipt } from './DoctrineMaturityReceipt';
 import type { Cultivator, WorldState } from '../types/world';
 
 type Doctrine = WorldState['doctrines'];
@@ -22,8 +28,18 @@ const movement = (row: History) => {
   return '';
 };
 
-export function SectDoctrinePanel({ world, cultivator }: { world: WorldState; cultivator: Cultivator | undefined }) {
+export function SectDoctrinePanel({ world, cultivator, foundingControls, maturityControls }: {
+  world: WorldState; cultivator: Cultivator | undefined; foundingControls?: DoctrineFoundingControlsProps;
+  maturityControls?: DoctrineMaturityControlsProps;
+}) {
   const viewer = world.cultivators.find(({ id }) => id === cultivator?.id);
+  const founding = projectDoctrineFoundings(world, cultivator === viewer ? viewer : undefined);
+  const maturity = viewer && viewer === cultivator ? world.doctrineFoundings.foundings.flatMap(row => {
+    const view = projectDoctrineMaturity(world, row, viewer);
+    return view ? [{id:row.id,name:row.independentName,view}] : [];
+  }) : [];
+  const maturityById = new Map(maturity.map(row => [row.id,row.view]));
+  const haveFounding = new Set(founding.map(row => row.id));
   const sect = world.sects.find(({ id }) => id === viewer?.sectId);
   const local = sect ? (world.doctrines?.schools ?? []).filter(({ parentSectId, foundedTick }) => parentSectId === sect.id && foundedTick <= world.tick)
     .sort((a, b) => b.foundedTick - a.foundedTick || a.id.localeCompare(b.id)) : [];
@@ -37,8 +53,16 @@ export function SectDoctrinePanel({ world, cultivator }: { world: WorldState; cu
         <p className="break-words text-xs text-slate-300">{sect ? `${sect.name} · Tick #${world.tick} · ${local.length} 支道统` : viewer ? '散修暂无本宗道统档案。' : '选中修士后查看所属宗门的公开道统。'}</p>
         <p className="text-xs text-slate-400">仅列公开表态、证据计数与已记载的交割，不显示私人心声或记忆原文。有效支持不按门中位阶加权。</p>
       </header>
-      {sect && local.length === 0 && <p className="text-xs text-slate-400">本宗尚无公开道统记录。</p>}
+      {sect && local.length === 0 && !founding.length && !maturity.length && <p className="text-xs text-slate-400">本宗尚无公开道统记录。</p>}
+      <DoctrineFoundingReceipts rows={founding} maturity={maturityById} />
+      {maturity.filter(row => !haveFounding.has(row.id)).map(row => <details key={row.id} className="min-w-0 rounded-lg border border-slate-800 bg-slate-950/60">
+        <summary className="min-h-11 cursor-pointer break-words px-3 py-2 text-xs font-semibold text-teal-100">{row.name} · 并宗实录</summary>
+        <div className="px-3 pb-3 text-xs leading-relaxed text-slate-300"><DoctrineMaturityReceipt view={row.view} /></div>
+      </details>)}
+      {foundingControls && <DoctrineFoundingControls {...foundingControls} />}
+      {maturityControls && <DoctrineMaturityControls {...maturityControls} />}
       {local.map((school) => {
+        const founded = Boolean(school.foundedSectId);
         const support = doctrineSupport(world, school);
         const supporters = new Set(support.supporterIds);
         const evidence = [...new Map(world.doctrines.endorsements.filter((entry) => entry.schoolId === school.id &&
@@ -54,16 +78,16 @@ export function SectDoctrinePanel({ world, cultivator }: { world: WorldState; cu
         return (
           <details key={school.id} className="min-w-0 rounded-lg border border-slate-800 bg-slate-950/60">
             <summary className="min-h-11 cursor-pointer break-words px-3 py-2 text-xs font-semibold text-teal-100">
-              {DOCTRINE_LABELS[school.theme]} · {STATUS[school.status]} · 有效支持 {support.supporters} 人
+              {DOCTRINE_LABELS[school.theme]} · {founded ? '已另立宗门' : `${STATUS[school.status]} · 有效支持 ${support.supporters} 人`}
             </summary>
             <div className="space-y-2 border-t border-slate-800 p-3 text-xs text-slate-300">
               <p className="break-words">发起：{names(school.founderId)} · 始于 Tick #{school.foundedTick}{school.stewardId ? ` · 主持：${names(school.stewardId)}` : ''}</p>
-              <dl className="grid grid-cols-2 gap-2">
+              {!founded && <dl className="grid grid-cols-2 gap-2">
                 <div className="rounded bg-slate-900 p-2"><dt className="text-slate-400">在世成员</dt><dd>{liveMembers} 人</dd></div>
                 <div className="rounded bg-slate-900 p-2"><dt className="text-slate-400">道统公库余额</dt><dd>{school.treasury} 灵石</dd></div>
-              </dl>
-              {school.status === 'autonomous' && <p className="text-slate-400">自治学舍有独立公库；成员保留原宗籍，加入和退出均须自愿。</p>}
-              <div className="space-y-1 border-t border-slate-800 pt-2">
+              </dl>}
+              {!founded && school.status === 'autonomous' && <p className="text-slate-400">自治学舍有独立公库；成员保留原宗籍，加入和退出均须自愿。</p>}
+              {!founded && <div className="space-y-1 border-t border-slate-800 pt-2">
                 <h5 className="font-semibold text-teal-100">有效支持与分立门槛</h5>
                 <p>有效支持 {support.supporters} 人 · 可参与 {support.eligibleMembers} 人 · 至少需 {support.threshold} 人</p>
                 <progress className="h-2 w-full accent-teal-400" aria-label="相对分立门槛的有效支持" max={Math.max(1, support.threshold)} value={Math.min(support.supporters, support.threshold)} />
@@ -76,7 +100,7 @@ export function SectDoctrinePanel({ world, cultivator }: { world: WorldState; cu
                     </li>)}
                   </ul>
                 </details>}
-              </div>
+              </div>}
               <div className="space-y-1 border-t border-slate-800 pt-2">
                 <h5 className="font-semibold text-teal-100">协商、表态与交割</h5>
                 {!proposals.length ? <p className="text-slate-400">尚无协商。</p> : <ul className="space-y-1">

@@ -1,3 +1,4 @@
+import {localDoctrineFoundingNotice} from '../engine/doctrineFoundingEngine';
 import {localDanxiaSeasonReviewSite} from '../engine/danxiaSeasonReviewEngine';
 import { VILLAGE_WORK_RULES, visibleVillageWorks } from '../engine/villageWorksEngine';
 import { projectVillageEvolution } from '../engine/villageEvolutionEngine';
@@ -265,6 +266,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     const clinic = visibleInfirmaries(world, selected);
     return clinic?.capacity && isCurrentLocation(clinic.siteId) ? { siteId: clinic.siteId, capacity: clinic.capacity } : undefined;
   }, [world, selected, isCurrentLocation]);
+  const localFoundingNotice=useMemo(()=>localDoctrineFoundingNotice(world,selected),[world,selected]);
   const localSeasonReviewSite=useMemo(()=>{
     const siteId=localDanxiaSeasonReviewSite(world,selected);
     return siteId&&isCurrentLocation(siteId)?siteId:undefined;
@@ -1414,6 +1416,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                 {sanctuary !== undefined && <span className="text-cyan-200">· 本人通行权有效 · {sanctuary > 0 ? `护阵可挡 ${sanctuary} 次决斗` : '护阵已耗尽'}</span>}
                 {(localErrata.get(location.id) ?? 0) > 0 && <span className="text-amber-200">· 公开史料有待勘误 {localErrata.get(location.id)} 条</span>}
                 {habitatView && <span className="text-emerald-200">· 复育栖地 {habitatView.wildOccupancy ?? 0}/{habitatView.capacity} 野兽</span>}
+                {localFoundingNotice?.siteId===location.id&&isCurrentLocation(location.id)&&
+                   <span className="text-teal-200">· {localFoundingNotice.established?'此地已实际另立宗门':'此地有你可核对的立宗筹议'}</span>}
                 {localSeasonReviewSite===location.id&&<span className="text-teal-200">· 这里有你可核对的旧药约</span>}
                 {localClinic?.siteId === location.id && <span className="text-rose-200">· 静养床 {localClinic.capacity.available}/{localClinic.capacity.beds} 本轮可受理</span>}
                 {localCourierHandoff?.siteId === location.id && isCurrentLocation(location.id) &&

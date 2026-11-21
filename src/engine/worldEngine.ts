@@ -1,5 +1,7 @@
+import {advanceDoctrineMaturity,resolveDoctrineMaturityAction} from './doctrineMaturityEngine';
 import { advanceDanxiaMedicine, resolveDanxiaMedicineAction } from './danxiaMedicineEngine';
 import { advanceDanxiaSeasonReviews, resolveDanxiaReviewAction } from './danxiaSeasonReviewEngine';
+import {advanceDoctrineFoundings,resolveDoctrineFoundingAction} from './doctrineFoundingEngine';
 import { activeDanxiaMedicineEscort, danxiaMedicineActedThisTick } from './danxiaMedicineTerms';
 import {advanceDanxiaShortages,openDanxiaShortage} from './danxiaShortageEngine';
 import { isScopedExpeditionGate } from './expeditionOmenTerms';
@@ -383,6 +385,10 @@ export function applyCultivatorBrainDecision(
       return resolveCareFollowupAction(world, cultivator, decision);
     case 'DANXIA_MEDICINE':
       return resolveDanxiaMedicineAction(world,cultivator,decision,rng);
+    case 'DOCTRINE_MATURITY':
+      return resolveDoctrineMaturityAction(world,cultivator,decision);
+    case 'DOCTRINE_FOUNDING':
+      return resolveDoctrineFoundingAction(world,cultivator,decision);
     case 'DANXIA_REVIEW':
       return resolveDanxiaReviewAction(world,cultivator,decision);
     case 'HABITAT':
@@ -857,7 +863,7 @@ export function advanceWorldTick(
   const avatarOrder = consumeAvatarOrder(nextState);
   const danxiaRegrowth = maintainAlchemy(nextState);
   maintainSectEconomy(nextState);
-  const newEvents: WorldEvent[] = [...advanceSanctuaries(nextState), ...advanceCeasefires(nextState), ...advanceCompetitionSeasons(nextState), ...advanceMapHazards(nextState), ...advanceTerrainSuccession(nextState), ...advanceRoads(nextState), ...advanceCouriers(nextState), ...advanceDanxiaMedicine(nextState), ...advanceDanxiaSeasonReviews(nextState), ...advancePilgrimages(nextState), ...advanceRelocations(nextState), ...advanceWorkshopInstitutionClosures(nextState), ...advanceSettlements(nextState), ...advanceVillageSupply(nextState), ...advanceVillageWorks(nextState), ...advanceSpiritBeasts(nextState, rng), ...advanceSeedCulture(nextState), ...advanceVillageFairs(nextState), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...advanceSharedCommons(nextState), ...advanceHouseholds(nextState), ...advanceSeasonalHousing(nextState)];
+  const newEvents: WorldEvent[] = [...advanceSanctuaries(nextState), ...advanceCeasefires(nextState), ...advanceCompetitionSeasons(nextState), ...advanceMapHazards(nextState), ...advanceTerrainSuccession(nextState), ...advanceRoads(nextState), ...advanceCouriers(nextState), ...advanceDanxiaMedicine(nextState), ...advanceDanxiaSeasonReviews(nextState), ...advancePilgrimages(nextState), ...advanceRelocations(nextState), ...advanceDoctrineMaturity(nextState,prevState), ...advanceWorkshopInstitutionClosures(nextState), ...advanceSettlements(nextState), ...advanceVillageSupply(nextState), ...advanceVillageWorks(nextState), ...advanceSpiritBeasts(nextState, rng), ...advanceSeedCulture(nextState), ...advanceVillageFairs(nextState), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...advanceSharedCommons(nextState), ...advanceHouseholds(nextState), ...advanceSeasonalHousing(nextState)];
   newEvents.push(...openDanxiaShortage(nextState,danxiaRegrowth));
   for (const event of newEvents) witnessEvent(nextState, event);
   openFurnaceTurn(nextState);
@@ -1048,7 +1054,7 @@ export function advanceWorldTick(
   }
 
   for (const event of [...advanceApprenticeCohorts(nextState), ...advanceBoundaryReliefs(nextState), ...advanceShortShifts(nextState), ...advanceSparring(nextState), ...advanceDiplomacy(nextState, rng), ...advanceOccasions(nextState, rng), ...advanceOaths(nextState), ...advanceMarkets(nextState), ...advanceWitnesses(nextState), ...advanceSeasonReviews(nextState, (state, seasonId) =>
-    publicCompetitionStandings(state, seasonId).find(({ rank }) => rank === 1)), ...maintainSectPolitics(nextState), ...advanceBounties(nextState), ...advanceResearch(nextState), ...advanceWorkshops(nextState), ...advanceDamageAssurance(nextState), ...advanceRelicExhibits(nextState), ...advanceProbation(nextState), ...advanceToolLoans(nextState), ...advanceEstates(nextState), ...advanceDoctrines(nextState), ...advanceSectCredit(nextState), ...advanceSanctuaries(nextState), ...advancePilgrimages(nextState), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceCareFollowups(nextState), ...advanceDanxiaShortages(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...reconcileCourierDeaths(nextState), ...advanceHouseholds(nextState), ...advanceHouseholdNames(nextState)]) {
+    publicCompetitionStandings(state, seasonId).find(({ rank }) => rank === 1)), ...maintainSectPolitics(nextState), ...advanceDoctrineFoundings(nextState), ...advanceDoctrineMaturity(nextState,prevState), ...advanceBounties(nextState), ...advanceResearch(nextState), ...advanceWorkshops(nextState), ...advanceDamageAssurance(nextState), ...advanceRelicExhibits(nextState), ...advanceProbation(nextState), ...advanceToolLoans(nextState), ...advanceEstates(nextState), ...advanceDoctrines(nextState), ...advanceSectCredit(nextState), ...advanceSanctuaries(nextState), ...advancePilgrimages(nextState), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceCareFollowups(nextState), ...advanceDanxiaShortages(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...reconcileCourierDeaths(nextState), ...advanceHouseholds(nextState), ...advanceHouseholdNames(nextState)]) {
     newEvents.push(event);
     witnessEvent(nextState, event);
   }

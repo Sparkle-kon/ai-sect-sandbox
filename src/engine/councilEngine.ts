@@ -1,3 +1,4 @@
+import {isSectActive} from './sectActivity';
 import { canCouncilUseMisconduct, recordProbationExpulsion } from './probationEngine';
 import { isRetiredFromService } from './serviceRetirementEngine';
 import { archiveChronicleEvents } from './novelGenerator';
@@ -38,6 +39,7 @@ const eligibleTargetForExpulsion = (world: WorldState, target: Cultivator) => ta
 export function availableCouncilPlans(world: WorldState, sectId?: string): CouncilPlan[] {
   const plans: CouncilPlan[] = [];
   for (const sect of world.sects) {
+    if(!isSectActive(sect))continue;
     if ((sectId && sect.id !== sectId) || world.councils.some((record) => record.sectId === sect.id && record.tick === world.tick)) continue;
     const own = members(world, sect);
     const leader = own.find((item) => item.id === sect.leaderId);

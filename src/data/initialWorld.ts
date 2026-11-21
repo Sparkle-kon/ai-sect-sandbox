@@ -292,6 +292,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     settlements: createSettlementState(locations, seed),
     villageEvolution:{villages:[],migrations:[]},
     doctrines: createDoctrineState(),
+    doctrineFoundings:{foundings:[]},
     relocations: createRelocationState(),
     reincarnation: createReincarnationState(),
     relics: createRelicState(locations, seed),

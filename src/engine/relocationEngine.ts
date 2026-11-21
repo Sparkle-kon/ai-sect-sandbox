@@ -1,3 +1,4 @@
+import {doctrineFoundingPinnedRelocationIds} from './doctrineFoundingTerms';
 import { activeCourierForActor } from './sealedCourierEngine';
 import type { Cultivator, LLMDecisionPayload, LocationNode, MapPoint, RelocationMove, RelocationPlan, RelocationState,
   Sect, WorldEvent, WorldState } from '../types/world';
@@ -279,7 +280,9 @@ export function advanceRelocations(world: WorldState): WorldEvent[] {
     if (plan.pathIndex === plan.path.length - 1) events.push(arrive(world, plan, sect, origin, destination));
   }
   const latest = new Set(world.relocations.plans.filter((plan) => !active(plan)).slice(-64));
-  world.relocations.plans = world.relocations.plans.filter((plan) => active(plan) || latest.has(plan));
-  world.relocations.abandonedSites = world.relocations.abandonedSites.slice(-64);
+  const pinned=doctrineFoundingPinnedRelocationIds(world);
+  world.relocations.plans = world.relocations.plans.filter((plan) => active(plan) || latest.has(plan)||pinned.has(plan.id));
+  const tail=Math.max(0,world.relocations.abandonedSites.length-64);
+  if(tail)world.relocations.abandonedSites=world.relocations.abandonedSites.filter((row,index)=>index>=tail||pinned.has(row.planId));
   return events;
 }

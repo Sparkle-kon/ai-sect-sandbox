@@ -1,3 +1,6 @@
+import {SECT_CREDIT_TREASURY_CAP} from './sectCreditTerms';
+export {SECT_CREDIT_TREASURY_CAP} from './sectCreditTerms';
+import {isSectActive} from './sectActivity';
 import type { Cultivator, LLMDecisionPayload, Sect, SectCreditMove, SectCreditReceipt, SectCreditState, SectLoan, WorldEvent, WorldState } from '../types/world';
 
 export const SECT_CREDIT_PRINCIPAL = 120;
@@ -8,7 +11,6 @@ export const SECT_CREDIT_PAYMENT_MAX = 40;
 export const SECT_CREDIT_RESERVE = 80;
 export const SECT_CREDIT_EXPOSURE_MAX = 360;
 export const SECT_CREDIT_RESTRICTION_TICKS = 7;
-export const SECT_CREDIT_TREASURY_CAP = 50_000;
 const RETAIN_TERMINAL = 72;
 
 export interface SectCreditOption {
@@ -119,7 +121,7 @@ function paymentAmount(world: WorldState, borrower: Sect, lender: Sect, loan: Se
 
 export function availableSectCreditActions(actor: Cultivator, world: WorldState): SectCreditOption[] {
   const own = findSect(world, actor.sectId);
-  if (!own || !world.cultivators.includes(actor) || !represents(world, actor, own)) return [];
+  if (!isSectActive(own) || !world.cultivators.includes(actor) || !represents(world, actor, own)) return [];
   const options: SectCreditOption[] = [];
   const add = (creditMove: SectCreditMove, targetSectId?: string, targetCreditId?: string) =>
     options.push({ action: 'SECT_CREDIT', creditMove, ...(targetSectId ? { targetSectId } : {}), ...(targetCreditId ? { targetCreditId } : {}) });
@@ -135,7 +137,7 @@ export function availableSectCreditActions(actor: Cultivator, world: WorldState)
     }
   }
   for (const other of world.sects) {
-    if (other === own || !represents(world, findPerson(world, other.leaderId), other) || !canFund(world, own, other)) continue;
+    if (!isSectActive(other)||other === own || !represents(world, findPerson(world, other.leaderId), other) || !canFund(world, own, other)) continue;
     add('offer', other.id);
   }
   return options;

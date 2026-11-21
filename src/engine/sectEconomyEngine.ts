@@ -1,3 +1,4 @@
+import {isSectActive} from './sectActivity';
 import { flowSect, recordResourceFlow } from './resourceFlowEngine';
 import { isRetiredFromService } from './serviceRetirementEngine';
 import { activeRelocationForSect } from './relocationEngine';
@@ -123,7 +124,7 @@ export function maintainSectEconomy(world: WorldState): void {
     if (actor.guardAssignment && !isGuardAssignmentActive(actor, world)) delete actor.guardAssignment;
   }
   for (const sect of world.sects) {
-    if (sect.monthlyEconomy?.tick === world.tick) continue;
+    if (!isSectActive(sect)||sect.monthlyEconomy?.tick === world.tick) continue;
     if (activeRelocationForSect(world, sect.id)) {
       sect.monthlyEconomy = { tick: world.tick, taxes: 0, mining: 0, upkeep: 0, net: 0 };
       continue;

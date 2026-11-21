@@ -103,6 +103,8 @@ export type ActionType =
   | 'CLAIM_ESTATE'
   | 'HOLD_MEMORIAL'
   | 'DOCTRINE'
+  | 'DOCTRINE_FOUNDING'
+  | 'DOCTRINE_MATURITY'
   | 'RELOCATE'
   | 'RECOLLECT'
   | 'RELIC'
@@ -266,6 +268,7 @@ export interface GuardAssignment {
 }
 
 export interface Sect {
+  inactiveSinceTick?:number;
   id: string;
   name: string;
   alignment: '正道' | '魔道' | '中立';
@@ -497,6 +500,9 @@ export interface LLMDecisionPayload {
   targetWitnessClaimId?: string;
   targetEstateId?: string;
   doctrineMove?: DoctrineMove;
+  doctrineFoundingMove?:DoctrineFoundingMove;
+  doctrineMaturityMove?:DoctrineMaturityMove;
+  targetDoctrineFoundingId?:string;
   doctrineTheme?: ReflectionTheme;
   targetDoctrineSchoolId?: string;
   targetDoctrineProposalId?: string;
@@ -1001,6 +1007,9 @@ export type AvatarOrder = 'REST' | 'CULTIVATE';
 export type AvatarPendingOrder = { actorId: string; queuedTick: number } & (
   | { action: AvatarOrder }
   | { action: 'SALVAGE_ARTIFACT'; targetArtifactId: string; targetLocationId: string }
+  | { action:'DOCTRINE_MATURITY';doctrineMaturityMove:DoctrineMaturityMove;targetDoctrineFoundingId:string }
+  | { action:'DOCTRINE_FOUNDING'; doctrineFoundingMove:DoctrineFoundingMove; targetDoctrineFoundingId?:string;
+    targetDoctrineSchoolId?:string;targetRelocationId?:string }
   | { action: 'DANXIA_REVIEW'; danxiaReviewMove: DanxiaReviewMove; targetDanxiaReviewId:string; targetSettlementRecordId?:string }
   | { action: 'DANXIA_MEDICINE'; danxiaMedicineMove: DanxiaMedicineMove; targetDanxiaShortageId?:string; targetDanxiaMedicineId?:string; targetCultivatorId?:string }
 );
@@ -1433,6 +1442,7 @@ export interface DecisionTraceState {
 
 export type DoctrineMove = 'endorse' | 'propose_separation' | 'propose_reconciliation' | 'accept' | 'decline' | 'join' | 'leave' | 'fund_training';
 export interface DoctrineSchool {
+  foundedSectId?:string;
   id: string;
   parentSectId: string;
   theme: ReflectionTheme;
@@ -3175,6 +3185,42 @@ export interface VillageEvolutionMigration {
 }
 export interface VillageEvolutionState {villages:VillageEvolutionRecord[];migrations:VillageEvolutionMigration[]}
 
+export type DoctrineFoundingMove='propose'|'join'|'authorize'|'decline'|'withdraw'|'establish';
+export interface DoctrineFoundingMemberConsent {actorId:string;tick:number;withdrawnTick?:number}
+export interface DoctrineFounding {
+  id:string;schoolId:string;parentSectId:string;independentSectId:string;oldSiteId:string;
+  relocationPlanId:string;abandonedSiteId:string;autonomyProposalId:string;scriptureId:string;founderId:string;
+  independentName:string;schoolTreasury:number;proposedTick:number;expiresTick:number;
+  status:'proposed'|'established'|'declined'|'withdrawn'|'expired'|'invalidated';
+  authorization?:{actorId:string;tick:number;siteId:string};
+  consents:DoctrineFoundingMemberConsent[];
+  settlement?:{tick:number;actorId?:string;memberIds?:string[];transferredStones?:number};
+  continuity?:{tick:number;previousLeaderId:string;successorId:string;eventId:string;cause:'native_succession'};
+  maturity?:DoctrineMaturity;
+}
+export interface DoctrineFoundingsState {foundings:DoctrineFounding[]}
+
+export type DoctrineMaturityMove='offer_merge'|'accept_merge'|'approve_member'|'decline_merge'|'withdraw_merge'|'finalize_merge';
+export interface DoctrineMaturityHazardSample {tick:number;siteId:string;hazard:RouteWarningHazardProof}
+export type DoctrineMaturitySupport =
+  | {kind:'sustained_hazard';observedTick:number;siteId:string;samples:DoctrineMaturityHazardSample[]}
+  | {kind:'title_lost';observedTick:number;siteId:string;previousTick:number;currentOwnerSectId?:string};
+export interface DoctrineMaturityOffer {
+  openedTick:number;expiresTick:number;outgoingLeaderId:string;receivingLeaderId:string;receivingSiteId:string;
+  memberIds:string[];wallet:number;scriptureId:string;support:DoctrineMaturitySupport;
+  consents:Array<{actorId:string;tick:number}>;acceptedTick?:number;
+  status:'offered'|'declined'|'withdrawn'|'expired'|'invalidated'|'merged';closedTick?:number;closedById?:string;
+}
+export interface DoctrineMaturity {
+  latestHazards:DoctrineMaturityHazardSample[];
+  lastTitle?:{siteId:string;tick:number};
+  support?:DoctrineMaturitySupport;
+  offers:DoctrineMaturityOffer[];
+  settlement?:{kind:'merged'|'dispersed';tick:number;siteId:string;
+    receivingSectId?:string;memberIds:string[];transferredStones:number;retainedStones:number;releasedTileId?:string;
+    transferredScriptureId?:string;scriptureAlreadyHeld?:boolean};
+}
+
 export interface WorldState {
   fieldObservatories: FieldObservatoriesState;
   danxiaShortages: DanxiaShortagesState;
@@ -3242,6 +3288,7 @@ export interface WorldState {
   relocations: RelocationState;
   worldgen?: WorldGeneration;
   doctrines: DoctrineState;
+  doctrineFoundings:DoctrineFoundingsState;
   decisionTrace: DecisionTraceState;
   estates: EstateState;
   witnesses: WitnessState;
