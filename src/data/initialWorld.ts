@@ -1,3 +1,4 @@
+import { createSeasonalHousingState } from '../engine/seasonalHousingEngine';
 import { createMentorTransferState } from '../engine/mentorTransferEngine';
 import { createCompetitionReviewState } from '../engine/seasonReviewEngine';
 import { createCausalChronicleState } from '../engine/chronicleCausalityEngine';
@@ -309,6 +310,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     formations: createFormationNetworkState(),
     territorialLeases: createTerritorialLeaseState(),
     households: createHouseholdState(),
+    seasonalHousing: createSeasonalHousingState(),
     villageWorks: createVillageWorksState(),
     watchlists: createWatchlistState(),
     couriers: createSealedCourierState(),

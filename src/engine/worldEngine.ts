@@ -1,3 +1,4 @@
+import { advanceSeasonalHousing, recordSeasonalHousingMovement, resolveSeasonalHousingAction } from './seasonalHousingEngine';
 import { advanceMentorTransfers, resolveMentorTransferAction } from './mentorTransferEngine';
 import { advanceSeasonReviews, resolveSeasonReviewAction } from './seasonReviewEngine';
 import { advanceDamageAssurance, resolveDamageAssuranceAction } from './damageAssuranceEngine';
@@ -314,6 +315,8 @@ export function applyCultivatorBrainDecision(
       return resolveMentorTransferAction(world, cultivator, decision);
     case 'APPRENTICE_COHORT':
       return resolveApprenticeCohortAction(world, cultivator, decision);
+    case 'SEASONAL_HOUSING':
+      return resolveSeasonalHousingAction(world, cultivator, decision);
     case 'HOUSEHOLD_NAME':
       return resolveHouseholdNameAction(world, cultivator, decision);
     case 'TOOL_LOAN':
@@ -835,7 +838,7 @@ export function advanceWorldTick(
   const avatarOrder = consumeAvatarOrder(nextState);
   maintainAlchemy(nextState);
   maintainSectEconomy(nextState);
-  const newEvents: WorldEvent[] = [...advanceSanctuaries(nextState), ...advanceCeasefires(nextState), ...advanceCompetitionSeasons(nextState), ...advanceMapHazards(nextState), ...advanceTerrainSuccession(nextState), ...advanceRoads(nextState), ...advanceCouriers(nextState), ...advancePilgrimages(nextState), ...advanceRelocations(nextState), ...advanceWorkshopInstitutionClosures(nextState), ...advanceSettlements(nextState), ...advanceVillageSupply(nextState), ...advanceVillageWorks(nextState), ...advanceSpiritBeasts(nextState, rng), ...advanceSeedCulture(nextState), ...advanceVillageFairs(nextState), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...advanceSharedCommons(nextState), ...advanceHouseholds(nextState)];
+  const newEvents: WorldEvent[] = [...advanceSanctuaries(nextState), ...advanceCeasefires(nextState), ...advanceCompetitionSeasons(nextState), ...advanceMapHazards(nextState), ...advanceTerrainSuccession(nextState), ...advanceRoads(nextState), ...advanceCouriers(nextState), ...advancePilgrimages(nextState), ...advanceRelocations(nextState), ...advanceWorkshopInstitutionClosures(nextState), ...advanceSettlements(nextState), ...advanceVillageSupply(nextState), ...advanceVillageWorks(nextState), ...advanceSpiritBeasts(nextState, rng), ...advanceSeedCulture(nextState), ...advanceVillageFairs(nextState), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...advanceSharedCommons(nextState), ...advanceHouseholds(nextState), ...advanceSeasonalHousing(nextState)];
   for (const event of newEvents) witnessEvent(nextState, event);
   openFurnaceTurn(nextState);
   beginClinicDutyTurn(nextState);
@@ -953,6 +956,10 @@ export function advanceWorldTick(
       newEvents.push(event);
       witnessEvent(nextState, event);
     });
+    if (decision.chosenAction === 'EXPLORE' && cultivator.currentAction === 'EXPLORE' && previousLocation !== cultivator.locationId) {
+      const lodging = recordSeasonalHousingMovement(nextState,cultivator,previousLocation);
+      if (lodging) { newEvents.push(lodging); witnessEvent(nextState,lodging); }
+    }
     if (evt && (decision.chosenAction === 'DUEL' || decision.chosenAction === 'SOCIALIZE' || decision.chosenAction === 'BREAKTHROUGH'))
       captureWitnessedPersonalScene(nextState, evt);
     const validEffect = decision.chosenAction === cultivator.currentAction && (evt !== null ||
@@ -997,7 +1004,7 @@ export function advanceWorldTick(
     newEvents.push(event);
     witnessEvent(nextState, event);
   }
-  for(const event of [...advanceMentorTransfers(nextState), ...advanceSectStipends(nextState)]) {
+  for(const event of [...advanceSeasonalHousing(nextState), ...advanceMentorTransfers(nextState), ...advanceSectStipends(nextState)]) {
     newEvents.push(event);
     witnessEvent(nextState,event);
   }

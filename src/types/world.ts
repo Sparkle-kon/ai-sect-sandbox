@@ -148,6 +148,7 @@ export type ActionType =
   | 'BOUNDARY_RELIEF'
   | 'MENTOR_TRANSFER'
   | 'APPRENTICE_COHORT'
+  | 'SEASONAL_HOUSING'
   | 'HOUSEHOLD_NAME'
   | 'CARAVAN_RESTITUTION'
   | 'VILLAGE_GRANARY'
@@ -559,6 +560,9 @@ export interface LLMDecisionPayload {
   boundaryReliefMove?: BoundaryReliefMove;
   targetBoundaryReliefId?: string;
   cohortMove?: ApprenticeCohortMove;
+  housingMove?: HousingMove;
+  targetHousingHouseholdId?: string;
+  targetHousingClaimId?: string;
   mentorTransferMove?: MentorTransferMove;
   targetOldMentorId?: string;
   targetMentorReleaseId?: string;
@@ -2267,6 +2271,19 @@ export interface HouseholdState {
   nextId: number;
 }
 
+export type HousingMove = 'offer'|'accept'|'decline'|'check_in'|'withdraw'|'revoke';
+export type HousingClaimReason = 'guest_declined'|'guest_withdrew'|'host_revoked'|'offer_expired'|'season_ended'|
+  'party_unavailable'|'shelter_unavailable'|'unsafe_shelter'|'route_interrupted'|'no_spare_room';
+export interface HousingMovement {tick:number;fromSiteId:string;toSiteId:string}
+export interface HousingClaim {
+  id:string; householdId:string; hostId:string; guestId:string; settlementId:string; siteId:string; shelterProjectId:string;
+  offeredTick:number; expiresTick:number; seasonStartTick:number; seasonEndTick:number;
+  status:'offered'|'reserved'|'occupied'|'moved_out'|'closed';
+  acceptedTick?:number; arriveByTick?:number; arrival?:HousingMovement; checkedInTick?:number; departure?:HousingMovement;
+  endedTick?:number; hazard?:RouteWarningHazardProof; reason?:HousingClaimReason;
+}
+export interface SeasonalHousingState { claims:HousingClaim[]; nextId:number }
+
 export type VillageWorkKind = 'well' | 'field' | 'shelter';
 export type VillageWorkEndReason = 'deadline' | 'abandoned' | 'site_lost';
 export interface VillageWorkReceipt { tick: number; labor: number; adultsAvailable: number }
@@ -3122,6 +3139,7 @@ export interface WorldState {
   watchlists: WatchlistState;
   villageWorks: VillageWorksState;
   households: HouseholdState;
+  seasonalHousing: SeasonalHousingState;
   territorialLeases: TerritorialLeaseState;
   formations: FormationNetworkState;
   infirmaries: InfirmaryState;

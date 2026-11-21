@@ -1,3 +1,5 @@
+import { projectSeasonalHousing } from '../engine/seasonalHousingEngine';
+import { SeasonalHousingReceipts } from './SeasonalHousingReceipts';
 import type { HouseholdCensus, HouseholdView } from '../engine/householdEngine';
 import type { Cultivator, WorldState } from '../types/world';
 
@@ -19,7 +21,8 @@ export function HouseholdRegisterPanel({ world, census, view, cultivator }: {
   if (own) localGroups.add(own.householdId);
   const guardians = view.guardianContracts.filter(({ householdId, openedTick, guardianId, wardId }) =>
     localGroups.has(householdId) && openedTick <= world.tick && (guardianId === cultivator.id || wardId === cultivator.id));
-  if (!census.groups.length && !own && !guardians.length) return null;
+  const housing = projectSeasonalHousing(world,cultivator).filter(row=>row.settlementId===census.settlementId);
+  if (!census.groups.length && !own && !guardians.length && !housing.length) return null;
   const people = new Map(world.cultivators.map(({ id, name }) => [id, name]));
 
   return (
@@ -54,6 +57,7 @@ export function HouseholdRegisterPanel({ world, census, view, cultivator }: {
             </li>
           ))}
         </ol>}
+        <SeasonalHousingReceipts rows={housing} viewerId={cultivator.id} />
       </div>
     </details>
   );

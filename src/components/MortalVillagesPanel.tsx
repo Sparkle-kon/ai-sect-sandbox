@@ -1,3 +1,5 @@
+import { projectSeasonalHousing } from '../engine/seasonalHousingEngine';
+import { SeasonalHousingReceipts } from './SeasonalHousingReceipts';
 import {
   availableSettlementActions, SETTLEMENT_RELIEF, SETTLEMENT_RECRUIT_STIPEND, visibleSettlements,
 } from '../engine/settlementEngine';
@@ -28,6 +30,7 @@ export function MortalVillagesPanel({ world, cultivator }: { world: WorldState; 
     ? visibleSettlements(world, cultivator).filter(({ locationId }) => terrain.isCurrentLocation(locationId)).map(({ id }) => id) : []);
   const worksView = cultivator && visible.size > 0 ? visibleVillageWorks(world, cultivator) : [];
   const householdView = cultivator && visible.size > 0 ? visibleHouseholds(world, cultivator) : undefined;
+  const personalHousing = projectSeasonalHousing(world,cultivator);
   const householdCensuses = new Map(householdView?.censuses.map((census) => [census.settlementId, census]));
   const options = cultivator?.alive && world.settlements ? availableSettlementActions(cultivator, world) : [];
   const people = new Map(world.cultivators.map(({ id, name }) => [id, name]));
@@ -114,7 +117,10 @@ export function MortalVillagesPanel({ world, cultivator }: { world: WorldState; 
                       )}
                     </div>
                   </div>
-                ) : <p className="mt-2 text-xs text-slate-400">已知地名，但当前不在视野中，不显示实时人口、招募或账目。</p>}
+                ) : <div className="mt-2 space-y-2 text-xs text-slate-400">
+                  <p>已知地名，但当前不在视野中，不显示实时人口、招募或账目。</p>
+                  {cultivator && <SeasonalHousingReceipts rows={personalHousing.filter(row=>row.settlementId===village.id)} viewerId={cultivator.id} />}
+                </div>}
               </details>
             );
           })}

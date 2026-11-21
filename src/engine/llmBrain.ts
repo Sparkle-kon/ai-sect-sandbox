@@ -1,3 +1,4 @@
+import { availableSeasonalHousingActions, seasonalHousingTravelTarget, type SeasonalHousingOption } from './seasonalHousingEngine';
 import { availableMentorTransferActions, type MentorTransferOption } from './mentorTransferEngine';
 import { availableSeasonReviewActions, SEASON_REVIEW_WINDOW } from './seasonReviewEngine';
 import { availableObservatoryActions, availableObservatoryFundingActions, OBSERVATORY_COST } from './fieldObservatoryEngine';
@@ -366,6 +367,17 @@ export function computeHeuristicDecision(
     if (owing) return toMentorTransferDecision(owing,'按本人此前的约定实到，授课结果另行核验。');
     const answer = options.find(({mentorTransferMove}) => mentorTransferMove === (willingTransfer ? 'accept' : 'decline'));
     if (answer) return toMentorTransferDecision(answer,willingTransfer ? '愿与同门续修原功法，另约同堂。' : '此时不宜转接，先谢绝。');
+  }
+  if (world.seasonalHousing.claims.some(row=>
+      (row.status==='offered'||row.status==='reserved')&&row.guestId===cultivator.id)) {
+    const lodging = availableSeasonalHousingActions(cultivator,world);
+    const registration = lodging.find(({housingMove})=>housingMove==='check_in');
+    if (registration) return toHousingDecision(registration,'实际到村后愿照约登记借居，不因此入坊籍。');
+    const wantsRoom = cultivator.hp >= cultivator.maxHp*.55 && cultivator.personality!=='嗜血';
+    const answer = lodging.find(({housingMove})=>housingMove===(wantsRoom?'accept':'decline'));
+    if (answer) return toHousingDecision(answer,wantsRoom?'愿按季暂借一房；仍须亲自实到。':'此季不能赴约，先谢绝。');
+    const arrival = seasonalHousingTravelTarget(world,cultivator);
+    if (arrival) return {chosenAction:'EXPLORE',targetLocationId:arrival,innerMonologue:'凭已知村路自行赴约，路到方可借居。'};
   }
   const willingFollowup = !cultivator.guardAssignment &&
     (cultivator.hp / Math.max(1, cultivator.maxHp) <= CARE_FOLLOWUP_NEED_THRESHOLD || cultivator.pillToxicity > 0);
@@ -1168,6 +1180,12 @@ export function computeHeuristicDecision(
       return toMentorTransferDecision(end,'旧师已不能按原约授业，我愿收束旧约；所学仍在。');
   }
 
+  if (world.tick>=26&&(world.tick+cultivator.id.charCodeAt(cultivator.id.length-1))%31===3&&
+      (cultivator.personality==='刚正'||cultivator.personality==='逍遥')&&
+      world.households.members.some(({recruitedId,status})=>recruitedId===cultivator.id&&status==='recruited')) {
+    const offer = availableSeasonalHousingActions(cultivator,world).find(({housingMove})=>housingMove==='offer');
+    if (offer) return toHousingDecision(offer,'家户确有季节空房，只问这位相识道友是否愿借住。');
+  }
   if (world.householdNames.entries.some(({ status }) => status === 'proposed')) {
     const village = world.settlements.villages.find(({ locationId }) => locationId === cultivator.locationId);
     if (village && world.householdNames.entries.some(({ status, settlementId, actorId }) =>
@@ -1560,6 +1578,8 @@ export async function requestCultivatorLLMDecision(
     row.role === 'recipient' && row.status === 'delivered' && row.payload).slice(-3).map(({ deliveredTick, payload }) => ({ deliveredTick, payload }));
   const worksOptions = availableVillageWorksActions(cultivator, world);
   const guardianOptions = availableGuardianActions(cultivator, world);
+  const housingOptions = availableSeasonalHousingActions(cultivator,world,requestTick);
+  const housingTravel = seasonalHousingTravelTarget(world,cultivator,requestTick);
   const householdNameOptions = availableHouseholdNameActions(cultivator, world, requestTick);
   const leaseOptions = availableTerritorialLeaseActions(cultivator, world);
   const formationOptions = availableFormationActions(cultivator, world);
@@ -1646,6 +1666,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 义仓仅照抄本地已有依据的 donate、donate_roots、donate_stones 或 draw 和 targetSettlementId。不得填用量、材料、灾情、人数、分数或奖励；支取须在真正执行之轮重新核查灾困、实存库存与救济间隔：${JSON.stringify(granaryOptions)}
 - 村镇互助只复制本人执行回合所列协议选项：offer 只填实际已知邻村 targetSettlementId；accept、decline、withdraw 只填 targetVillageSupplyId。不得代签、推断远村库存、填数量、转运路线或宣布货物已到：${JSON.stringify(villageSupplyOptions)}
 - 商队遗货只采用本人此地实际可执行的 discover 或 return 与 targetRestitutionId。不能填写遗货数量、货类、商人行踪、归属或退款，不据账面失货假定有可寻库存：${JSON.stringify(restitutionOptions)}
+- 时令借居只可抄本人有效选项，不填到场、居住、离村或坊籍结果：${JSON.stringify(housingOptions)}；已同意且可行的实际赴约行路地点：${housingTravel??'无'}。
 - 称名登记仅用所列 offer、offer_clear、verify 或 withdraw：offer 复制已列称名，offer_clear 无目标，其余只用登记编号；不填其他身份、家户、籍贯、亲缘或证人：${JSON.stringify(householdNameOptions)}
 - 家户监护只允许双方自愿，不能自填亲缘或宗籍；照抄已见的选项：${JSON.stringify(guardianOptions)}
 - 地契只按本地印契和真实所有权办理，只出租限期采集许可，不转移疆域：${JSON.stringify(leaseOptions)}
@@ -1796,6 +1817,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'BOUNDARY_RELIEF',
             'MENTOR_TRANSFER',
             'APPRENTICE_COHORT',
+            'SEASONAL_HOUSING',
             'HOUSEHOLD_NAME',
             'CARAVAN_RESTITUTION',
             'VILLAGE_GRANARY',
@@ -1871,6 +1893,16 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             item.targetCultivatorId === parsed.targetCultivatorId && item.targetBoundaryReliefId === parsed.targetBoundaryReliefId) : undefined;
           if (chosenAction === 'BOUNDARY_RELIEF' && (!legalBoundaryRelief || Object.keys(parsed).some((field) =>
             !['chosenAction', 'innerMonologue', 'spokenLine', 'boundaryReliefMove', 'targetLocationId', 'targetCultivatorId', 'targetBoundaryReliefId'].includes(field)))) return undefined;
+          if (chosenAction === 'SEASONAL_HOUSING') {
+            const exact = housingOptions.find(row=>row.housingMove===parsed.housingMove&&
+              row.targetHousingClaimId===parsed.targetHousingClaimId&&row.targetHousingHouseholdId===parsed.targetHousingHouseholdId&&
+              row.targetCultivatorId===parsed.targetCultivatorId);
+            if(!exact||Object.keys(parsed).some(field=>!['chosenAction','innerMonologue','housingMove',
+               ...(exact.housingMove==='offer'?['targetHousingHouseholdId','targetCultivatorId']:['targetHousingClaimId'])].includes(field))) return undefined;
+            const reflection=(typeof parsed.innerMonologue==='string'&&parsed.innerMonologue.trim().slice(0,160))||
+              cultivator.innerMonologue||'按实际地处和本人许可办借居。';
+            return toHousingDecision(exact,reflection);
+          }
           const legalHouseholdName = chosenAction === 'HOUSEHOLD_NAME' ? householdNameOptions.find((item) =>
             item.nameMove === parsed.nameMove && item.householdAlias === parsed.householdAlias &&
             item.targetHouseholdNameId === parsed.targetHouseholdNameId) : undefined;
@@ -2441,5 +2473,9 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
 
 
 function toMentorTransferDecision({action,...targets}:MentorTransferOption,innerMonologue:string):LLMDecisionPayload {
+  return {chosenAction:action,...targets,innerMonologue};
+}
+
+function toHousingDecision({action,...targets}:SeasonalHousingOption,innerMonologue:string):LLMDecisionPayload {
   return {chosenAction:action,...targets,innerMonologue};
 }
