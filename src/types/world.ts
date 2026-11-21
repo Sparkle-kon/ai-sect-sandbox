@@ -895,7 +895,33 @@ export interface ChronicleBiography {
   sectName?: string;
   anchorIds: string[];
 }
+export type ChapterStoryFocal =
+  { kind: 'ensemble' } |
+  { kind: 'lead'; actorId: string; arcId: string; eventIds: string[] };
+
+export interface ProtagonistEvidence {
+  eventId: string;
+  tick: number;
+  category: WorldEvent['category'];
+  attribution: 'named_first' | 'direct_quote' | 'named_participant';
+}
+export interface ProtagonistArc {
+  id: string;
+  actorId: string;
+  openedTick: number;
+  predecessorArcId?: string;
+  opening: ProtagonistEvidence[];
+  support: ProtagonistEvidence[];
+  endedTick?: number;
+  closeReason?: 'public_death' | 'receded' | 'evidence_lost';
+  death?: ProtagonistEvidence;
+}
+export interface ProtagonistSuccessionState {
+  arcs: ProtagonistArc[];
+  lastEvaluatedTick?: number;
+}
 export interface ChronicleChapterPlan {
+  storyFocal?: ChapterStoryFocal;
   id: string;
   chapterNumber: number;
   startTick: number;
@@ -3083,6 +3109,7 @@ export interface WorldState {
   random: WorldRandomState;
   playerAvatar: PlayerAvatarState;
   chronicleArchive: ChronicleArchive;
+  protagonistSuccession: ProtagonistSuccessionState;
   councils: CouncilRecord[];
   tick: number;
   interventionSequence: number;

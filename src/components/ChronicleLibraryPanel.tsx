@@ -1,7 +1,7 @@
 import { useId, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { publicChronicleChapters } from '../engine/coldHistoryEngine';
-import { projectChronicleReading } from '../engine/novelGenerator';
+import { projectChronicleReading, stampedChronicleLead } from '../engine/novelGenerator';
 import { isChronicleStoryFact, projectChronicleLead, publicChronicleSceneEvents, type ChronicleLead } from '../engine/chronicleLead';
 import type { ChronicleChapter, Cultivator, WorldEvent, WorldState } from '../types/world';
 import { DialogueTranscript } from './DialogueTranscript';
@@ -26,8 +26,11 @@ function chapterForReading(chapter: ChronicleChapter, liveIds: ReadonlySet<strin
     if (anchor.tick < chapter.startTick || !isChronicleStoryFact(anchor, chapter.endTick) || duplicate.has(anchor.id)) return false;
     if (!liveIds.has(anchor.id)) return true; // A genuine older anchor need not still be in the live feed.
     const live = publicById.get(anchor.id);
-    return Boolean(live && live.tick === anchor.tick && live.category === anchor.category && live.locationId === anchor.locationId &&
-      canonicalExcerpt(live.title, 80) === anchor.title && canonicalExcerpt(live.description, 220) === anchor.description);
+    if (!live || live.tick !== anchor.tick || live.category !== anchor.category || live.locationId !== anchor.locationId ||
+        canonicalExcerpt(live.title, 80) !== anchor.title || canonicalExcerpt(live.description, 220) !== anchor.description) return false;
+    if (!chapter.storyFocal) return true;
+    const participants = [...new Set(live.actorIds)].slice(0,12);
+    return participants.length === anchor.actorIds.length && participants.every((id,index)=>id===anchor.actorIds[index]);
   });
   return anchors.length === chapter.anchors.length ? chapter : { ...chapter, anchors, body: '' };
 }
@@ -116,7 +119,8 @@ export function ChronicleLibraryPanel({ world, cultivator, scopeKey }: { world: 
   const readable = (entry: ChronicleChapter) => chapterForReading(entry, liveIds, publicById);
   const chapters = publicChronicleChapters(world).filter(({ id }) => recentIds.has(id)).map(readable);
   const chapter = chapters.find(({ id }) => id === requestedChapter) ?? chapters[0];
-  const lead = chapter && projectChronicleLead(world, chapter.anchors, chapter.endTick);
+  const lead = chapter && (chapter.storyFocal ? stampedChronicleLead(chapter) :
+    projectChronicleLead(world, chapter.anchors, chapter.endTick));
   const reading = chapter && projectChronicleReading(chapter, lead);
 
   const moveTab = (event: KeyboardEvent<HTMLButtonElement>) => {
@@ -144,7 +148,7 @@ export function ChronicleLibraryPanel({ world, cultivator, scopeKey }: { world: 
             value={chapter?.id ?? ''}
             onChange={(event) => setRequestedChapter(event.currentTarget.value)}
           >
-            {chapters.map((entry) => <option key={entry.id} value={entry.id}>{entry === chapter ? reading?.title : projectChronicleReading(entry).title}</option>)}
+            {chapters.map((entry) => <option key={entry.id} value={entry.id}>{entry === chapter ? reading?.title : projectChronicleReading(entry, stampedChronicleLead(entry)).title}</option>)}
           </select>
         </label>
       )}
@@ -186,10 +190,13 @@ export function ChronicleLibraryPanel({ world, cultivator, scopeKey }: { world: 
       ))}
       <ChronicleTopicDigest world={world} viewerId={cultivator?.id} scopeKey={scopeKey} />
       <ChronicleErrataPanel world={world} chapter={chapter} cultivator={cultivator} />
-      <ColdChronicleShelf world={world} chapterTitle={(older) => projectChronicleReading(readable(older)).title}
+      <ColdChronicleShelf world={world} chapterTitle={(older) => {
+        const safe = readable(older);
+        return projectChronicleReading(safe, stampedChronicleLead(safe)).title;
+      }}
         readChapter={(older) => {
           const safe = readable(older);
-          const olderLead = projectChronicleLead(world, safe.anchors, safe.endTick);
+          const olderLead = safe.storyFocal ? stampedChronicleLead(safe) : projectChronicleLead(world, safe.anchors, safe.endTick);
           return <ChapterArchive key={safe.id} chapter={safe} reading={projectChronicleReading(safe, olderLead)} lead={olderLead} />;
         }} />
     </section>

@@ -70,6 +70,7 @@ import { maintainMentorship, mentorshipTechniqueMultiplier, resolveMentorshipAct
 import { worldRandom } from './worldRandom';
 import { consumeAvatarOrder, maintainPlayerAvatar } from './avatarEngine';
 import { archiveChronicleEvents } from './novelGenerator';
+import { advanceProtagonistSuccession } from './protagonistSuccession';
 import { settleChronicleOffline } from './chronicleRuntime';
 import { settleAnnualCouncilOffline } from './councilRuntime';
 import {
@@ -822,6 +823,7 @@ export function advanceWorldTick(
     nextState.month += 1;
   }
 
+  advanceProtagonistSuccession(nextState, prevState);
   openResourceFlowMonth(nextState);
   advanceRouteWarnings(nextState);
   maintainPlayerAvatar(nextState);

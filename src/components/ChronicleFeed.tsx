@@ -6,11 +6,12 @@ import type { ChronicleFocusOptions, ChronicleFocusRequest } from '../engine/chr
 import { isChronicleStoryFact, type ChronicleLead } from '../engine/chronicleLead';
 import { writeChronicleScene } from '../engine/chronicleScene';
 import { DialogueTranscript } from './DialogueTranscript';
+import { ProtagonistArchive, protagonistCueTitles, type ProtagonistSuccessionView } from './ProtagonistArchive';
 
 export type ChronicleCategoryFilter = 'all' | WorldEvent['category'];
 type ProofSection = 'record' | 'cause' | 'dialogue';
 interface OpenProof { eventId: string; sections: ProofSection[] }
-export interface ChronicleFeedPosition { listScrollTop: number; pageScrollY: number; openProofs?: OpenProof[] }
+export interface ChronicleFeedPosition { listScrollTop: number; pageScrollY: number; openProofs?: OpenProof[]; protagonistArchiveOpen?: boolean }
 export interface ChronicleFeedReturn extends ChronicleFeedPosition { token: number; request: ChronicleFocusRequest }
 
 interface ChronicleFeedProps {
@@ -24,6 +25,7 @@ interface ChronicleFeedProps {
   focusNotice?: string;
   causality?: (eventId: string) => CausalChronicleView | undefined;
   lead?: ChronicleLead;
+  succession?: ProtagonistSuccessionView;
 }
 
 const CATEGORY_BADGE: Record<
@@ -85,7 +87,7 @@ export function reopenChronicleProofs(proofs: ReadonlyMap<string, HTMLDetailsEle
 }
 
 export function ChronicleFeed({
-  events, category, onCategoryChange, focusOptions, onJump, returnPosition, onReturnHandled, focusNotice, causality, lead,
+  events, category, onCategoryChange, focusOptions, onJump, returnPosition, onReturnHandled, focusNotice, causality, lead, succession,
 }: ChronicleFeedProps) {
   const [localCategory, setLocalCategory] = useState<ChronicleCategoryFilter>('all');
   const filter = category ?? localCategory;
@@ -94,6 +96,7 @@ export function ChronicleFeed({
   const listRef = useRef<HTMLDivElement>(null);
   const filterRef = useRef<HTMLSelectElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const protagonistArchive = useRef<HTMLDetailsElement>(null);
   const proofRefs = useRef(new Map<string, HTMLDetailsElement>());
   const handled = useRef<number>();
   const onHandled = useRef(onReturnHandled);
@@ -109,6 +112,7 @@ export function ChronicleFeed({
         if (!list) return;
         const original = findChronicleReturnTarget(list.querySelectorAll<HTMLButtonElement>('button[data-chronicle-focus]'), returnPosition.request);
         reopenChronicleProofs(proofRefs.current, returnPosition);
+        if (protagonistArchive.current) protagonistArchive.current.open = returnPosition.protagonistArchiveOpen === true;
         if (original) {
           const proof = proofRefs.current.get(returnPosition.request.eventId);
           if (proof) proof.open = true;
@@ -127,15 +131,20 @@ export function ChronicleFeed({
   }, [returnPosition]);
 
   const scenes = visible.map((fact) => ({ fact, scene: writeChronicleScene(fact) }));
-  const leadProofs = filter === 'all' && lead ? (() => {
-    const sceneById = new Map(scenes.filter(({ fact }) => fact.actorIds.includes(lead.actorId) &&
-      fact.tick >= lead.firstTick && fact.tick <= lead.lastTick)
+  const active = filter === 'all' ? succession?.active : undefined;
+  const exactLead = succession === undefined || active?.actorId === lead?.actorId ? lead : undefined;
+  const leadProofs = filter === 'all' && exactLead ? (() => {
+    const sceneById = new Map(scenes.filter(({ fact }) => fact.actorIds.includes(exactLead.actorId) &&
+      fact.tick >= exactLead.firstTick && fact.tick <= exactLead.lastTick)
       .map(({ fact, scene }) => [fact.id, scene]));
-    return [...new Set(lead.eventIds)].flatMap((id) => {
+    return [...new Set(exactLead.eventIds)].flatMap((id) => {
       const scene = sceneById.get(id);
       return scene ? [scene] : [];
     });
   })() : [];
+  const leadName = active?.name ?? (succession === undefined && leadProofs.length >= 2 ? exactLead?.name : undefined);
+  const leadTitles = leadProofs.length >= 2 ? [leadProofs[0].title, leadProofs[leadProofs.length - 1].title] :
+    active ? protagonistCueTitles(active) : [];
 
   return (
     <div className="flex h-[340px] min-w-0 flex-col rounded-xl border border-slate-800 bg-slate-900/60 p-3 sm:p-4">
@@ -161,9 +170,12 @@ export function ChronicleFeed({
       </div>
       {focusNotice && <p role="status" className="mb-1 break-words text-xs text-amber-200">{focusNotice}</p>}
       <div ref={listRef} aria-label="纪事列表" className="min-h-0 min-w-0 flex-1 space-y-2 overflow-y-auto pr-1">
-        {lead && leadProofs.length >= 2 && <aside aria-label="这一卷的主线" className="min-w-0 rounded-lg border border-amber-400/25 bg-amber-950/25 px-2.5 py-2">
-          <p className="break-words font-serif text-sm leading-relaxed text-slate-300">这一卷，先随<strong className="text-amber-100">{lead.name}</strong>：从〈{leadProofs[0].title}〉读到〈{leadProofs[leadProofs.length - 1].title}〉。</p>
+        {leadName && <aside aria-label="这一卷的主线" className="min-w-0 rounded-lg border border-amber-400/25 bg-amber-950/25 px-2.5 py-2">
+          <p className="break-words font-serif text-sm leading-relaxed text-slate-300">这一卷，先随<strong className="text-amber-100">{leadName}</strong>
+            {leadTitles.length >= 2 ? `：从〈${leadTitles[0]}〉读到〈${leadTitles[leadTitles.length - 1]}〉。` :
+              leadTitles.length === 1 ? `，读到〈${leadTitles[0]}〉。` : '。'}</p>
         </aside>}
+        {filter === 'all' && succession && <ProtagonistArchive succession={succession} disclosureRef={protagonistArchive} />}
         {!visible.length && <p className="p-2 text-xs text-slate-400">这个分类暂无见闻。</p>}
         {scenes.map(({ fact: evt, scene }) => {
           const badge = CATEGORY_BADGE[evt.category];
@@ -189,7 +201,8 @@ export function ChronicleFeed({
                         data-event-id={eventId} data-target-kind={kind} data-target-id={targetId}
                         className={`${control} break-words py-1 text-left text-amber-100`}
                         onClick={() => onJump?.({ eventId, kind, targetId }, { listScrollTop: listRef.current?.scrollTop ?? 0,
-                          pageScrollY: window.scrollY, openProofs: captureOpenProofs(proofRefs.current) })}>
+                          pageScrollY: window.scrollY, openProofs: captureOpenProofs(proofRefs.current),
+                          protagonistArchiveOpen: protagonistArchive.current?.open })}>
                         {kindLabel[kind]}：{label}
                       </button>
                     ))}

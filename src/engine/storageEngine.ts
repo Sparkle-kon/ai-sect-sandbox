@@ -3,6 +3,8 @@ import { createAlignedWeatherState } from './alignedWeatherEngine';
 import { alignedWeatherPinnedRuns } from './alignedWeatherTerms';
 import { observatoryStationValid } from './observatoryStation';
 import { validateAlignedWeatherHistory } from './storageAlignedWeatherValidation';
+import { validateProtagonistHistory } from './storageProtagonistValidation';
+import { createProtagonistSuccessionState } from './protagonistSuccession';
 import { validateCourierHandoffHistory } from './storageCourierHandoffValidation';
 import { createCompetitionReviewState, SEASON_REVIEW_CASE_LIMIT, SEASON_REVIEW_WINDOW, seasonReviewProofId } from './seasonReviewEngine';
 import { OBSERVATORY_INBOX_LIMIT, OBSERVATORY_LEAD_TICKS, OBSERVATORY_RETENTION_TICKS, OBSERVATORY_TERMINAL_LIMIT, createFieldObservatoriesState } from './fieldObservatoryEngine';
@@ -200,7 +202,13 @@ const dialogue = structure({kind:one('combat','trade','dual_cultivation','sect_d
   turns:arr(24,structure({speakerId:id,speakerName:id,text}))});
 const publicFact = {id,tick,year:tick,month,title:text,description:text,category:eventCategory,actorIds:ids,locationId:oid,dialogue:optional(dialogue)};
 const anchor = structure(publicFact);
-const chronicleChapter = structure({id,chapterNumber:tick,startTick:tick,endTick:tick,title:text,
+const chapterStoryFocal: Validator = (value,path) => {
+  if ((value as {kind?:unknown} | null)?.kind === 'ensemble') return structure({kind:one('ensemble')})(value,path);
+  return structure({kind:one('lead'),actorId:id,arcId:id,eventIds:arr(18,id)})(value,path);
+};
+const protagonistEvidence=structure({eventId:id,tick,category:eventCategory,
+  attribution:one('named_first','direct_quote','named_participant')});
+const chronicleChapter = structure({id,chapterNumber:tick,startTick:tick,endTick:tick,title:text,storyFocal:optional(chapterStoryFocal),
   anchors:arr(18,anchor),biographies:arr(8,structure({actorId:id,name:id,realm,sectName:otext,anchorIds:ids})),body:strings(25_000),source});
 const scenarioObjective: Validator = (value, path) => {
   const kind = (value as {kind?:unknown} | null)?.kind;
@@ -341,6 +349,10 @@ const shape = structure({
     ballots:arr(5,structure({voterId:id,vote,reason:text,source})),tally:structure({support:count,oppose:count,abstain:count,required:count}),
     status:one('passed','rejected','stale'),outcome:text})),
   chronicleArchive:structure({anchors:arr(384,anchor),chapters:arr(SAVE_COLLECTION_LIMIT,chronicleChapter)}),
+  protagonistSuccession:structure({lastEvaluatedTick:otick,arcs:arr(SAVE_COLLECTION_LIMIT,structure({
+    id,actorId:id,openedTick:tick,predecessorArcId:oid,opening:arr(3,protagonistEvidence),support:arr(8,protagonistEvidence),
+    endedTick:otick,closeReason:optional(one('public_death','receded','evidence_lost')),death:optional(protagonistEvidence),
+  }))}),
   coldHistory:structure({chapters:arr(SAVE_COLLECTION_LIMIT,chronicleChapter),droppedChapters:tick}),
   decisionTrace:structure({records:arr(100,structure({id,actorId:id,tick,source:one('model','utility','avatar'),applied:bool,
     chosenAction:one('REST','CULTIVATE','BREAKTHROUGH','SOCIALIZE','EXPLORE','FACE_TRIBULATION','redacted'),chosenCandidateId:oid,
@@ -897,6 +909,7 @@ function verifyWorld(value: unknown): WorldState {
       ...(!Object.hasOwn(value, 'sharedCommons') ? { sharedCommons: createSharedCommonsState() } : {}),
       ...(!Object.hasOwn(value, 'serviceRetirement') ? { serviceRetirement: createServiceRetirementState() } : {}),
       ...(!Object.hasOwn(value, 'couriers') ? { couriers: createSealedCourierState() } : {}),
+      ...(!Object.hasOwn(value, 'protagonistSuccession') ? { protagonistSuccession: createProtagonistSuccessionState() } : {}),
       ...(!Object.hasOwn(value, 'watchlists') ? { watchlists: createWatchlistState() } : {}),
       ...(!Object.hasOwn(value, 'villageWorks') ? { villageWorks: createVillageWorksState() } : {}),
       ...(!Object.hasOwn(value, 'households') ? { households: createHouseholdState() } : {}),
@@ -2827,6 +2840,7 @@ function verifyWorld(value: unknown): WorldState {
         chapter.anchors.some(({ tick: at }) => at < chapter.startTick || at > chapter.endTick) ||
         chapter.biographies.some((entry) => entry.anchorIds.some((id) => !anchors.has(id)))) fail('coldHistory.chapters.references');
   }
+  validateProtagonistHistory(w,chapters,actor,fail);
   w.coldHistory = freezeColdHistory(w.coldHistory);
   return w;
 }

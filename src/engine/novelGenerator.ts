@@ -1,6 +1,7 @@
 import { compactColdHistory } from './coldHistoryEngine';
 import { isChronicleStoryFact, projectChronicleLead } from './chronicleLead';
 import type { ChronicleLead } from './chronicleLead';
+import { projectEarnedChronicleLead } from './protagonistSuccession';
 import { writeChronicleScene } from './chronicleScene';
 import type { ChronicleAnchor, ChronicleArchive, ChronicleChapter, ChronicleChapterPlan, WorldEvent, WorldState } from '../types/world';
 
@@ -92,11 +93,14 @@ export function availableChronicleChapter(world: WorldState, force = false, endT
   const anchors = sampleAnchors(archive.anchors.filter((anchor) => anchor.tick >= startTick &&
     isChronicleStoryFact(anchor, endTick) && !unavailable.has(anchor.id)));
   if (!anchors.length) return undefined;
+  const evaluated = (world.protagonistSuccession.lastEvaluatedTick ?? -1) >= endTick;
+  const earned = evaluated ? projectEarnedChronicleLead(world, anchors, endTick) : undefined;
   const mentions = new Map<string, string[]>();
   for (const anchor of anchors) {
     for (const actorId of anchor.actorIds) mentions.set(actorId, [...(mentions.get(actorId) ?? []), anchor.id]);
   }
   const biographies = [...mentions.entries()].sort(([a, x], [b, y]) => y.length - x.length || a.localeCompare(b))
+    .sort(([a], [b]) => Number(b === earned?.actorId) - Number(a === earned?.actorId))
     .slice(0, MAX_BIOGRAPHIES).flatMap(([actorId, anchorIds]) => {
       const actor = world.cultivators.find(({ id }) => id === actorId);
       if (!actor) return [];
@@ -104,10 +108,13 @@ export function availableChronicleChapter(world: WorldState, force = false, endT
         sectName: world.sects.find(({ id }) => id === actor.sectId)?.name, anchorIds }];
     });
   const chapterNumber = (previous?.chapterNumber ?? 0) + 1;
-  const lead = projectChronicleLead(world, anchors, endTick);
+  const lead = evaluated ? earned : projectChronicleLead(world, anchors, endTick);
+  const storyFocal = evaluated ? earned
+    ? { kind: 'lead' as const, actorId: earned.actorId, arcId: earned.arcId, eventIds: [...earned.eventIds] }
+    : { kind: 'ensemble' as const } : undefined;
   return { id: `chapter-${startTick}-${endTick}`, chapterNumber, startTick, endTick,
     title: chapterReadingTitle(chapterNumber, readScenes(anchors), lead),
-    anchors: structuredClone(anchors), biographies };
+    anchors: structuredClone(anchors), biographies, ...(storyFocal ? { storyFocal } : {}) };
 }
 
 export interface ChronicleReadingSection {
@@ -142,6 +149,20 @@ function chapterReadingTitle(chapterNumber: number, scenes: readonly AnchoredSce
     !best || drama[scene.anchor.category] > drama[best.anchor.category] ? scene : best, undefined);
   const prefix = `第${chapterNumber}章：`;
   return prefix + cutText(chosen?.section.title ?? '山河一页', MAX_TITLE - prefix.length);
+}
+
+export function stampedChronicleLead(chapter: ChronicleChapterPlan): ChronicleLead | undefined {
+  const stamp = chapter.storyFocal;
+  if (stamp?.kind !== 'lead') return undefined;
+  const biography = chapter.biographies.find(({ actorId }) => actorId === stamp.actorId);
+  if (!biography) return undefined;
+  const sourceIds = new Set(stamp.eventIds);
+  const anchors = chapter.anchors.filter((anchor) => sourceIds.has(anchor.id) && biography.anchorIds.includes(anchor.id) &&
+    anchor.actorIds.includes(stamp.actorId) && anchor.tick >= chapter.startTick &&
+    isChronicleStoryFact(anchor, chapter.endTick));
+  if (new Set(anchors.map(({ id }) => id)).size < 2 || new Set(anchors.map(({ tick }) => tick)).size < 2) return undefined;
+  return { actorId: stamp.actorId, name: biography.name, eventIds: anchors.map(({ id }) => id),
+    firstTick: Math.min(...anchors.map(({ tick }) => tick)), lastTick: Math.max(...anchors.map(({ tick }) => tick)) };
 }
 
 /** Novel-first view of existing public facts. Saved prose, chronology and proof are left untouched. */

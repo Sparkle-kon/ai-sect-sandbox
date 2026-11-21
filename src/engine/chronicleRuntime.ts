@@ -1,6 +1,6 @@
 import { llmScheduler } from './llmScheduler';
 import type { ChronicleChapterPlan, LLMConfig, WorldState } from '../types/world';
-import { availableChronicleChapter, isChronicleDraftNovelStyle, resolveChronicleChapter } from './novelGenerator';
+import { availableChronicleChapter, isChronicleDraftNovelStyle, resolveChronicleChapter, stampedChronicleLead } from './novelGenerator';
 import { projectChronicleLead } from './chronicleLead';
 import type { ChronicleLead } from './chronicleLead';
 
@@ -58,7 +58,7 @@ export async function settleChronicleOnline(world: WorldState, config: LLMConfig
   // Seal the previous month after it ends; manual events within its last tick still count.
   const plan = availableChronicleChapter(world, false, world.tick - 1);
   if (!plan) return world;
-  const lead = projectChronicleLead(world, plan.anchors, plan.endTick);
+  const lead = plan.storyFocal ? stampedChronicleLead(plan) : projectChronicleLead(world, plan.anchors, plan.endTick);
   const draft = await chapterDraft(plan, config, world.tick, lead);
   resolveChronicleChapter(world, plan, draft, plan.endTick);
   return world;
