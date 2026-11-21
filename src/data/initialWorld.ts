@@ -1,3 +1,4 @@
+import { createResourceFlowState } from '../engine/resourceFlowEngine';
 import { createSharedCommonsState } from '../engine/sharedCommonsEngine';
 import { createServiceRetirementState } from '../engine/serviceRetirementEngine';
 import { createColdHistoryState } from '../engine/coldHistoryEngine';
@@ -276,6 +277,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     coldHistory: createColdHistoryState(),
     serviceRetirement: createServiceRetirementState(),
     sharedCommons: createSharedCommonsState(),
+    resourceFlow: createResourceFlowState(),
     witnesses: createWitnessState(),
     estates: createEstateState(),
     decisionTrace: createDecisionTraceState(),

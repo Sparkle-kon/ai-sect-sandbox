@@ -1,3 +1,4 @@
+import { flowActor, flowSite, recordResourceFlow } from './resourceFlowEngine';
 import { commonsHarvestLimit, settleCommonsHarvest } from './sharedCommonsEngine';
 import { authorizedHerbHarvestLimit, settleLeasedHerbHarvest } from './territorialLeaseEngine';
 import { weatherHerbRegrowth } from './weatherEngine';
@@ -98,6 +99,8 @@ export function resolveAlchemy(world: WorldState, actor: Cultivator, decision: L
     choice.targetCultivatorId === (decision.targetCultivatorId ?? (decision.chosenAction === 'USE_PILL' && decision.targetPillId !== 'heart_poison' ? actor.id : undefined)));
   if (!option) return null;
   const place = world.locations.find((node) => node.id === actor.locationId)!;
+  const participant = { kind: 'participants', actorIds: [actor.id] } as const;
+  const pocket = flowActor(actor.id);
   if (option.action === 'GATHER_HERBS' && option.targetHerbId) {
     const herb = option.targetHerbId;
     const amount = Math.min(2, Math.floor(place.herbs[herb]), 99 - actor.herbs[herb], authorizedHerbHarvestLimit(world, actor, place),
@@ -106,20 +109,36 @@ export function resolveAlchemy(world: WorldState, actor: Cultivator, decision: L
       (!place.ownerSectId && !settleCommonsHarvest(world, actor, place, herb, amount))) return null;
     place.herbs[herb] -= amount;
     actor.herbs[herb] += amount;
+    recordResourceFlow(world, { kind: 'transfer', mechanism: 'alchemy', refId: place.id, reason: 'herb_harvest',
+      from: flowSite(place.id), to: pocket, good: herb, amount, visibility: participant });
     return event(world, actor, `${actor.name}采集灵草`, `${actor.name}在${place.name}采得${amount}株${HERB_LABELS[herb]}，灵草存量随之减少。`);
   }
   const pill = option.targetPillId!;
   const recipe = ALCHEMY_RECIPES[pill];
   if (option.action === 'BREW_PILL') {
     const cost = alchemyCost(pill, place.furnaceGrade);
-    for (const herb of HERBS) actor.herbs[herb] -= recipe.herbs[herb] ?? 0;
+    for (const herb of HERBS) {
+      const used = recipe.herbs[herb] ?? 0;
+      if (!used) continue;
+      actor.herbs[herb] -= used;
+      recordResourceFlow(world, { kind: 'consumption', mechanism: 'alchemy', refId: place.id, reason: 'brew_material',
+        from: pocket, good: herb, amount: used, visibility: participant });
+    }
     actor.spiritStones -= cost;
+    recordResourceFlow(world, { kind: 'consumption', mechanism: 'alchemy', refId: place.id, reason: 'brew_fee',
+      from: pocket, good: 'stone', amount: cost, visibility: participant });
     const success = rng() < alchemySuccess(actor, pill, place.furnaceGrade);
-    if (success) actor.pills[pill] += 1;
+    if (success) {
+      actor.pills[pill] += 1;
+      recordResourceFlow(world, { kind: 'production', mechanism: 'alchemy', refId: place.id, reason: 'brew_output',
+        to: pocket, good: pill, amount: 1, visibility: participant });
+    }
     return event(world, actor, `${actor.name}${success ? '炼丹成丹' : '炼丹失手'}`,
       `${actor.name}借${place.furnaceGrade}阶丹炉耗费${cost}灵石与药材炼制【${recipe.name}】，${success ? '凝成一枚灵丹。' : '炉火失控，药材与灵石尽耗，未能成丹。'}`);
   }
   actor.pills[pill] -= 1;
+  recordResourceFlow(world, { kind: 'consumption', mechanism: 'alchemy', refId: place.id, reason: 'pill_use',
+    from: pocket, good: pill, amount: 1, visibility: participant });
   if (pill === 'heart_poison') {
     const target = world.cultivators.find((person) => person.id === option.targetCultivatorId)!;
     target.hp = Math.max(1, target.hp - Math.max(1, Math.round(target.maxHp * 0.16)));
@@ -152,7 +171,13 @@ export function maintainAlchemy(world: WorldState): void {
   for (const place of world.locations) {
     for (const herb of HERBS) {
       const increment = weatherHerbRegrowth(world, place, herb, 3);
-      if (increment > 0) place.herbs[herb] = clamp(place.herbs[herb] + increment, 0, place.herbCapacity[herb]);
+      if (increment > 0) {
+        const before = place.herbs[herb];
+        const after = clamp(before + increment, 0, place.herbCapacity[herb]);
+        place.herbs[herb] = after;
+        if (after > before) recordResourceFlow(world, { kind: 'production', mechanism: 'alchemy', refId: place.id,
+          reason: 'herb_regrowth', to: flowSite(place.id), good: herb, amount: after - before, visibility: { kind: 'known_sites', siteIds: [place.id] } });
+      }
     }
   }
   for (const actor of world.cultivators) {

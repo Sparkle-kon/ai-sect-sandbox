@@ -41,6 +41,15 @@ describe('contract outcomes across both AI paths', () => {
     expect(requester.herbs.jade_leaf).toBe(3);
     expect(provider.herbs.jade_leaf).toBe(3);
     expect(decodeWorldSave(encodeWorldSave(world)).oaths).toEqual(world.oaths);
+    const recorded = world.resourceFlow.months[0].entries.filter(({ mechanism }) => mechanism === 'oath');
+    expect(recorded).toHaveLength(5);
+    expect(recorded.map(({ reason, good, amount }) => [reason, good, amount])).toEqual([
+      ['oath_funded', 'stone', held.payment], ['oath_funded', 'stone', held.collateral], ['oath_goods', 'jade_leaf', 3],
+      ['oath_paid', 'stone', held.payment], ['oath_refunded', 'stone', held.collateral],
+    ]);
+    expect(recorded.every(({ kind }) => kind === 'transfer')).toBe(true);
+    expect(applyCultivatorBrainDecision(world, provider, delivery)).toBeNull();
+    expect(world.resourceFlow.months[0].entries.filter(({ mechanism }) => mechanism === 'oath')).toHaveLength(5);
   });
 
   it('migrates an old version-one save without inventing outstanding payments', () => {

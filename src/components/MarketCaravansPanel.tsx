@@ -3,6 +3,7 @@ import { marketClosureReason, marketOrdersInPriority, MARKET_GOODS } from '../en
 import { visibleEscorts } from '../engine/escortEngine';
 import { createTerrainMapView } from './terrainMapView';
 import { visibleCheckpointRoute } from './mapConvoyView';
+import { ResourceFlowPanel } from './ResourceFlowPanel';
 import { ShipmentEscortDetails } from './ShipmentEscortDetails';
 import type { Cultivator, WorldState } from '../types/world';
 
@@ -155,6 +156,7 @@ export function MarketCaravansPanel({ world, cultivator }: { world: WorldState; 
           </details>
         </>
       )}
+      <ResourceFlowPanel world={world} cultivator={cultivator} />
     </section>
   );
 }

@@ -10,6 +10,7 @@ export default defineConfig({
         manualChunks: {
           'react-runtime': ['react', 'react-dom', 'react-dom/client', 'react/jsx-runtime'],
           'interface-icons': ['lucide-react'],
+          'resource-journal': ['./src/engine/resourceFlowEngine.ts'],
         },
       },
     },

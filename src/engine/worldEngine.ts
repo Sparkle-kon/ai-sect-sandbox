@@ -1,3 +1,4 @@
+import { openResourceFlowMonth } from './resourceFlowEngine';
 import { advanceSharedCommons, resolveSharedCommonsAction } from './sharedCommonsEngine';
 import { resolveServiceRetirementAction } from './serviceRetirementEngine';
 import { cloneWorldWithColdHistory, compactColdHistory } from './coldHistoryEngine';
@@ -691,6 +692,7 @@ export function advanceWorldTick(
     nextState.month += 1;
   }
 
+  openResourceFlowMonth(nextState);
   maintainPlayerAvatar(nextState);
   maintainMentorship(nextState);
   const avatarOrder = consumeAvatarOrder(nextState);

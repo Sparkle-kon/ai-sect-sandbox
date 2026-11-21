@@ -1,4 +1,5 @@
 import { escortDirective, settleEscortWithShipment } from './escortEngine';
+import { flowActor, flowOrder, flowShipment, recordResourceFlow } from './resourceFlowEngine';
 import type { Cultivator, HerbId, LLMDecisionPayload, MarketGood, MarketOrder, MarketReceipt, MarketShipment, MarketState, LocationNode, WorldEvent, WorldState } from '../types/world';
 import { terrainTileAt } from './terrainEngine';
 import { weatherTravelFriction } from './weatherEngine';
@@ -45,6 +46,13 @@ const count = (actor: Cultivator, good: MarketGood): number => isHerb(good) ? ac
 const integerIn = (value: number | undefined, low: number, high: number): value is number =>
   value !== undefined && Number.isSafeInteger(value) && value >= low && value <= high;
 const validGood = (value: MarketGood | undefined): value is MarketGood => value !== undefined && GOODS.includes(value);
+
+type MarketFlowAccount = ReturnType<typeof flowActor> | ReturnType<typeof flowOrder> | ReturnType<typeof flowShipment>;
+function transfer(world: WorldState, refId: string, reason: string, good: MarketGood | 'stone', amount: number,
+  actorIds: string[], from: MarketFlowAccount, to: MarketFlowAccount): void {
+  if (amount > 0) recordResourceFlow(world, { kind: 'transfer', mechanism: 'market', refId, reason, good, amount,
+    visibility: { kind: 'participants', actorIds }, from, to });
+}
 
 const activeDangers = (world: WorldState, ids: Set<string>) => world.mapHazards.filter((hazard) =>
   hazard.createdTick <= world.tick && hazard.expiresTick > world.tick && ids.has(hazard.tileId) && hazard.intensity >= 1);
@@ -101,6 +109,8 @@ function releaseOrder(world: WorldState, actor: Cultivator, order: MarketOrder, 
   order.escrowGoods = 0;
   order.status = status;
   order.settledTick = world.tick;
+  transfer(world, order.id, 'order_release', 'stone', refund, [actor.id], flowOrder(order.id), flowActor(actor.id));
+  transfer(world, order.id, 'order_release', order.good, goods, [actor.id], flowOrder(order.id), flowActor(actor.id));
   return event(world, `${order.id}-${status}`, status === 'cancelled' ? '坊市撤单' : '坊市挂单到期',
     `${actor.name}的挂单结束，退回${refund}灵石、${goods}份${MARKET_GOODS[order.good].label}。`, [actor.id], order.locationId);
 }
@@ -125,16 +135,20 @@ export function resolveMarketAction(world: WorldState, actor: Cultivator, decisi
     side, good, quantity, remaining: quantity, limitPrice, escrowStones, escrowGoods,
     placedTick: world.tick, expiresTick: world.tick + ORDER_LIFE, status: 'open' };
   world.markets.orders.push(order);
+  transfer(world, order.id, 'order_deposit', 'stone', escrowStones, [actor.id], flowActor(actor.id), flowOrder(order.id));
+  transfer(world, order.id, 'order_deposit', order.good, escrowGoods, [actor.id], flowActor(actor.id), flowOrder(order.id));
   return event(world, order.id, side === 'buy' ? '坊市买单入簿' : '坊市卖单入簿',
     `${actor.name}挂出${quantity}份${MARKET_GOODS[good].label}，限价${limitPrice}灵石，履约资产交由坊市保管。`, [actor.id], order.locationId);
 }
 
 function record(world: WorldState, trade: Pick<MarketReceipt, 'buyerId' | 'sellerId' | 'originId' | 'destinationId' | 'good' | 'quantity' | 'unitPrice'>,
-  status: MarketReceipt['status'], shipmentId?: string, reason?: string): void {
+  status: MarketReceipt['status'], shipmentId?: string, reason?: string): string {
   const sequence = world.markets.nextId++;
+  const id = `receipt-${sequence}`;
   const { buyerId, sellerId, originId, destinationId, good, quantity, unitPrice } = trade;
-  world.markets.receipts.push({ id: `receipt-${sequence}`, sequence, buyerId, sellerId, originId, destinationId, good,
+  world.markets.receipts.push({ id, sequence, buyerId, sellerId, originId, destinationId, good,
     quantity, unitPrice, tick: world.tick, status, ...(shipmentId ? { shipmentId } : {}), ...(reason ? { reason } : {}) });
+  return id;
 }
 
 type Trade = Pick<MarketShipment, 'buyerId' | 'sellerId' | 'originId' | 'destinationId' | 'good' | 'quantity' | 'unitPrice'>;
@@ -143,9 +157,12 @@ function match(world: WorldState, bid: MarketOrder, ask: MarketOrder, buyer: Cul
   origin: LocationNode, destination: LocationNode): WorldEvent {
   const quantity = Math.min(bid.remaining, ask.remaining);
   const unitPrice = bid.sequence < ask.sequence ? bid.limitPrice : ask.limitPrice;
+  const price = unitPrice * quantity;
+  const difference = quantity * (bid.limitPrice - unitPrice);
+  const participants = [buyer.id, seller.id];
   bid.escrowStones -= quantity * bid.limitPrice;
   ask.escrowGoods -= quantity;
-  buyer.spiritStones += quantity * (bid.limitPrice - unitPrice);
+  buyer.spiritStones += difference;
   for (const order of [bid, ask]) {
     order.remaining -= quantity;
     if (order.remaining === 0) {
@@ -157,8 +174,11 @@ function match(world: WorldState, bid: MarketOrder, ask: MarketOrder, buyer: Cul
     good: ask.good, quantity, unitPrice };
   if (origin.id === destination.id) {
     store(buyer, ask.good, quantity);
-    seller.spiritStones += unitPrice * quantity;
-    record(world, trade, 'local_fill');
+    seller.spiritStones += price;
+    const ref = record(world, trade, 'local_fill');
+    transfer(world, ref, 'price_improvement', 'stone', difference, [buyer.id], flowOrder(bid.id), flowActor(buyer.id));
+    transfer(world, ref, 'local_fill', 'stone', price, participants, flowOrder(bid.id), flowActor(seller.id));
+    transfer(world, ref, 'local_fill', ask.good, quantity, participants, flowOrder(ask.id), flowActor(buyer.id));
     return event(world, `fill-${world.markets.nextId - 1}`, '坊市当场结算',
       `${quantity}份${MARKET_GOODS[ask.good].label}成交，每份${unitPrice}灵石，货款当场交割。`, [buyer.id, seller.id], origin.id);
   }
@@ -168,6 +188,9 @@ function match(world: WorldState, bid: MarketOrder, ask: MarketOrder, buyer: Cul
   const shipment: MarketShipment = { ...trade, id: `caravan-${sequence}`, sequence, buyOrderId: bid.id,
     sellOrderId: ask.id, departedTick: world.tick, arrivalTick: world.tick + eta, status: 'in_transit' };
   world.markets.shipments.push(shipment);
+  transfer(world, shipment.id, 'price_improvement', 'stone', difference, [buyer.id], flowOrder(bid.id), flowActor(buyer.id));
+  transfer(world, shipment.id, 'shipment_departure', 'stone', price, participants, flowOrder(bid.id), flowShipment(shipment.id));
+  transfer(world, shipment.id, 'shipment_departure', ask.good, quantity, participants, flowOrder(ask.id), flowShipment(shipment.id));
   return event(world, shipment.id, '跨坊商队启程',
     `${quantity}份${MARKET_GOODS[ask.good].label}由${origin.name}运往${destination.name}，预计${eta}回合。货款待到货结算。`,
     [buyer.id, seller.id], origin.id);
@@ -239,6 +262,19 @@ function settleShipment(world: WorldState, shipment: MarketShipment): WorldEvent
   shipment.reason = reason;
   shipment.settledTick = world.tick;
   record(world, shipment, status, shipment.id, reason);
+  const participants = [buyer.id, seller.id];
+  const from = flowShipment(shipment.id);
+  if (status === 'delivered') {
+    transfer(world, shipment.id, 'shipment_delivery', 'stone', price, participants, from, flowActor(seller.id));
+    transfer(world, shipment.id, 'shipment_delivery', shipment.good, shipment.quantity, participants, from, flowActor(buyer.id));
+  } else if (status === 'returned') {
+    transfer(world, shipment.id, 'shipment_return', 'stone', price, participants, from, flowActor(buyer.id));
+    transfer(world, shipment.id, 'shipment_return', shipment.good, shipment.quantity, participants, from, flowActor(seller.id));
+  } else {
+    transfer(world, shipment.id, 'shipment_refund', 'stone', price, participants, from, flowActor(buyer.id));
+    recordResourceFlow(world, { kind: 'loss', mechanism: 'market', refId: shipment.id, reason: 'shipment_loss',
+      good: shipment.good, amount: shipment.quantity, visibility: { kind: 'participants', actorIds: participants }, from });
+  }
   return event(world, shipment.id, status === 'delivered' ? '商队到货结算' : status === 'lost' ? '商队货损退款' : '商队退运退款',
     `${reason}。`, [buyer.id, seller.id], shipment.destinationId);
 }

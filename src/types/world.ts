@@ -1820,7 +1820,48 @@ export interface SharedCommonsPact {
 }
 export interface SharedCommonsState { pacts: SharedCommonsPact[]; nextId: number }
 
+export type ResourceFlowGood = 'stone' | MarketGood;
+export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation';
+export type ResourceFlowAccount =
+  | { kind: 'actor' | 'site' | 'sect' | 'order' | 'shipment' | 'relocation'; id: string }
+  | { kind: 'oath'; id: string; pocket: 'payment' | 'collateral' };
+export type ResourceFlowVisibility =
+  | { kind: 'observer' }
+  | { kind: 'known_sites'; siteIds: readonly string[] }
+  | { kind: 'participants'; actorIds: readonly string[] };
+
+export type ResourceFlowDraft = {
+  mechanism: ResourceFlowMechanism;
+  refId: string;
+  reason: string;
+  good: ResourceFlowGood;
+  amount: number;
+  visibility: ResourceFlowVisibility;
+} & (
+  | { kind: 'transfer'; from: ResourceFlowAccount; to: ResourceFlowAccount }
+  | { kind: 'production'; to: ResourceFlowAccount }
+  | { kind: 'consumption' | 'loss'; from: ResourceFlowAccount }
+);
+export type ResourceFlowEntry = ResourceFlowDraft & { id: number; tick: number };
+export interface ResourceFlowTotal {
+  good: ResourceFlowGood;
+  transfer: number;
+  production: number;
+  consumption: number;
+  loss: number;
+}
+export interface ResourceFlowMonth {
+  tick: number;
+  year: number;
+  month: number;
+  totalEntries: number;
+  totals: ResourceFlowTotal[];
+  entries: ResourceFlowEntry[];
+}
+export interface ResourceFlowState { nextId: number; months: ResourceFlowMonth[] }
+
 export interface WorldState {
+  resourceFlow: ResourceFlowState;
   sharedCommons: SharedCommonsState;
   serviceRetirement: ServiceRetirementState;
   coldHistory: ColdHistoryState;

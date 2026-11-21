@@ -1,3 +1,4 @@
+import { createResourceFlowState, RESOURCE_FLOW_DETAIL_LIMIT, RESOURCE_FLOW_MONTH_LIMIT, RESOURCE_FLOW_REASON, sameFlowAccount } from './resourceFlowEngine';
 import { COMMONS_MAINTENANCE_UNIT, COMMONS_MAX_RESERVE, COMMONS_OFFER_TICKS, COMMONS_ROUND_TICKS, COMMONS_TERM_TICKS, commonsQuotaShares, createSharedCommonsState } from './sharedCommonsEngine';
 import { createServiceRetirementState, SERVICE_RETIREMENT_HISTORY_LIMIT, SERVICE_RETIREMENT_MIN_TICKS, isRetiredFromService } from './serviceRetirementEngine';
 import { COLD_HISTORY_MIN_AGE_TICKS, createColdHistoryState, freezeColdHistory } from './coldHistoryEngine';
@@ -102,6 +103,12 @@ const vote = one('support','oppose','abstain');
 const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER SECT_SERVICE SHARED_COMMONS REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
+const flowGood = one('stone','jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
+const flowMeasure = num(0,Number.MAX_SAFE_INTEGER);
+const flowSerial = num(1,Number.MAX_SAFE_INTEGER,true);
+const flowAccount = structure({kind:one('actor','site','sect','order','shipment','oath','relocation'),id,
+  pocket:optional(one('payment','collateral'))});
+const flowScope = structure({kind:one('observer','known_sites','participants'),siteIds:optional(arr(8,id)),actorIds:optional(arr(8,id))});
 const marketQty = num(1,12,true), marketPrice = num(1,500,true);
 const pills = structure({foundation:count,golden:count,barrier:count,heart_poison:count});
 const technique = structure({id:oid,authorId:oid,createdTick:otick,name:id,spiritRoot:spirit});
@@ -240,6 +247,15 @@ const shape = structure({
       attestations:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,tick,verdict:one('supports','contradicts')})),
       appeal:optional(structure({tick,actorId:id,verdict:one('upheld','rejected'),reason:text})),settledTick:otick,
       reputationSectId:oid,reputationPenalty:percentage,reputationRestored:percentage,reason:otext}))}),
+  resourceFlow:structure({nextId:flowSerial,months:arr(RESOURCE_FLOW_MONTH_LIMIT,structure({
+    tick,year:tick,month,totalEntries:num(0,Number.MAX_SAFE_INTEGER,true),
+    totals:arr(9,structure({good:flowGood,transfer:flowMeasure,production:flowMeasure,consumption:flowMeasure,loss:flowMeasure})),
+    entries:arr(RESOURCE_FLOW_DETAIL_LIMIT,structure({
+      id:flowSerial,tick,mechanism:one('alchemy','market','sect_economy','oath','commons','relocation'),
+      refId:id,reason:strings(40,1),good:flowGood,amount:flowMeasure,visibility:flowScope,
+      kind:one('transfer','production','consumption','loss'),from:optional(flowAccount),to:optional(flowAccount)
+    }))
+  }))}),
   sharedCommons:structure({nextId:num(1,100_000_000,true),pacts:arr(SAVE_COLLECTION_LIMIT,structure({
     id,siteId:id,herbId:one('jade_leaf','earth_root','star_bloom','shadow_moss'),proposerSectId:id,openedTick:tick,offerExpiresTick:tick,
     status:one('offered','active','closed'),activatedTick:otick,startsTick:otick,endsTick:otick,settledTick:otick,
@@ -461,6 +477,7 @@ function verifyWorld(value: unknown): WorldState {
       ...(!Object.hasOwn(value, 'mentorship') ? { mentorship: { offers: [], lineage: [], budgets: [] } } : {}),
       ...(!Object.hasOwn(value, 'decisionTrace') ? { decisionTrace: { records: [] } } : {}),
       ...(!Object.hasOwn(value, 'coldHistory') ? { coldHistory: createColdHistoryState() } : {}),
+      ...(!Object.hasOwn(value, 'resourceFlow') ? { resourceFlow: createResourceFlowState() } : {}),
       ...(!Object.hasOwn(value, 'sharedCommons') ? { sharedCommons: createSharedCommonsState() } : {}),
       ...(!Object.hasOwn(value, 'serviceRetirement') ? { serviceRetirement: createServiceRetirementState() } : {}),
       ...(!Object.hasOwn(value, 'couriers') ? { couriers: createSealedCourierState() } : {}),
@@ -507,6 +524,51 @@ function verifyWorld(value: unknown): WorldState {
   const sector = unique(w.sects, (item) => item.id, 'sects.id');
   const locations = unique(w.locations, (item) => item.id, 'locations.id');
   const map = unique(w.terrain.tiles, (item) => item.id, 'terrain.tiles.id');
+  let previousFlowTick = -1;
+  let previousFlowId = 0;
+  for (const book of w.resourceFlow.months) {
+    if (book.tick <= previousFlowTick || book.tick > w.tick || (book.tick === w.tick && (book.year !== w.year || book.month !== w.month)) ||
+        book.entries.length !== Math.min(book.totalEntries, RESOURCE_FLOW_DETAIL_LIMIT)) fail('resourceFlow.months.window');
+    previousFlowTick = book.tick;
+    unique(book.totals, ({ good }) => good, 'resourceFlow.months.totals');
+    const recorded = new Map(book.totals.map(({ good }) => [good, { transfer:0, production:0, consumption:0, loss:0 }]));
+    for (const entry of book.entries) {
+      if (entry.id <= previousFlowId || entry.id >= w.resourceFlow.nextId || entry.tick !== book.tick || entry.amount <= 0 ||
+          !RESOURCE_FLOW_REASON.test(entry.reason)) fail('resourceFlow.entries.reference');
+      previousFlowId = entry.id;
+      const hasFrom = 'from' in entry && !!entry.from;
+      const hasTo = 'to' in entry && !!entry.to;
+      if (hasFrom !== (entry.kind !== 'production') || hasTo !== (entry.kind === 'transfer' || entry.kind === 'production'))
+        fail('resourceFlow.entries.endpoints');
+      if (entry.kind === 'transfer' && sameFlowAccount(entry.from, entry.to)) fail('resourceFlow.entries.sameEndpoint');
+      const accounts = [...('from' in entry ? [entry.from] : []), ...('to' in entry ? [entry.to] : [])];
+      for (const account of accounts) {
+        if (!account || (account.kind === 'oath') !== ('pocket' in account)) fail('resourceFlow.entries.account');
+      }
+      const scope = entry.visibility;
+      if (scope.kind === 'observer' && ('siteIds' in scope || 'actorIds' in scope)) fail('resourceFlow.entries.scope');
+      if (scope.kind === 'participants') {
+        if ('siteIds' in scope || !scope.actorIds.length) fail('resourceFlow.entries.scope');
+        unique([...scope.actorIds], (value) => value, 'resourceFlow.entries.participants');
+      }
+      if (scope.kind === 'known_sites') {
+        if ('actorIds' in scope || !scope.siteIds.length) fail('resourceFlow.entries.scope');
+        unique([...scope.siteIds], (value) => value, 'resourceFlow.entries.sites');
+      }
+      const total = recorded.get(entry.good);
+      if (!total) fail('resourceFlow.entries.unaccounted');
+      else total[entry.kind] += entry.amount;
+    }
+    for (const total of book.totals) {
+      const stored = recorded.get(total.good)!;
+      if (!(total.transfer > 0 || total.production > 0 || total.consumption > 0 || total.loss > 0)) fail('resourceFlow.totals.empty');
+      for (const kind of ['transfer','production','consumption','loss'] as const) {
+        const precision = Math.max(1, total[kind], stored[kind]) * 1e-10;
+        if (stored[kind] - total[kind] > precision ||
+            (book.totalEntries === book.entries.length && Math.abs(stored[kind] - total[kind]) > precision)) fail('resourceFlow.totals.accounting');
+      }
+    }
+  }
   unique(w.sharedCommons.pacts, ({ id }) => id, 'sharedCommons.pacts.id');
   unique(w.sharedCommons.pacts.filter(({ status }) => status !== 'closed'), ({ siteId }) => siteId, 'sharedCommons.openSite');
   for (const pact of w.sharedCommons.pacts) {

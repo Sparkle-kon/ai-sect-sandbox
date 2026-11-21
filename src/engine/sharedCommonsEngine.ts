@@ -1,3 +1,4 @@
+import { flowRelocation, flowSect, recordResourceFlow } from './resourceFlowEngine';
 import type { CommonsCloseReason, CommonsMove, CommonsParty, CommonsQuotaRound, Cultivator, HerbId, LLMDecisionPayload, LocationNode, Sect,
   SharedCommonsPact, SharedCommonsState, WorldEvent, WorldState } from '../types/world';
 import { knownMapLocations } from './terrainEngine';
@@ -176,6 +177,9 @@ function makeRound(world: WorldState, pact: SharedCommonsPact, site: LocationNod
     const maintenancePaid = balance >= maintenanceDue ? maintenanceDue : 0;
     if (maintenancePaid && moving) moving.custody.stones -= maintenancePaid;
     else if (maintenancePaid && sect) sect.spiritStones -= maintenancePaid;
+    if (maintenancePaid) recordResourceFlow(world, { kind: 'consumption', mechanism: 'commons', refId: pact.id,
+      reason: 'commons_upkeep', from: moving ? flowRelocation(moving.id) : flowSect(party.sectId), good: 'stone',
+      amount: maintenancePaid, visibility: { kind: 'observer' } });
     return { sectId: party.sectId, maintenanceDue, maintenancePaid, quota: maintenancePaid ? shares[position] : 0, used: 0 };
   });
   return { startTick, endsTick: startTick + COMMONS_ROUND_TICKS, stockAtOpen,

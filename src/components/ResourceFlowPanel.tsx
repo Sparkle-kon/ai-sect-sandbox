@@ -1,0 +1,136 @@
+import { useMemo, useState } from 'react';
+import { MARKET_GOODS } from '../engine/marketEngine';
+import { projectResourceFlowMonth } from '../engine/resourceFlowEngine';
+import { createTerrainMapView } from './terrainMapView';
+import type { Cultivator, ResourceFlowAccount, WorldState } from '../types/world';
+
+type Month = NonNullable<ReturnType<typeof projectResourceFlowMonth>>;
+type FlowRow = Month['rows'][number];
+type FlowGood = FlowRow['good'];
+
+const KIND: Record<FlowRow['kind'], string> = { transfer: '转移', production: '产出', consumption: '消耗', loss: '损失' };
+const REASONS: Readonly<Record<string, string>> = {
+  herb_harvest: '现场采集', herb_regrowth: '灵草自然补生', brew_material: '炼丹耗材', brew_fee: '炼丹炉费',
+  brew_output: '炼成丹药', pill_use: '使用丹药', treasury_tax: '库账税赋', treasury_mining: '灵石矿产',
+  treasury_upkeep: '宗门维护', treasury_overflow: '库容溢出', facility_construction: '设施建设',
+  oath_funded: '天道契书托管', oath_paid: '契书价金支付', oath_refunded: '契书托管退款', oath_forfeited: '契书抵押罚没',
+  oath_goods: '契书实物交付', commons_upkeep: '中立灵地共管维护',
+  order_deposit: '挂单托管', order_release: '撤单或到期退回', price_improvement: '限价差退回',
+  local_fill: '现场交割', shipment_departure: '商队启程转入保管', shipment_delivery: '商队到货交割',
+  shipment_return: '商队退运退款退货', shipment_refund: '货损退款', shipment_loss: '实际货损',
+};
+const control = 'min-h-11 min-w-0 rounded border border-slate-700 bg-slate-950 px-2 text-xs text-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300 disabled:opacity-40';
+const PAGE_SIZE = 8;
+const MONTHS = 6;
+
+const goodName = (good: FlowGood) => good === 'stone' ? '灵石' : MARKET_GOODS[good]?.label ?? '物资未详';
+const units = (good: FlowGood) => good === 'stone' ? '灵石'
+  : good === 'jade_leaf' || good === 'earth_root' || good === 'star_bloom' || good === 'shadow_moss' ? '株' : '枚';
+
+export function ResourceFlowMonth({ ledger, world, scope, visibleSiteIds }: {
+  ledger: Month;
+  world: WorldState;
+  scope: 'actor' | 'observer';
+  visibleSiteIds: ReadonlySet<string>;
+}) {
+  const [requested, setRequested] = useState(0);
+  const pages = Math.max(1, Math.ceil(ledger.rows.length / PAGE_SIZE));
+  const page = Math.min(requested, pages - 1);
+  const pageRows = ledger.rows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  const actors = new Map(world.cultivators.map(({ id, name }) => [id, name]));
+  const sects = new Map(world.sects.map(({ id, name }) => [id, name]));
+  const sites = new Map(world.locations.filter(({ id }) => scope === 'observer' || visibleSiteIds.has(id)).map(({ id, name }) => [id, name]));
+  const account = (row: ResourceFlowAccount | undefined, fallback: string) => {
+    if (!row) return fallback;
+    switch (row.kind) {
+      case 'actor': return actors.get(row.id) ?? '修士未详';
+      case 'site': return sites.get(row.id) ?? '未观测地点';
+      case 'sect': return sects.get(row.id) ?? '宗门未详';
+      case 'oath': return row.pocket === 'payment' ? '契书价金托管' : '契书抵押托管';
+      case 'order': return '坊市挂单托管';
+      case 'shipment': return '商队在途保管';
+      case 'relocation': return '迁址在途公库';
+    }
+  };
+
+  return (
+    <section aria-label="此月已记录物资" className="min-w-0 space-y-2">
+      <p>仙历 {ledger.year} 年 {ledger.month} 月 · Tick #{ledger.tick} · {ledger.closed ? '已完成的月份' : '当月尚未结束'}</p>
+      {ledger.partial && <p className="text-amber-200">本月只列{scope === 'actor' ? '可见且保留的明细' : '已保留的明细'}；未列明细不按零计。</p>}
+      {ledger.omittedEntries !== undefined && ledger.omittedEntries > 0 && <p className="text-amber-200">另有 {ledger.omittedEntries} 条明细超出保留上限，不能展开；只能依据此处已经保留的汇总。</p>}
+      {ledger.totals.length === 0 ? <p className="text-slate-400">当前视角没有此月可列出的记录，不代表没有发生物资活动。</p> : (
+        <ul aria-label="按物资各自对账" className="space-y-1.5">
+          {ledger.totals.map(({ good, transfer, production, consumption, loss }) => (
+            <li key={good} className="min-w-0 space-y-0.5 rounded border border-slate-800 p-2">
+              <h6 className="font-semibold text-cyan-100">{goodName(good)} · 单位：{units(good)}</h6>
+              <dl className="grid grid-cols-2 gap-1 text-slate-300 sm:grid-cols-4">
+                <div><dt className="inline text-slate-400">产出 </dt><dd className="inline">{production}</dd></div>
+                <div><dt className="inline text-slate-400">消耗 </dt><dd className="inline">{consumption}</dd></div>
+                <div><dt className="inline text-slate-400">损失 </dt><dd className="inline">{loss}</dd></div>
+                <div><dt className="inline text-slate-400">转移 </dt><dd className="inline">{transfer}</dd></div>
+              </dl>
+            </li>
+          ))}
+        </ul>
+      )}
+      {pageRows.length > 0 && (
+        <ol className="space-y-1" aria-label="有方向的物资收据">
+          {pageRows.map((row) => (
+            <li key={row.id} className="min-w-0 break-words rounded bg-slate-900/70 p-2">
+              <p className="font-semibold text-slate-100">{KIND[row.kind]} · {row.amount} {units(row.good)}{row.good !== 'stone' && ` ${goodName(row.good)}`} · {REASONS[row.reason] ?? '其他已记录活动'}</p>
+              <p className="text-slate-400">{account('from' in row ? row.from : undefined, row.kind === 'production' ? '产出' : '来源未列')} → {account('to' in row ? row.to : undefined, row.kind === 'consumption' ? '消耗' : row.kind === 'loss' ? '实际损失' : '去向未列')}</p>
+            </li>
+          ))}
+        </ol>
+      )}
+      {pages > 1 && <div className="flex flex-wrap items-center gap-1.5" aria-label="月度收据分页">
+        <button type="button" className={control} disabled={page === 0} onClick={() => setRequested(page - 1)}>上一页</button>
+        <button type="button" className={control} disabled={page + 1 === pages} onClick={() => setRequested(page + 1)}>下一页</button>
+        <p className="text-slate-400" role="status">明细第 {page + 1}/{pages} 页 · 每页最多 {PAGE_SIZE} 条</p>
+      </div>}
+    </section>
+  );
+}
+
+export function ResourceFlowPanel({ world, cultivator }: { world: WorldState; cultivator?: Cultivator }) {
+  const [opened, setOpened] = useState(false);
+  const [scope, setScope] = useState<'actor' | 'observer'>('actor');
+  const [requested, setRequested] = useState<number>();
+  const actor = cultivator && world.cultivators.find(({ id }) => id === cultivator.id);
+  const months = (world.resourceFlow?.months ?? []).filter(({ tick }) => tick <= world.tick).sort((a, b) => b.tick - a.tick).slice(0, MONTHS);
+  const selected = months.find(({ tick }) => tick === requested) ?? months.find(({ tick }) => tick < world.tick) ?? months[0];
+  const visibleSiteIds = useMemo(() => {
+    if (!opened || scope !== 'actor') return new Set<string>();
+    const view = createTerrainMapView(world, actor, true);
+    return new Set(view.seenLocations.filter(({ id }) => view.isCurrentLocation(id)).map(({ id }) => id));
+  }, [world, actor, opened, scope]);
+  const ledger = opened && selected ? projectResourceFlowMonth(world, selected.tick, scope === 'observer'
+    ? { kind: 'observer' } : { kind: 'actor', actorId: actor?.id, visibleSiteIds }) : undefined;
+  return (
+    <details className="min-w-0 rounded border border-cyan-400/20 bg-slate-950/55"
+      onToggle={(event) => setOpened(event.currentTarget.open)}>
+      <summary className="min-h-11 cursor-pointer break-words px-3 py-2.5 text-xs font-semibold text-cyan-100">物资流向与月度对账</summary>
+      <div className="space-y-2 px-3 pb-3 text-xs leading-relaxed text-slate-300">
+        <p>只统计已接入对账的活动，不是全世界总账。转移单列，不算新增或净变化；不同物资不相加。</p>
+        {opened && <>
+          <div className="grid min-w-0 gap-1.5 sm:grid-cols-2">
+            <label className="grid min-w-0 gap-1">对账视角
+              <select className={control} value={scope} onChange={(event) => setScope(event.currentTarget.value === 'observer' ? 'observer' : 'actor')}>
+                <option value="actor">所选修士可见</option><option value="observer">天道视角（查看已记录总量）</option>
+              </select>
+            </label>
+            {selected && <label className="grid min-w-0 gap-1">月份（最多保留 {MONTHS} 期）
+              <select className={control} value={selected.tick} onChange={(event) => setRequested(Number(event.currentTarget.value))}>
+                {months.map(({ tick, year, month }) => <option key={tick} value={tick}>{year} 年 {month} 月 · Tick #{tick}</option>)}
+              </select>
+            </label>}
+          </div>
+          <p className="text-slate-400">{scope === 'actor' ? (actor ? '只显示本修士可见或参与的记录；不返回隐藏账目。' : '未选修士，不将空缺当作全局记录。') : '只看已接入的数据汇总，未记录活动不在其中。'}</p>
+          {ledger ? <ResourceFlowMonth key={`${scope}:${actor?.id ?? ''}:${ledger.tick}`} ledger={ledger}
+            world={world} scope={scope} visibleSiteIds={visibleSiteIds} />
+            : <p className="text-slate-400">尚无可查看的月度记录。</p>}
+        </>}
+      </div>
+    </details>
+  );
+}

@@ -1,3 +1,4 @@
+import { flowSect, recordResourceFlow } from './resourceFlowEngine';
 import { isRetiredFromService } from './serviceRetirementEngine';
 import { activeRelocationForSect } from './relocationEngine';
 import type { ActionType, Cultivator, FacilityKind, LLMDecisionPayload, LocationNode, Sect, WorldEvent, WorldState } from '../types/world';
@@ -80,6 +81,8 @@ export function resolveSectEconomyAction(world: WorldState, actor: Cultivator, d
     const cost = facilityBuildCost(sect, kind);
     sect.spiritStones -= cost;
     const level = ++sect.facilities[kind];
+    recordResourceFlow(world, { kind: 'consumption', mechanism: 'sect_economy', refId: sect.id, reason: 'facility_construction',
+      from: flowSect(sect.id), good: 'stone', amount: cost, visibility: { kind: 'participants', actorIds: [actor.id] } });
     const hq = world.locations.find(({ id }) => id === sect.headquartersId)!;
     if (kind === 'alchemy_hall' && level > hq.furnaceGrade) hq.furnaceGrade = Math.min(3, level) as LocationNode['furnaceGrade'];
     if (kind === 'defense_array') {
@@ -135,6 +138,13 @@ export function maintainSectEconomy(world: WorldState): void {
     const end = Math.min(TREASURY_CAP, funds - upkeep);
     sect.monthlyEconomy = { tick: world.tick, taxes, mining, upkeep, net: end - sect.spiritStones };
     sect.spiritStones = end;
+    const account = flowSect(sect.id);
+    const common = { mechanism: 'sect_economy', refId: sect.id, good: 'stone', visibility: { kind: 'observer' } } as const;
+    if (taxes > 0) recordResourceFlow(world, { ...common, kind: 'production', reason: 'treasury_tax', to: account, amount: taxes });
+    if (mining > 0) recordResourceFlow(world, { ...common, kind: 'production', reason: 'treasury_mining', to: account, amount: mining });
+    if (upkeep > 0) recordResourceFlow(world, { ...common, kind: 'consumption', reason: 'treasury_upkeep', from: account, amount: upkeep });
+    const overflow = funds - upkeep - end;
+    if (overflow > 0) recordResourceFlow(world, { ...common, kind: 'loss', reason: 'treasury_overflow', from: account, amount: overflow });
   }
 }
 

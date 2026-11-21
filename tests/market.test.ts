@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createInitialWorld } from '../src/data/initialWorld';
 import { advanceMarkets, availableMarketActions, createMarketState, marketClosureReason, marketOrdersInPriority, resolveMarketAction } from '../src/engine/marketEngine';
+import { flowActor, flowOrder, flowShipment } from '../src/engine/resourceFlowEngine';
 import { terrainTileAt } from '../src/engine/terrainEngine';
 import type { Cultivator, LocationNode } from '../src/types/world';
 
@@ -32,6 +33,8 @@ function fixture(seed = 9) {
   return { world, buyer, seller, rival, alternate, west, east, place, cancel, total };
 }
 
+const flows = (world: ReturnType<typeof createInitialWorld>) => world.resourceFlow.months.flatMap(({ entries }) => entries);
+
 describe('regional order books and bonded convoys', () => {
   it('matches by price then insertion sequence, uses older limit, and returns only residual escrow once', () => {
     const { world, buyer, seller, rival, alternate, place, cancel, total } = fixture();
@@ -56,6 +59,19 @@ describe('regional order books and bonded convoys', () => {
     expect(alternate.pills.foundation).toBe(1);
     expect(advanceMarkets(world)).toEqual([]);
     expect(total()).toEqual({ stones: 4000, goods: 6 });
+    const entries = flows(world);
+    expect(entries.map(({ reason, amount }) => [reason, amount])).toEqual([
+      ['order_deposit', 2], ['order_deposit', 2], ['order_deposit', 2], ['order_deposit', 66],
+      ['price_improvement', 24], ['local_fill', 20], ['local_fill', 2],
+      ['price_improvement', 12], ['local_fill', 10], ['local_fill', 1],
+      ['order_release', 1],
+    ]);
+    expect(entries[3]).toMatchObject({ good: 'stone', from: flowActor(buyer.id), to: flowOrder('order-4'),
+      visibility: { kind: 'participants', actorIds: [buyer.id] } });
+    expect(entries[4].visibility).toEqual({ kind: 'participants', actorIds: [buyer.id] });
+    expect(entries[5]).toMatchObject({ good: 'stone', from: flowOrder('order-4'), to: flowActor(rival.id) });
+    expect(entries[10]).toMatchObject({ good: 'foundation', refId: residual.id, from: flowOrder(residual.id),
+      to: flowActor(alternate.id), visibility: { kind: 'participants', actorIds: [alternate.id] } });
   });
 
   it('rejects unfunded, illegal, or closed placement, prevents self-trade, expires and releases escrow', () => {
@@ -83,6 +99,9 @@ describe('regional order books and bonded convoys', () => {
     expect(advanceMarkets(world)).toEqual([]);
     expect(seller.pills.foundation).toBe(1);
     expect(seller.spiritStones).toBe(1000);
+    expect(flows(world).filter(({ reason }) => reason === 'order_release').map(({ good, amount }) => [good, amount])).toEqual([
+      ['stone', 20], ['foundation', 1],
+    ]);
   });
 
   it('delays delivery and seller payout during a genuine journey and waits through closure', () => {
@@ -111,6 +130,12 @@ describe('regional order books and bonded convoys', () => {
     expect(seller.spiritStones).toBe(1060);
     expect(advanceMarkets(world)).toEqual([]);
     expect(total()).toEqual({ stones: 4000, goods: 2 });
+    expect(flows(world).filter(({ refId }) => refId === caravan.id)).toMatchObject([
+      { reason: 'shipment_departure', good: 'stone', amount: 60, from: flowOrder(caravan.buyOrderId), to: flowShipment(caravan.id) },
+      { reason: 'shipment_departure', good: 'foundation', amount: 2, from: flowOrder(caravan.sellOrderId), to: flowShipment(caravan.id) },
+      { reason: 'shipment_delivery', good: 'stone', amount: 60, from: flowShipment(caravan.id), to: flowActor(seller.id) },
+      { reason: 'shipment_delivery', good: 'foundation', amount: 2, from: flowShipment(caravan.id), to: flowActor(buyer.id) },
+    ]);
   });
 
   it('records seeded lost cargo only on a threatened segment and refunds payment exactly once', () => {
@@ -135,6 +160,15 @@ describe('regional order books and bonded convoys', () => {
         expect(buyer.spiritStones).toBe(1000);
         expect(seller.pills.foundation).toBe(0);
         expect(advanceMarkets(world)).toEqual([]);
+        const terminal = flows(world).filter(({ reason }) => reason === 'shipment_loss' || reason === 'shipment_refund');
+        const participantIds = [buyer.id, seller.id].sort();
+        expect(terminal).toMatchObject([
+          { kind: 'transfer', good: 'stone', amount: 90, from: flowShipment(caravan.id), to: flowActor(buyer.id) },
+          { kind: 'loss', good: 'foundation', amount: 3, from: flowShipment(caravan.id) },
+        ]);
+        expect(terminal.every(({ visibility }) => visibility.kind === 'participants' &&
+          [...visibility.actorIds].sort().join(',') === participantIds.join(','))).toBe(true);
+        expect('to' in terminal[1]).toBe(false);
       } else {
         world.tick = caravan.arrivalTick + 1;
         advanceMarkets(world);
@@ -166,5 +200,10 @@ describe('regional order books and bonded convoys', () => {
     expect(world.markets.receipts[0].status).toBe('returned');
     expect(advanceMarkets(world)).toEqual([]);
     expect(total()).toEqual({ stones: 4000, goods: 2 });
+    expect(flows(world).filter(({ reason }) => reason === 'shipment_return')).toMatchObject([
+      { kind: 'transfer', good: 'stone', amount: 60, from: flowShipment(caravan.id), to: flowActor(buyer.id) },
+      { kind: 'transfer', good: 'foundation', amount: 2, from: flowShipment(caravan.id), to: flowActor(seller.id) },
+    ]);
+    expect(flows(world).some(({ kind }) => kind === 'loss')).toBe(false);
   });
 });

@@ -1,0 +1,75 @@
+import { describe, expect, it } from 'vitest';
+import { createInitialWorld } from '../src/data/initialWorld';
+import { maintainAlchemy, resolveAlchemy } from '../src/engine/alchemyEngine';
+import { flowActor, flowSect, flowSite, projectResourceFlowMonth, resourceFlowAccountDelta, resourceFlowNet } from '../src/engine/resourceFlowEngine';
+import { maintainSectEconomy } from '../src/engine/sectEconomyEngine';
+import { decodeWorldSave, encodeWorldSave } from '../src/engine/storageEngine';
+import { weatherHerbRegrowth } from '../src/engine/weatherEngine';
+import type { HerbId, LLMDecisionPayload } from '../src/types/world';
+
+describe('resource reconciliation against actual custody and dated mutations', () => {
+  it('reports clamped site production, one real harvest and only consumed inputs on a failed recipe', () => {
+    const world = createInitialWorld(9182);
+    const site = world.locations.find(({ id }) => id === 'loc-market')!;
+    const actor = world.cultivators[0];
+    actor.locationId = site.id;
+    actor.spiritStones = 1000;
+    actor.herbs.jade_leaf = 2;
+    actor.herbs.earth_root = 3;
+    actor.pills.foundation = 0;
+    const herb: HerbId = 'jade_leaf';
+    const cap = site.herbCapacity[herb];
+    site.herbs[herb] = cap - 1;
+    for (world.tick = 1; world.tick <= 30 && weatherHerbRegrowth(world, site, herb, 3) <= 0; world.tick++);
+    const initialHolding = actor.herbs.jade_leaf;
+    expect(world.tick).toBeLessThanOrEqual(30);
+    const increase = Math.min(1, weatherHerbRegrowth(world, site, herb, 3));
+    maintainAlchemy(world);
+    expect(site.herbs[herb]).toBeCloseTo(cap - 1 + increase);
+    const gather: LLMDecisionPayload = { chosenAction: 'GATHER_HERBS', targetHerbId: herb, innerMonologue: '以实际收草入账。' };
+    const brew: LLMDecisionPayload = { chosenAction: 'BREW_PILL', targetPillId: 'foundation', innerMonologue: '按实物用料。' };
+    expect(resolveAlchemy(world, actor, gather, () => .99)).not.toBeNull();
+    expect(resolveAlchemy(world, actor, brew, () => .99)).not.toBeNull();
+    const view = projectResourceFlowMonth(world, world.tick, { kind: 'observer' })!;
+    expect(view.closed).toBe(false);
+    const jadeRows = view.rows.filter((row) => row.good === herb);
+    expect(jadeRows.filter(({ reason, refId }) => reason === 'herb_regrowth' && refId === site.id)).toHaveLength(1);
+    expect(jadeRows.filter(({ reason }) => reason === 'herb_harvest')).toHaveLength(1);
+    expect(view.rows.filter(({ reason }) => reason === 'brew_output')).toEqual([]);
+    const sum = (account: ReturnType<typeof flowActor>) => jadeRows.reduce((n, row) => n + resourceFlowAccountDelta(row, account), 0);
+    expect(sum(flowActor(actor.id))).toBeCloseTo(actor.herbs[herb] - initialHolding);
+    expect(sum(flowSite(site.id))).toBeCloseTo(site.herbs[herb] - (cap - 1));
+    expect(actor.pills.foundation).toBe(0);
+    expect(view.rows.find(({ reason }) => reason === 'brew_fee')?.amount).toBe(1000 - actor.spiritStones);
+    const personal = projectResourceFlowMonth(world, world.tick, { kind: 'actor', actorId: actor.id, visibleSiteIds: new Set([site.id]) })!;
+    expect(personal.rows.filter(({ reason }) => reason === 'herb_regrowth').every(({ refId }) => refId === site.id)).toBe(true);
+    expect(personal.omittedEntries).toBeUndefined();
+  });
+
+  it('reconciles taxes plus mining minus consumed upkeep and cap loss to the actual sect chest, not another inventory', () => {
+    const world = createInitialWorld(9183);
+    const sect = world.sects[0];
+    world.tick++;
+    sect.spiritStones = 50_000;
+    sect.facilities.spirit_mine = 3;
+    maintainSectEconomy(world);
+    const sameMonth = projectResourceFlowMonth(world, world.tick, { kind: 'observer' })!;
+    const mine = sameMonth.rows.filter(({ refId }) => refId === sect.id);
+    expect(mine.map(({ reason }) => reason)).toEqual(['treasury_tax', 'treasury_mining', 'treasury_upkeep', 'treasury_overflow']);
+    const net = mine.reduce((n, row) => n + resourceFlowAccountDelta(row, flowSect(sect.id)), 0);
+    expect(net).toBe(sect.spiritStones - 50_000);
+    expect(sameMonth.totals.find(({ good }) => good === 'stone')).toBeDefined();
+    expect(resourceFlowNet(sameMonth.totals.find(({ good }) => good === 'stone')!))
+      .toBeCloseTo(sameMonth.rows.reduce((n, row) => n + (row.kind === 'production' ? row.amount : -row.amount), 0));
+    maintainSectEconomy(world);
+    expect(projectResourceFlowMonth(world, world.tick, { kind: 'observer' })?.rows).toEqual(sameMonth.rows);
+    const raw = encodeWorldSave(world);
+    expect(decodeWorldSave(raw).resourceFlow).toEqual(world.resourceFlow);
+    const bad = JSON.parse(raw) as { world: typeof world };
+    bad.world.resourceFlow.months[0].totals[0].loss += 1000;
+    expect(() => decodeWorldSave(JSON.stringify(bad))).toThrow('resourceFlow.totals.accounting');
+    const old = JSON.parse(raw) as { world: Partial<typeof world> };
+    delete old.world.resourceFlow;
+    expect(decodeWorldSave(JSON.stringify(old)).resourceFlow).toEqual({ nextId: 1, months: [] });
+  });
+});

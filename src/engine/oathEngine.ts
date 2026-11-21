@@ -1,3 +1,4 @@
+import { flowActor, flowOath, recordResourceFlow } from './resourceFlowEngine';
 import type { Cultivator, LLMDecisionPayload, OathContract, OathState, OathTerm, WorldEvent, WorldState } from '../types/world';
 
 export const OATH_TERMS: Record<OathTerm, { name: string; quantity: number; payment: number; collateral: number }> = {
@@ -77,6 +78,12 @@ function settle(world: WorldState, oath: OathContract, disposition: 'deliver' | 
     if (disposition === 'forfeit') payer.spiritStones += oath.escrow.collateral;
     else provider.spiritStones += oath.escrow.collateral;
   }
+  const parties = { kind: 'participants', actorIds: [oath.requesterId, oath.providerId] } as const;
+  const shared = { kind: 'transfer', mechanism: 'oath', refId: oath.id, good: 'stone', visibility: parties } as const;
+  recordResourceFlow(world, { ...shared, reason: disposition === 'deliver' ? 'oath_paid' : 'oath_refunded',
+    from: flowOath(oath.id, 'payment'), to: flowActor(disposition === 'deliver' ? provider.id : payer.id), amount: oath.escrow.payment });
+  recordResourceFlow(world, { ...shared, reason: disposition === 'forfeit' ? 'oath_forfeited' : 'oath_refunded',
+    from: flowOath(oath.id, 'collateral'), to: flowActor(disposition === 'forfeit' ? payer.id : provider.id), amount: oath.escrow.collateral });
   oath.escrow = { payment: 0, collateral: 0 };
   oath.settledTick = world.tick;
   return true;
@@ -106,6 +113,10 @@ export function resolveOathAction(world: WorldState, actor: Cultivator, choice: 
   if (option.action === 'ACCEPT_OATH') {
     requester.spiritStones -= oath.payment; actor.spiritStones -= oath.collateral;
     oath.escrow = { payment: oath.payment, collateral: oath.collateral };
+    const shared = { kind: 'transfer', mechanism: 'oath', refId: oath.id, reason: 'oath_funded', good: 'stone',
+      visibility: { kind: 'participants', actorIds: [requester.id, actor.id] } } as const;
+    recordResourceFlow(world, { ...shared, from: flowActor(requester.id), to: flowOath(oath.id, 'payment'), amount: oath.payment });
+    recordResourceFlow(world, { ...shared, from: flowActor(actor.id), to: flowOath(oath.id, 'collateral'), amount: oath.collateral });
     oath.deadlineTick = world.tick + SERVICE_WINDOW; oath.status = 'active';
     return oathEvent(world, oath, 'accept', '天道契书生效', `双方实际出资已托管，须于第${oath.deadlineTick}轮之前在立约地完成交付。`);
   }
@@ -119,6 +130,9 @@ export function resolveOathAction(world: WorldState, actor: Cultivator, choice: 
     } else {
       actor.herbs.jade_leaf -= oath.quantity; requester.herbs.jade_leaf += oath.quantity;
     }
+    recordResourceFlow(world, { kind: 'transfer', mechanism: 'oath', refId: oath.id, reason: 'oath_goods',
+      from: flowActor(actor.id), to: flowActor(requester.id), good: oath.term === 'foundation_pill' ? 'foundation' : 'jade_leaf',
+      amount: oath.quantity, visibility: { kind: 'participants', actorIds: [requester.id, actor.id] } });
     settle(world, oath, 'deliver');
     oath.status = 'fulfilled'; oath.outcome = '实物已验收，价款与保证金按约支付，仅结算一次。';
     return oathEvent(world, oath, 'delivery', '契书履约结算', oath.outcome);
