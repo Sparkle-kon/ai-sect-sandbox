@@ -20,6 +20,14 @@ import type { CameraPoint, MapCamera } from './mapCamera';
 import { BRUSH_LABELS, brushPoint, drawHazards, getVisibleHazards } from './mapBrushView';
 import { BEAST_COLORS, visibleBeastsByLocation } from './spiritBeastView';
 import { activeAvatar } from '../engine/avatarEngine';
+import { localQiWeather } from '../engine/weatherEngine';
+
+const WEATHER_MARK = {
+  平息: { symbol: '', color: '#94a3b8' },
+  灵潮: { symbol: '潮', color: '#6ee7b7' },
+  罡风: { symbol: '风', color: '#fcd34d' },
+  霜息: { symbol: '霜', color: '#bae6fd' },
+};
 
 interface WorldMapCanvasProps {
   world: WorldState;
@@ -52,6 +60,9 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const selected = world.cultivators.find((c) => c.id === selectedCultivatorId);
   const mapView = useMemo(() => createTerrainMapView(world, selected, fog), [world, selected, fog]);
   const { seenLocations, liveActors, isCurrentLocation } = mapView;
+  const weatherAtVisibleSites = useMemo(() => new Map(seenLocations
+    .filter(({ id }) => isCurrentLocation(id))
+    .map((site) => [site.id, localQiWeather(world, site)])), [world, seenLocations, isCurrentLocation]);
   const hazards = useMemo(() => getVisibleHazards(world, mapView), [world, mapView]);
   const beastsByLocation = useMemo(() => visibleBeastsByLocation(world, mapView), [world, mapView]);
   const armedBrush = !fog && onBrushStroke && brush !== 'browse' ? brush : undefined;
@@ -255,6 +266,16 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           ctx.fillStyle = '#67e8f9';
           ctx.fillText('会', loc.x + 28, loc.y - 4);
         }
+        const localWeather = weatherAtVisibleSites.get(loc.id);
+        if (localWeather && localWeather.kind !== '平息') {
+          const appearance = WEATHER_MARK[localWeather.kind];
+          ctx.save();
+          ctx.textAlign = 'right';
+          ctx.font = 'bold 11px sans-serif';
+          ctx.fillStyle = appearance.color;
+          ctx.fillText(appearance.symbol, loc.x - 21, loc.y + 11);
+          ctx.restore();
+        }
         const localCouncil = currentCouncils.get(headquarters.get(loc.id)?.id ?? '');
         if (localCouncil && isCurrentLocation(loc.id)) {
           ctx.font = 'bold 11px sans-serif';
@@ -389,7 +410,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener('change', stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, hazards, beastsByLocation, armedBrush, preview]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, hazards, beastsByLocation, weatherAtVisibleSites, armedBrush, preview]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -692,6 +713,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
             const homeSect = headquarters.get(location.id);
             const localOccasions = occasionsByLocation.get(location.id) ?? [];
             const localCouncil = currentCouncils.get(homeSect?.id ?? '');
+            const localWeather = weatherAtVisibleSites.get(location.id);
             const localBeasts = beastsByLocation.get(location.id) ?? [];
             return (
               <li key={location.id} className="inline-flex items-center gap-1.5">
@@ -709,6 +731,9 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                 {homeSect && homeSect.arrayMaxHp > 0 && (
                   <span className="text-indigo-300">· 护山阵 {homeSect.arrayHp}/{homeSect.arrayMaxHp}</span>
                 )}
+                {localWeather && <span style={{ color: WEATHER_MARK[localWeather.kind].color }}>
+                  · 已观测：{localWeather.kind} {Math.round(localWeather.intensity * 100)}%
+                </span>}
                 {localCouncil && <span className="text-violet-300">· 本月议决：{localCouncil.title}</span>}
                 {besiegedLocationIds.has(location.id) && <span className="text-rose-300">· 围攻中</span>}
                 {localOccasions.map((occasion) => (

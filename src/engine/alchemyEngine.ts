@@ -1,3 +1,4 @@
+import { weatherHerbRegrowth } from './weatherEngine';
 import type { Cultivator, HerbId, LLMDecisionPayload, PillId, WorldEvent, WorldState } from '../types/world';
 import { recordMemory } from './memoryEngine';
 import { guardingHerbBeast } from './spiritBeastEngine';
@@ -142,9 +143,10 @@ export function resolveAlchemy(world: WorldState, actor: Cultivator, decision: L
 
 /** Called once per world tick before agent decisions. No RNG: deterministic regrowth and detox. */
 export function maintainAlchemy(world: WorldState): void {
-  if (world.tick % 3 === 0) {
-    for (const place of world.locations) {
-      for (const herb of HERBS) place.herbs[herb] = clamp(place.herbs[herb] + 1, 0, place.herbCapacity[herb]);
+  for (const place of world.locations) {
+    for (const herb of HERBS) {
+      const increment = weatherHerbRegrowth(world, place, herb, 3);
+      if (increment > 0) place.herbs[herb] = clamp(place.herbs[herb] + increment, 0, place.herbCapacity[herb]);
     }
   }
   for (const actor of world.cultivators) {

@@ -34,6 +34,7 @@ import { TimelinePanel } from './components/TimelinePanel';
 import { AnalyticsModal } from './components/AnalyticsModal';
 import { MentorshipPanel } from './components/MentorshipPanel';
 import { OathContractsPanel } from './components/OathContractsPanel';
+import { WeatherAtlasPanel } from './components/WeatherAtlasPanel';
 import { createTimeline, forkTimeline, readTimelineHead, readTimelineSnapshot, recordTimelineWorld, selectTimelineBranch } from './engine/timelineEngine';
 import type { WorldTimeline } from './engine/timelineEngine';
 import { activeAvatar, possessAvatar, queueAvatarOrder } from './engine/avatarEngine';
@@ -387,6 +388,7 @@ export const App: React.FC = () => {
             onSelectCultivator={setSelectedCultivatorId}
             onBrushStroke={preview ? undefined : handleBrushStroke}
           />
+          <WeatherAtlasPanel world={visibleWorld} cultivator={selectedCultivator} />
           <BountyBoard world={visibleWorld} />
           {!preview && <GodConsole
             world={world}

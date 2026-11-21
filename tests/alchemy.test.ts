@@ -1,3 +1,4 @@
+import { weatherHerbRegrowth } from '../src/engine/weatherEngine';
 import { describe, expect, it, vi } from 'vitest';
 import { createInitialWorld } from '../src/data/initialWorld';
 import { ALCHEMY_RECIPES, alchemyCost, alchemySuccess, availableAlchemy, maintainAlchemy, resolveAlchemy } from '../src/engine/alchemyEngine';
@@ -126,18 +127,18 @@ describe('fictional alchemy resources and remedies', () => {
     expect(toxic.actor.hp).toBe(0); expect(toxic.actor.pillToxicity).toBe(toxicity);
   });
 
-  it('herbs regrow on a fixed three-tick cadence only up to local capacities', () => {
+  it('applies local weather growth without exceeding each herb capacity', () => {
     const { world, actor, place } = fixture();
     actor.pillToxicity = 1;
-    world.tick = 2; maintainAlchemy(world);
-    expect(place.herbs.jade_leaf).toBe(3); expect(actor.pillToxicity).toBe(0);
-    world.tick = 3; maintainAlchemy(world);
-    expect(place.herbs.jade_leaf).toBe(4);
-    world.tick = 6; maintainAlchemy(world);
-    expect(place.herbs.jade_leaf).toBe(4);
     place.herbCapacity.shadow_moss = 0; place.herbs.shadow_moss = 0;
-    world.tick = 9; maintainAlchemy(world);
-    expect(place.herbs.shadow_moss).toBe(0);
+    for (const tick of [2, 3, 6, 9]) {
+      world.tick = tick;
+      const expected = Math.min(place.herbCapacity.jade_leaf, place.herbs.jade_leaf + weatherHerbRegrowth(world, place, 'jade_leaf', 3));
+      maintainAlchemy(world);
+      expect(place.herbs.jade_leaf).toBe(expected);
+      expect(place.herbs.shadow_moss).toBe(0);
+    }
+    expect(actor.pillToxicity).toBe(0);
   });
 
   it('hostile fictional poison requires a living local enemy, never consumes on stale eligibility', () => {

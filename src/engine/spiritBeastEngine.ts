@@ -1,3 +1,4 @@
+import { weatherHabitatScore } from './weatherEngine';
 import type { Cultivator, LLMDecisionPayload, LocationNode, SpiritBeast, WorldEvent, WorldState } from '../types/world';
 import { activeSiegeForActor } from './diplomacyEngine';
 import { recordMemory } from './memoryEngine';
@@ -144,7 +145,8 @@ export function advanceSpiritBeasts(world: WorldState, rng: () => number): World
     if (sites.length <= 1 || rng() >= .45) continue;
     const previous = place;
     place = sites.filter(({ id }) => id !== previous.id)
-      .sort((a, b) => Math.hypot(a.x - previous.x, a.y - previous.y) - Math.hypot(b.x - previous.x, b.y - previous.y) || a.id.localeCompare(b.id))[0];
+      .sort((a, b) => weatherHabitatScore(world, previous, b, beast.kind) - weatherHabitatScore(world, previous, a, beast.kind) ||
+        Math.hypot(a.x - previous.x, a.y - previous.y) - Math.hypot(b.x - previous.x, b.y - previous.y) || a.id.localeCompare(b.id))[0];
     beast.locationId = place.id;
     results.push(event(world, `roam-${beast.id}`, '妖兽游踪', `${beast.name}离开原处，在${place.name}附近出没。`, [], place.id));
   }

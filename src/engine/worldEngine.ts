@@ -1,3 +1,4 @@
+import { weatherTravelFriction } from './weatherEngine';
 import { advanceOaths, resolveOathAction } from './oathEngine';
 import { maintainMentorship, mentorshipTechniqueMultiplier, resolveMentorshipAction } from './mentorshipEngine';
 import { worldRandom } from './worldRandom';
@@ -228,6 +229,13 @@ export function applyCultivatorBrainDecision(
           (knownRumorLead(cultivator, world) === decision.targetLocationId ? world.locations.find((site) => site.id === decision.targetLocationId) : undefined)
         : candidates[Math.floor(rng() * candidates.length)];
       if (dest && dest.id !== cultivator.locationId) {
+        const strain = location ? Math.round(weatherTravelFriction(world, location, dest) * 12) : 0;
+        if (strain > 0) {
+          const spent = Math.min(cultivator.qiProgress, strain);
+          cultivator.qiProgress -= spent;
+          if (spent >= 3) recordMemory(cultivator, world.tick,
+            `灵潮扰动御剑行路，抵至【${dest.name}】时额外消耗${spent}点灵气。`, 4, 'cultivation', -1);
+        }
         cultivator.locationId = dest.id;
         noteTerrainVisit(world, cultivator);
         // Random chance of finding spirit stones or herbs while exploring
