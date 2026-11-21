@@ -22,6 +22,7 @@ import { applyMapBrush } from './engine/mapBrushEngine';
 import { GodBrushKind, LLMConfig, MapPoint, WorldEvent, WorldState } from './types/world';
 import { SandboxWorkspace, WorkspaceSections } from './components/SandboxWorkspace';
 import type { WorkspaceId } from './components/SandboxWorkspace';
+import { readWorkspaceFoldPreferences, resolveWorkspaceActor, writeWorkspaceFoldPreferences } from './components/workspacePreferences';
 import { annotationWriteIsCurrent } from './components/annotationUi';
 import type { NotebookStamp, NoteCommand, NoteStatus } from './components/annotationUi';
 import { llmScheduler } from './engine/llmScheduler';
@@ -119,6 +120,10 @@ const panel = 'space-y-2 rounded-xl border border-slate-800 bg-slate-900 p-3';
 
 export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSection }) => {
   const [workspace, setWorkspace] = useState<WorkspaceId>(initialWorkspace);
+  const [foldPreferences, setFoldPreferences] = useState(readWorkspaceFoldPreferences);
+  const [rosterFocus, setRosterFocus] = useState<{ id: string; scope: string }>();
+  const actorHeading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => writeWorkspaceFoldPreferences(foldPreferences), [foldPreferences]);
   const [chronicleFilter, setChronicleFilter] = useState<ChronicleCategoryFilter>('all');
   const [focusTrail, setFocusTrail] = useState<ChronicleTrail>();
   const [chronicleReturn, setChronicleReturn] = useState<ChronicleFeedReturn>();
@@ -582,11 +587,18 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
       (base, orders, mode, onActor, replayDraws) => advanceWorldTick(base, orders, undefined, mode, undefined, { captureTrace: false, onActor, replayDraws }));
   };
   const visibleHistory = timeline.branches.find(({ id }) => id === timeline.activeBranchId)?.snapshots;
-  const selectedCultivator =
-    visibleWorld.cultivators.find((c) => c.id === selectedCultivatorId) ??
-    visibleWorld.cultivators[0];
+  const selectedCultivator = resolveWorkspaceActor(visibleWorld, selectedCultivatorId);
   const aliveCount = visibleWorld.cultivators.filter((c) => c.alive).length;
   const activeActorId = selectedCultivator?.id ?? null;
+  useEffect(() => {
+    if (selectedCultivatorId !== activeActorId) setSelectedCultivatorId(activeActorId);
+  }, [activeActorId, selectedCultivatorId]);
+  useEffect(() => {
+    if (!rosterFocus) return;
+    if (workspace === 'people' && rosterFocus.id === activeActorId && rosterFocus.scope === viewScopeKey)
+      actorHeading.current?.focus();
+    setRosterFocus(undefined);
+  }, [activeActorId, rosterFocus, viewScopeKey, workspace]);
   const chronicleCauses = useMemo(() => workspace === 'chronicle'
     ? new Map(visibleCausalChronicle(visibleWorld, activeActorId, 120).map((row) => [row.entry.eventId, row]))
     : undefined, [visibleWorld, activeActorId, workspace]);
@@ -650,6 +662,25 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
   };
   const clearChronicleReturn = (token: number) => setChronicleReturn((previous) => previous?.token === token ? undefined : previous);
   const opened = (view: WorkspaceId, fallback?: string) => initialWorkspace === view ? initialSection ?? fallback : fallback;
+  const ordinaryChronicleFold = foldPreferences.sections.chronicle === undefined
+    ? opened('chronicle', 'feed') : foldPreferences.sections.chronicle;
+  const rememberFold = (view: Exclude<WorkspaceId, 'map'>, id: string | null) => {
+    setFoldPreferences((previous) => previous.sections[view] === id ? previous :
+      { ...previous, sections: { ...previous.sections, [view]: id } });
+  };
+  const fold = (view: Exclude<WorkspaceId, 'map'>) => ({
+    rememberedOpen: foldPreferences.sections[view],
+    onOpenChange: (id: string | null) => rememberFold(view, id),
+  });
+  const selectRosterActor = (id: string) => {
+    if (workspace !== 'people' || history.current.activeBranchId !== timeline.activeBranchId ||
+        (browsing.current ? preview?.world : authority.current) !== visibleWorld ||
+        !visibleWorld.cultivators.some((person) => person.id === id)) return;
+    setSelectedCultivatorId(id);
+    rememberFold('people', 'profile');
+    setRosterFocus({ id, scope: viewScopeKey });
+  };
+  const toggleAutoplay = () => { if (!fastForwardRun.current) setIsRunning((current) => !current); };
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
@@ -664,19 +695,19 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
               <p className="break-words text-xs text-slate-300">仙历 {visibleWorld.year}年{visibleWorld.month}月 · 在世 {aliveCount} · 已陨落 {visibleWorld.cultivators.length - aliveCount}</p>
             </div>
           </div>
-          <div aria-label="推演控制" className="flex flex-wrap items-center gap-1.5">
+          <div aria-label="推演控制" className={`flex flex-wrap items-center gap-1.5 ${workspace !== 'map' && !preview && !isRunning ? 'max-sm:hidden' : ''}`}>
             {preview ? (
               <><span className="text-xs text-amber-200">历史只读 · Tick #{preview.tick}</span>
                 <button type="button" onClick={() => handleTimelinePreview(null)} className={`${action} bg-amber-400/15 text-amber-100`}>回到当前</button></>
             ) : (
               <>
-                <button type="button" disabled={fastForwardLocked} onClick={() => {
-                  if (!fastForwardRun.current) setIsRunning((current) => !current);
-                }} className={`${action} ${isRunning ? 'bg-amber-500 text-slate-950' : 'bg-emerald-500 text-slate-950'}`}>
+                <button type="button" disabled={fastForwardLocked} onClick={toggleAutoplay}
+                  className={`${action} ${isRunning ? 'bg-amber-500 text-slate-950' : 'max-sm:hidden bg-emerald-500 text-slate-950'}`}>
                   {isRunning ? <Pause aria-hidden="true" className="h-4 w-4" /> : <Play aria-hidden="true" className="h-4 w-4" />}
                   {isRunning ? '暂停推演' : '自动推演'}
                 </button>
-                <button type="button" disabled={isStepping || fastForwardLocked} onClick={() => void handleStepTick()} className={`${action} bg-slate-800 text-slate-100 hover:bg-slate-700`}>
+                <button type="button" disabled={isStepping || fastForwardLocked} onClick={() => void handleStepTick()}
+                  className={`${action} ${isRunning ? 'max-sm:hidden bg-slate-800 text-slate-100' : 'bg-emerald-500 text-slate-950'}`}>
                   <FastForward aria-hidden="true" className="h-4 w-4" />{isStepping ? '推演中…' : '单步推演'}
                 </button>
               </>
@@ -693,6 +724,10 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
         map: <div className="grid min-w-0 items-start gap-2.5 lg:grid-cols-[minmax(0,1fr)_17rem] lg:gap-4">
           <div className="min-w-0"><React.Suspense fallback={<div role="status" className="grid min-h-64 place-items-center rounded-xl border border-slate-800 text-sm text-slate-300">载入舆图…</div>}>
             <WorldMapCanvas compact scopeKey={viewScopeKey} world={visibleWorld} selectedCultivatorId={activeActorId}
+            toolsOpen={workspace === 'map' && (foldPreferences.mapTools ?? false)} onToolsOpenChange={(mapTools) =>
+              setFoldPreferences((previous) => (previous.mapTools ?? false) === mapTools ? previous : { ...previous, mapTools })}
+            additionalTools={!preview && !isRunning && <button type="button" disabled={fastForwardLocked} onClick={toggleAutoplay}
+              className={`${action} bg-slate-800 text-emerald-100 sm:hidden`}><Play aria-hidden="true" className="h-4 w-4" />自动推演</button>}
             chronicleFocus={trail?.request.kind === 'site' && focusTarget ? trail : undefined} onChronicleFocusUnavailable={reportMapFocusFailure}
             onSelectCultivator={setSelectedCultivatorId} onBrushStroke={preview ? undefined : handleBrushStroke} />
           </React.Suspense></div>
@@ -702,7 +737,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
                 <p className="text-xs text-slate-400">当前修士</p>
                 <h2 className="text-base font-semibold text-amber-100">{selectedCultivator?.name ?? '未选中人物'}</h2>
               </div>
-              <button type="button" onClick={() => openWorkspace('people')} className={`${action} bg-slate-800 text-slate-100 hover:bg-slate-700`}>人物详情</button>
+              <button type="button" onClick={() => openWorkspace('people')} className={`${action} max-sm:hidden bg-slate-800 text-slate-100 hover:bg-slate-700`}>人物详情</button>
             </div>
             {selectedCultivator && <p className="break-words text-xs leading-relaxed text-slate-300">
               {selectedCultivator.realm} {selectedCultivator.realmStage}层 · {selectedCultivator.alive ? `气血 ${selectedCultivator.hp}/${selectedCultivator.maxHp}` : '已陨落'} · {expeditionRescueCheckpoint(visibleWorld, selectedCultivator) ? '位于实际撤离关口' :
@@ -712,8 +747,9 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
           </aside>
         </div>,
         people: <div className="grid min-w-0 items-start gap-3 md:grid-cols-[17rem_minmax(0,1fr)]">
-          <React.Suspense fallback={<p role="status">载入修士名册…</p>}><ActorRoster world={visibleWorld} selected={selectedCultivator} onSelect={setSelectedCultivatorId} /></React.Suspense>
-          <WorkspaceSections label={`${selectedCultivator?.name ?? '修士'} · 人物档案`} initialOpen={focusProfile ? 'profile' : opened('people', 'profile')} sections={[
+          <React.Suspense fallback={<p role="status">载入修士名册…</p>}><ActorRoster world={visibleWorld} selected={selectedCultivator} dismissOnSelect onSelect={selectRosterActor} /></React.Suspense>
+          <WorkspaceSections label={`${selectedCultivator?.name ?? '修士'} · 人物档案`} initialOpen={opened('people', 'profile')}
+            {...fold('people')} moreAfterContent headingRef={actorHeading} forcedOpen={focusProfile ? 'profile' : undefined} sections={[
             { id: 'profile', label: '人物概况', content: <>
               {inspect('profile')}
               {activeActorId && visibleWorld.expeditionRescues.requests.some(({ explorerId, rescuerId, witnessIds }) =>
@@ -744,7 +780,8 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
             </React.Suspense> }]),
           ]} />
         </div>,
-        chronicle: <WorkspaceSections label="纪事与历史" initialOpen={chronicleReturn ? 'feed' : opened('chronicle', 'feed')} sections={[
+        chronicle: <WorkspaceSections label="纪事与历史" initialOpen={opened('chronicle', 'feed')}
+          {...fold('chronicle')} forcedOpen={chronicleReturn && ordinaryChronicleFold !== 'feed' ? 'feed' : undefined} sections={[
           { id: 'feed', label: '当世纪事', content: <React.Suspense fallback={<p role="status">载入当世纪事…</p>}><ChronicleFeed
             events={visibleWorld.events.filter(chronicleFeedFact)}
             category={chronicleFilter} onCategoryChange={setChronicleFilter} focusOptions={resolver?.build}
@@ -772,7 +809,8 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
             <EstateMemorialPanel world={visibleWorld} cultivator={selectedCultivator} />
           </React.Suspense> },
         ]} />,
-        sect: <WorkspaceSections label="宗门事务" initialOpen={focusSect ? 'governance' : opened('sect', 'governance')} sections={[
+        sect: <WorkspaceSections label="宗门事务" initialOpen={opened('sect', 'governance')}
+          {...fold('sect')} forcedOpen={focusSect ? 'governance' : undefined} sections={[
           { id: 'governance', label: '宗门地位、库账与外交', content: focusSect
             ? <FocusedSectSummary name={focusSect.name} alignment={focusSect.alignment} />
             : <div className="space-y-2.5">{inspect('sect')}
@@ -801,15 +839,19 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
           ...(preview ? [] : [{ id: 'council', label: '长老议事厅', content: <button type="button" disabled={isStepping} onClick={() => { setCouncilOpenedBefore(true); setCouncilOpen(true); }}
             className={`${action} bg-violet-900/60 text-violet-100 hover:bg-violet-800`}>打开长老议事厅</button> }]),
         ]} />,
-        world: <WorkspaceSections label="世界与设置" initialOpen={opened('world')} sections={[
+        world: <WorkspaceSections label="世界与设置" initialOpen={opened('world', 'weather')} {...fold('world')} sections={[
           { id: 'weather', label: '灵候图与观测', content: <div className="space-y-2.5">
             <React.Suspense fallback={<p role="status">载入世界记录…</p>}><WeatherAtlasPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense>
             {activeActorId && visibleWorld.shortShifts.shifts.some(({ hostId, workerId }) => activeActorId === hostId || activeActorId === workerId) &&
               <React.Suspense fallback={<p role="status">载入短聘凭证…</p>}><ShortShiftPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense>}
           </div> },
-          { id: 'markets', label: '坊市与商队', content: <React.Suspense fallback={<p role="status">载入世界记录…</p>}><MarketCaravansPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense> },
+          { id: 'markets', label: '坊市与商队', content: selectedCultivator
+            ? <React.Suspense fallback={<p role="status">载入世界记录…</p>}><MarketCaravansPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense>
+            : <p className="text-xs text-slate-300">从人物名册选择实际修士后查看坊市。</p> },
           { id: 'villages', label: '凡人村镇与赈济', content: <React.Suspense fallback={<p role="status">载入世界记录…</p>}><MortalVillagesPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense> },
-          { id: 'occasions', label: '比武与秘境盛会', content: <React.Suspense fallback={<p role="status">载入盛会记录…</p>}><WorldOccasionsPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense> },
+          { id: 'occasions', label: '比武与秘境盛会', content: selectedCultivator
+            ? <React.Suspense fallback={<p role="status">载入盛会记录…</p>}><WorldOccasionsPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense>
+            : <p className="text-xs text-slate-300">从人物名册选择实际修士后查看盛会。</p> },
           { id: 'bounties', label: '天机悬赏榜', content: <React.Suspense fallback={<p role="status">载入悬赏榜…</p>}><BountyBoard world={visibleWorld} /></React.Suspense> },
           { id: 'analytics', label: '天道观测与演化统计', content: <button type="button" onClick={() => setAnalyticsOpen(true)}
             className={`${action} bg-sky-900/60 text-sky-100 hover:bg-sky-800`}><BarChart3 aria-hidden="true" className="h-4 w-4" />打开天道观测</button> },

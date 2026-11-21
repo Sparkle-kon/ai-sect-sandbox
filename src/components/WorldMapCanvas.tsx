@@ -58,6 +58,9 @@ interface WorldMapCanvasProps {
   onBrushStroke?: (kind: GodBrushKind, points: MapPoint[]) => void;
   compact?: boolean;
   scopeKey?: string;
+  toolsOpen?: boolean;
+  onToolsOpenChange?: (value: boolean) => void;
+  additionalTools?: React.ReactNode;
   chronicleFocus?: { request: ChronicleFocusRequest; viewerId: string; token: number };
   onChronicleFocusUnavailable?: () => void;
 }
@@ -70,6 +73,9 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   onBrushStroke,
   compact = false,
   scopeKey = '',
+  toolsOpen,
+  onToolsOpenChange,
+  additionalTools,
   chronicleFocus,
   onChronicleFocusUnavailable,
 }) => {
@@ -84,6 +90,10 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     return () => { obsolete = true; };
   }, [hasNotes, annotationView]);
   const [touchPan, setTouchPan] = useState(false);
+  const [localToolsOpen, setLocalToolsOpen] = useState(!compact);
+  const toolsExpanded = toolsOpen ?? localToolsOpen;
+  const toolsRef = useRef<HTMLDetailsElement>(null);
+  const toolsSummary = useRef<HTMLElement | null>(null);
   const [followsSelection, setFollowsSelection] = useState(false);
   const [explorerOpen, setExplorerOpen] = useState(false);
   const [focusMessage, setFocusMessage] = useState('');
@@ -109,6 +119,18 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     if (interrupted.preview !== undefined) setPreview(interrupted.preview);
     if (interrupted.disarmBrush) setBrush('browse');
   };
+  const disarmTools = () => {
+    abandonGesture();
+    setBrush('browse');
+    setTouchPan(false);
+  };
+  const toolsInteractive = () => toolsExpanded && toolsRef.current?.open !== false;
+  useEffect(() => {
+    if (!toolsExpanded) {
+      disarmTools();
+      if (toolsRef.current?.contains(document.activeElement)) toolsSummary.current?.focus({ preventScroll: true });
+    }
+  }, [toolsExpanded]);
   const commandCamera = (next: MapCamera) => { abandonGesture(); manualCamera(next); };
   const [fog, setFog] = useState(false);
   const [cluster, setCluster] = useState<{ marker: Extract<MapActorMarker, { kind: 'cluster' }>; scope: string; tick: number }>();
@@ -185,7 +207,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const escortedCaravan = useMemo(() => visibleMapEscort(world, mapView, selected), [world, mapView, selected]);
   const hazards = useMemo(() => getVisibleHazards(world, mapView), [world, mapView]);
   const beastsByLocation = useMemo(() => visibleBeastsByLocation(world, mapView), [world, mapView]);
-  const armedBrush = !fog && onBrushStroke && brush !== 'browse' ? brush : undefined;
+  const armedBrush = toolsExpanded && !fog && onBrushStroke && brush !== 'browse' ? brush : undefined;
   const gestureScope = `${clusterScope}|${selectedCultivatorId ?? ''}|${world.tick}|${world.interventionSequence}|${onBrushStroke ? 'live' : 'read'}`;
   useEffect(() => { abandonGesture(); }, [gestureScope]);
 
@@ -708,7 +730,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const centerOfMap = { x: MAP_WIDTH / 2, y: MAP_HEIGHT / 2 };
   const frameFor = (canvas: HTMLCanvasElement): MapGestureFrame => ({
     camera: cameraRef.current, rect: canvas.getBoundingClientRect(), scope: gestureScope,
-    allowSingleTouchPan: touchPan || !compact, brush: armedBrush,
+    allowSingleTouchPan: !compact || touchPan && toolsInteractive(), brush: toolsInteractive() ? armedBrush : undefined,
   });
   const contactFor = (event: Pick<PointerEvent, 'pointerId' | 'pointerType' | 'clientX' | 'clientY'>): MapGestureContact => ({
     id: event.pointerId, pointerType: event.pointerType, client: { x: event.clientX, y: event.clientY },
@@ -743,7 +765,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     if (transition.preview !== undefined) setPreview(transition.preview);
     if (transition.disarmBrush) setBrush('browse');
     if (transition.camera) manualCamera(transition.camera);
-    if (transition.finished?.kind === 'stroke' && transition.finished.brush === armedBrush) {
+    if (transition.finished?.kind === 'stroke' && toolsInteractive() && transition.finished.brush === armedBrush) {
       onBrushStroke?.(transition.finished.brush, transition.finished.points);
     } else if (transition.finished?.kind === 'tap' && canvas) {
       useTap(transition.finished.screen, transition.finished.isTouch, canvas);
@@ -836,62 +858,6 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         </div>
       </div>
 
-      {compact && <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 px-3 py-1 text-xs text-slate-300" aria-label="地图快捷控制">
-        <button type="button" className="min-h-11 min-w-11 rounded border border-slate-700 disabled:opacity-40"
-          aria-label="缩小地图" disabled={camera.zoom <= 1} onClick={() => activateCamera('out')}>−</button>
-        <button type="button" className="min-h-11 min-w-11 rounded border border-slate-700 disabled:opacity-40"
-          aria-label="放大地图" disabled={camera.zoom >= MAX_ZOOM} onClick={() => activateCamera('in')}>＋</button>
-        <button type="button" className="min-h-11 rounded border border-slate-700 px-2 disabled:opacity-40"
-          disabled={camera.zoom === 1} onClick={() => activateCamera('home')}>复位</button>
-        <span className="tabular-nums">{Math.round(camera.zoom * 100)}%</span>
-        <button type="button" aria-pressed={touchPan} onClick={() => { abandonGesture(); setTouchPan((enabled) => !enabled); }}
-          className={`min-h-11 rounded border px-2 sm:hidden ${touchPan ? 'border-sky-400 text-sky-100' : 'border-slate-700 text-slate-200'}`}>
-          {touchPan ? '拖图开启' : '拖图'}
-        </button>
-      </div>}
-      <details className="border-b border-slate-800" open={!compact || undefined}>
-        <summary className={`cursor-pointer px-3 py-2 text-xs text-slate-400 ${compact ? 'flex min-h-11 items-center' : 'sr-only'}`}>地图选项</summary>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-slate-800 px-4 py-2 text-xs text-slate-300">
-        <label className="inline-flex items-center gap-1.5">
-          <input type="checkbox" checked={fog} disabled={!selected && !fog} onChange={(event) => setFog(event.currentTarget.checked)} />
-          修士视野（迷雾）
-        </label>
-        <label className="inline-flex items-center gap-1.5">
-          <input type="checkbox" checked={heat} onChange={(event) => setHeat(event.currentTarget.checked)} />
-          灵气热力
-        </label>
-        <span className="text-[11px] text-slate-400">
-          {fog ? `${selected?.name ?? '无修士'}视角 · 已探索 ${mapView.known?.size ?? 0}/${world.terrain.tiles.length} 格 · 视野内 ${mapView.current?.size ?? 0} 格` : '天道全图 · 宗门色线为领地边界'}
-        </span>
-        {heat && <span className="text-[11px] text-slate-400">蓝色至橙红色表示灵气由低到高。</span>}
-      </div>
-      <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-800 px-4 py-2 text-[11px] text-slate-300" aria-label="地图视角与画笔">
-        {([
-          { label: '缩小地图', text: '−', disabled: camera.zoom <= 1, command: 'out' },
-          { label: '放大地图', text: '+', disabled: camera.zoom >= MAX_ZOOM, command: 'in' },
-          { label: '向左浏览', text: '←', disabled: camera.x >= 0, command: 'left' },
-          { label: '向右浏览', text: '→', disabled: minViewport.x + MAP_WIDTH / camera.zoom >= MAP_WIDTH - 0.001, command: 'right' },
-          { label: '向上浏览', text: '↑', disabled: camera.y >= 0, command: 'up' },
-          { label: '向下浏览', text: '↓', disabled: minViewport.y + MAP_HEIGHT / camera.zoom >= MAP_HEIGHT - 0.001, command: 'down' },
-          { label: '重置地图视角', text: '重置', disabled: camera.zoom === 1, command: 'home' },
-        ] as const).map(({ label, text, disabled, command }) => (
-          <button key={label} type="button" aria-label={label} disabled={disabled} onClick={() => activateCamera(command)}
-            className="rounded border border-slate-700 px-2 py-1 text-slate-200 disabled:opacity-35">{text}</button>
-        ))}
-        <span className="px-1 tabular-nums">{Math.round(camera.zoom * 100)}%</span>
-        <label className="inline-flex items-center gap-1">
-          天道画笔
-          <select value={fog ? 'browse' : brush} disabled={fog || !onBrushStroke} onChange={(event) => { abandonGesture(); setBrush(event.currentTarget.value as GodBrushKind | 'browse'); }}
-            className="rounded border border-slate-700 bg-slate-900 px-1.5 py-1 disabled:opacity-40">
-            <option value="browse">浏览／选择</option>
-            {(Object.entries(BRUSH_LABELS) as [GodBrushKind, string][]).map(([kind, label]) => <option key={kind} value={kind}>{label}</option>)}
-          </select>
-        </label>
-        <span className="text-slate-400">
-          {fog ? '修士视野中不可使用天道画笔。' : armedBrush ? '单指松开才落笔；双指或中断会取消此笔。' : compact ? '双指缩放；单指上下滚动，选拖图后可单指平移。' : '滚轮或双指缩放，拖动平移，点击选择。'}
-        </span>
-      </div>
-      </details>
       <p id={keyboardHelp} className="sr-only">方向键平移，加号或减号缩放，Home 复位，F 定位所选修士。山河索引可按地点、修士或事件定位。</p>
       <div className="relative">
         <canvas
@@ -912,7 +878,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         onPointerUp={endGesture}
         onPointerCancel={cancelGesture}
         onLostPointerCapture={cancelGesture}
-        style={{ touchAction: !compact || touchPan || armedBrush ? 'none' : 'pan-y' }}
+        style={{ touchAction: !compact || toolsExpanded && touchPan || armedBrush ? 'none' : 'pan-y' }}
         className={`w-full h-auto select-none block focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-amber-300 ${armedBrush ? 'cursor-crosshair' : 'cursor-grab active:cursor-grabbing'}`}
         aria-label="修仙世界地图。选择修士可查看下方识海状态摘要；也可通过识海面板的修士按钮切换。雷劫用静态闪电标注；围攻地点用玫红虚线圈标注；各地渡劫、驻守、围攻和活跃盛会可在下方列表查看；本月移动、交锋和可见灵兽也有文字摘要。"
       />
@@ -942,6 +908,13 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           </svg>
         </button>
       </div>
+      {pilgrimageMark && <p className="sr-only">所选修士的巡礼关口：第 {pilgrimageMark.row} 行，第 {pilgrimageMark.col} 列。</p>}
+      {campMarks.length > 0 && <p className="sr-only">已观测夜宿营地 {campMarks.length} 处，共 {campMarks.reduce((count, camp) => count + camp.parties, 0)} 队，不是新地点。</p>}
+      {extractionMarks.length > 0 && <p className="sr-only">当前看见 {extractionMarks.length} 处实际撤离关口；不是新地点，也未公开路线。</p>}
+      {boundaryMarks.length > 0 && <p className="sr-only">当前看见 {boundaryMarks.length} 处实际换防关口。尚在途中的候补不算驻守。</p>}
+      {compact && <p className="min-w-0 break-words border-t border-slate-800 px-3 py-2 text-xs text-slate-300" aria-label="地图当前选择">
+        {selected ? <>当前选择：<span className="text-slate-100">{selected.name}</span> · {selected.alive ? `${selected.realm}${selected.realmStage}层` : '已陨落'}</> : '轻触地图选择修士。'}
+      </p>}
       {clusterActors.length > 0 && <section className="space-y-2 border-t border-sky-900 bg-slate-900 px-3 py-2 text-xs text-slate-200"
         aria-label="聚合修士列表">
         <div className="flex items-center justify-between gap-2">
@@ -972,16 +945,6 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
             disabled={drillPage.page + 1 === drillPage.pages} onClick={() => setClusterPage(drillPage.page + 1)}>下一页</button>
         </div>}
       </section>}
-      <details className="border-t border-slate-800/80 bg-slate-900/40" onToggle={(event) => setExplorerOpen(event.currentTarget.open)}>
-        <summary ref={(node) => { explorerSummary.current = node; }} className="flex min-h-11 cursor-pointer items-center px-3 text-xs font-semibold text-slate-300 focus-visible:outline focus-visible:outline-amber-300">山河索引</summary>
-        {explorerOpen && <React.Suspense fallback={<p className="px-3 pb-2 text-xs text-slate-300" role="status">载入山河索引…</p>}>
-          <MapKeyboardExplorer world={world} view={mapView} actorPositions={actorPositions} presentation={presentation}
-            selected={selectedPoint?.actor} follows={followsSelection} zoom={camera.zoom} onCamera={activateCamera}
-            onActor={(actor) => locateActor(actor.id)} onSite={focusSite}
-            onFollow={() => { abandonGesture(); setFollowsSelection((current) => !current); }}
-            onFocusLost={() => { if (explorerSummary.current?.getClientRects().length) explorerSummary.current.focus({ preventScroll: true }); }} />
-        </React.Suspense>}
-      </details>
       <p role="status" className="sr-only">{focusMessage}</p>
       <div className={`px-4 py-2 border-t border-slate-800/80 bg-slate-900/60 text-[11px] text-slate-400 flex-wrap gap-x-4 gap-y-1 ${compact ? 'hidden' : 'flex'}`} aria-label="选中修士记忆摘要">
         {selected ? (
@@ -1055,9 +1018,81 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           <span>选择一位修士查看其当前记忆状态。</span>
         )}
       </div>
+      <details ref={toolsRef} open={toolsExpanded} className="border-t border-slate-800" aria-label="地图工具"
+        onToggle={(event) => {
+          if (event.target !== event.currentTarget) return;
+          const next = event.currentTarget.open;
+          if (!next) disarmTools();
+          if (next === toolsExpanded) return;
+          if (toolsOpen === undefined) setLocalToolsOpen(next);
+          onToolsOpenChange?.(next);
+        }}>
+        <summary ref={(node) => { toolsSummary.current = node; }}
+          onClick={() => { if (toolsRef.current?.open) disarmTools(); }}
+          className="flex min-h-11 cursor-pointer items-center px-3 text-xs font-semibold text-slate-200 focus-visible:outline focus-visible:outline-amber-300">地图工具</summary>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-slate-800 px-4 py-2 text-xs text-slate-300">
+        <label className="inline-flex min-h-11 items-center gap-1.5">
+          <input type="checkbox" checked={fog} disabled={!selected && !fog} onChange={(event) => setFog(event.currentTarget.checked)} />
+          修士视野（迷雾）
+        </label>
+        <label className="inline-flex min-h-11 items-center gap-1.5">
+          <input type="checkbox" checked={heat} onChange={(event) => setHeat(event.currentTarget.checked)} />
+          灵气热力
+        </label>
+        <span className="text-[11px] text-slate-400">
+          {fog ? `${selected?.name ?? '无修士'}视角 · 已探索 ${mapView.known?.size ?? 0}/${world.terrain.tiles.length} 格 · 视野内 ${mapView.current?.size ?? 0} 格` : '天道全图 · 宗门色线为领地边界'}
+        </span>
+        {heat && <span className="text-[11px] text-slate-400">蓝色至橙红色表示灵气由低到高。</span>}
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-800 px-4 py-2 text-[11px] text-slate-300" aria-label="地图视角与画笔">
+        {([
+          { label: '缩小地图', text: '−', disabled: camera.zoom <= 1, command: 'out' },
+          { label: '放大地图', text: '+', disabled: camera.zoom >= MAX_ZOOM, command: 'in' },
+          { label: '向左浏览', text: '←', disabled: camera.x >= 0, command: 'left' },
+          { label: '向右浏览', text: '→', disabled: minViewport.x + MAP_WIDTH / camera.zoom >= MAP_WIDTH - 0.001, command: 'right' },
+          { label: '向上浏览', text: '↑', disabled: camera.y >= 0, command: 'up' },
+          { label: '向下浏览', text: '↓', disabled: minViewport.y + MAP_HEIGHT / camera.zoom >= MAP_HEIGHT - 0.001, command: 'down' },
+          { label: '重置地图视角', text: '重置', disabled: camera.zoom === 1, command: 'home' },
+        ] as const).map(({ label, text, disabled, command }) => (
+          <button key={label} type="button" aria-label={label} disabled={disabled} onClick={() => activateCamera(command)}
+            className="min-h-11 min-w-11 rounded border border-slate-700 px-2 py-1 text-slate-200 disabled:opacity-35">{text}</button>
+        ))}
+        <span className="px-1 tabular-nums">{Math.round(camera.zoom * 100)}%</span>
+        {compact && <button type="button" disabled={!toolsExpanded} aria-pressed={touchPan} onClick={() => { if (!toolsInteractive()) return; abandonGesture(); setTouchPan((enabled) => !enabled); }}
+          className={`min-h-11 rounded border px-2 sm:hidden ${touchPan ? 'border-sky-400 text-sky-100' : 'border-slate-700 text-slate-200'}`}>
+          {touchPan ? '拖图开启' : '拖图'}
+        </button>}
+        <label className="inline-flex min-h-11 items-center gap-1">
+          天道画笔
+          <select value={fog || !toolsExpanded ? 'browse' : brush} disabled={!toolsExpanded || fog || !onBrushStroke} onChange={(event) => {
+            if (!toolsInteractive()) return;
+            abandonGesture();
+            setBrush(event.currentTarget.value as GodBrushKind | 'browse');
+          }}
+            className="min-h-11 rounded border border-slate-700 bg-slate-900 px-1.5 py-1 disabled:opacity-40">
+            <option value="browse">浏览／选择</option>
+            {(Object.entries(BRUSH_LABELS) as [GodBrushKind, string][]).map(([kind, label]) => <option key={kind} value={kind}>{label}</option>)}
+          </select>
+        </label>
+        <span className="text-slate-400">
+          {fog ? '修士视野中不可使用天道画笔。' : armedBrush ? '单指松开才落笔；双指或中断会取消此笔。' : compact ? '双指缩放；单指上下滚动，选拖图后可单指平移。' : '滚轮或双指缩放，拖动平移，点击选择。'}
+        </span>
+      </div>
+      {additionalTools !== undefined && <div className="border-b border-slate-800 px-3 py-2">{additionalTools}</div>}
+      <details className="border-t border-slate-800/80 bg-slate-900/40" onToggle={(event) => setExplorerOpen(event.currentTarget.open)}>
+        <summary ref={(node) => { explorerSummary.current = node; }} className="flex min-h-11 cursor-pointer items-center px-3 text-xs font-semibold text-slate-300 focus-visible:outline focus-visible:outline-amber-300">山河索引</summary>
+        {explorerOpen && <React.Suspense fallback={<p className="px-3 pb-2 text-xs text-slate-300" role="status">载入山河索引…</p>}>
+          <MapKeyboardExplorer world={world} view={mapView} actorPositions={actorPositions} presentation={presentation}
+            selected={selectedPoint?.actor} follows={followsSelection} zoom={camera.zoom} onCamera={activateCamera}
+            onActor={(actor) => locateActor(actor.id)} onSite={focusSite}
+            onFollow={() => { abandonGesture(); setFollowsSelection((current) => !current); }}
+            onFocusLost={() => { if (explorerSummary.current?.getClientRects().length) explorerSummary.current.focus({ preventScroll: true }); }} />
+        </React.Suspense>}
+      </details>
+      {toolsExpanded && <>
       {(presentation.routes.size > 0 || presentation.effects.length > 0) && (
         <details className="border-t border-slate-800/80 bg-slate-900/40 px-4 py-2 text-[11px] text-slate-300">
-          <summary className="cursor-pointer">本月地图动态 · 移动 {presentation.routes.size} · 事件 {presentation.effects.length}</summary>
+          <summary className="flex min-h-11 cursor-pointer items-center">本月地图动态 · 移动 {presentation.routes.size} · 事件 {presentation.effects.length}</summary>
           <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto">
             {actorPositions.flatMap(({ actor }) => {
               const route = presentation.routes.get(actor.id);
@@ -1080,10 +1115,6 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           </li>)}
         </ul>
       </details>}
-      {pilgrimageMark && <p className="sr-only">所选修士的巡礼关口：第 {pilgrimageMark.row} 行，第 {pilgrimageMark.col} 列。</p>}
-      {campMarks.length > 0 && <p className="sr-only">已观测夜宿营地 {campMarks.length} 处，共 {campMarks.reduce((count, camp) => count + camp.parties, 0)} 队，不是新地点。</p>}
-      {extractionMarks.length > 0 && <p className="sr-only">当前看见 {extractionMarks.length} 处实际撤离关口；不是新地点，也未公开路线。</p>}
-      {boundaryMarks.length > 0 && <p className="sr-only">当前看见 {boundaryMarks.length} 处实际换防关口。尚在途中的候补不算驻守。</p>}
       {escortedCaravan && <div className="border-t border-slate-800/80 px-3 text-xs text-sky-200">
         <button type="button" className="min-h-11 text-left" onClick={() => commandCamera(focusMapPoint(cameraRef.current, escortedCaravan.marker))}>
           定位所选护镖车队 · 第 {escortedCaravan.row} 行，第 {escortedCaravan.col} 列
@@ -1099,7 +1130,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       </details>}
       {hazards.length > 0 && (
         <details className="border-t border-slate-800/80 bg-slate-900/40 px-4 py-2 text-[11px] text-slate-300">
-          <summary className="cursor-pointer">当前可见灾害 · {hazards.length} 处</summary>
+          <summary className="flex min-h-11 cursor-pointer items-center">当前可见灾害 · {hazards.length} 处</summary>
           <ul className="mt-2 max-h-28 overflow-y-auto space-y-1">
             {hazards.map(({ hazard, tile, label }) => (
               <li key={hazard.id}>第 {tile.row + 1} 行，第 {tile.col + 1} 列 · {label} · 强度 {hazard.intensity} · 至 Tick #{hazard.expiresTick}</li>
@@ -1108,7 +1139,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         </details>
       )}
       <details className="border-t border-slate-800/80 bg-slate-900/40 px-4 py-2 text-[11px] text-slate-300">
-        <summary className="cursor-pointer">{fog ? '查看已发现地点与当前所见' : '查看各地点灵脉属性'}</summary>
+        <summary className="flex min-h-11 cursor-pointer items-center">{fog ? '查看已发现地点与当前所见' : '查看各地点灵脉属性'}</summary>
         <div aria-label="地形图例" className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
           {Object.entries(BIOME_PALETTE).map(([name, { swatch }]) => (
             <span key={name} className="inline-flex items-center gap-1">
@@ -1230,6 +1261,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
             </ul>
           </div>
         )}
+      </details>
+      </>}
       </details>
     </div>
   );

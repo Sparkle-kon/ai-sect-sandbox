@@ -79,7 +79,7 @@ describe('escorted caravan roles, accounting, and known route', () => {
     expect(visibleMapEscort(world, { ...base, current: new Set([mark, remote]) }, guard)).toEqual(shown);
     expect(visibleMapEscort(world, base, observer)).toBeUndefined();
     expect(mapTransitActorIds(world).has(guard.id)).toBe(true);
-    const canvas = () => renderToStaticMarkup(<WorldMapCanvas compact world={world} selectedCultivatorId={guard.id} onSelectCultivator={() => undefined} />);
+    const canvas = () => renderToStaticMarkup(<WorldMapCanvas toolsOpen compact world={world} selectedCultivatorId={guard.id} onSelectCultivator={() => undefined} />);
     expect(canvas()).toContain('定位所选护镖车队');
     expect(visibleCheckpointRoute(world, { ...base, current: new Set([remote]) }, contract.path, contract.pathIndex)).toBeUndefined();
     contract.status = 'failed';

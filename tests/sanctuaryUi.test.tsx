@@ -69,7 +69,7 @@ describe('sanctuary scoped real rights and ward outcomes', () => {
     expect(panel()).toContain('护阵已耗尽，通行权不等于仍受护阵保护');
     expect(panel()).toContain('本人通行权：有效');
     expect(map(true).get(site.id)).toBe(0);
-    const visualAlternative = renderToStaticMarkup(<WorldMapCanvas world={world} selectedCultivatorId={viewer.id} onSelectCultivator={() => {}} compact />);
+    const visualAlternative = renderToStaticMarkup(<WorldMapCanvas toolsOpen world={world} selectedCultivatorId={viewer.id} onSelectCultivator={() => {}} compact />);
     expect(visualAlternative).toContain('本人通行权有效 · 护阵已耗尽');
     world.tick = pass.expiresTick;
     expect(panel()).not.toContain('本人有通行权');

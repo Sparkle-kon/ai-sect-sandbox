@@ -94,7 +94,7 @@ describe('relocation history and convoy map', () => {
     expect(renderToStaticMarkup(<App />)).not.toContain('山门迁移与旧址');
     expect(renderToStaticMarkup(<App initialWorkspace="sect" />)).toContain('山门迁移与旧址');
     const { world, viewer, active } = fixture();
-    const canvas = () => renderToStaticMarkup(<WorldMapCanvas compact world={world} selectedCultivatorId={viewer.id} onSelectCultivator={() => undefined} />);
+    const canvas = () => renderToStaticMarkup(<WorldMapCanvas toolsOpen compact world={world} selectedCultivatorId={viewer.id} onSelectCultivator={() => undefined} />);
     expect(canvas()).toContain('当前可见迁移车队 · 1 支');
     expect(canvas()).toMatch(/<button[^>]*>[^<]*迁移车队 · 第/);
     active.status = 'aborted';

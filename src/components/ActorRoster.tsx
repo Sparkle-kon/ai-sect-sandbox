@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import type { Cultivator, WorldState } from '../types/world';
 
 export type RosterStatus = 'all' | 'living' | 'fallen';
@@ -15,15 +15,18 @@ export function getActorRosterPage(world: WorldState, search: string, status: Ro
   return { actors: filtered.slice(page * ACTOR_PAGE_SIZE, (page + 1) * ACTOR_PAGE_SIZE), total: filtered.length, pages, page };
 }
 
-export function ActorRoster({ world, selected, onSelect }: { world: WorldState; selected?: Cultivator; onSelect: (id: string) => void }) {
+export function ActorRoster({ world, selected, onSelect, dismissOnSelect = false }: {
+  world: WorldState; selected?: Cultivator; onSelect: (id: string) => void; dismissOnSelect?: boolean;
+}) {
   const uid = useId();
+  const roster = useRef<HTMLDetailsElement>(null);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<RosterStatus>('all');
   const [cursor, setCursor] = useState(0);
   const { actors, total, pages, page } = getActorRosterPage(world, search, status, cursor);
   const entry = 'min-h-11 rounded border border-slate-700 bg-slate-950 px-2 text-sm text-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300';
   return (
-    <details className="min-w-0 rounded-lg border border-slate-800 bg-slate-900" aria-label="修士名册">
+    <details ref={roster} className="min-w-0 rounded-lg border border-slate-800 bg-slate-900" aria-label="修士名册">
       <summary className="min-h-11 cursor-pointer p-3 text-sm font-semibold text-slate-100">修士名册 · {world.cultivators.length} 位</summary>
       <div className="space-y-2 border-t border-slate-800 p-2.5 sm:p-3">
         <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
@@ -38,7 +41,11 @@ export function ActorRoster({ world, selected, onSelect }: { world: WorldState; 
         <p className="text-xs text-slate-400" role="status">匹配 {total} 位{total > 0 ? ` · 第 ${page + 1}/${pages} 页` : ''}</p>
         {actors.length > 0 && <ul className="grid grid-cols-2 gap-1.5">
           {actors.map((actor) => <li key={actor.id} className="min-w-0">
-            <button type="button" aria-pressed={selected?.id === actor.id} onClick={() => onSelect(actor.id)}
+            <button type="button" aria-pressed={selected?.id === actor.id} onClick={() => {
+              if (dismissOnSelect && selected?.id === actor.id) return;
+              if (dismissOnSelect && roster.current) roster.current.open = false;
+              onSelect(actor.id);
+            }}
               className={`${entry} w-full break-words py-1 text-left ${selected?.id === actor.id ? 'border-amber-500/60 text-amber-200' : ''}`}>
               {actor.name}<span className="block text-xs text-slate-400">{actor.alive ? `${actor.realm} ${actor.realmStage}层` : '已陨落'}</span>
             </button>

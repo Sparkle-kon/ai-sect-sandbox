@@ -75,7 +75,7 @@ describe('neutral commons shared-site UI', () => {
   it('shows accessible current visible commons marker only when neutral and active', () => {
     const { world, viewer, outsider, a, site, panel, marks } = fixture();
     expect(marks().has(site.id)).toBe(true);
-    const renderedMap = () => renderToStaticMarkup(<WorldMapCanvas world={world} selectedCultivatorId={viewer.id} onSelectCultivator={() => {}} compact />);
+    const renderedMap = () => renderToStaticMarkup(<WorldMapCanvas toolsOpen world={world} selectedCultivatorId={viewer.id} onSelectCultivator={() => {}} compact />);
     expect(renderedMap()).toContain('中立灵地共管中 · 外来者限采储备之外的余量');
     viewer.locationId = world.locations.find(({ id }) => id === 'loc-market')!.id;
     expect(marks().has(site.id)).toBe(false);
