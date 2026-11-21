@@ -381,7 +381,13 @@ export function computeHeuristicDecision(
       orders.find(({ workshopMove }) => workshopMove === 'accept') ??
       (mayCommission ? orders.find(({ workshopMove, workshopQuantity, workshopQualityFloor }) =>
         workshopMove === 'offer' && workshopQuantity === 1 && workshopQualityFloor === 'standard') : undefined);
-    if (work) return { ...work, chosenAction: 'WORKSHOP', innerMonologue: '各自应允，按工序实耗和实测质量交付，未用料退回。' };
+    if (work) {
+      const charteredConsent = work.workshopMove === 'accept' &&
+        workshopState.some((order) => order.id === work.targetWorkshopId && order.makerId === cultivator.id && order.institution);
+      return { ...work, chosenAction: 'WORKSHOP', innerMonologue: charteredConsent ?
+        '我自愿依旧章程接活；若该工坊实际撤并，已耗已付不重算，余资退原委托人。' :
+        '各自应允，按工序实耗和实测质量交付，未用料退回。' };
+    }
   }
   const mayOpenCommons = world.tick >= 30 && world.tick % 12 === 8;
   if (mayOpenCommons || world.sharedCommons.pacts.some((pact) => pact.status === 'offered' &&
@@ -1014,6 +1020,8 @@ export async function requestCultivatorLLMDecision(
   const probationOptions = availableProbationActions(cultivator, world);
   const exhibitOptions = availableRelicExhibitActions(cultivator, world);
   const workshopOptions = availableWorkshopActions(cultivator, world, true, requestTick);
+  const mayAcceptCharteredWorkshop = workshopOptions.some(({ workshopMove, targetWorkshopId }) => workshopMove === 'accept' &&
+    world.workshops.orders.some((order) => order.id === targetWorkshopId && order.makerId === cultivator.id && order.institution));
   const furnaceOptions = availableFurnaceReservationActions(cultivator, world, requestTick);
   const furnaceSafetyOptions = availableFurnaceSafetyActions(cultivator, world, requestTick)
     .map(({ action, furnaceSafetyMove, targetFurnaceSafetyId }) => ({ action, furnaceSafetyMove, targetFurnaceSafetyId }));
@@ -1081,7 +1089,8 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 驿路选项要求实地维修和真实资源；巡礼只有实际列出的付费路才可选，普通路线不另收路费：${JSON.stringify(roadOptions)}
 - 赎责见习必须复制已列动作；赈济另走真实 DELIVER_RELIEF，复籍不抹去原处分：${JSON.stringify(probationOptions)}
 - 古器陈列只能由真实双方当面应允；复制许可参数，不改写原件持有史：${JSON.stringify(exhibitOptions)}
-- 工坊委制只复制现有许可；须双方同意，按实际加工与质量交付：${JSON.stringify(workshopOptions)}
+- 工坊委制只复制现有许可；须双方同意，按实际加工与质量交付：${JSON.stringify(workshopOptions)}${mayAcceptCharteredWorkshop ?
+    '\n- 本人可接受的一份章程内委制：如这座旧工坊实际因迁宗撤并，实余资财退原委托人，已付或已耗不重算；新址不自动接约。这不是另一个行动。' : ''}
 - 地脉恢复只可使用现地列出的地格，按实付收费，永久伤痕不能用普通工作抹掉：${JSON.stringify(recoveryOptions)}
 - 共管不会改变地权；只复制实际列出的三方提议或对本宗邀请的选择：${JSON.stringify(commonsOptions)}
 - 公职退居和复出须本人同意，只复制所列动作；复出仅恢复任职资格：${JSON.stringify(serviceOptions)}
@@ -1341,8 +1350,9 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             item.workshopMove === parsed.workshopMove && item.targetWorkshopId === parsed.targetWorkshopId &&
             item.targetCultivatorId === parsed.targetCultivatorId && item.workshopTier === parsed.workshopTier &&
             item.workshopQuantity === parsed.workshopQuantity && item.workshopQualityFloor === parsed.workshopQualityFloor) : undefined;
-          if (chosenAction === 'WORKSHOP' && (!legalWorkshop || parsed.targetLocationId !== undefined ||
-              parsed.targetSectId !== undefined)) return undefined;
+          if (chosenAction === 'WORKSHOP' && (!legalWorkshop || Object.entries(parsed).some(([field, value]) =>
+            !['chosenAction', 'innerMonologue', 'spokenLine', 'workshopMove', 'targetWorkshopId', 'targetCultivatorId',
+              'workshopTier', 'workshopQuantity', 'workshopQualityFloor'].includes(field) && !(field === 'action' && value === 'WORKSHOP')))) return undefined;
           const legalRecovery = chosenAction === 'TERRAIN_RECOVERY' ?
             recoveryOptions.find((item) => item.targetTerrainTileId === parsed.targetTerrainTileId) : undefined;
           if (chosenAction === 'TERRAIN_RECOVERY' && (!legalRecovery || parsed.targetCultivatorId !== undefined ||

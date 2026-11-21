@@ -2138,7 +2138,7 @@ export type WorkshopQualityFloor = 'standard' | 'fine';
 export type WorkshopOutputGrade = 'failed' | WorkshopQualityFloor;
 export type WorkshopStatus = 'offered' | 'active' | 'completed' | 'cancelled' | 'declined' | 'expired';
 export type WorkshopCloseReason = 'patron_cancelled' | 'maker_cancelled' | 'offer_expired' |
-  'work_expired' | 'patron_unavailable' | 'maker_unavailable' | 'site_unavailable';
+  'work_expired' | 'patron_unavailable' | 'maker_unavailable' | 'site_unavailable' | 'institution_closed';
 
 export interface WorkshopWorkReceipt {
   tick: number;
@@ -2167,6 +2167,8 @@ export interface WorkshopOrder {
   deadlineTick?: number;
   settledTick?: number;
   closeReason?: WorkshopCloseReason;
+  institution?: {sectId:string;establishedTick:number;arrivalPlanId?:string};
+  disbandmentId?: string;
   escrowStones: number;
   escrowHerbs: number;
   refundedStones: number;
@@ -2174,6 +2176,33 @@ export interface WorkshopOrder {
   work: WorkshopWorkReceipt[];
 }
 export interface WorkshopState { orders: WorkshopOrder[]; nextId: number }
+
+export interface WorkshopDisbandReturn {
+  orderId: string;
+  patronId: string;
+  makerId: string;
+  acceptedTick: number;
+  tier: WorkshopTier;
+  quantity: 1 | 2;
+  workCount: number;
+  consumedStones: number;
+  consumedHerbs: number;
+  paidWages: number;
+  refundedStones: number;
+  refundedHerbs: number;
+}
+export interface WorkshopInstitutionClosure {
+  id: string;
+  planId: string;
+  abandonedSiteId: string;
+  sectId: string;
+  originId: string;
+  destinationId: string;
+  tick: number;
+  returns: WorkshopDisbandReturn[];
+  voidedOfferIds: string[];
+}
+export interface WorkshopDisbandmentState { closures: WorkshopInstitutionClosure[] }
 
 export type FurnaceUseKind = 'brew' | 'forge' | 'repair' | 'awaken' | 'workshop' | 'relic';
 export interface FurnaceReservation {
@@ -2532,6 +2561,7 @@ export interface WorldState {
   villageCensuses: VillageCensusesState;
   probation: ProbationState;
   workshops: WorkshopState;
+  workshopDisbandments: WorkshopDisbandmentState;
   furnaceReservations: FurnaceReservationState;
   furnaceSafety: FurnaceSafetyState;
   sparring: SparringState;

@@ -36,6 +36,12 @@ export function writeChronicleScene(fact: ChronicleSceneFact): ChronicleSceneTex
   if (fact.witnessScope === 'participants') return {title:'未公开的纪事',paragraph:''};
   const title = plain(fact.title);
   const text = plain(fact.description);
+  const closedHall = /^([^，。；\n]{1,70})的旧工坊章程随迁宗终止；([^，。；\n]{1,70})只承接山门，不承继原委托。$/.exec(text);
+  if(fact.category==='diplomacy' && title==='旧山门工坊停止承接' && closedHall) {
+    const [,oldSeat,newSeat]=closedHall;
+    return {title:`${oldSeat}的旧工坊散了`,
+      paragraph:`山门迁到${newSeat}，${oldSeat}的旧工坊章程却留在了过去。旧单不随山门转手，新址也没有接下这些委托。`};
+  }
   if (fact.category === 'heavenly' && title === '天道沙盒开启：风起陨仙墟' &&
     text === '仙历1001年春，上古陨仙墟灵气暴涨，太虚剑宗、血月魔宗、丹霞谷与天机阁修士纷纷出动，修仙界大幕拉开。') {
     return {title:'陨仙墟异动',paragraph:'那年春天，先有动静的是上古陨仙墟。墟中灵气骤盛，太虚剑宗、血月魔宗、丹霞谷和天机阁的修士纷纷动身。这一卷，便从陨仙墟写起。'};

@@ -10,8 +10,26 @@ const STATUS: Record<Order['status'], string> = {
 const CLOSE: Record<NonNullable<Order['closeReason']>, string> = {
   patron_cancelled: '委托方取消', maker_cancelled: '工匠取消', offer_expired: '邀约过期',
   work_expired: '工期已满', patron_unavailable: '委托方无法交接', maker_unavailable: '工匠无法继续', site_unavailable: '工坊地点已失效',
+  institution_closed: '原山门工坊章程终止',
 };
 const QUALITY = { failed: '未成品', standard: '合格', fine: '精良' } as const;
+
+function ClosureReceipt({ world, order, patron }: { world: WorldState; order: Order; patron: boolean }) {
+  const closure = world.workshopDisbandments.closures.find((row) => row.id === order.disbandmentId &&
+    row.originId === order.siteId && row.sectId === order.institution?.sectId && row.tick === order.settledTick && row.tick <= world.tick);
+  const returned = closure?.returns.find((row) => row.orderId === order.id && row.patronId === order.patronId &&
+    row.makerId === order.makerId && row.acceptedTick === order.acceptedTick && row.tier === order.tier && row.quantity === order.quantity &&
+    row.refundedStones === order.refundedStones && row.refundedHerbs === order.refundedHerbs);
+  const voided = order.acceptedTick === undefined && closure?.voidedOfferIds.includes(order.id);
+  return <div aria-label="旧工坊撤并凭据" className="space-y-1 rounded border border-slate-800 p-2">
+    <p>新山门不自动接续这份旧委托。</p>
+    {voided ? <p>未付款邀约已作废；没有托管或退款。</p> : returned ? <>
+      {patron ? <p className="text-emerald-200">已实退至本人：{returned.refundedStones} 灵石、玄土根 {returned.refundedHerbs} 株，仅退未耗余料。</p>
+        : <p>未耗余料退给原委托方，不归承制人。</p>}
+      <p>已实际完成的工序、已付工钱与已交割器物保留，不重复结算。</p>
+    </> : <p className="text-slate-400">目前没有可核验的本单撤并款物凭据。</p>}
+  </div>;
+}
 
 export function WorkshopPanel({ world, cultivator }: { world: WorldState; cultivator: Cultivator }) {
   const actor = world.cultivators.find(({ id }) => id === cultivator.id);
@@ -37,6 +55,8 @@ export function WorkshopPanel({ world, cultivator }: { world: WorldState; cultiv
             const delivered = receipts.filter(({ stage, artifactId }) => stage === 'finish' && artifactId !== undefined).length;
             const terms = workshopTerms(order.tier, order.quantity);
             const label = order.status === 'offered' && world.tick >= order.offerExpiresTick ? STATUS.expired : STATUS[order.status];
+            const institutionClosed = order.closeReason === 'institution_closed' && order.status === 'cancelled' &&
+              order.settledTick !== undefined && order.settledTick <= world.tick;
             return (
               <li key={order.id} className="min-w-0 space-y-1.5 break-words rounded border border-slate-800 p-2">
                 <h5 className="font-semibold text-indigo-100">{patron ? '本人委制' : '本人承制'} · {order.tier} ×{order.quantity} · {label}</h5>
@@ -49,8 +69,10 @@ export function WorkshopPanel({ world, cultivator }: { world: WorldState; cultiv
                   <p>工匠同意 Tick #{order.acceptedTick}{order.deadlineTick !== undefined && ` · 工期截止 Tick #${order.deadlineTick}`}</p>
                   <p>实际工序 {receipts.length}/{order.quantity * 2} · 已验质 {completedPieces}/{order.quantity} 件 · 实际交割 {delivered} 件</p>
                 </> : <p className="text-slate-400">没有已同意的承制记录，未开工。</p>}
-                <p>当前托管 {order.escrowStones} 灵石与玄土根 {order.escrowHerbs} 株 · 已实退 {order.refundedStones} 灵石与玄土根 {order.refundedHerbs} 株</p>
-                {order.closeReason && <p>结案：{CLOSE[order.closeReason]}{order.settledTick !== undefined && ` · Tick #${order.settledTick}`}</p>}
+                {order.closeReason !== 'institution_closed' && <p>当前托管 {order.escrowStones} 灵石与玄土根 {order.escrowHerbs} 株 · 已实退 {order.refundedStones} 灵石与玄土根 {order.refundedHerbs} 株</p>}
+                {order.closeReason && (order.closeReason !== 'institution_closed' || institutionClosed) &&
+                  <p>结案：{CLOSE[order.closeReason]}{order.settledTick !== undefined && ` · Tick #${order.settledTick}`}</p>}
+                {institutionClosed && <ClosureReceipt world={world} order={order} patron={patron} />}
                 {!order.closeReason && order.settledTick !== undefined && <p>已结算 Tick #{order.settledTick}</p>}
                 {!!receipts.length && <ol aria-label="逐件实际耗材与品质凭证" className="space-y-1.5 border-t border-slate-800 pt-2">
                   {receipts.map((receipt, index) => {

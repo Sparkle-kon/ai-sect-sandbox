@@ -1,6 +1,6 @@
 import type {
   CultivationRealm, Cultivator, LLMDecisionPayload, LocationNode, WorkshopCloseReason, WorkshopMove, WorkshopOrder,
-  WorkshopOutputGrade, WorkshopQualityFloor, WorkshopState, WorkshopTier, WorkshopWorkReceipt, WorldEvent, WorldState,
+  WorkshopInstitutionClosure, WorkshopOutputGrade, WorkshopQualityFloor, WorkshopState, WorkshopTier, WorkshopWorkReceipt, WorldEvent, WorldState,
 } from '../types/world';
 import { ARTIFACT_RULES } from './artifactEngine';
 import { canUseFurnace, claimFurnaceUse } from './furnaceReservationEngine';
@@ -14,6 +14,7 @@ import { isTribulationActive } from './tribulationEngine';
 export const WORKSHOP_OFFER_TICKS = 3;
 export const WORKSHOP_ACTIVE_TICKS = 7;
 export const WORKSHOP_TERMINAL_LIMIT = 24;
+export const WORKSHOP_DISBANDMENT_HISTORY_LIMIT = 64;
 export const WORKSHOP_MAX_WORK_RECEIPTS = 4;
 export const WORKSHOP_HERB = 'earth_root';
 export const WORKSHOP_CAPACITY = 12;
@@ -34,6 +35,7 @@ export interface WorkshopOption {
 }
 
 export const createWorkshopState = (): WorkshopState => ({ orders: [], nextId: 1 });
+export const createWorkshopDisbandmentState = (): WorldState['workshopDisbandments'] => ({ closures:[] });
 
 export function workshopTerms(tier: WorkshopTier, quantity: 1 | 2 = 1) {
   const base = ARTIFACT_RULES[tier].stones;
@@ -52,6 +54,20 @@ const active = (world: WorldState, order: WorkshopOrder) => order.status === 'ac
   (order.acceptedTick ?? Infinity) <= world.tick && world.tick < (order.deadlineTick ?? 0);
 const offered = (world: WorldState, order: WorkshopOrder) => order.status === 'offered' &&
   order.offeredTick <= world.tick && world.tick < order.offerExpiresTick;
+function institutionEpoch(world:WorldState,sectId:string,siteId:string,tick:number):NonNullable<WorkshopOrder['institution']> {
+  const prior=world.relocations.abandonedSites.filter(row=>row.sectId===sectId && row.destinationId===siteId && row.tick<=tick)
+    .reduce<(typeof world.relocations.abandonedSites)[number]|undefined>((best,row)=>!best || row.tick>best.tick ? row : best,undefined);
+  return prior ? {sectId,establishedTick:prior.tick,arrivalPlanId:prior.planId} : {sectId,establishedTick:0};
+}
+
+function institutionAtOffer(world:WorldState,siteId:string,makerId:string):WorkshopOrder['institution'] {
+  const site=at(world,siteId);
+  const title=site?.ownerSectId;
+  if(!title || site.type!=='sect_hq' || person(world,makerId)?.sectId!==title) return undefined;
+  const sect=world.sects.find(row=>row.id===title && row.headquartersId===siteId);
+  return sect && sect.facilities.alchemy_hall>0 ? institutionEpoch(world,title,siteId,world.tick) : undefined;
+}
+
 const qualityNames: Record<WorkshopOutputGrade, string> = { failed: '报废', standard: '标准', fine: '精品' };
 
 function availableAt(world: WorldState, actor: Cultivator | undefined, site: LocationNode | undefined): actor is Cultivator {
@@ -232,11 +248,13 @@ export function resolveWorkshopAction(world: WorldState, actor: Cultivator, payl
     option.workshopQuantity === payload.workshopQuantity && option.workshopQualityFloor === payload.workshopQualityFloor);
   if (!valid) return null;
   if (valid.workshopMove === 'offer') {
+    const institution=institutionAtOffer(world,actor.locationId,valid.targetCultivatorId!);
     const order: WorkshopOrder = {
       id: `commission-${world.workshops.nextId++}`, patronId: actor.id, makerId: valid.targetCultivatorId!, siteId: actor.locationId,
       tier: valid.workshopTier!, quantity: valid.workshopQuantity!, qualityFloor: valid.workshopQualityFloor!,
       status: 'offered', offeredTick: world.tick, offerExpiresTick: world.tick + WORKSHOP_OFFER_TICKS,
       escrowStones: 0, escrowHerbs: 0, refundedStones: 0, refundedHerbs: 0, work: [],
+      ...(institution ? {institution} : {}),
     };
     world.workshops.orders.push(order);
     return event(world, order, 'offer', '提出工坊委制', `拟制${order.quantity}件${order.tier}，约定${qualityNames[order.qualityFloor]}起收；尚未支出。`);
@@ -267,6 +285,63 @@ export function resolveWorkshopAction(world: WorldState, actor: Cultivator, payl
   }
   settle(world, order, 'cancelled', actor.id === order.patronId ? 'patron_cancelled' : 'maker_cancelled');
   return event(world, order, 'cancel', '工坊委制中止', `只退实余${order.refundedStones}灵石、${order.refundedHerbs}份玄土根；已耗用料不退。`);
+}
+
+/** Shutter one actual old charter, never a nearby or successor workshop and never an expired obligation. */
+export function advanceWorkshopInstitutionClosures(world:WorldState):WorldEvent[] {
+  const state=world.workshopDisbandments;
+  const events:WorldEvent[]=[];
+  for(const abandoned of world.relocations.abandonedSites) {
+    if(abandoned.tick!==world.tick || abandoned.originalType!=='sect_hq' || abandoned.facilities.alchemy_hall<1 ||
+      state.closures.some(row=>row.abandonedSiteId===abandoned.id)) continue;
+    const plan=world.relocations.plans.find(row=>row.id===abandoned.planId && row.status==='settled' &&
+      row.settledTick===abandoned.tick && row.sectId===abandoned.sectId && row.originId===abandoned.originId &&
+      row.destinationId===abandoned.destinationId);
+    if(!plan) continue;
+    const title=world.sects.find(sect=>sect.id===abandoned.sectId);
+    const origin=at(world,abandoned.originId);
+    const destination=at(world,abandoned.destinationId);
+    if(!origin || !destination || origin.ownerSectId===abandoned.sectId || title?.headquartersId!==destination.id ||
+      destination.ownerSectId!==abandoned.sectId) continue;
+    const epoch=institutionEpoch(world,abandoned.sectId,abandoned.originId,world.tick-1);
+    const closure:WorkshopInstitutionClosure={
+      id:`workshop-disband-${plan.id}`,planId:plan.id,abandonedSiteId:abandoned.id,
+      sectId:abandoned.sectId,originId:abandoned.originId,destinationId:abandoned.destinationId,tick:world.tick,
+      returns:[],voidedOfferIds:[],
+    };
+    for(const order of world.workshops.orders) {
+      if(order.siteId!==origin.id || order.institution?.sectId!==epoch.sectId ||
+        order.institution?.establishedTick!==epoch.establishedTick || order.institution?.arrivalPlanId!==epoch.arrivalPlanId ||
+        order.offeredTick>=world.tick || !alive(person(world,order.patronId)) || !alive(person(world,order.makerId))) continue;
+      const paid=active(world,order);
+      if(!paid && !offered(world,order)) continue;
+      if(!settle(world,order,'cancelled','institution_closed')) continue;
+      order.disbandmentId=closure.id;
+      if(paid && order.acceptedTick!==undefined) {
+        closure.returns.push({orderId:order.id,patronId:order.patronId,makerId:order.makerId,acceptedTick:order.acceptedTick,
+          tier:order.tier,quantity:order.quantity,workCount:order.work.length,
+          consumedStones:order.work.reduce((sum,work)=>sum+work.stonesUsed,0),
+          consumedHerbs:order.work.reduce((sum,work)=>sum+work.herbsUsed,0),
+          paidWages:order.work.reduce((sum,work)=>sum+(work.feePaid??0),0),
+          refundedStones:order.refundedStones,refundedHerbs:order.refundedHerbs});
+        events.push(event(world,order,'institution-return','旧山门工坊撤并，实退原委托余料',
+          `只退实余${order.refundedStones}灵石及${order.refundedHerbs}份玄土根；已履行工序、发放工钱与成品不重复结算。`));
+      } else {
+        closure.voidedOfferIds.push(order.id);
+        events.push(event(world,order,'institution-void','旧山门工坊撤并，未付款邀约撤销','未收取灵石或材料，无需退款。'));
+      }
+    }
+    state.closures.push(closure);
+    events.push({id:`evt-${closure.id}`,tick:world.tick,year:world.year,month:world.month,category:'diplomacy',
+      title:'旧山门工坊停止承接',description:`${origin.name}的旧工坊章程随迁宗终止；${destination.name}只承接山门，不承继原委托。`,
+      actorIds:[],locationId:origin.id});
+  }
+  if(state.closures.length>WORKSHOP_DISBANDMENT_HISTORY_LIMIT) {
+    const keep=new Set(state.closures.slice(-WORKSHOP_DISBANDMENT_HISTORY_LIMIT).map(row=>row.id));
+    for(const order of world.workshops.orders) if(order.disbandmentId) keep.add(order.disbandmentId);
+    state.closures=state.closures.filter(row=>keep.has(row.id));
+  }
+  return events;
 }
 
 export function advanceWorkshops(world: WorldState): WorldEvent[] {

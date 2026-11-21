@@ -39,6 +39,10 @@ import { resolveChronicleFocus } from '../engine/chronicleFocusEngine';
 import { availableFurnaceSlotSummary } from '../engine/furnaceReservationEngine';
 import { getCurrentBoundaryCoverage } from '../engine/boundaryReliefEngine';
 import { currentVisibleTileIds, terrainTileAt } from '../engine/terrainEngine';
+import { courierCheckpoint } from '../engine/sealedCourierEngine';
+import { pilgrimageCheckpoint } from '../engine/pilgrimageEngine';
+import { expeditionRescueCheckpoint } from '../engine/expeditionRescueCheckpoint';
+import { boundaryReliefCheckpoint } from '../engine/boundaryReliefCheckpoint';
 import { projectVillageGranary } from '../engine/villageGranaryEngine';
 import { projectHouseholdNames } from '../engine/householdNameEngine';
 import type { ChronicleFocusRequest } from '../engine/chronicleFocusEngine';
@@ -186,6 +190,13 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       .map(({ siteId }) => siteId));
   }, [world, selected]);
   const { seenLocations, isCurrentLocation } = mapView;
+  const locallyObservedWorkshopClosure = useMemo(() => {
+    if (!selected?.alive || selected.hp <= 0 || !isCurrentLocation(selected.locationId) ||
+      mapTransitActorIds(world).has(selected.id) || courierCheckpoint(world,selected) || pilgrimageCheckpoint(world,selected) ||
+      expeditionRescueCheckpoint(world,selected) || boundaryReliefCheckpoint(world,selected)) return undefined;
+    return world.workshopDisbandments.closures.filter(({ originId, tick }) =>
+      originId === selected.locationId && tick <= world.tick).at(-1);
+  }, [world, selected, isCurrentLocation]);
   const liveActors = useMemo(() => {
     const travellers = mapTransitActorIds(world);
     return travellers.size ? mapView.liveActors.filter(({ id }) => !travellers.has(id)) : mapView.liveActors;
@@ -1230,6 +1241,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                 {fog && (visibleActorsAtSite.get(location.id) ?? 0) > 0 &&
                   <span className="text-slate-300">· 可见修士 {visibleActorsAtSite.get(location.id)} 位（山河索引可查）</span>}
                 {location.furnaceGrade > 0 && <span className="text-emerald-300">· {location.furnaceGrade} 阶丹炉</span>}
+                {location.id === locallyObservedWorkshopClosure?.originId &&
+                  <span className="text-amber-200">· 此处旧工坊曾撤并，旧委托未转址</span>}
                 {location.id === ownPracticeSite && isCurrentLocation(location.id) &&
                   <span className="text-sky-200">· 本人已约定自愿切磋</span>}
                 {location.id === ownShift?.siteId && location.ownerSectId === ownShift.hostSectId && isCurrentLocation(location.id) &&

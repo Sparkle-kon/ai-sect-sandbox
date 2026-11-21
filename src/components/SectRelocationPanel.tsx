@@ -32,6 +32,11 @@ export function SectRelocationPanel({ world, cultivator }: { world: WorldState; 
           const votes = [...new Map(plan.votes.filter(({ actorId, tick }) => voters.has(actorId) && tick <= world.tick)
             .sort((a, b) => a.tick - b.tick).map((item) => [item.actorId, item])).values()];
           const approvals = votes.filter((item) => item.approve).length;
+          const former = plan.status === 'settled' && oldSites.find((old) => old.planId === plan.id && old.sectId === plan.sectId &&
+            old.originId === plan.originId && old.destinationId === plan.destinationId && old.tick === plan.settledTick);
+          const workshopClosed = former && world.workshopDisbandments.closures.some((closure) =>
+            closure.planId === plan.id && closure.abandonedSiteId === former.id && closure.sectId === plan.sectId &&
+            closure.originId === former.originId && closure.destinationId === former.destinationId && closure.tick === former.tick);
           return (
             <details key={plan.id} className="min-w-0 rounded border border-slate-800 bg-slate-950/60">
               <summary className="min-h-11 cursor-pointer break-words px-3 py-2 text-xs font-semibold text-slate-100">
@@ -53,6 +58,7 @@ export function SectRelocationPanel({ world, cultivator }: { world: WorldState; 
                 </>}
                 {plan.garrisonIds.length > 0 && <p className="break-words">启程名册（非到达确认）：{plan.garrisonIds.map(person).join('、')}</p>}
                 {plan.status === 'settled' && <p className="text-emerald-200">迁移已交割，托管财库与功法并入新址，不再计作在途资产。</p>}
+                {workshopClosed && <p className="text-amber-200">旧址工坊章程随迁移终止。新址只接续山门，不接续旧委托，也不表示已开设新工坊。</p>}
               </div>
             </details>
           );

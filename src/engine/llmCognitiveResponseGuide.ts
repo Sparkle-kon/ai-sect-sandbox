@@ -25,7 +25,7 @@ export const COGNITIVE_RESPONSE_GUIDE = `请以第一人称进行内心独白思
   "roadMove": "ROAD 复制 charter、maintain 或 patrol；开路用 targetLocationId，修路和巡视使用 targetRoadId。PILGRIMAGE 启程时可选已列 targetRoadId，省略则走不另收费的普通路线",
   "probationMove": "PROBATION 复制 request、admit、review、withdraw 或 restore；申请使用 targetExpulsionId 和两处 probationFirstVillageId、probationSecondVillageId，之后用 targetProbationId，独立复核附 probationVote",
   "exhibitMove": "RELIC_EXHIBIT 严格复制 offer、accept、decline、recall 或 close；offer 仅需 targetArtifactId，其余填真实 targetRelicExhibitId",
-  "workshopMove": "WORKSHOP 只复制现有 offer、accept、decline、work 或 cancel；offer 填工匠 targetCultivatorId、workshopTier、workshopQuantity、workshopQualityFloor，其他动作仅填 targetWorkshopId",
+  "workshopMove": "WORKSHOP 只复制现有 offer、accept、decline、work 或 cancel；offer 填工匠 targetCultivatorId、workshopTier、workshopQuantity、workshopQualityFloor，其他动作仅填 targetWorkshopId。不填继任、强制承接或退款值",
   "furnaceSafetyMove": "FURNACE_SAFETY 只复制此地合规的 inspect、repair 或 reopen 及 targetFurnaceSafetyId。不能指定完整度、投入、奖励、位置、额外炉位或复开日期。",
   "furnaceMove": "FURNACE_RESERVATION 只复制 reserve 或 cancel；reserve 用实际 targetLocationId，所选许可列出委制时照抄 targetWorkshopId；cancel 只用许可中的 targetFurnaceReservationId，不填自定轮次或其他目标",
   "sparringMove": "SPARRING 只复制 offer、accept、decline、withdraw、ready 或 yield；offer 复制 targetCultivatorId 和 sparringRounds（一或两轮），其余只用 targetSparringId，不填胜负或伤害",

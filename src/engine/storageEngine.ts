@@ -5,6 +5,7 @@ import { createVillageCensusesState, VILLAGE_CENSUS_PERIOD_LIMIT } from './villa
 import { createRoadState, ROAD_CONDITION_MAX, ROAD_FARE, ROAD_PAID_STRIDE, ROAD_PATH_POINT_LIMIT, ROAD_PATH_TILE_LIMIT } from './roadEngine';
 import { createProbationState, PROBATION_REQUEST_TICKS, PROBATION_REQUIRED_RELIEF, PROBATION_REQUIRED_REVIEWS, PROBATION_SERVICE_TICKS } from './probationEngine';
 import { createRelicExhibitState, RELIC_EXHIBIT_DURATION, RELIC_EXHIBIT_OFFER_TICKS } from './relicExhibitEngine';
+import { validateWorkshopInstitutionHistory } from './storageWorkshopValidation';
 import { WORKSHOP_ACTIVE_TICKS, WORKSHOP_MAX_WORK_RECEIPTS, WORKSHOP_OFFER_TICKS, createWorkshopState, workshopGradeForScore, workshopTerms } from './workshopEngine';
 import { createFurnaceSafetyState } from './furnaceSafetyEngine';
 import { createFurnaceReservationState, FURNACE_QUEUE_TICKS, FURNACE_TERMINAL_LIMIT, FURNACE_USE_RETENTION_TICKS } from './furnaceReservationEngine';
@@ -363,12 +364,19 @@ const shape = structure({
     id,patronId:id,makerId:id,siteId:id,tier:one('法器','灵器'),quantity:one(1,2),qualityFloor:one('standard','fine'),
     status:one('offered','active','completed','cancelled','declined','expired'),
     offeredTick:tick,offerExpiresTick:tick,acceptedTick:otick,deadlineTick:otick,settledTick:otick,
-    closeReason:optional(one('patron_cancelled','maker_cancelled','offer_expired','work_expired',
-      'patron_unavailable','maker_unavailable','site_unavailable')),
+    closeReason:optional(one('patron_cancelled','maker_cancelled','offer_expired','work_expired','patron_unavailable','maker_unavailable','site_unavailable','institution_closed')),
+    institution:optional(structure({sectId:id,establishedTick:tick,arrivalPlanId:oid})),disbandmentId:oid,
     escrowStones:count,escrowHerbs:count,refundedStones:count,refundedHerbs:count,
     work:arr(WORKSHOP_MAX_WORK_RECEIPTS,structure({tick,makerId:id,piece:one(1,2),stage:one('blank','finish'),
       stonesUsed:count,herbsUsed:count,quality:optional(one('failed','standard','fine')),
       qualityScore:optional(num(0,100,true)),artifactId:oid,feePaid:optional(count)}))
+  }))}),
+  workshopDisbandments:structure({closures:arr(88,structure({
+    id,planId:id,abandonedSiteId:id,sectId:id,originId:id,destinationId:id,tick,
+    returns:arr(SAVE_COLLECTION_LIMIT,structure({orderId:id,patronId:id,makerId:id,acceptedTick:tick,
+      tier:one('法器','灵器'),quantity:one(1,2),workCount:num(0,WORKSHOP_MAX_WORK_RECEIPTS-1,true),
+      consumedStones:count,consumedHerbs:count,paidWages:count,refundedStones:count,refundedHerbs:count})),
+    voidedOfferIds:arr(SAVE_COLLECTION_LIMIT,id),
   }))}),
   furnaceReservations:structure({nextId:num(1,Number.MAX_SAFE_INTEGER,true),reservations:arr(SAVE_COLLECTION_LIMIT,structure({
     id,actorId:id,siteId:id,workshopOrderId:oid,requestedTick:tick,expiresTick:tick,
@@ -703,6 +711,7 @@ function verifyWorld(value: unknown): WorldState {
       ...(!Object.hasOwn(value, 'roads') ? { roads: createRoadState() } : {}),
       ...(!Object.hasOwn(value, 'probation') ? { probation: createProbationState() } : {}),
       ...(!Object.hasOwn(value, 'relicExhibits') ? { relicExhibits: createRelicExhibitState() } : {}),
+      ...(!Object.hasOwn(value, 'workshopDisbandments') ? { workshopDisbandments: {closures:[]} } : {}),
       ...(!Object.hasOwn(value, 'workshops') ? { workshops: createWorkshopState() } : {}),
       ...(!Object.hasOwn(value, 'furnaceSafety') ? { furnaceSafety: createFurnaceSafetyState() } : {}),
       ...(!Object.hasOwn(value, 'furnaceReservations') ? { furnaceReservations: createFurnaceReservationState() } : {}),
@@ -1123,6 +1132,7 @@ function verifyWorld(value: unknown): WorldState {
         order.escrowHerbs + order.refundedHerbs + usedHerbs !== (accepted === undefined ? 0 : terms.totalHerbs))
       fail('workshops.orders.custody');
   }
+  validateWorkshopInstitutionHistory(w, actor, sector, locations, fail);
   const furnace = w.furnaceReservations;
   unique(furnace.reservations, ({ id }) => id, 'furnaceReservations.reservations.id');
   unique(furnace.uses, ({ siteId, tick, slot }) => JSON.stringify([siteId, tick, slot]), 'furnaceReservations.uses.siteTurn');

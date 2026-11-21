@@ -301,6 +301,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     resourceFlow: createResourceFlowState(),
     terrainSuccession: createTerrainSuccessionState(),
     workshops: createWorkshopState(),
+    workshopDisbandments: {closures:[]},
     furnaceReservations: createFurnaceReservationState(),
     furnaceSafety: createFurnaceSafetyState(),
     sparring: createSparringState(),
