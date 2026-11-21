@@ -21,6 +21,8 @@ import { ChronicleFeed } from './components/ChronicleFeed';
 import { BountyBoard } from './components/BountyBoard';
 import { SectCouncilModal } from './components/SectCouncilModal';
 import { ChronicleLibraryPanel } from './components/ChronicleLibraryPanel';
+import { LlmTelemetryPanel } from './components/LlmTelemetryPanel';
+import { llmScheduler } from './engine/llmScheduler';
 import { settleChronicleOnline } from './engine/chronicleRuntime';
 import { availableCouncilPlans } from './engine/councilEngine';
 import { commitCouncilSnapshot, settleAnnualCouncilOnline, settleCouncilSnapshot } from './engine/councilRuntime';
@@ -28,6 +30,13 @@ import type { CouncilPlan } from './types/world';
 
 export const App: React.FC = () => {
   const [world, setWorld] = useState<WorldState>(() => createInitialWorld());
+  const authority = useRef(world);
+  const updateWorld = useCallback((change: (current: WorldState) => WorldState) => {
+    const next = change(authority.current);
+    authority.current = next;
+    setWorld(next);
+    return next;
+  }, []);
   const [selectedCultivatorId, setSelectedCultivatorId] = useState<
     string | null
   >('npc-1');
@@ -49,31 +58,57 @@ export const App: React.FC = () => {
     stepInFlight.current = true;
     setIsStepping(true);
     try {
+      const starting = authority.current;
       if (llmConfig.enabled && llmConfig.apiKey.trim()) {
-        const alive = world.cultivators.filter((c) => c.alive && !activeSiegeForActor(world, c) && !activeOccasionForActor(world, c));
+        llmScheduler.beginTick(starting.tick + 1);
+        const alive = starting.cultivators.filter((c) => c.alive && !activeSiegeForActor(starting, c) && !activeOccasionForActor(starting, c));
+        const modelActors = new Set<string>();
         const results = await Promise.all(
           alive.map(async (c) => {
-            const dec = await queryCultivatorLLMDecision(c, world, llmConfig);
+            const dec = await queryCultivatorLLMDecision(c, starting, llmConfig, (source) => {
+              if (source === 'llm') modelActors.add(c.id);
+              else llmScheduler.markDecision('local_fallback');
+            }, starting.tick + 1);
             return [c.id, dec] as const;
           })
         );
+        llmScheduler.markDecision('validated', modelActors.size);
+        if (authority.current !== starting) {
+          llmScheduler.markDecision('stale', modelActors.size);
+          return;
+        }
         const decisions: Record<string, LLMDecisionPayload> = Object.fromEntries(results);
-        const tick = advanceWorldTick(world, decisions, undefined, 'deferred');
+        const applied = new Set<string>();
+        const tick = advanceWorldTick(starting, decisions, undefined, 'deferred', (id, effective) => {
+          if (effective && modelActors.has(id)) applied.add(id);
+        });
         const [reflected, dramatized] = await Promise.all([
           enrichAnnualReflections(tick, llmConfig), enrichTickDialogues(tick, llmConfig),
         ]);
+        if (authority.current !== starting) {
+          llmScheduler.markDecision('stale', modelActors.size);
+          return;
+        }
         const withCouncil = await settleAnnualCouncilOnline({ ...reflected, events: dramatized.events }, llmConfig);
+        if (authority.current !== starting) {
+          llmScheduler.markDecision('stale', modelActors.size);
+          return;
+        }
         const next = await settleChronicleOnline(withCouncil, llmConfig);
-        // A reset or divine intervention during the request invalidates its snapshot.
-        setWorld((prev) => commitCouncilSnapshot(prev, world, next));
+        if (updateWorld((current) => commitCouncilSnapshot(current, starting, next)) === next) {
+          llmScheduler.markDecision('applied', applied.size);
+          llmScheduler.markDecision('simulation_rejected', modelActors.size - applied.size);
+        } else {
+          llmScheduler.markDecision('stale', modelActors.size);
+        }
       } else {
-        setWorld((prev) => advanceWorldTick(prev));
+        updateWorld((prev) => advanceWorldTick(prev));
       }
     } finally {
       stepInFlight.current = false;
       setIsStepping(false);
     }
-  }, [llmConfig, world]);
+  }, [llmConfig, updateWorld]);
 
   useEffect(() => {
     if (!isRunning) return;
@@ -84,30 +119,33 @@ export const App: React.FC = () => {
   }, [isRunning, tickIntervalMs, handleStepTick]);
 
   const handleConveneCouncil = useCallback(async (plan: CouncilPlan) => {
-    if (stepInFlight.current || !availableCouncilPlans(world, plan.sectId).some((item) => item.id === plan.id)) return;
+    const starting = authority.current;
+    if (stepInFlight.current || !availableCouncilPlans(starting, plan.sectId).some((item) => item.id === plan.id)) return;
     stepInFlight.current = true;
     setIsStepping(true);
     setLastManualCouncilId(plan.id);
     try {
-      const next = await settleCouncilSnapshot(world, plan, llmConfig);
-      setWorld((previous) => commitCouncilSnapshot(previous, world, next));
+      llmScheduler.beginTick(starting.tick);
+      const next = await settleCouncilSnapshot(starting, plan, llmConfig);
+      updateWorld((previous) => commitCouncilSnapshot(previous, starting, next));
     } finally {
       stepInFlight.current = false;
       setIsStepping(false);
     }
-  }, [world, llmConfig]);
+  }, [llmConfig, updateWorld]);
 
   const handleGodIntervene = (cmd: GodInterventionCommand) => {
-    setWorld((prev) => executeGodIntervention(prev, cmd));
+    updateWorld((prev) => executeGodIntervention(prev, cmd));
   };
 
   const handleBrushStroke = (kind: GodBrushKind, points: MapPoint[]) => {
-    setWorld((previous) => applyMapBrush(previous, kind, points));
+    updateWorld((previous) => applyMapBrush(previous, kind, points));
   };
 
   const handleReset = () => {
     setIsRunning(false);
-    setWorld(createInitialWorld());
+    updateWorld(() => createInitialWorld());
+    llmScheduler.resetTickBudget();
     setSelectedCultivatorId('npc-1');
     setLastManualCouncilId(undefined);
   };
@@ -132,14 +170,15 @@ export const App: React.FC = () => {
             </h1>
             <p className="text-xs text-slate-400">
               仙历 {world.year}年{world.month}月 (Tick #{world.tick}) · 存活修士{' '}
-              {aliveCount}/{world.cultivators.length} ·{' '}
-              {llmConfig.enabled ? 'LLM 思维链驱动中' : '启发式规则脑驱动中'}
+              {aliveCount}/{world.cultivators.length}
             </p>
           </div>
         </div>
 
         {/* Simulation Controls */}
         <div className="flex flex-wrap items-center gap-2">
+          <LlmTelemetryPanel scheduler={llmScheduler} configured={llmConfig.enabled}
+            hasCredential={Boolean(llmConfig.apiKey.trim())} model={llmConfig.model || 'gpt-4o-mini'} />
           <button
             type="button"
             onClick={() => setCouncilOpen(true)}

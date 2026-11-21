@@ -521,7 +521,8 @@ export function advanceWorldTick(
   prevState: WorldState,
   precomputedDecisions?: Record<string, LLMDecisionPayload>,
   rng: () => number = Math.random,
-  councilMode: 'utility' | 'deferred' = 'utility'
+  councilMode: 'utility' | 'deferred' = 'utility',
+  recordDecisionEffect?: (actorId: string, applied: boolean) => void
 ): WorldState {
   const nextState: WorldState = structuredClone(prevState);
   nextState.tick += 1;
@@ -581,7 +582,14 @@ export function advanceWorldTick(
       precomputedDecisions?.[cultivator.id] ??
       computeHeuristicDecision(cultivator, nextState, rng);
 
+    const previousLocation = cultivator.locationId;
     const evt = applyCultivatorBrainDecision(nextState, cultivator, decision, rng);
+    if (recordDecisionEffect && precomputedDecisions?.[cultivator.id]) {
+      const validEffect = decision.chosenAction === cultivator.currentAction && (evt !== null ||
+        decision.chosenAction === 'REST' || decision.chosenAction === 'CULTIVATE' ||
+        (decision.chosenAction === 'EXPLORE' && previousLocation !== cultivator.locationId));
+      recordDecisionEffect(cultivator.id, validEffect);
+    }
     creditSectService(nextState, cultivator, evt);
     if (evt) {
       newEvents.push(evt);

@@ -1,3 +1,4 @@
+import { llmScheduler } from './llmScheduler';
 import type {
   Cultivator, CultivatorReflection, LLMConfig, MemoryEntry, ReflectionKind, ReflectionTheme, WorldState,
 } from '../types/world';
@@ -95,7 +96,7 @@ export async function enrichAnnualReflections(world: WorldState, config: LLMConf
       }),
     }));
     try {
-      const response = await fetch(endpoint, {
+      const result = await llmScheduler.requestJson<CultivatorReflection[]>('reflection', endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.apiKey.trim()}` },
         signal: AbortSignal.timeout(6000),
@@ -106,16 +107,19 @@ export async function enrichAnnualReflections(world: WorldState, config: LLMConf
             { role: 'user', content: JSON.stringify({ personality: cultivator.personality, realm: cultivator.realm, observations }) },
           ],
           temperature: 0.4,
+          max_tokens: 550,
+          response_format: { type: 'json_object' },
         }),
-      });
-      if (!response.ok) return cultivator;
-      const data: unknown = await response.json();
-      if (!isRecord(data) || !Array.isArray(data.choices)) return cultivator;
-      const first: unknown = data.choices[0];
-      if (!isRecord(first) || !isRecord(first.message) || typeof first.message.content !== 'string') return cultivator;
-      const text = first.message.content.trim().replace(/^(?:```(?:json)?\s*)|(?:```$)/gi, '').trim();
-      const payload: unknown = JSON.parse(text);
-      return { ...cultivator, reflections: applyReflectionLanguage(cultivator.reflections, world.tick, payload) };
+      }, { tick: world.tick, model: config.model || 'gpt-4o-mini', decode: (data) => {
+        if (!isRecord(data) || !Array.isArray(data.choices)) return undefined;
+        const first: unknown = data.choices[0];
+        if (!isRecord(first) || !isRecord(first.message) || typeof first.message.content !== 'string') return undefined;
+        const text = first.message.content.trim().replace(/^(?:```(?:json)?\s*)|(?:```$)/gi, '').trim();
+        const payload: unknown = JSON.parse(text);
+        const decoded = applyReflectionLanguage(cultivator.reflections, world.tick, payload);
+        return decoded.some((entry, index) => entry !== cultivator.reflections[index]) ? decoded : undefined;
+      } });
+      return result.status === 'ok' ? { ...cultivator, reflections: result.data } : cultivator;
     } catch {
       return cultivator;
     }

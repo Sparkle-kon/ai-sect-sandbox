@@ -49,7 +49,7 @@ export const GodConsole: React.FC<GodConsoleProps> = ({
           }`}
         >
           <Cpu className="w-3.5 h-3.5" />
-          {llmConfig.enabled ? 'LLM 真脑已开启' : '配置 LLM API'}
+          {llmConfig.enabled ? (llmConfig.apiKey.trim() ? 'LLM 已配置' : 'LLM 缺少密钥') : '配置 LLM API'}
         </button>
       </div>
 

@@ -1,3 +1,4 @@
+import { llmScheduler } from './llmScheduler';
 import { memoryStrength, recallMemories } from './memoryEngine';
 import { knownRumorLead } from './rumorEngine';
 import { isSchemeKind, schemeOptions, utilityScheme } from './schemeEngine';
@@ -278,11 +279,15 @@ export function computeHeuristicDecision(
 export async function queryCultivatorLLMDecision(
   cultivator: Cultivator,
   world: WorldState,
-  config: LLMConfig
+  config: LLMConfig,
+  onSource?: (source: 'llm' | 'utility') => void,
+  requestTick = world.tick,
 ): Promise<LLMDecisionPayload> {
-  if (!config.enabled || !config.apiKey.trim()) {
+  const fallback = () => {
+    onSource?.('utility');
     return computeHeuristicDecision(cultivator, world);
-  }
+  };
+  if (!config.enabled || !config.apiKey.trim()) return fallback();
 
   const location = world.locations.find((l) => l.id === cultivator.locationId);
   const coLocated = world.cultivators.filter(
@@ -357,7 +362,7 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
 
   try {
     const endpoint = `${config.apiBaseUrl.replace(/\/+$/, '')}/chat/completions`;
-    const response = await fetch(endpoint, {
+    const result = await llmScheduler.requestJson<LLMDecisionPayload>('decision', endpoint, {
       method: 'POST',
       signal: AbortSignal.timeout(8000),
       headers: {
@@ -375,140 +380,137 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
           { role: 'user', content: prompt },
         ],
         temperature: 0.8,
+        max_tokens: 450,
+        response_format: { type: 'json_object' },
       }),
-    });
+    }, { tick: requestTick, model: config.model || 'gpt-4o-mini', decode: (value) => {
+          const data = value as { choices?: Array<{ message?: { content?: string } }> };
+          const rawText = data.choices?.[0]?.message?.content?.trim() ?? '';
+          const cleaned = rawText
+            .replace(/^```json\s*/i, '')
+            .replace(/```$/i, '')
+            .trim();
+          const parsed = JSON.parse(cleaned) as Partial<LLMDecisionPayload>;
 
-    if (!response.ok) {
-      return computeHeuristicDecision(cultivator, world);
-    }
+          const validActions: ActionType[] = [
+            'CULTIVATE',
+            'BREAKTHROUGH',
+            'EXPLORE',
+            'SOCIALIZE',
+            'DUEL',
+            'SCHEMING',
+            'PURSUE_SCHEME',
+            'AUTHOR_TECHNIQUE',
+            'STUDY_TECHNIQUE',
+            'GATHER_HERBS',
+            'BREW_PILL',
+            'USE_PILL',
+            'FORGE_ARTIFACT',
+            'BIND_ARTIFACT',
+            'REPAIR_ARTIFACT',
+            'AWAKEN_ARTIFACT',
+            'FACE_TRIBULATION',
+            'AMBUSH_TRIBULATION',
+            'CHALLENGE_LEADERSHIP',
+            'PLOT_COUP',
+            'BUILD_FACILITY',
+            'DISPATCH_GUARD',
+            'GUARD_DUTY',
+            'OFFER_ALLIANCE',
+            'DECLARE_WAR',
+            'DEMAND_TRIBUTE',
+            'LAUNCH_SIEGE',
+            'JOIN_OCCASION',
+            'PURSUE_BOUNTY',
+            'TAME_BEAST',
+            'TRADE',
+            'DUAL_CULTIVATE',
+            'SECT_DIPLOMACY',
+            'REST',
+          ];
+          const chosenAction = parsed?.chosenAction;
+          if (!chosenAction || !validActions.includes(chosenAction)) return undefined;
 
-    const data = (await response.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
-    };
-    const rawText = data.choices?.[0]?.message?.content?.trim() ?? '';
-    const cleaned = rawText
-      .replace(/^```json\s*/i, '')
-      .replace(/```$/i, '')
-      .trim();
-    const parsed = JSON.parse(cleaned) as Partial<LLMDecisionPayload>;
+          const currentlyFacing = isTribulationActive(cultivator);
+          const stance = parsed.tribulationStance;
+          const validStance = stance === 'guard' || stance === 'focus' || stance === 'defy';
+          if (currentlyFacing && (chosenAction !== 'FACE_TRIBULATION' || !validStance)) return undefined;
+          if (!currentlyFacing && chosenAction === 'FACE_TRIBULATION') return undefined;
+          if (chosenAction === 'AMBUSH_TRIBULATION' &&
+              !availableAmbushTargets(cultivator, world).some((target) => target.id === parsed.targetCultivatorId)) {
+            return undefined;
+          }
+          if (chosenAction === 'EXPLORE' && parsed.targetLocationId !== undefined &&
+              !knownLocations.some((item) => item.id === parsed.targetLocationId) && parsed.targetLocationId !== unverifiedTrail) return undefined;
+          if ((chosenAction === 'CHALLENGE_LEADERSHIP' || chosenAction === 'PLOT_COUP') &&
+              !availableLeadershipActions(cultivator, world).some((option) => option.action === chosenAction && option.targetCultivatorId === parsed.targetCultivatorId)) {
+            return undefined;
+          }
+          const legalBeast = chosenAction === 'TAME_BEAST' ? availableBeastTames(cultivator, world).find((item) => item.targetBeastId === parsed.targetBeastId) : undefined;
+          if (chosenAction === 'TAME_BEAST' && !legalBeast) return undefined;
+          const legalHunt = chosenAction === 'PURSUE_BOUNTY' ? availableBountyHunts(cultivator, world).find((item) => item.targetBountyId === parsed.targetBountyId) : undefined;
+          if (chosenAction === 'PURSUE_BOUNTY' && !legalHunt) return undefined;
+          const legalOccasion = chosenAction === 'JOIN_OCCASION' ? availableOccasionJoins(cultivator, world).find((item) => item.targetOccasionId === parsed.targetOccasionId) : undefined;
+          if (chosenAction === 'JOIN_OCCASION' && !legalOccasion) return undefined;
+          const foreign = chosenAction === 'OFFER_ALLIANCE' || chosenAction === 'DECLARE_WAR' || chosenAction === 'DEMAND_TRIBUTE' || chosenAction === 'LAUNCH_SIEGE';
+          const legalForeign = foreign ? availableDiplomacyActions(cultivator, world)
+            .find((option) => option.action === chosenAction && option.targetSectId === parsed.targetSectId) : undefined;
+          if (foreign && !legalForeign) return undefined;
+          const infrastructureChoice = chosenAction === 'BUILD_FACILITY' || chosenAction === 'DISPATCH_GUARD' || chosenAction === 'GUARD_DUTY';
+          const legalInfrastructure = infrastructureChoice ? availableSectEconomyActions(cultivator, world).find((item) =>
+            item.action === chosenAction && item.facilityKind === parsed.facilityKind &&
+            item.targetCultivatorId === parsed.targetCultivatorId && item.targetLocationId === parsed.targetLocationId) : undefined;
+          if (infrastructureChoice && !legalInfrastructure) return undefined;
+          const artifactAction = chosenAction === 'FORGE_ARTIFACT' || chosenAction === 'BIND_ARTIFACT' || chosenAction === 'REPAIR_ARTIFACT' || chosenAction === 'AWAKEN_ARTIFACT';
+          const legalArtifact = artifactAction ? availableArtifactActions(cultivator, world).find((item) =>
+            item.action === chosenAction && item.targetArtifactId === parsed.targetArtifactId && item.forgeTier === parsed.forgeTier) : undefined;
+          if (artifactAction && !legalArtifact) return undefined;
+          const alchemyAction = chosenAction === 'GATHER_HERBS' || chosenAction === 'BREW_PILL' || chosenAction === 'USE_PILL';
+          const legalAlchemy = alchemyAction ? availableAlchemy(cultivator, world).find((option) =>
+            option.action === chosenAction && option.targetHerbId === parsed.targetHerbId &&
+            option.targetPillId === parsed.targetPillId && option.targetCultivatorId === parsed.targetCultivatorId) : undefined;
+          if (alchemyAction && !legalAlchemy) return undefined;
+          if ((chosenAction === 'AUTHOR_TECHNIQUE' && !mayAuthorTechnique(cultivator)) ||
+              (chosenAction === 'STUDY_TECHNIQUE' && !availableTechniques(cultivator, world).some((option) => option.id === parsed.targetTechniqueId))) {
+            return undefined;
+          }
+          if ((chosenAction === 'TRADE' || chosenAction === 'DUAL_CULTIVATE' || chosenAction === 'SECT_DIPLOMACY') &&
+              !availableEncounters(cultivator, world).some((option) => option.action === chosenAction && option.targetId === parsed.targetCultivatorId)) {
+            return undefined;
+          }
+          if (chosenAction === 'PURSUE_SCHEME' && !currentPlan && (!isSchemeKind(parsed.proposedScheme) || !eligiblePlans.includes(parsed.proposedScheme))) {
+            return undefined;
+          }
 
-    const validActions: ActionType[] = [
-      'CULTIVATE',
-      'BREAKTHROUGH',
-      'EXPLORE',
-      'SOCIALIZE',
-      'DUEL',
-      'SCHEMING',
-      'PURSUE_SCHEME',
-      'AUTHOR_TECHNIQUE',
-      'STUDY_TECHNIQUE',
-      'GATHER_HERBS',
-      'BREW_PILL',
-      'USE_PILL',
-      'FORGE_ARTIFACT',
-      'BIND_ARTIFACT',
-      'REPAIR_ARTIFACT',
-      'AWAKEN_ARTIFACT',
-      'FACE_TRIBULATION',
-      'AMBUSH_TRIBULATION',
-      'CHALLENGE_LEADERSHIP',
-      'PLOT_COUP',
-      'BUILD_FACILITY',
-      'DISPATCH_GUARD',
-      'GUARD_DUTY',
-      'OFFER_ALLIANCE',
-      'DECLARE_WAR',
-      'DEMAND_TRIBUTE',
-      'LAUNCH_SIEGE',
-      'JOIN_OCCASION',
-      'PURSUE_BOUNTY',
-      'TAME_BEAST',
-      'TRADE',
-      'DUAL_CULTIVATE',
-      'SECT_DIPLOMACY',
-      'REST',
-    ];
-    const chosenAction: ActionType =
-      parsed.chosenAction && validActions.includes(parsed.chosenAction)
-        ? parsed.chosenAction
-        : 'CULTIVATE';
-
-    const currentlyFacing = isTribulationActive(cultivator);
-    const stance = parsed.tribulationStance;
-    const validStance = stance === 'guard' || stance === 'focus' || stance === 'defy';
-    if (currentlyFacing && (chosenAction !== 'FACE_TRIBULATION' || !validStance)) return computeHeuristicDecision(cultivator, world);
-    if (!currentlyFacing && chosenAction === 'FACE_TRIBULATION') return computeHeuristicDecision(cultivator, world);
-    if (chosenAction === 'AMBUSH_TRIBULATION' &&
-        !availableAmbushTargets(cultivator, world).some((target) => target.id === parsed.targetCultivatorId)) {
-      return computeHeuristicDecision(cultivator, world);
-    }
-    if (chosenAction === 'EXPLORE' && parsed.targetLocationId !== undefined &&
-        !knownLocations.some((item) => item.id === parsed.targetLocationId) && parsed.targetLocationId !== unverifiedTrail) return computeHeuristicDecision(cultivator, world);
-    if ((chosenAction === 'CHALLENGE_LEADERSHIP' || chosenAction === 'PLOT_COUP') &&
-        !availableLeadershipActions(cultivator, world).some((option) => option.action === chosenAction && option.targetCultivatorId === parsed.targetCultivatorId)) {
-      return computeHeuristicDecision(cultivator, world);
-    }
-    const legalBeast = chosenAction === 'TAME_BEAST' ? availableBeastTames(cultivator, world).find((item) => item.targetBeastId === parsed.targetBeastId) : undefined;
-    if (chosenAction === 'TAME_BEAST' && !legalBeast) return computeHeuristicDecision(cultivator, world);
-    const legalHunt = chosenAction === 'PURSUE_BOUNTY' ? availableBountyHunts(cultivator, world).find((item) => item.targetBountyId === parsed.targetBountyId) : undefined;
-    if (chosenAction === 'PURSUE_BOUNTY' && !legalHunt) return computeHeuristicDecision(cultivator, world);
-    const legalOccasion = chosenAction === 'JOIN_OCCASION' ? availableOccasionJoins(cultivator, world).find((item) => item.targetOccasionId === parsed.targetOccasionId) : undefined;
-    if (chosenAction === 'JOIN_OCCASION' && !legalOccasion) return computeHeuristicDecision(cultivator, world);
-    const foreign = chosenAction === 'OFFER_ALLIANCE' || chosenAction === 'DECLARE_WAR' || chosenAction === 'DEMAND_TRIBUTE' || chosenAction === 'LAUNCH_SIEGE';
-    const legalForeign = foreign ? availableDiplomacyActions(cultivator, world)
-      .find((option) => option.action === chosenAction && option.targetSectId === parsed.targetSectId) : undefined;
-    if (foreign && !legalForeign) return computeHeuristicDecision(cultivator, world);
-    const infrastructureChoice = chosenAction === 'BUILD_FACILITY' || chosenAction === 'DISPATCH_GUARD' || chosenAction === 'GUARD_DUTY';
-    const legalInfrastructure = infrastructureChoice ? availableSectEconomyActions(cultivator, world).find((item) =>
-      item.action === chosenAction && item.facilityKind === parsed.facilityKind &&
-      item.targetCultivatorId === parsed.targetCultivatorId && item.targetLocationId === parsed.targetLocationId) : undefined;
-    if (infrastructureChoice && !legalInfrastructure) return computeHeuristicDecision(cultivator, world);
-    const artifactAction = chosenAction === 'FORGE_ARTIFACT' || chosenAction === 'BIND_ARTIFACT' || chosenAction === 'REPAIR_ARTIFACT' || chosenAction === 'AWAKEN_ARTIFACT';
-    const legalArtifact = artifactAction ? availableArtifactActions(cultivator, world).find((item) =>
-      item.action === chosenAction && item.targetArtifactId === parsed.targetArtifactId && item.forgeTier === parsed.forgeTier) : undefined;
-    if (artifactAction && !legalArtifact) return computeHeuristicDecision(cultivator, world);
-    const alchemyAction = chosenAction === 'GATHER_HERBS' || chosenAction === 'BREW_PILL' || chosenAction === 'USE_PILL';
-    const legalAlchemy = alchemyAction ? availableAlchemy(cultivator, world).find((option) =>
-      option.action === chosenAction && option.targetHerbId === parsed.targetHerbId &&
-      option.targetPillId === parsed.targetPillId && option.targetCultivatorId === parsed.targetCultivatorId) : undefined;
-    if (alchemyAction && !legalAlchemy) return computeHeuristicDecision(cultivator, world);
-    if ((chosenAction === 'AUTHOR_TECHNIQUE' && !mayAuthorTechnique(cultivator)) ||
-        (chosenAction === 'STUDY_TECHNIQUE' && !availableTechniques(cultivator, world).some((option) => option.id === parsed.targetTechniqueId))) {
-      return computeHeuristicDecision(cultivator, world);
-    }
-    if ((chosenAction === 'TRADE' || chosenAction === 'DUAL_CULTIVATE' || chosenAction === 'SECT_DIPLOMACY') &&
-        !availableEncounters(cultivator, world).some((option) => option.action === chosenAction && option.targetId === parsed.targetCultivatorId)) {
-      return computeHeuristicDecision(cultivator, world);
-    }
-    if (chosenAction === 'PURSUE_SCHEME' && !currentPlan && (!isSchemeKind(parsed.proposedScheme) || !eligiblePlans.includes(parsed.proposedScheme))) {
-      return computeHeuristicDecision(cultivator, world);
-    }
-
-    return {
-      innerMonologue:
-        (typeof parsed.innerMonologue === 'string' && parsed.innerMonologue.trim().slice(0, 160)) ||
-        cultivator.innerMonologue ||
-        '天道无常，唯有苦修方是正途。',
-      chosenAction,
-      targetLocationId: typeof parsed.targetLocationId === 'string' ? parsed.targetLocationId : undefined,
-      targetCultivatorId: typeof parsed.targetCultivatorId === 'string' ? parsed.targetCultivatorId : undefined,
-      spokenLine: typeof parsed.spokenLine === 'string' ? parsed.spokenLine.trim().slice(0, 90) : undefined,
-      facilityKind: legalInfrastructure?.facilityKind,
-      targetSectId: legalForeign?.targetSectId,
-      targetOccasionId: legalOccasion?.targetOccasionId,
-      targetBountyId: legalHunt?.targetBountyId,
-      targetBeastId: legalBeast?.targetBeastId,
-      tribulationStance: chosenAction === 'FACE_TRIBULATION' && validStance ? stance : undefined,
-      targetArtifactId: legalArtifact?.targetArtifactId,
-      forgeTier: legalArtifact?.forgeTier,
-      targetHerbId: legalAlchemy?.targetHerbId,
-      targetPillId: legalAlchemy?.targetPillId,
-      targetTechniqueId: chosenAction === 'STUDY_TECHNIQUE' && typeof parsed.targetTechniqueId === 'string' ? parsed.targetTechniqueId : undefined,
-      proposedScheme: chosenAction === 'PURSUE_SCHEME' && isSchemeKind(parsed.proposedScheme) ? parsed.proposedScheme : undefined,
-      rumorIntent: chosenAction === 'SCHEMING' && (parsed.rumorIntent === 'FABRICATE' || parsed.rumorIntent === 'EXAGGERATE')
-        ? parsed.rumorIntent : undefined,
-    };
+          return {
+            innerMonologue:
+              (typeof parsed.innerMonologue === 'string' && parsed.innerMonologue.trim().slice(0, 160)) ||
+              cultivator.innerMonologue ||
+              '天道无常，唯有苦修方是正途。',
+            chosenAction,
+            targetLocationId: typeof parsed.targetLocationId === 'string' ? parsed.targetLocationId : undefined,
+            targetCultivatorId: typeof parsed.targetCultivatorId === 'string' ? parsed.targetCultivatorId : undefined,
+            spokenLine: typeof parsed.spokenLine === 'string' ? parsed.spokenLine.trim().slice(0, 90) : undefined,
+            facilityKind: legalInfrastructure?.facilityKind,
+            targetSectId: legalForeign?.targetSectId,
+            targetOccasionId: legalOccasion?.targetOccasionId,
+            targetBountyId: legalHunt?.targetBountyId,
+            targetBeastId: legalBeast?.targetBeastId,
+            tribulationStance: chosenAction === 'FACE_TRIBULATION' && validStance ? stance : undefined,
+            targetArtifactId: legalArtifact?.targetArtifactId,
+            forgeTier: legalArtifact?.forgeTier,
+            targetHerbId: legalAlchemy?.targetHerbId,
+            targetPillId: legalAlchemy?.targetPillId,
+            targetTechniqueId: chosenAction === 'STUDY_TECHNIQUE' && typeof parsed.targetTechniqueId === 'string' ? parsed.targetTechniqueId : undefined,
+            proposedScheme: chosenAction === 'PURSUE_SCHEME' && isSchemeKind(parsed.proposedScheme) ? parsed.proposedScheme : undefined,
+            rumorIntent: chosenAction === 'SCHEMING' && (parsed.rumorIntent === 'FABRICATE' || parsed.rumorIntent === 'EXAGGERATE')
+              ? parsed.rumorIntent : undefined,
+          };
+    } });
+    if (result.status !== 'ok') return fallback();
+    onSource?.('llm');
+    return result.data;
   } catch {
-    return computeHeuristicDecision(cultivator, world);
+    return fallback();
   }
 }

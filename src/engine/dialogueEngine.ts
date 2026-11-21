@@ -1,3 +1,4 @@
+import { llmScheduler } from './llmScheduler';
 import type { Cultivator, DialogueExchange, DialogueTurn, LLMConfig, WorldEvent, WorldState } from '../types/world';
 
 const OPENING: Record<DialogueExchange['kind'], readonly [string, string]> = {
@@ -61,7 +62,7 @@ export async function enrichTickDialogues(world: WorldState, config: LLMConfig):
     }] : []);
   if (!exchanges.length) return world;
   try {
-    const response = await fetch(`${config.apiBaseUrl.replace(/\/+$/, '')}/chat/completions`, {
+    const result = await llmScheduler.requestJson<WorldEvent[]>('dialogue', `${config.apiBaseUrl.replace(/\/+$/, '')}/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.apiKey.trim()}` },
       signal: AbortSignal.timeout(5000),
@@ -72,15 +73,18 @@ export async function enrichTickDialogues(world: WorldState, config: LLMConfig):
           { role: 'user', content: JSON.stringify(exchanges) },
         ],
         temperature: 0.5,
+        max_tokens: 800,
+        response_format: { type: 'json_object' },
       }),
-    });
-    if (!response.ok) return world;
-    const data: unknown = await response.json();
-    if (!isRecord(data) || !Array.isArray(data.choices)) return world;
-    const first: unknown = data.choices[0];
-    if (!isRecord(first) || !isRecord(first.message) || typeof first.message.content !== 'string') return world;
-    const payload: unknown = JSON.parse(first.message.content.trim().replace(/^(?:```(?:json)?\s*)|(?:```$)/gi, '').trim());
-    return { ...world, events: applyDialogueLanguage(world.events, exchanges.map((item) => item.id), payload) };
+    }, { tick: world.tick, model: config.model || 'gpt-4o-mini', decode: (data) => {
+      if (!isRecord(data) || !Array.isArray(data.choices)) return undefined;
+      const first: unknown = data.choices[0];
+      if (!isRecord(first) || !isRecord(first.message) || typeof first.message.content !== 'string') return undefined;
+      const payload: unknown = JSON.parse(first.message.content.trim().replace(/^(?:```(?:json)?\s*)|(?:```$)/gi, '').trim());
+      const events = applyDialogueLanguage(world.events, exchanges.map((item) => item.id), payload);
+      return events.some((event, index) => event !== world.events[index]) ? events : undefined;
+    } });
+    return result.status === 'ok' ? { ...world, events: result.data } : world;
   } catch {
     return world;
   }

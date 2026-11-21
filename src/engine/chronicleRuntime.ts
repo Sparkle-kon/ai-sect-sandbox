@@ -1,3 +1,4 @@
+import { llmScheduler } from './llmScheduler';
 import type { ChronicleChapterPlan, LLMConfig, WorldState } from '../types/world';
 import { availableChronicleChapter, resolveChronicleChapter } from './novelGenerator';
 
@@ -19,11 +20,11 @@ function parseDraft(data: unknown, plan: ChronicleChapterPlan): { title: string;
   return { title, body };
 }
 
-async function chapterDraft(plan: ChronicleChapterPlan, config: LLMConfig): Promise<{ title: string; body: string } | undefined> {
+async function chapterDraft(plan: ChronicleChapterPlan, config: LLMConfig, tick: number): Promise<{ title: string; body: string } | undefined> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 10_000);
   try {
-    const response = await fetch(`${config.apiBaseUrl.replace(/\/+$/, '')}/chat/completions`, {
+    const result = await llmScheduler.requestJson('chronicle', `${config.apiBaseUrl.replace(/\/+$/, '')}/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.apiKey.trim()}` },
       signal: controller.signal,
@@ -34,8 +35,8 @@ async function chapterDraft(plan: ChronicleChapterPlan, config: LLMConfig): Prom
           { role: 'user', content: JSON.stringify({ anchors: plan.anchors, biographies: plan.biographies }) },
         ],
       }),
-    });
-    return response.ok ? parseDraft(await response.json(), plan) : undefined;
+    }, { tick, model: config.model, decode: (data) => parseDraft(data, plan) });
+    return result.status === 'ok' ? result.data : undefined;
   } catch {
     return undefined;
   } finally {
@@ -55,7 +56,7 @@ export async function settleChronicleOnline(world: WorldState, config: LLMConfig
   // Seal the previous month after it ends; manual events within its last tick still count.
   const plan = availableChronicleChapter(world, false, world.tick - 1);
   if (!plan) return world;
-  const draft = await chapterDraft(plan, config);
+  const draft = await chapterDraft(plan, config, world.tick);
   resolveChronicleChapter(world, plan, draft, plan.endTick);
   return world;
 }
