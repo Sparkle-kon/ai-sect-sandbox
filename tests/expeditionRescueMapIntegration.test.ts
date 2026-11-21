@@ -1,3 +1,4 @@
+import { restoreLegacyExpeditionFixture } from './fixtures/legacyExpeditionFixture';
 import { describe, expect, it } from 'vitest';
 import { createInitialWorld } from '../src/data/initialWorld';
 import { createTerrainMapView } from '../src/components/terrainMapView';
@@ -12,7 +13,7 @@ function fixture() {
   const world = createInitialWorld(8278);
   const [explorer, guide, spare, outsider] = world.cultivators;
   world.tick = 60;
-  advanceOccasions(world, () => .99);
+  restoreLegacyExpeditionFixture(world);
   const occasion = world.occasions[0];
   // A longer real exit in this map fixture ensures an intermediate committed turn;
   // the gate has already opened and neither endpoint changes after the route is paid.

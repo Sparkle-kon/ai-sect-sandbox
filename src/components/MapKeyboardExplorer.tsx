@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { Cultivator, LocationNode, MapPoint, WorldState } from '../types/world';
-import { isOpenOccasion, OCCASION_KIND } from './occasionLabels';
+import { OCCASION_KIND } from './occasionLabels';
 import { isActiveCampaign } from './siegeLabels';
 import { isActiveTrial } from './mapStatusLabels';
 import { MAP_EFFECT_LABELS } from './mapPresentationView';
@@ -68,7 +68,7 @@ export function mapExplorerIndex(world: WorldState, view: Terrain, actorPosition
       events.push({ id: `effect-${effect.id}`, label: MAP_EFFECT_LABELS[effect.kind], site });
     }
   }
-  for (const occasion of world.occasions.filter(isOpenOccasion)) {
+  for (const occasion of view.visibleOpenOccasions) {
     const site = current.get(occasion.locationId);
     if (site) events.push({ id: `occasion-${occasion.id}`, label: `${OCCASION_KIND[occasion.kind]}：${occasion.title}`, site });
   }

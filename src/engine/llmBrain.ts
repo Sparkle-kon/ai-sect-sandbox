@@ -82,6 +82,7 @@ import { availableLeadershipActions } from './sectPoliticsEngine';
 import { availableSectEconomyActions } from './sectEconomyEngine';
 import { availableDiplomacyActions } from './diplomacyEngine';
 import { activeOccasionForActor, availableOccasionJoins } from './occasionEngine';
+import { canSeeOccasion, canInvestigateExpeditionOmen, projectExpeditionOmens } from './expeditionOmenEngine';
 import { availableBountyHunts } from './bountyEngine';
 import { knownMapLocations, terrainTileAt } from './terrainEngine';
 import { availableBeastTames, guardingHerbBeast, petCombatBonus } from './spiritBeastEngine';
@@ -457,7 +458,8 @@ export function computeHeuristicDecision(
   }
   const mayFundWeather = world.tick >= 29 && (world.tick + cultivator.id.charCodeAt(cultivator.id.length - 1)) % 19 === 4 &&
     (cultivator.personality === '刚正' || cultivator.personality === '逍遥');
-  const surveyOptions = mayFundWeather || Object.hasOwn(world.fieldObservatories.byActor, cultivator.id)
+  const examineOmen=canInvestigateExpeditionOmen(world,cultivator);
+  const surveyOptions = mayFundWeather || examineOmen || Object.hasOwn(world.fieldObservatories.byActor, cultivator.id)
     ? availableObservatoryActions(cultivator, world) : [];
   const dueWeather = surveyOptions.find(({ observatoryMove }) => observatoryMove === 'measure');
   if (dueWeather) return { ...dueWeather, chosenAction: 'FIELD_OBSERVATORY', innerMonologue: '如期完成本人先前约定的实测，不以短聘替代。' };
@@ -585,7 +587,7 @@ export function computeHeuristicDecision(
 
   const pairStation = pairedObservatoryStation(cultivator, world);
   const observe = surveyOptions.find(({ observatoryMove }) => observatoryMove === 'relay') ??
-    (mayFundWeather && pairStation === undefined
+    ((mayFundWeather||examineOmen) && pairStation === undefined
       ? surveyOptions.find(({ observatoryMove, observatoryStation }) => observatoryMove === 'fund' && observatoryStation === undefined)
       : undefined);
   if (observe) return { ...observe, chosenAction: 'FIELD_OBSERVATORY', innerMonologue: '只记录到场实测；推测另记，转给同伴的仍是当时旧读数。' };
@@ -1740,7 +1742,8 @@ ${JSON.stringify(recalled)}
 ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confidence, provenance }) => ({ subject, locationId, confidence, provenance })))}
 - 同地可见的野兽/灵宠：${JSON.stringify(world.spiritBeasts.filter((item) => item.alive && item.locationId === cultivator.locationId).map(({id,name,kind,tamedBy}) => ({id,name,kind,tamedBy})))}；护药兽：${guardingHerbBeast(world, cultivator)?.name ?? '无'}；可尝试驯服：${JSON.stringify(availableBeastTames(cultivator, world))}
 - 天机悬赏榜：${JSON.stringify(world.bounties.filter((item) => item.status === 'open').map(({id,targetCultivatorId,reward,reason}) => ({id,targetCultivatorId,reward,reason})))}；可接的追缉：${JSON.stringify(availableBountyHunts(cultivator, world))}
-- 天下公示的大会与秘境：${JSON.stringify(world.occasions.filter((item) => item.status === 'registration' || item.status === 'running').map(({id,title,kind,locationId,status,registrationClosesTick}) => ({id,title,kind,locationId,status,registrationClosesTick})))}；可报名项目：${JSON.stringify(availableOccasionJoins(cultivator, world))}
+- 当前能核实的大会与秘境：${JSON.stringify(world.occasions.filter((item) => (item.status === 'registration' || item.status === 'running') && canSeeOccasion(world,cultivator,item)).map(({id,title,kind,locationId,status,registrationClosesTick}) => ({id,title,kind,locationId,status,registrationClosesTick})))}；只可报名：${JSON.stringify(availableOccasionJoins(cultivator, world,requestTick))}
+- 本人依法实测或当面收到的秘境线索（并非报名凭据）：${JSON.stringify(projectExpeditionOmens(world,cultivator).map(({siteName,learnedTick,measuredTick,windowStartsTick,windowEndsTick,status})=>({siteName,learnedTick,measuredTick,windowStartsTick,windowEndsTick,status})))}
 - 本宗邦交：${JSON.stringify(world.diplomacy.filter((relation) => relation.sectAId === cultivator.sectId || relation.sectBId === cultivator.sectId))}；公示的外事权限：${JSON.stringify(availableDiplomacyActions(cultivator, world))}
 - 赛季复核只选真实可核验收据；提交不会改写原榜：${JSON.stringify(honorReviewOptions)}
 - 临时观象只复制实际地点的 fund、到期 measure 或带原日期 relay。仅 fund 任选列表中的观测位（现地中心省略、边位用 observatoryStation:'edge'）；不填写读数或强度：${JSON.stringify(observatoryOptions)}
@@ -2374,7 +2377,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
           if (chosenAction === 'TAME_BEAST' && !legalBeast) return undefined;
           const legalHunt = chosenAction === 'PURSUE_BOUNTY' ? availableBountyHunts(cultivator, world).find((item) => item.targetBountyId === parsed.targetBountyId) : undefined;
           if (chosenAction === 'PURSUE_BOUNTY' && !legalHunt) return undefined;
-          const legalOccasion = chosenAction === 'JOIN_OCCASION' ? availableOccasionJoins(cultivator, world).find((item) => item.targetOccasionId === parsed.targetOccasionId) : undefined;
+          const legalOccasion = chosenAction === 'JOIN_OCCASION' ? availableOccasionJoins(cultivator, world,requestTick).find((item) => item.targetOccasionId === parsed.targetOccasionId) : undefined;
           if (chosenAction === 'JOIN_OCCASION' && !legalOccasion) return undefined;
           const foreign = chosenAction === 'OFFER_ALLIANCE' || chosenAction === 'DECLARE_WAR' || chosenAction === 'DEMAND_TRIBUTE' || chosenAction === 'LAUNCH_SIEGE';
           const legalForeign = foreign ? availableDiplomacyActions(cultivator, world)

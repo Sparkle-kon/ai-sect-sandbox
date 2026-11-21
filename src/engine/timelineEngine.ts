@@ -1,3 +1,4 @@
+import { isScopedExpeditionGate } from './expeditionOmenTerms';
 import { cloneWorldWithColdHistory } from './coldHistoryEngine';
 import { activeAvatar, possessAvatar } from './avatarEngine';
 import { findEraEntryCandidate } from './eraEntryCandidates';
@@ -86,7 +87,7 @@ function validateIntervention(world: WorldState, command: GodInterventionCommand
     return { type: command.type };
   }
   if (command.type === 'SPAWN_TREASURE') {
-    if (command.targetCultivatorId || command.whisperText || !world.locations.some(({ id }) => id === command.targetLocationId)) throw invalid();
+    if (command.targetCultivatorId || command.whisperText || !world.locations.some(site=>site.id===command.targetLocationId&&!isScopedExpeditionGate(site))) throw invalid();
     return { type: command.type, targetLocationId: command.targetLocationId };
   }
   if (command.type !== 'WHISPER_MIND' && command.type !== 'TRIBULATION_STRIKE') throw invalid();

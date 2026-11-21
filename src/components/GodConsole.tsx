@@ -1,3 +1,4 @@
+import { isScopedExpeditionGate } from '../engine/expeditionOmenTerms';
 import React, { useState } from 'react';
 import { Sparkles, Zap, Skull, MessageSquarePlus, Cpu } from 'lucide-react';
 import { GodInterventionCommand } from '../engine/worldEngine';
@@ -21,9 +22,9 @@ export const GodConsole: React.FC<GodConsoleProps> = ({
   const [whisperText, setWhisperText] = useState(
     '立刻前往上古陨仙墟夺取机缘，顺便刺杀血月老祖！'
   );
-  const [targetLocId, setTargetLocId] = useState(
-    world.locations[0]?.id ?? 'loc-secret-1'
-  );
+  const permittedSites = world.locations.filter(location=>!isScopedExpeditionGate(location));
+  const [requestedTarget, setTargetLocId] = useState<string>();
+  const targetLocId = permittedSites.find(site=>site.id===requestedTarget)?.id ?? permittedSites[0]?.id;
   const [showLLMConfig, setShowLLMConfig] = useState(false);
 
   const selectedCultivator =
@@ -104,11 +105,11 @@ export const GodConsole: React.FC<GodConsoleProps> = ({
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
         <div className="flex items-center gap-1.5 bg-slate-950/70 p-1.5 rounded-lg border border-slate-800">
           <select
-            value={targetLocId}
+            value={targetLocId??''}
             onChange={(e) => setTargetLocId(e.target.value)}
             className="bg-slate-900 text-slate-200 text-xs px-2 py-1 rounded border border-slate-700 flex-1"
           >
-            {world.locations.map((loc) => (
+            {permittedSites.map((loc) => (
               <option key={loc.id} value={loc.id}>
                 {loc.name}
               </option>
@@ -116,8 +117,9 @@ export const GodConsole: React.FC<GodConsoleProps> = ({
           </select>
           <button
             type="button"
+            disabled={!targetLocId}
             onClick={() =>
-              onIntervene({
+              targetLocId && onIntervene({
                 type: 'SPAWN_TREASURE',
                 targetLocationId: targetLocId,
               })

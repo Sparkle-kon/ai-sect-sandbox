@@ -13,6 +13,8 @@ import { localQiWeather } from './weatherEngine';
 import { observatoryEdgeStation,observatoryStationValid } from './observatoryStation';
 import { alignedWeatherPinnedRuns } from './alignedWeatherTerms';
 
+import { expeditionOmenPinnedRuns, recordExpeditionOmen, recordExpeditionOmenRelay } from './expeditionOmenEngine';
+
 export const OBSERVATORY_COST = 5;
 export const OBSERVATORY_LEAD_TICKS = 2;
 export const OBSERVATORY_RETENTION_TICKS = 8;
@@ -180,12 +182,14 @@ export function resolveObservatoryAction(world: WorldState, actor: Cultivator, d
     if (decision.targetCultivatorId !== undefined || row !== due || row.station&&!observatoryStationValid(world,site,row.station)) return null;
     const measured: MeasuredRun = { ...row, status: 'measured', reading: weatherReading(world, site,row.station) };
     runs[rowIndex] = measured;
+    recordExpeditionOmen(world, actor, site, measured);
     return event(world, actor, measured, 'measure', '于约定月份实际读数，核对封存预测');
   }
   if (decision.observatoryMove !== 'relay' || row.status !== 'measured' || !canRelay(row, site.id, world.tick)) return null;
   const recipient = world.cultivators.find(candidate => candidate.id === decision.targetCultivatorId);
   if (!recipient || !validRecipient(world, actor, site, recipient, world.tick)) return null;
   row.relay = { recipientId: recipient.id, relayedTick: world.tick };
+  recordExpeditionOmenRelay(world, actor, site, row);
   const inbox = ensureBucket(world, recipient.id).inbox;
   inbox.push({ operatorId: actor.id, openedTick: row.openedTick });
   if (inbox.length > OBSERVATORY_INBOX_LIMIT) inbox.shift();
@@ -203,9 +207,11 @@ function sourceOf(world: WorldState, recipientId: string, entry: FieldObservator
 export function advanceFieldObservatories(world: WorldState): void {
   const buckets = Object.entries(world.fieldObservatories.byActor);
   const pinned=alignedWeatherPinnedRuns(world);
+  const omenPinned=expeditionOmenPinnedRuns(world);
   for (const [id, bucket] of buckets) {
     const fixed=pinned.get(id);
-    const keep=(row:FieldObservatoryRun)=>row.status==='measured'&&!!fixed?.has(row.openedTick);
+    const omenSources=omenPinned.get(id);
+    const keep=(row:FieldObservatoryRun)=>row.status==='measured'&&!!(fixed?.has(row.openedTick)||omenSources?.has(row.openedTick));
     bucket.runs = bucket.runs.filter(row => keep(row)||retained(row, world.tick)).map(row =>
       row.status === 'pending' && row.targetTick <= world.tick ? { ...row, status: 'missed' } : row);
     const count = bucket.runs.filter(row => row.status !== 'pending'&&!keep(row)).length;

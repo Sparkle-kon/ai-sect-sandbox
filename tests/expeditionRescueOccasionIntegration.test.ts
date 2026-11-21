@@ -1,3 +1,4 @@
+import { restoreLegacyExpeditionFixture } from './fixtures/legacyExpeditionFixture';
 import { describe, expect, it, vi } from 'vitest';
 import { createInitialWorld } from '../src/data/initialWorld';
 import { resolveExpeditionRescueAction } from '../src/engine/expeditionRescueEngine';
@@ -8,7 +9,7 @@ function startedExpedition(entrants = 8) {
   const world = createInitialWorld(20);
   const [guide, weak, ...remaining] = world.cultivators.slice(0, entrants);
   world.tick = 60;
-  advanceOccasions(world, () => .99);
+  restoreLegacyExpeditionFixture(world);
   const [occasion] = world.occasions;
   expect(occasion.kind).toBe('expedition');
   guide.combatPower = 100_000;

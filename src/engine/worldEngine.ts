@@ -1,3 +1,4 @@
+import { isScopedExpeditionGate } from './expeditionOmenTerms';
 import { recordOrdinaryActionEvidence, snapshotOrdinaryAction } from './ordinaryActionEvidence';
 import { isOrdinaryIntentAction, matchesOrdinaryIntent, modelOrdinaryIntentOptions, rankOrdinaryIntents } from './ordinaryIntentEngine';
 import {recordEraHistoryTurn} from './eraHistoryIndex';
@@ -479,11 +480,12 @@ export function applyCultivatorBrainDecision(
 
     case 'EXPLORE': {
       const known = knownMapLocations(world, cultivator);
-      const unknown = world.locations.filter((place) => place.id !== cultivator.locationId && !known.includes(place));
-      const candidates = unknown.length ? unknown : world.locations.filter((place) => place.id !== cultivator.locationId);
+      const ordinarySites = world.locations.filter(place=>!isScopedExpeditionGate(place));
+      const unknown = ordinarySites.filter((place) => place.id !== cultivator.locationId && !known.includes(place));
+      const candidates = unknown.length ? unknown : ordinarySites.filter((place) => place.id !== cultivator.locationId);
       const dest = decision.targetLocationId
         ? known.find((place) => place.id === decision.targetLocationId) ??
-          (knownRumorLead(cultivator, world) === decision.targetLocationId ? world.locations.find((site) => site.id === decision.targetLocationId) : undefined)
+          (knownRumorLead(cultivator, world) === decision.targetLocationId ? ordinarySites.find((site) => site.id === decision.targetLocationId) : undefined)
         : candidates[Math.floor(rng() * candidates.length)];
       if (dest && dest.id !== cultivator.locationId) {
         const strain = location ? Math.round(weatherTravelFriction(world, location, dest) * 12) : 0;
@@ -1082,13 +1084,14 @@ export function executeGodIntervention(
   prevState: WorldState,
   cmd: GodInterventionCommand
 ): WorldState {
+  if(cmd.type==='SPAWN_TREASURE'&&prevState.locations.some(site=>site.id===cmd.targetLocationId&&isScopedExpeditionGate(site)))return prevState;
   const nextState: WorldState = cloneWorldWithColdHistory(prevState);
 
   switch (cmd.type) {
     case 'SPAWN_TREASURE': {
-      const loc =
-        nextState.locations.find((l) => l.id === cmd.targetLocationId) ??
-        nextState.locations[0];
+      const available=nextState.locations.filter(site=>!isScopedExpeditionGate(site));
+      const loc=available.find(site=>site.id===cmd.targetLocationId)??available[0];
+      if(!loc)return prevState;
       loc.spiritQi = clamp(loc.spiritQi + 20, 10, 150);
 
       const luckyOnes = nextState.cultivators.filter(

@@ -1,3 +1,4 @@
+import { restoreLegacyExpeditionFixture } from './fixtures/legacyExpeditionFixture';
 import { describe, expect, it, vi } from 'vitest';
 import { createInitialWorld } from '../src/data/initialWorld';
 import { activeOccasionForActor, advanceOccasions, availableOccasionJoins, joinOccasion } from '../src/engine/occasionEngine';
@@ -9,7 +10,8 @@ const join = (world: WorldState, actor: Cultivator) => joinOccasion(world, actor
 function fixture(roll: number) {
   const world = createInitialWorld();
   world.tick = 60;
-  advanceOccasions(world, () => roll);
+  if (roll >= .5) restoreLegacyExpeditionFixture(world);
+  else advanceOccasions(world, () => roll);
   return { world, occasion: world.occasions[0] };
 }
 

@@ -221,6 +221,7 @@ export interface RelationshipEdge {
 }
 
 export interface LocationNode {
+  expeditionOmenId?: string;
   id: string;
   name: string;
   x: number; // 0-1000 canvas coordinate
@@ -671,6 +672,8 @@ export interface ExpeditionResult {
 }
 
 export interface WorldOccasion {
+  omenId?: string;
+  anchorSiteId?: string;
   id: string;
   kind: 'tournament' | 'expedition';
   title: string;
@@ -3122,6 +3125,7 @@ export interface AlignedWeatherState { comparisons: AlignedWeatherComparison[]; 
 
 export interface WorldState {
   fieldObservatories: FieldObservatoriesState;
+  expeditionOmens: ExpeditionOmensState;
   alignedWeather: AlignedWeatherState;
   villageCensuses: VillageCensusesState;
   probation: ProbationState;
@@ -3218,3 +3222,9 @@ export interface WorldState {
   relationships: RelationshipEdge[];
   events: WorldEvent[];
 }
+export interface ExpeditionOmen {
+  id:string;siteId:string;operatorId:string;openedTick:number;measuredTick:number;measuredQi:number;reading:FieldWeatherReading;
+  windowStartsTick:number;windowEndsTick:number;relay?:{recipientId:string;tick:number};
+  opening?:{tick:number;qi:number;reading:FieldWeatherReading;occasionId:string};
+}
+export interface ExpeditionOmensState { rows: ExpeditionOmen[]; lastCalendarTick?:number }

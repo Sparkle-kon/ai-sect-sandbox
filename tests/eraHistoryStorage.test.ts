@@ -71,22 +71,21 @@ describe('native era history and storage validation',()=>{
   });
 
   it('keeps actual public office evidence while not archiving a deliberately hidden assembly site',()=>{
-    let current=createInitialWorld(0xffffffff);
-    current.locations[0].spiritQi=150;
-    for(let n=0;n<75;n++){
-      current=advanceWorldTick(current);
-      const row=current.eraHistory.receipts.find(receipt=>receipt.kind==='succession'&&receipt.tick===current.tick&&
-        current.events.some(event=>event.id===receipt.eventId&&current.locations.some(site=>site.id===event.locationId&&
-          (site.type==='abyss'||site.type==='secret_realm'))));
-      if(!row)continue;
-      expect(row.locationId).toBeUndefined();
-      expect(decodeWorldSave(encodeWorldSave(current)).eraHistory.receipts).toContainEqual(row);
-      const actual=current.events.find(({id})=>id===row.eventId)!;
-      row.locationId=actual.locationId;
-      expect(()=>decodeWorldSave(json(current))).toThrow('eraHistory.receipts.sitePrivacy');
-      return;
-    }
-    throw Error('the seeded native fixture did not exercise a public succession at a hidden site');
+    let before=createInitialWorld(2031);
+    while(before.month<12)before=step(before);
+    const sect=before.sects[0],hq=before.locations.find(site=>site.id===sect.headquartersId)!;
+    const incumbent=before.cultivators.find(row=>row.id===sect.leaderId)!;
+    hq.type='secret_realm'; // A legacy hidden place, not an emerging linked gate.
+    incumbent.age=incumbent.lifespan-1;
+    for(const actor of before.cultivators)if(actor.sectId===sect.id)actor.locationId=hq.id;
+    const current=step(before);
+    const row=current.eraHistory.receipts.find(receipt=>receipt.kind==='succession'&&receipt.tick===current.tick&&
+      current.events.some(event=>event.id===receipt.eventId&&event.locationId===hq.id));
+    if(!row)throw Error('native hidden-office succession was not actually settled');
+    expect(row.locationId).toBeUndefined();
+    expect(decodeWorldSave(encodeWorldSave(current)).eraHistory.receipts).toContainEqual(row);
+    row.locationId=hq.id;
+    expect(()=>decodeWorldSave(json(current))).toThrow('eraHistory.receipts.sitePrivacy');
   });
 
   it('initializes old saves empty and keeps same-name identities, branch slices and genuinely lost origins distinct',()=>{

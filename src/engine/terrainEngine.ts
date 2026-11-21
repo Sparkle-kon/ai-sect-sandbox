@@ -1,3 +1,4 @@
+import { isScopedExpeditionGate } from './expeditionOmenTerms';
 import { courierCheckpoint } from './sealedCourierEngine';
 import { pilgrimageCheckpoint } from './pilgrimageEngine';
 import { expeditionRescueCheckpoint } from './expeditionRescueCheckpoint';
@@ -99,6 +100,7 @@ export function knownMapLocations(world: WorldState, actor: Cultivator): Locatio
   const leads = new Set(actor.rumors.filter((rumor) => rumor.provenance !== 'fabricated' && !rumor.id.startsWith('rumor-forged-') && rumor.confidence >= 55 &&
     rumor.originTick <= world.tick && world.tick - rumor.originTick <= 10 && rumor.learnedTick <= world.tick).map(({ locationId }) => locationId));
   return world.locations.filter((location) => {
+    if (isScopedExpeditionGate(location)) return false;
     if (location.id === actor.locationId || location.type === 'sect_hq' || location.type === 'market' ||
         world.sects.some((sect) => sect.headquartersId === location.id) || leads.has(location.id)) return true;
     const tile = terrainTileAt(world, location.x, location.y);

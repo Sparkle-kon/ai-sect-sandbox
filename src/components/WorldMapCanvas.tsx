@@ -18,7 +18,7 @@ import { DIALOGUE_KIND_LABELS } from './DialogueTranscript';
 import { SPIRIT_ROOT_COLORS, SpiritRootBadge } from './SpiritRootBadge';
 import { durabilityOf, equippedArtifact, maxDurabilityOf } from '../engine/artifactEngine';
 import { isActiveCampaign, SIEGE_LABELS } from './siegeLabels';
-import { isOpenOccasion, OCCASION_KIND, OCCASION_STATUS } from './occasionLabels';
+import { OCCASION_KIND, OCCASION_STATUS } from './occasionLabels';
 import { BOUNTY_STATUS, relevantBounty } from './bountyLabels';
 import { BIOME_PALETTE, createTerrainMapView, mapActorPositions } from './terrainMapView';
 import { drawMapTerritoryGlyphs, drawTerrain, EXPLORED_TERRAIN_SHADE } from './terrainMapDraw';
@@ -339,7 +339,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const selectedBounty = selected && relevantBounty(world.bounties, selected.id);
   const activeSieges = world.sieges.filter(isActiveCampaign);
   const occasionsByLocation = new Map<string, WorldState['occasions']>();
-  for (const occasion of world.occasions.filter(isOpenOccasion)) {
+  for (const occasion of mapView.visibleOpenOccasions) {
     const local = occasionsByLocation.get(occasion.locationId) ?? [];
     local.push(occasion);
     occasionsByLocation.set(occasion.locationId, local);

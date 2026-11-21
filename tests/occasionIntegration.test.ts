@@ -3,6 +3,7 @@ import { createInitialWorld } from '../src/data/initialWorld';
 import { computeHeuristicDecision, queryCultivatorLLMDecision } from '../src/engine/llmBrain';
 import { encodeWorldSave } from '../src/engine/storageEngine';
 import { advanceWorldTick } from '../src/engine/worldEngine';
+import { restoreLegacyExpeditionFixture } from './fixtures/legacyExpeditionFixture';
 import type { LLMConfig, LLMDecisionPayload, WorldState } from '../src/types/world';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -34,7 +35,7 @@ describe('calendar occasions in both brains', () => {
   it('revalidates a JSON sign-up against the active registration ledger', async () => {
     const initial = createInitialWorld();
     initial.tick = 59;
-    let world = advanceWorldTick(initial, rest(initial), () => 0.95);
+    let world = advanceWorldTick(initial, rest(initial), () => 0.1);
     const actor = world.cultivators[0];
     let target = 'nonexistent';
     const response = vi.fn(async (_url: string, _request: RequestInit) => new Response(JSON.stringify({
@@ -49,14 +50,13 @@ describe('calendar occasions in both brains', () => {
     expect(choice).toMatchObject({ chosenAction: 'JOIN_OCCASION', targetOccasionId: target });
     world = advanceWorldTick(world, { ...rest(world), [actor.id]: choice }, () => 0.2);
     expect(world.occasions[0].participantIds).toContain(actor.id);
-    expect(response.mock.calls[1][1].body).toEqual(expect.stringContaining('天下公示的大会与秘境'));
+    expect(response.mock.calls[1][1].body).toEqual(expect.stringContaining('当前能核实的大会与秘境'));
   });
   it('evacuates a real companion with its owner when a temporary expedition gate closes', () => {
     let world = createInitialWorld();
-    world.tick = 59;
-    world = advanceWorldTick(world, rest(world), () => .95);
-    const expedition = world.occasions.find(({ kind }) => kind === 'expedition')!;
-    expect(expedition).toBeDefined();
+    world.tick = 60;
+    const expedition = restoreLegacyExpeditionFixture(world);
+    expect(expedition.kind).toBe('expedition');
     const ownerId = world.cultivators[0].id;
     const id = world.spiritBeasts[0].id;
     world.cultivators[0].locationId = expedition.locationId;

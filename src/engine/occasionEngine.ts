@@ -10,6 +10,9 @@ import { isTribulationActive } from './tribulationEngine';
 import { advanceExpeditionRescues, expireOccasionRescues, hasOpenExpeditionRescue, rescueHoldsExpeditionRoll,
   rescuedMemberOutOfOccasion } from './expeditionRescueEngine';
 
+import { advanceExpeditionOmenRetention, canJoinOmenExpedition, eligibleExpeditionOmen, presentAtExpeditionAnchor,
+  recordExpeditionOpening } from './expeditionOmenEngine';
+
 const CAPACITY = 8;
 const alive = (person: Cultivator) => person.alive && person.hp > 0;
 const active = (occasion: WorldOccasion) => occasion.status === 'registration' || occasion.status === 'running';
@@ -23,17 +26,17 @@ export function activeOccasionForActor(world: WorldState, actor: Cultivator): Wo
     (occasion.kind !== 'expedition' || !rescuedMemberOutOfOccasion(world, occasion.id, actor.id)));
 }
 
-export function availableOccasionJoins(actor: Cultivator, world: WorldState): Array<{ action: 'JOIN_OCCASION'; targetOccasionId: string }> {
+export function availableOccasionJoins(actor: Cultivator, world: WorldState, executionTick=world.tick): Array<{ action: 'JOIN_OCCASION'; targetOccasionId: string }> {
   if (!alive(actor) || activeOccasionForActor(world, actor) || activeSiegeForActor(world, actor) || isTribulationActive(actor)) return [];
-  return world.occasions.filter((occasion) => occasion.status === 'registration' && world.tick < occasion.registrationClosesTick &&
-    occasion.participantIds.length < CAPACITY && world.locations.some(({ id }) => id === occasion.locationId))
+  return world.occasions.filter((occasion) => occasion.status === 'registration' && executionTick < occasion.registrationClosesTick &&
+    canJoinOmenExpedition(world, actor, occasion, executionTick) && occasion.participantIds.length < CAPACITY && world.locations.some(({ id }) => id === occasion.locationId))
     .map(({ id }) => ({ action: 'JOIN_OCCASION', targetOccasionId: id }));
 }
 
 function event(world: WorldState, occasion: WorldOccasion, token: string, title: string, description: string,
   actors: string[] = occasion.participantIds, category: WorldEvent['category'] = 'heavenly', locationId = occasion.locationId): WorldEvent {
   return { id: `evt-${world.tick}-${occasion.id}-${token}`, tick: world.tick, year: world.year, month: world.month,
-    title, description, category, actorIds: actors, locationId };
+    title, description, category, actorIds: actors, locationId, ...(occasion.omenId ? { witnessScope: 'participants' } : {}) };
 }
 
 export function joinOccasion(world: WorldState, actor: Cultivator, decision: LLMDecisionPayload): WorldEvent | null {
@@ -44,35 +47,54 @@ export function joinOccasion(world: WorldState, actor: Cultivator, decision: LLM
   return event(world, occasion, `join-${actor.id}`, '修士报名盛会', `${actor.name}报名参加${occasion.title}，开场时启程。`, [actor.id], 'diplomacy', actor.locationId);
 }
 
-function startOccasion(world: WorldState, rng: () => number): WorldEvent | undefined {
+function startTournament(world: WorldState, rng: () => number): WorldEvent | undefined {
   const stage = world.locations.find(({ type }) => type === 'market') ?? world.locations.find(({ ownerSectId }) => !ownerSectId) ?? world.locations[0];
-  if (!stage) return undefined;
-  const kind = rng() < .5 ? 'tournament' : 'expedition';
+  if (!stage || rng() >= .5) return undefined;
+  const kind = 'tournament';
   const id = `occasion-${world.tick}-${kind}`;
-  const title = kind === 'tournament' ? '诸宗百年大比' : '星门秘境远征';
-  const locationId = kind === 'tournament' ? stage.id : `${id}-gate`;
-  if (kind === 'expedition') {
-    world.locations.push({ id: locationId, name: '星门浮域', type: 'secret_realm', x: cap(stage.x + 48, 10, 990),
-      y: cap(stage.y + 55, 10, 590), description: '限时洞天，机缘与灵灾同在；关闭后遗卷将流落至外界。',
-      spiritRoot: '雷', spiritQi: 96, furnaceGrade: 0, inheritanceScrolls: [],
-      herbs: { jade_leaf: 1, earth_root: 0, star_bloom: 5, shadow_moss: 2 },
-      herbCapacity: { jade_leaf: 1, earth_root: 0, star_bloom: 5, shadow_moss: 2 } });
-  }
-  const occasion: WorldOccasion = { id, kind, title, locationId, startedTick: world.tick, registrationClosesTick: world.tick + 3,
+  const title = '诸宗百年大比';
+  const occasion: WorldOccasion = { id, kind, title, locationId: stage.id, startedTick: world.tick, registrationClosesTick: world.tick + 3,
     expiresTick: world.tick + 12, status: 'registration', participantIds: [], remainingIds: [], bouts: [], expeditions: [], round: 0 };
   world.occasions.push(occasion);
   return event(world, occasion, 'open', `${title}开启`, `天下修士可在第${occasion.registrationClosesTick}轮之前报名${title}。`);
 }
 
+function startLinkedExpedition(world: WorldState): WorldEvent | undefined {
+  const selected = eligibleExpeditionOmen(world);
+  if (!selected) return undefined;
+  const kind = 'expedition';
+  const title = '星门秘境远征';
+  const id = `occasion-${world.tick}-${kind}`;
+  const locationId = `${id}-gate`;
+  const { site, row } = selected;
+  world.locations.push({ id: locationId, name: '星门浮域', type: 'secret_realm', x: site.x, y: site.y,
+    expeditionOmenId: row.id, description: '限时洞天，原处实地通行，机缘与灵灾同在。', spiritRoot: '雷', spiritQi: 96, furnaceGrade: 0,
+    inheritanceScrolls: [], herbs: { jade_leaf: 1, earth_root: 0, star_bloom: 5, shadow_moss: 2 },
+    herbCapacity: { jade_leaf: 1, earth_root: 0, star_bloom: 5, shadow_moss: 2 } });
+  const occasion: WorldOccasion = { id, kind, title, locationId, startedTick: world.tick, registrationClosesTick: world.tick + 3,
+    expiresTick: world.tick + 12, status: 'registration', participantIds: [], remainingIds: [], bouts: [], expeditions: [],
+    round: 0, omenId: row.id, anchorSiteId: site.id };
+  world.occasions.push(occasion);
+  recordExpeditionOpening(world, selected, occasion);
+  const witnesses=[row.operatorId,...(row.relay?[row.relay.recipientId]:[])].filter(id=>{
+    const actor=world.cultivators.find(person=>person.id===id);
+    return !!actor&&presentAtExpeditionAnchor(world,actor,site.id);
+  });
+  return event(world, occasion, 'open', `${title}在实测地点开启`, '本地天候与灵气符合实测先兆；已知线索者需实地报名。',
+    witnesses, 'heavenly', site.id);
+}
+
 function finish(world: WorldState, occasion: WorldOccasion, cancelled = false): WorldEvent {
   const interruptedExpedition = cancelled && occasion.kind === 'expedition' && occasion.status === 'running';
   const permanent = world.locations.filter(({ id }) => id !== occasion.locationId);
-  const exit = permanent.find(({ type }) => type === 'market') ?? permanent[0];
+  const exit = (occasion.anchorSiteId ? permanent.find(site => site.id === occasion.anchorSiteId) : undefined) ??
+    permanent.find(({ type }) => type === 'market') ?? permanent[0];
   const temp = world.locations.find(({ id }) => id === occasion.locationId);
   for (const person of world.cultivators) {
     if (person.locationId !== occasion.locationId || (occasion.kind === 'tournament' && (occasion.status !== 'running' || !occasion.participantIds.includes(person.id)))) continue;
     const home = world.sects.find(({ id }) => id === person.sectId)?.headquartersId;
-    person.locationId = world.locations.find(({ id }) => id === home && id !== occasion.locationId)?.id ??
+    person.locationId = occasion.omenId ? exit?.id ?? occasion.locationId :
+      world.locations.find(({ id }) => id === home && id !== occasion.locationId)?.id ??
       (occasion.kind === 'tournament' ? occasion.locationId : exit?.id ?? occasion.locationId);
   }
   if (occasion.kind === 'expedition' && temp && exit) {
@@ -104,10 +126,14 @@ export function advanceOccasions(world: WorldState, rng: () => number): WorldEve
     if (occasion.kind === 'expedition') results.push(...expireOccasionRescues(world, occasion.id));
     results.push(finish(world, occasion, cancelled));
   };
-  if (world.tick > 0 && world.tick % 60 === 0 && !world.occasions.some((occasion) => active(occasion) || occasion.startedTick === world.tick)) {
-    const opened = startOccasion(world, rng);
+  if (world.tick > 0 && world.tick % 60 === 0 && world.expeditionOmens.lastCalendarTick !== world.tick && !world.occasions.some((occasion) => occasion.kind === 'tournament' && (active(occasion) || occasion.startedTick === world.tick))) {
+    world.expeditionOmens.lastCalendarTick = world.tick;
+    const opened = startTournament(world, rng);
     if (opened) results.push(opened);
   }
+  const openedExpedition = startLinkedExpedition(world);
+  if (openedExpedition) results.push(openedExpedition);
+  advanceExpeditionOmenRetention(world);
   for (const occasion of world.occasions) {
     if (!active(occasion) || (occasion.lastResolvedTick ?? -1) >= world.tick) continue;
     occasion.lastResolvedTick = world.tick;
@@ -117,7 +143,8 @@ export function advanceOccasions(world: WorldState, rng: () => number): WorldEve
     if (occasion.status === 'registration') {
       if (world.tick < occasion.registrationClosesTick) continue;
       const entrants = playerList(world, [...new Set(occasion.participantIds)]).filter((person) =>
-        !activeSiegeForActor(world, person) && !isTribulationActive(person));
+        !activeSiegeForActor(world, person) && !isTribulationActive(person) &&
+        (!occasion.omenId || (!!occasion.anchorSiteId && presentAtExpeditionAnchor(world, person, occasion.anchorSiteId))));
       if (entrants.length < (occasion.kind === 'tournament' ? 2 : 1)) {
         close(occasion, true); continue;
       }

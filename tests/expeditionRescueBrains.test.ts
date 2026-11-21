@@ -4,6 +4,7 @@ import { availableExpeditionRescueActions, EXPEDITION_RESCUE_HERB } from '../src
 import { computeHeuristicDecision, requestCultivatorLLMDecision, utilityExpeditionRescueDecision } from '../src/engine/llmBrain';
 import { modelDecisionCandidates } from '../src/engine/modelDecisionTurn';
 import { advanceOccasions, joinOccasion } from '../src/engine/occasionEngine';
+import { restoreLegacyExpeditionFixture } from './fixtures/legacyExpeditionFixture';
 import { applyCultivatorBrainDecision } from '../src/engine/worldEngine';
 import type { Cultivator, LLMConfig, LLMDecisionPayload } from '../src/types/world';
 
@@ -22,8 +23,7 @@ function fixture() {
   rescuer.hp = rescuer.maxHp;
   rescuer.personality = '刚正';
   world.tick = 60;
-  advanceOccasions(world, () => .8);
-  const occasion = world.occasions[0];
+  const occasion = restoreLegacyExpeditionFixture(world);
   expect(occasion?.kind).toBe('expedition');
   expect(joinOccasion(world, explorer, { chosenAction: 'JOIN_OCCASION', targetOccasionId: occasion.id, innerMonologue: '' })).not.toBeNull();
   expect(joinOccasion(world, rescuer, { chosenAction: 'JOIN_OCCASION', targetOccasionId: occasion.id, innerMonologue: '' })).not.toBeNull();

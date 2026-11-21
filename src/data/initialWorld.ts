@@ -349,6 +349,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     villageCensuses: createVillageCensusesState(),
     oathArbitrations: createOathArbitrationState(),
     fieldObservatories: createFieldObservatoriesState(),
+    expeditionOmens: { rows: [] },
     alignedWeather: createAlignedWeatherState(),
     competitionReviews: createCompetitionReviewState(),
     witnesses: createWitnessState(),

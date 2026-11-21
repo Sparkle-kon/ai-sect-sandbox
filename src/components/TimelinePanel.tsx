@@ -1,3 +1,4 @@
+import { isScopedExpeditionGate } from '../engine/expeditionOmenTerms';
 import type {ReactNode} from 'react';
 import { useState } from 'react';
 import { TIMELINE_MAX_BRANCHES, TIMELINE_MAX_TICKS } from '../engine/timelineEngine';
@@ -19,7 +20,7 @@ const INTERVENTIONS: Record<Intervention, { title: string; target: 'location' | 
 
 function choicesFor(world: WorldState, type: Intervention) {
   switch (INTERVENTIONS[type].target) {
-    case 'location': return world.locations.map(({ id, name }) => ({ id, name }));
+    case 'location': return world.locations.filter(location=>!isScopedExpeditionGate(location)).map(({ id, name }) => ({ id, name }));
     case 'cultivator': return world.cultivators.filter(({ alive, hp }) => alive && hp > 0).map(({ id, name }) => ({ id, name }));
     case 'world': return [];
   }

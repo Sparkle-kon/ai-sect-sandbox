@@ -1,3 +1,4 @@
+import { isScopedExpeditionGate } from './expeditionOmenTerms';
 import { courierCheckpoint } from './sealedCourierEngine';
 import { captureChronicleErrataSource } from './chronicleErrataEngine';
 import { capturePublicWitnessFact } from './witnessEngine';
@@ -42,13 +43,14 @@ export function fabricateRumor(
 ): void {
   if (!intent || (actor.personality !== '阴险' && actor.personality !== '诡诈') ||
       !actor.alive || !listener.alive || actor.id === listener.id || actor.locationId !== listener.locationId) return;
+  const publicSites = world.locations.filter(location=>!isScopedExpeditionGate(location));
   const existing = intent === 'EXAGGERATE' && actor.rumors
-    .filter((item) => item.locationId && item.witnessScope !== 'participants' && item.provenance !== 'fabricated' && world.tick - item.originTick <= RUMOR_LIFETIME)
+    .filter((item) => item.locationId && publicSites.some(site=>site.id===item.locationId) && item.witnessScope !== 'participants' && item.provenance !== 'fabricated' && world.tick - item.originTick <= RUMOR_LIFETIME)
     .sort(byValue)[0];
   const location = existing
-    ? world.locations.find((item) => item.id === existing.locationId)
-    : world.locations.find((item) => item.id !== actor.locationId && item.type === 'secret_realm') ??
-      world.locations.find((item) => item.id !== actor.locationId);
+    ? publicSites.find((item) => item.id === existing.locationId)
+    : publicSites.find((item) => item.id !== actor.locationId && item.type === 'secret_realm') ??
+      publicSites.find((item) => item.id !== actor.locationId);
   if (!location) return;
   const subject = existing
     ? `「${existing.subject.slice(0, 80)}」另有隐情：传说【${location.name}】地底还藏着未取走的秘宝。`
@@ -64,9 +66,10 @@ export function fabricateRumor(
 
 export function spreadRumors(world: WorldState): void {
   const live = world.cultivators.filter((item) => item.alive);
+  const privateSites=new Set(world.locations.filter(isScopedExpeditionGate).map(({id})=>id));
   const snapshot = new Map(live.map((item) => {
     item.rumors = item.rumors.filter((rumor) => world.tick - rumor.originTick <= RUMOR_LIFETIME);
-    return [item.id, item.rumors.filter((rumor) => rumor.learnedTick < world.tick && rumor.hops < MAX_HOPS && rumor.witnessScope !== 'participants').sort(byValue)];
+    return [item.id, item.rumors.filter((rumor) => rumor.learnedTick < world.tick && rumor.hops < MAX_HOPS && rumor.witnessScope !== 'participants' && (!rumor.locationId || !privateSites.has(rumor.locationId))).sort(byValue)];
   }));
   // One packet per listener per month; a snapshot prevents same-month cascades.
   for (const listener of live) {
@@ -95,5 +98,5 @@ export function spreadRumors(world: WorldState): void {
 export function knownRumorLead(cultivator: Cultivator, world: WorldState): string | undefined {
   return cultivator.rumors.filter((item) => item.lead && item.confidence >= 45 &&
     item.locationId !== cultivator.locationId && world.tick - item.originTick <= RUMOR_LIFETIME &&
-    world.locations.some((location) => location.id === item.locationId)).sort(byValue)[0]?.locationId;
+    world.locations.some((location) => location.id === item.locationId&&!isScopedExpeditionGate(location))).sort(byValue)[0]?.locationId;
 }

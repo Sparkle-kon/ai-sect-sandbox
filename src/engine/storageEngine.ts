@@ -5,6 +5,8 @@ import { validateMentorTransfers } from './storageMentorTransferValidation';
 import { sameGeneratedWorld } from './worldIdentity';
 import { createAlignedWeatherState } from './alignedWeatherEngine';
 import { alignedWeatherPinnedRuns } from './alignedWeatherTerms';
+import { createExpeditionOmensState, expeditionOmenPinnedRuns } from './expeditionOmenEngine';
+import { validateExpeditionOmenHistory } from './storageExpeditionOmenValidation';
 import { observatoryStationValid } from './observatoryStation';
 import { validateAlignedWeatherHistory } from './storageAlignedWeatherValidation';
 import { validateWitnessedPersonalStory } from './storageWitnessedPersonalStoryValidation';
@@ -301,7 +303,7 @@ const shape = structure({
     succession:optional(structure({tick,method:one('election','challenge','coup'),previousLeaderId:oid,leaderId:id,supporterIds:ids})),
     monthlyEconomy:optional(structure({tick,taxes:wealth,mining:wealth,upkeep:wealth,net:num(-1_000_000_000,1_000_000_000)}))})),
   locations:arr(1200,structure({id,name:id,x:num(0,1000),y:num(0,600),type:one('sect_hq','spirit_vein','secret_realm','market','abyss'),spiritRoot:spirit,
-    spiritQi:num(0,150),ownerSectId:oid,inheritanceScrolls:arr(350,technique),herbs,herbCapacity:herbs,furnaceGrade:one(0,1,2,3),description:text})),
+    spiritQi:num(0,150),ownerSectId:oid,expeditionOmenId:oid,inheritanceScrolls:arr(350,technique),herbs,herbCapacity:herbs,furnaceGrade:one(0,1,2,3),description:text})),
   cultivators:arr(SAVE_COLLECTION_LIMIT,structure({id,name:id,title:text,sectId:strings(240),sectRank,contribution:wealth,transgressions:percentage,disciplineRevision:otick,realm,realmStage:num(1,9,true),
     ordinaryActionEvidence:optional((value,path)=>{if(!isOrdinaryActionEvidence(value))fail(path);}),
     qiProgress:percentage,hp:wealth,maxHp:num(1,1_000_000_000),combatPower:wealth,age:wealth,lifespan:wealth,
@@ -336,7 +338,13 @@ const shape = structure({
   occasions:arr(2000,structure({id,kind:one('tournament','expedition'),title:text,locationId:id,startedTick:tick,registrationClosesTick:tick,expiresTick:tick,
     status:one('registration','running','completed','cancelled'),participantIds:ids,remainingIds:ids,
     bouts:arr(30,structure({round:count,firstId:id,secondId:oid,winnerId:id})),
-    expeditions:arr(30,structure({cultivatorId:id,tick,outcome:one('loot','wounded','death','escaped'),description:text})),round:count,championId:oid,lastResolvedTick:otick})),
+    expeditions:arr(30,structure({cultivatorId:id,tick,outcome:one('loot','wounded','death','escaped'),description:text})),round:count,championId:oid,lastResolvedTick:otick,
+    omenId:oid,anchorSiteId:oid})),
+  expeditionOmens:structure({lastCalendarTick:otick,rows:arr(SAVE_COLLECTION_LIMIT,structure({
+    id,siteId:id,operatorId:id,openedTick:tick,measuredTick:tick,measuredQi:num(0,150),reading:fieldReading,
+    windowStartsTick:tick,windowEndsTick:tick,relay:optional(structure({recipientId:id,tick})),
+    opening:optional(structure({tick,qi:num(0,150),reading:fieldReading,occasionId:id})),
+  }))}),
   bounties:arr(2000,structure({id,targetCultivatorId:id,reason:text,issuedTick:tick,reward:wealth,status:one('open','claimed','withdrawn'),sponsorSectIds:ids,
     escrow:arr(48,structure({sectId:id,amount:wealth})),hunterId:oid,settledTick:otick})),
   terrain:structure({seed:unsigned32,columns:num(1,80,true),rows:num(1,80,true),tiles:arr(6400,structure({id,col:num(0,79,true),row:num(0,79,true),
@@ -918,6 +926,7 @@ function verifyWorld(value: unknown): WorldState {
       ...(!Object.hasOwn(value, 'damageAssurance') ? { damageAssurance: createDamageAssuranceState() } : {}),
       ...(!Object.hasOwn(value, 'furnaceReservations') ? { furnaceReservations: createFurnaceReservationState() } : {}),
       ...(!Object.hasOwn(value, 'sparring') ? { sparring: createSparringState() } : {}),
+      ...(!Object.hasOwn(value, 'expeditionOmens') ? { expeditionOmens: createExpeditionOmensState() } : {}),
       ...(!Object.hasOwn(value, 'expeditionRescues') ? { expeditionRescues: createExpeditionRescueState() } : {}),
       ...(!Object.hasOwn(value, 'shortShifts') ? { shortShifts: createShortShiftState() } : {}),
       ...(!Object.hasOwn(value, 'boundaryReliefs') ? { boundaryReliefs: createBoundaryReliefState() } : {}),
@@ -1047,6 +1056,7 @@ function verifyWorld(value: unknown): WorldState {
   }
   const fieldActorStates = new Map(Object.entries(w.fieldObservatories.byActor));
   const pinnedWeatherRuns = alignedWeatherPinnedRuns(w);
+  const pinnedOmenRuns = expeditionOmenPinnedRuns(w);
   const weatherSites = new Map(w.locations.map((site) => [site.id,site]));
   const readingValid = ({ kind, intensity }: { kind: string; intensity: number }) =>
     Math.abs(intensity * 100 - Math.round(intensity * 100)) <= 1e-8 &&
@@ -1055,7 +1065,7 @@ function verifyWorld(value: unknown): WorldState {
     if (!actor.has(operatorId) || (!entry.runs.length && !entry.inbox.length) ||
         entry.runs.filter(({ status }) => status === 'pending').length > 1 ||
         entry.runs.filter(({ status, openedTick }) => status !== 'pending' &&
-          !pinnedWeatherRuns.get(operatorId)?.has(openedTick)).length > OBSERVATORY_TERMINAL_LIMIT)
+          !pinnedWeatherRuns.get(operatorId)?.has(openedTick) && !pinnedOmenRuns.get(operatorId)?.has(openedTick)).length > OBSERVATORY_TERMINAL_LIMIT)
       fail('fieldObservatories.byActor.references');
     unique(entry.runs, ({ openedTick }) => String(openedTick), 'fieldObservatories.runs.tick');
     unique(entry.inbox, ({ operatorId, openedTick }) => JSON.stringify([operatorId, openedTick]), 'fieldObservatories.inbox.source');
@@ -2209,7 +2219,9 @@ function verifyWorld(value: unknown): WorldState {
           escrow.aid !== (agreement.aidReleasedTick === undefined ? terms.aidAmount : 0))
           : (escrow.proposerBond !== 0 || escrow.targetBond !== 0 || escrow.aid !== 0))) fail('ceasefires.escrow');
   }
-  unique(w.occasions, ({ id }) => id, 'occasions.id'); unique(w.bounties, ({ id }) => id, 'bounties.id');
+  unique(w.occasions, ({ id }) => id, 'occasions.id');
+  validateExpeditionOmenHistory(w, actor, fail);
+  unique(w.bounties, ({ id }) => id, 'bounties.id');
   unique(w.mapHazards, ({ id }) => id, 'mapHazards.id'); unique(w.spiritBeasts, ({ id }) => id, 'spiritBeasts.id');
   for (const item of w.mapHazards) if (!map.has(item.tileId) || item.expiresTick <= item.createdTick) fail('mapHazards.references');
   for (const beast of w.spiritBeasts) if ((beast.alive && !locations.has(beast.locationId)) || beast.hp > beast.maxHp ||
