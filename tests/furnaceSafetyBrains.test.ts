@@ -75,7 +75,7 @@ describe('grounded furnace safety in both brains', () => {
     expect(JSON.stringify(trace)).not.toContain(row.id);
   });
 
-  it('has Utility inspect then spend actual repair stock; model reopens neither before proof nor for the same turn', async () => {
+  it('preserves Utility inspection and native repair stock; model reopens neither before proof nor for the same turn', async () => {
     const { world, site, owner, row, tide, payload, act } = fixture();
     world.tick = tide.expiresTick;
     advanceMapHazards(world);
@@ -87,8 +87,10 @@ describe('grounded furnace safety in both brains', () => {
     vi.stubGlobal('fetch', mocked);
     await expect(requestCultivatorLLMDecision(owner, world, config, world.tick + 1)).resolves.toBeUndefined();
     world.tick++;
-    const repair = computeHeuristicDecision(owner, world, () => .99);
-    expect(repair).toMatchObject({ chosenAction: 'FURNACE_SAFETY', furnaceSafetyMove: 'repair', targetFurnaceSafetyId: row.id });
+    // The ordinary repair remains a valid explicit choice even when Utility prefers assurance on an eligible claim.
+    const ordinary = availableFurnaceSafetyActions(owner, world).find(({ furnaceSafetyMove }) => furnaceSafetyMove === 'repair');
+    expect(ordinary).toMatchObject({ action: 'FURNACE_SAFETY', furnaceSafetyMove: 'repair', targetFurnaceSafetyId: row.id });
+    const repair = payload('repair');
     expect(act(owner, repair)).not.toBeNull();
     expect(row.integrity).toBe(90);
     expect([owner.spiritStones, owner.herbs.earth_root]).toEqual([100 - FURNACE_SAFETY_INSPECT_STONES - FURNACE_SAFETY_REPAIR.stones,

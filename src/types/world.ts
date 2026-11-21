@@ -140,6 +140,7 @@ export type ActionType =
   | 'WORKSHOP'
   | 'FURNACE_RESERVATION'
   | 'FURNACE_SAFETY'
+  | 'DAMAGE_ASSURANCE'
   | 'SPARRING'
   | 'EXPEDITION_RESCUE'
   | 'SHORT_SHIFT'
@@ -541,6 +542,8 @@ export interface LLMDecisionPayload {
   workshopMove?: WorkshopMove;
   furnaceMove?: 'reserve' | 'cancel';
   furnaceSafetyMove?: FurnaceSafetyMove;
+  damageAssuranceMove?: DamageAssuranceMove;
+  targetDamageAssuranceId?: string;
   targetFurnaceSafetyId?: string;
   targetFurnaceReservationId?: string;
   sparringMove?: SparringMove;
@@ -2582,6 +2585,7 @@ export interface FurnaceReservationState {
 
 export type FurnaceSafetyMove = 'inspect' | 'repair' | 'reopen';
 export interface FurnaceSafetyReceipt {
+  assuranceClaimId?: string;
   kind: FurnaceSafetyMove;
   tick: number;
   actorId: string;
@@ -2604,6 +2608,38 @@ export interface FurnaceSafetyCase {
   reopenedTick?: number;
 }
 export interface FurnaceSafetyState { nextId: number; cases: FurnaceSafetyCase[] }
+
+export type DamageAssuranceMove = 'seal' | 'make_good';
+export interface DamageAssuranceWork {
+  receiptId: string;
+  tick: number;
+  actorId: string;
+  integrityBefore: number;
+  integrityAfter: number;
+  creditedPoints: number;
+  stonesSpent: 8;
+  rootsSpent: 2;
+}
+export interface DamageAssuranceClaim {
+  id: string;
+  sourceCaseId: string;
+  siteId: string;
+  responsibleSectId: string;
+  hazardId: string;
+  damagedTick: number;
+  integrityBefore: number;
+  integrityAfterDamage: number;
+  initialLoss: number;
+  inspectionTick: number;
+  inspectorId: string;
+  sealedTick: number;
+  sealedById: string;
+  status: 'open' | 'fulfilled' | 'closed';
+  contributions: DamageAssuranceWork[];
+  closedTick?: number;
+  closure?: 'native_reopened' | 'title_changed' | 'case_superseded';
+}
+export interface DamageAssuranceState { claims: DamageAssuranceClaim[] }
 
 export type SparringMove = 'offer' | 'accept' | 'decline' | 'withdraw' | 'ready' | 'yield';
 export interface SparringRound {
@@ -2962,6 +2998,7 @@ export interface WorldState {
   workshopDisbandments: WorkshopDisbandmentState;
   furnaceReservations: FurnaceReservationState;
   furnaceSafety: FurnaceSafetyState;
+  damageAssurance: DamageAssuranceState;
   sparring: SparringState;
   expeditionRescues: ExpeditionRescueState;
   shortShifts: ShortShiftState;

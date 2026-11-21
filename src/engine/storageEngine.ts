@@ -13,6 +13,8 @@ import { validateWorkshopInstitutionHistory } from './storageWorkshopValidation'
 import { validateArtifactSalvageHistory } from './storageSalvageValidation';
 import { createArtifactSalvageState } from './artifactSalvageEngine';
 import { WORKSHOP_ACTIVE_TICKS, WORKSHOP_MAX_WORK_RECEIPTS, WORKSHOP_OFFER_TICKS, createWorkshopState, workshopGradeForScore, workshopTerms } from './workshopEngine';
+import { createDamageAssuranceState } from './damageAssuranceEngine';
+import { validateDamageAssuranceHistory } from './storageDamageAssuranceValidation';
 import { createFurnaceSafetyState } from './furnaceSafetyEngine';
 import { createFurnaceReservationState, FURNACE_QUEUE_TICKS, FURNACE_TERMINAL_LIMIT, FURNACE_USE_RETENTION_TICKS } from './furnaceReservationEngine';
 import { createSparringState, SPARRING_MASTERY_MAX, SPARRING_QI_COST } from './sparringEngine';
@@ -153,7 +155,7 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT SALVAGE_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY CARE_FOLLOWUP FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP FURNACE_RESERVATION FURNACE_SAFETY SPARRING EXPEDITION_RESCUE SHORT_SHIFT BOUNDARY_RELIEF APPRENTICE_COHORT HOUSEHOLD_NAME CARAVAN_RESTITUTION VILLAGE_GRANARY VILLAGE_SUPPLY ROUTE_WARNING PAVILION_LOAN WORKSHOP_CAPACITY CIVIC_MEMORIAL VILLAGE_FAIR SECT_STIPEND SEED_CULTURE TOOL_LOAN RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY ALIGNED_WEATHER SEASON_REVIEW REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT SALVAGE_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY CARE_FOLLOWUP FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP FURNACE_RESERVATION FURNACE_SAFETY DAMAGE_ASSURANCE SPARRING EXPEDITION_RESCUE SHORT_SHIFT BOUNDARY_RELIEF APPRENTICE_COHORT HOUSEHOLD_NAME CARAVAN_RESTITUTION VILLAGE_GRANARY VILLAGE_SUPPLY ROUTE_WARNING PAVILION_LOAN WORKSHOP_CAPACITY CIVIC_MEMORIAL VILLAGE_FAIR SECT_STIPEND SEED_CULTURE TOOL_LOAN RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY ALIGNED_WEATHER SEASON_REVIEW REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const flowGood = one('stone','jade_seed','jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
@@ -444,10 +446,18 @@ const shape = structure({
     siteId:id,actorId:id,tick,slot:one(1,2,3),kind:one('brew','forge','repair','awaken','workshop','relic','salvage'),
     workshopOrderId:oid,reservationId:oid,
   }))}),
+  damageAssurance:structure({claims:arr(SAVE_COLLECTION_LIMIT,structure({
+    id,sourceCaseId:id,siteId:id,responsibleSectId:id,hazardId:id,damagedTick:tick,
+    integrityBefore:num(0,100,true),integrityAfterDamage:num(0,100,true),initialLoss:num(1,100,true),
+    inspectionTick:tick,inspectorId:id,sealedTick:tick,sealedById:id,status:one('open','fulfilled','closed'),
+    contributions:arr(8,structure({receiptId:id,tick,actorId:id,integrityBefore:num(0,100,true),
+      integrityAfter:num(0,100,true),creditedPoints:num(1,100,true),stonesSpent:one(8),rootsSpent:one(2)})),
+    closedTick:otick,closure:optional(one('native_reopened','title_changed','case_superseded')),
+  }))}),
   furnaceSafety:structure({nextId:num(1,Number.MAX_SAFE_INTEGER,true),cases:arr(SAVE_COLLECTION_LIMIT,structure({
     id,siteId:id,ownerAtDamage:id,hazardId:id,hazardTileId:id,hazardCreatedTick:tick,severity:one(1,2,3),damagedTick:tick,
     integrityBefore:num(0,100,true),integrity:num(0,100,true),reopenedTick:otick,
-    receipts:arr(8,structure({kind:one('inspect','repair','reopen'),tick,actorId:id,ownerSectId:id,
+    receipts:arr(8,structure({kind:one('inspect','repair','reopen'),tick,actorId:id,ownerSectId:id,assuranceClaimId:oid,
       integrityBefore:num(0,100,true),integrityAfter:num(0,100,true)}))
   }))}),
   sparring:structure({nextId:num(1,Number.MAX_SAFE_INTEGER,true),agreements:arr(SAVE_COLLECTION_LIMIT,structure({
@@ -852,6 +862,7 @@ function verifyWorld(value: unknown): WorldState {
       ...(!Object.hasOwn(value, 'workshops') ? { workshops: createWorkshopState() } : {}),
       ...(!Object.hasOwn(value, 'artifactSalvages') ? { artifactSalvages: createArtifactSalvageState() } : {}),
       ...(!Object.hasOwn(value, 'furnaceSafety') ? { furnaceSafety: createFurnaceSafetyState() } : {}),
+      ...(!Object.hasOwn(value, 'damageAssurance') ? { damageAssurance: createDamageAssuranceState() } : {}),
       ...(!Object.hasOwn(value, 'furnaceReservations') ? { furnaceReservations: createFurnaceReservationState() } : {}),
       ...(!Object.hasOwn(value, 'sparring') ? { sparring: createSparringState() } : {}),
       ...(!Object.hasOwn(value, 'expeditionRescues') ? { expeditionRescues: createExpeditionRescueState() } : {}),
@@ -1363,6 +1374,7 @@ function verifyWorld(value: unknown): WorldState {
   validateVillageSupplyHistory(w, actor, fail);
   validateVillageGranaryRelationships(w, actor, fail);
   validateFurnaceSafetyRelationships(w, actor, sector, fail);
+  validateDamageAssuranceHistory(w, actor, fail);
   let previousFlowTick = -1;
   let previousFlowId = 0;
   for (const book of w.resourceFlow.months) {

@@ -22,6 +22,7 @@ import { availableSparringActions, sparringLocksActor, SPARRING_QI_COST } from '
 import { availableExpeditionRescueActions, EXPEDITION_RESCUE_DISTRESS_HP } from './expeditionRescueEngine';
 import { availableFurnaceReservationActions, heldFurnaceReservation } from './furnaceReservationEngine';
 import { availableFurnaceSafetyActions } from './furnaceSafetyEngine';
+import { availableDamageAssuranceActions } from './damageAssuranceEngine';
 import { COGNITIVE_RESPONSE_GUIDE } from './llmCognitiveResponseGuide';
 import { availableTerrainRecoveryActions } from './terrainSuccessionEngine';
 import { availableSharedCommonsActions } from './sharedCommonsEngine';
@@ -507,6 +508,17 @@ export function computeHeuristicDecision(
   if (cultivator.hp >= cultivator.maxHp * .65 && world.furnaceSafety.cases.some((row) =>
       row.siteId === cultivator.locationId && row.reopenedTick === undefined)) {
     const safety = availableFurnaceSafetyActions(cultivator, world)[0];
+    if (safety === undefined || safety.furnaceSafetyMove === 'repair') {
+      const assurances = availableDamageAssuranceActions(cultivator, world);
+      if (assurances.length === 1) {
+        const assurance = assurances[0];
+        if (assurance.damageAssuranceMove === 'seal') return { chosenAction: 'DAMAGE_ASSURANCE', damageAssuranceMove: 'seal',
+          targetFurnaceSafetyId: assurance.targetFurnaceSafetyId, innerMonologue: '验炉人已查明原损，先把旧账封存，不能写成修好了。' };
+        return { chosenAction: 'DAMAGE_ASSURANCE', damageAssuranceMove: 'make_good',
+          targetDamageAssuranceId: assurance.targetDamageAssuranceId,
+          innerMonologue: '只按本人实际能修的旧损交割；不另许款，也不越过复验开炉。' };
+      }
+    }
     if (safety) return { chosenAction: safety.action, furnaceSafetyMove: safety.furnaceSafetyMove,
       targetFurnaceSafetyId: safety.targetFurnaceSafetyId, innerMonologue: safety.furnaceSafetyMove === 'inspect' ?
         '待兽潮退去，在现场实付验明炉损，不把核验当修复。' : safety.furnaceSafetyMove === 'repair' ?
@@ -1415,6 +1427,9 @@ export async function requestCultivatorLLMDecision(
   const furnaceOptions = availableFurnaceReservationActions(cultivator, world, requestTick);
   const furnaceSafetyOptions = availableFurnaceSafetyActions(cultivator, world, requestTick)
     .map(({ action, furnaceSafetyMove, targetFurnaceSafetyId }) => ({ action, furnaceSafetyMove, targetFurnaceSafetyId }));
+  const damageAssuranceOptions = availableDamageAssuranceActions(cultivator, world, requestTick);
+  const damageAssurancePromptOptions = damageAssuranceOptions.map(({ damageAssuranceMove, targetFurnaceSafetyId, targetDamageAssuranceId }) =>
+    ({ damageAssuranceMove, targetFurnaceSafetyId, targetDamageAssuranceId }));
   const sparringOptions = availableSparringActions(cultivator, world, true, requestTick);
   const recoveryOptions = availableTerrainRecoveryActions(cultivator, world);
   const commonsOptions = availableSharedCommonsActions(cultivator, world);
@@ -1540,6 +1555,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 灵植留种只复制本人在实地可执行的许可：reserve 只填 targetLocationId；test、plant 只填 targetSeedLotId；harvest 只填 targetSeedPlotId。不要填写天气、样本量、出苗、收成或远处地点：${JSON.stringify(seedPromptOptions)}
 - 丹毒：${cultivator.pillToxicity}/100；灵药包：${JSON.stringify(cultivator.herbs)}；已有丹药：${JSON.stringify(cultivator.pills)}；允许的炼丹行动：${JSON.stringify(availableAlchemy(cultivator, world, requestTick))}
 - 炉体停用只用本人、此地、执行回合许可的 inspect、repair 或 reopen，照抄 targetFurnaceSafetyId。不得填写完整度、奖惩、物资、地点、复开日期或额外炉位；复开本轮仍停炉：${JSON.stringify(furnaceSafetyOptions)}
+- 炉损封存与实修只复制本人在地合法许可：seal 用原验炉 targetFurnaceSafetyId，make_good 只用 targetDamageAssuranceId。不填写灾况、原价、物料、完整度、磨损、修足或赔款；这些只由现地实据判定：${JSON.stringify(damageAssurancePromptOptions)}
 - 炉位预约仅复制执行回合的实际许可：${JSON.stringify(furnaceOptions)}；预约不是已开炉，不自填时间、容量或物料。
 - 自愿切磋只使用执行回合的许可：${JSON.stringify(sparringOptions)}；双方分别应允，认输即停，不自行填伤势、胜负或惩罚。
 - 秘境应援仅限本人确已接获且到场可行的执行许可：${JSON.stringify(rescueOptions)}；只复制合法动作与编号，不填坐标、补给或战利品。
@@ -1684,6 +1700,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'WORKSHOP_CAPACITY',
             'FURNACE_RESERVATION',
             'FURNACE_SAFETY',
+            'DAMAGE_ASSURANCE',
             'SPARRING',
             'EXPEDITION_RESCUE',
             'SHORT_SHIFT',
@@ -1731,6 +1748,20 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             item.targetWorkshopId === parsed.targetWorkshopId && item.targetFurnaceReservationId === parsed.targetFurnaceReservationId) : undefined;
           if (chosenAction === 'FURNACE_RESERVATION' && (!legalFurnace || Object.keys(parsed).some((field) =>
             !['innerMonologue', 'chosenAction', 'spokenLine', 'furnaceMove', 'targetLocationId', 'targetWorkshopId', 'targetFurnaceReservationId'].includes(field)))) return undefined;
+          const legalAssurance = chosenAction === 'DAMAGE_ASSURANCE' ? damageAssuranceOptions.find((item) =>
+            item.damageAssuranceMove === parsed.damageAssuranceMove && item.targetFurnaceSafetyId === parsed.targetFurnaceSafetyId &&
+            item.targetDamageAssuranceId === parsed.targetDamageAssuranceId) : undefined;
+          if (chosenAction === 'DAMAGE_ASSURANCE' && (!legalAssurance || Object.keys(parsed).some((field) =>
+            !['chosenAction', 'innerMonologue', 'damageAssuranceMove',
+              legalAssurance.damageAssuranceMove === 'seal' ? 'targetFurnaceSafetyId' : 'targetDamageAssuranceId'].includes(field)))) return undefined;
+          if (legalAssurance) {
+            const innerMonologue = (typeof parsed.innerMonologue === 'string' && parsed.innerMonologue.trim().slice(0, 160)) ||
+              cultivator.innerMonologue || '只按真实验炉和已发生的实修行动。';
+            return legalAssurance.damageAssuranceMove === 'seal'
+              ? { chosenAction: 'DAMAGE_ASSURANCE', damageAssuranceMove: 'seal', targetFurnaceSafetyId: legalAssurance.targetFurnaceSafetyId, innerMonologue }
+              : { chosenAction: 'DAMAGE_ASSURANCE', damageAssuranceMove: 'make_good',
+                targetDamageAssuranceId: legalAssurance.targetDamageAssuranceId, innerMonologue };
+          }
           const legalFurnaceSafety = chosenAction === 'FURNACE_SAFETY' ? furnaceSafetyOptions.find((item) =>
             item.furnaceSafetyMove === parsed.furnaceSafetyMove && item.targetFurnaceSafetyId === parsed.targetFurnaceSafetyId) : undefined;
           if (chosenAction === 'FURNACE_SAFETY' && (!legalFurnaceSafety || Object.keys(parsed).some((field) =>

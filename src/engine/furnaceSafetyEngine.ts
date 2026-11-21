@@ -27,7 +27,7 @@ export interface FurnaceSafetyView {
   severity?: 1|2|3;
   lastInspectedTick?: number;
   lastRepairTick?: number;
-  ownReceipts: Array<Omit<FurnaceSafetyReceipt,'actorId'|'ownerSectId'>>;
+  ownReceipts: Array<Omit<FurnaceSafetyReceipt,'actorId'|'ownerSectId'|'assuranceClaimId'>>;
 }
 
 export const createFurnaceSafetyState = (): FurnaceSafetyState => ({nextId:1,cases:[]});
@@ -76,8 +76,15 @@ function compactCases(world:WorldState) {
   for(const row of state.cases) latest.set(row.siteId,row);
   const previous=state.cases.filter(row=>latest.get(row.siteId)!==row);
   const keep=new Set(previous.slice(-FURNACE_SAFETY_HISTORY_LIMIT));
-  const cited = new Set(world.workshops.orders.flatMap((order)=>order.capacityOffer ? [order.capacityOffer.caseId] : []));
-  state.cases=state.cases.filter(row=>latest.get(row.siteId)===row || keep.has(row) || cited.has(row.id));
+  const cited = new Set([
+    ...world.workshops.orders.flatMap(order=>order.capacityOffer?[order.capacityOffer.caseId]:[]),
+    ...world.damageAssurance.claims.map(claim=>claim.sourceCaseId),
+  ]);
+  const firstCited=new Map<string,number>();
+  for(const row of state.cases)if(cited.has(row.id))
+    firstCited.set(row.siteId,Math.min(firstCited.get(row.siteId)??Infinity,row.damagedTick));
+  state.cases=state.cases.filter(row=>latest.get(row.siteId)===row||keep.has(row)||
+    row.damagedTick>=(firstCited.get(row.siteId)??Infinity));
 }
 
 /** Called from the actual map hazard hook before that turn has granted any furnace capacity. */
@@ -142,6 +149,14 @@ function safeWork(world:WorldState,site:LocationNode,tick:number) {
   const local=terrainTileAt(world,site.x,site.y)?.id;
   return !!local && !world.mapHazards.some(hazard=>hazard.tileId===local && active(hazard,tick) &&
     (hazard.kind==='beast_tide' || hazard.intensity>=2));
+}
+/** Shared physical and institutional qualification for exact local damage assurance. */
+export function furnaceDamageCustodianReady(world:WorldState,actor:Cultivator,caseId:string,tick=world.tick):boolean {
+  if(!world.cultivators.includes(actor))return false;
+  const site=siteAt(world,actor.locationId);
+  if(!site||!gradeAt(site)||!authorized(world,actor,site,tick)||!safeWork(world,site,tick))return false;
+  const row=latestAt(world,site.id,tick);
+  return !!row&&row.id===caseId&&row.ownerAtDamage===actor.sectId&&row.damagedTick<tick;
 }
 const funds=(actor:Cultivator,stones:number) => Number.isFinite(actor.spiritStones) && actor.spiritStones>=stones;
 
@@ -210,6 +225,6 @@ export function projectFurnaceSafety(world:WorldState,viewer?:Cultivator,siteId=
     ...(reopenedTick!==undefined?{reopenedTick}:{}),
     ...(inspected?{lastInspectedTick:inspected.tick}:{}),
     ...(repaired?{lastRepairTick:repaired.tick}:{}),
-    ownReceipts:records.filter(receipt=>receipt.actorId===viewer.id).map(({actorId:_actor,ownerSectId:_owner,...receipt})=>receipt),
+    ownReceipts:records.filter(receipt=>receipt.actorId===viewer.id).map(({actorId:_actor,ownerSectId:_owner,assuranceClaimId:_claim,...receipt})=>receipt),
   };
 }

@@ -3,6 +3,7 @@ import { householdCensus } from '../engine/householdEngine';
 import { visibleSharedCommonsMapSites } from './sharedCommonsMapView';
 import { visibleLeaseMapSites } from './leaseMapView';
 import { drawFormationMapLinks, visibleFormationMapLinks } from './formationMapView';
+import { projectLocalDamageAssurance } from '../engine/damageAssuranceEngine';
 import { projectLocalAlignedWeather } from '../engine/alignedWeatherEngine';
 import { projectLocalCareFollowupCapacity } from '../engine/careFollowupEngine';
 import { visibleInfirmaries } from '../engine/infirmaryEngine';
@@ -251,6 +252,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     const clinic = visibleInfirmaries(world, selected);
     return clinic?.capacity && isCurrentLocation(clinic.siteId) ? { siteId: clinic.siteId, capacity: clinic.capacity } : undefined;
   }, [world, selected, isCurrentLocation]);
+  const localDamageAssurance = useMemo(() => world.damageAssurance.claims.length ?
+    projectLocalDamageAssurance(world, selected) : undefined, [world, selected]);
   const localAlignedWeather = useMemo(() => world.alignedWeather.comparisons.length ?
     projectLocalAlignedWeather(world, selected) : undefined, [world, selected]);
   const localFollowup = useMemo(() => {
@@ -1388,6 +1391,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                 {(localErrata.get(location.id) ?? 0) > 0 && <span className="text-amber-200">· 公开史料有待勘误 {localErrata.get(location.id)} 条</span>}
                 {habitatView && <span className="text-emerald-200">· 复育栖地 {habitatView.wildOccupancy ?? 0}/{habitatView.capacity} 野兽</span>}
                 {localClinic?.siteId === location.id && <span className="text-rose-200">· 静养床 {localClinic.capacity.available}/{localClinic.capacity.beds} 本轮可受理</span>}
+                {localDamageAssurance?.siteId === location.id && isCurrentLocation(location.id) &&
+                  <span className="text-amber-200">· 原炉损 {localDamageAssurance.initialLoss} 点，已记实修后尚缺 {localDamageAssurance.remaining} 点，不作复炉凭据</span>}
                 {localAlignedWeather?.siteId === location.id && isCurrentLocation(location.id) &&
                   <span className="text-teal-200">· 本人参与的第 {localAlignedWeather.measuredTick} 轮旧观：{localAlignedWeather.outcome === 'uncertain' ? '异读未定' : '两读相合'}，非当前天象</span>}
                 {localFollowup?.siteId === location.id &&

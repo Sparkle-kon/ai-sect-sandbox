@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { getFurnaceView } from '../engine/furnaceReservationEngine';
 import { projectFurnaceSafety, type FurnaceSafetyView } from '../engine/furnaceSafetyEngine';
 import type { Cultivator, WorldState } from '../types/world';
+import { projectDamageAssurance } from '../engine/damageAssuranceEngine';
+import { DamageAssuranceReceipts, type DamageAssuranceReceipt } from './DamageAssuranceReceipts';
 
 type FurnaceView = NonNullable<ReturnType<typeof getFurnaceView>>;
 const PAGE_SIZE = 8;
@@ -24,11 +26,22 @@ export function FurnaceReservationPanel({ world, cultivator }: { world: WorldSta
   const safety = viewer && projectFurnaceSafety(world, viewer);
   const view = safety && getFurnaceView(world, viewer);
   const site = view && world.locations.find(({ id }) => id === view.siteId);
-  if (!view || !site) return null;
-  return <FurnaceQueueReceipt key={`${viewer?.id}:${site.id}`} view={view} siteName={site.name} safety={safety} />;
+  const assurances = projectDamageAssurance(world, viewer);
+  if (!view || !site) return assurances.length ? (
+    <details className="min-w-0 rounded border border-indigo-400/20 bg-slate-950/60">
+      <summary className="min-h-11 cursor-pointer break-words px-3 py-2.5 text-xs font-semibold text-indigo-200">同刻炉位与预约</summary>
+      <div className="space-y-2 px-3 pb-3 text-xs leading-relaxed text-slate-300">
+        <p>未在可查炉点，仅显示已获准查阅的历史凭据。</p>
+        <DamageAssuranceReceipts receipts={assurances} />
+      </div>
+    </details>
+  ) : null;
+  return <FurnaceQueueReceipt key={`${viewer?.id}:${site.id}`} view={view} siteName={site.name} safety={safety} assurances={assurances} />;
 }
 
-export function FurnaceQueueReceipt({ view, siteName, safety }: { view: FurnaceView; siteName: string; safety?: FurnaceSafetyView }) {
+export function FurnaceQueueReceipt({ view, siteName, safety, assurances = [] }: {
+  view: FurnaceView; siteName: string; safety?: FurnaceSafetyView; assurances?: readonly DamageAssuranceReceipt[];
+}) {
   const [page, setPage] = useState(0);
   const pages = Math.max(1, Math.ceil(view.queue.length / PAGE_SIZE));
   const shownPage = Math.min(page, pages - 1);
@@ -62,6 +75,7 @@ export function FurnaceQueueReceipt({ view, siteName, safety }: { view: FurnaceV
           </li>)}
         </ul>}
       </div>}
+      <DamageAssuranceReceipts receipts={assurances} onsiteId={view.siteId} />
       {!closed && <ol aria-label="本回合炉位状态" className="grid min-w-0 gap-1 sm:grid-cols-3">
         {view.slots.map((slot) => <li key={slot.slot} className="break-words rounded border border-slate-800 p-1.5">
           炉位 {slot.slot} · {SLOT_STATUS[slot.status]}{slot.isOwn ? ' · 本人' : ''}

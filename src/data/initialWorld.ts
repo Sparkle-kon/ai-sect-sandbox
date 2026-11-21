@@ -10,6 +10,7 @@ import { createRelicExhibitState } from '../engine/relicExhibitEngine';
 import { createWorkshopState } from '../engine/workshopEngine';
 import { createArtifactSalvageState } from '../engine/artifactSalvageEngine';
 import { createFurnaceReservationState } from '../engine/furnaceReservationEngine';
+import { createDamageAssuranceState } from '../engine/damageAssuranceEngine';
 import { createFurnaceSafetyState } from '../engine/furnaceSafetyEngine';
 import { createSparringState } from '../engine/sparringEngine';
 import { createExpeditionRescueState } from '../engine/expeditionRescueEngine';
@@ -317,6 +318,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     workshopDisbandments: {closures:[]},
     furnaceReservations: createFurnaceReservationState(),
     furnaceSafety: createFurnaceSafetyState(),
+    damageAssurance: createDamageAssuranceState(),
     sparring: createSparringState(),
     expeditionRescues: createExpeditionRescueState(),
     shortShifts: createShortShiftState(),
