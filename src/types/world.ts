@@ -92,6 +92,7 @@ export type ActionType =
   | 'CHRONICLE_ERRATA'
   | 'HABITAT'
   | 'INFIRMARY'
+  | 'FORMATION_NETWORK'
   | 'GATHER_HERBS'
   | 'BREW_PILL'
   | 'USE_PILL'
@@ -387,6 +388,8 @@ export interface LLMDecisionPayload {
   targetHazardId?: string;
   ceasefireMove?: CeasefireMove;
   targetCeasefireId?: string;
+  formationMove?: FormationMove;
+  targetFormationLinkId?: string;
   infirmaryMove?: InfirmaryMove;
   targetInfirmaryCaseId?: string;
   habitatMove?: HabitatMove;
@@ -1510,7 +1513,55 @@ export interface InfirmaryState {
   nextId: number;
 }
 
+export type FormationMove = 'offer' | 'accept' | 'decline' | 'dispatch' | 'overload' | 'draw' | 'repair';
+export interface FormationReceipt {
+  tick: number;
+  kind: 'dispatch' | 'overload' | 'draw' | 'repair' | 'dissipate';
+  actorId?: string;
+  fromSiteId?: string;
+  toSiteId?: string;
+  sent?: number;
+  delivered?: number;
+  lost?: number;
+  drawn?: number;
+  stonesSpent?: number;
+  dissipated?: number;
+}
+export interface FormationLink {
+  id: string;
+  sectAId: string;
+  sectBId: string;
+  siteAId: string;
+  siteBId: string;
+  proposerId: string;
+  recipientLeaderId: string;
+  proposerSectId: string;
+  openedTick: number;
+  offerExpiresTick: number;
+  steps: number;
+  status: 'offered' | 'active' | 'broken' | 'ended' | 'declined' | 'expired';
+  openedPaymentEach: number;
+  fundedTick?: number;
+  settledTick?: number;
+  endReason?: 'site_lost' | 'hostility';
+  heldA: number;
+  heldB: number;
+  sentTotal: number;
+  deliveredTotal: number;
+  transmissionLoss: number;
+  drawnTotal: number;
+  dissipatedTotal: number;
+  repairTotal: number;
+  lastDispatchTick?: number;
+  lastDrawTick?: number;
+  lastRepairTick?: number;
+  brokenTick?: number;
+  receipts: FormationReceipt[];
+}
+export interface FormationNetworkState { links: FormationLink[]; nextId: number }
+
 export interface WorldState {
+  formations: FormationNetworkState;
   infirmaries: InfirmaryState;
   habitats: HabitatState;
   chronicleErrata: ChronicleErrataState;

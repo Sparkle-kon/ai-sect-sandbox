@@ -1,3 +1,4 @@
+import { drawFormationMapLinks, visibleFormationMapLinks } from './formationMapView';
 import { visibleInfirmaries } from '../engine/infirmaryEngine';
 import { visibleHabitats } from '../engine/habitatEngine';
 import { visibleChronicleErrata } from '../engine/chronicleErrataEngine';
@@ -97,6 +98,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const weatherAtVisibleSites = useMemo(() => new Map(seenLocations
     .filter(({ id }) => isCurrentLocation(id))
     .map((site) => [site.id, localQiWeather(world, site)])), [world, seenLocations, isCurrentLocation]);
+  const formationLines = useMemo(() => visibleFormationMapLinks(world, mapView, selected), [world, mapView, selected]);
   const localClinic = useMemo(() => {
     const clinic = visibleInfirmaries(world, selected);
     return clinic?.capacity && isCurrentLocation(clinic.siteId) ? { siteId: clinic.siteId, capacity: clinic.capacity } : undefined;
@@ -232,6 +234,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       drawHazards(ctx, hazards);
       annotationView?.drawMapAnnotationPins(ctx, annotationPins, camera.zoom);
       drawMapConvoys(ctx, convoys, camera.zoom);
+      drawFormationMapLinks(ctx, formationLines, camera.zoom);
       if (escortedCaravan) drawMapConvoys(ctx, [escortedCaravan], camera.zoom, '#7dd3fc');
       if (pilgrimageMark) {
         const { x, y } = pilgrimageMark.point;
@@ -514,7 +517,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener('change', stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, hazards, convoys, escortedCaravan, pilgrimageMark, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, hazards, convoys, escortedCaravan, formationLines, pilgrimageMark, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -887,6 +890,9 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
             </span>
           ))}
         </div>
+        {formationLines.length > 0 && <ul className="mt-2 space-y-1 text-cyan-200" aria-label="当前可见聚灵阵链">
+          {formationLines.map(({ id, status, a, b }) => <li key={id}>{a.name}与{b.name}：{status === 'broken' ? '阵链已断' : '阵链有效'}</li>)}
+        </ul>}
         {fog && seenLocations.length === 0 && <p className="mt-2">无已发现的地点。</p>}
         <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-2">
           {seenLocations.map((location) => {

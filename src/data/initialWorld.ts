@@ -1,3 +1,4 @@
+import { createFormationNetworkState } from '../engine/formationNetworkEngine';
 import { createInfirmaryState } from '../engine/infirmaryEngine';
 import { createHabitatState } from '../engine/habitatEngine';
 import { createChronicleErrataState } from '../engine/chronicleErrataEngine';
@@ -258,6 +259,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     chronicleErrata: createChronicleErrataState(),
     habitats: createHabitatState(),
     infirmaries: createInfirmaryState(),
+    formations: createFormationNetworkState(),
     witnesses: createWitnessState(),
     estates: createEstateState(),
     decisionTrace: createDecisionTraceState(),

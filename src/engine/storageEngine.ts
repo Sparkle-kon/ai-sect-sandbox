@@ -1,3 +1,6 @@
+import { createFormationNetworkState, FORMATION_BUFFER_CAP, FORMATION_DISPATCH_QI, FORMATION_DRAW_CAP,
+  FORMATION_MAX_THROUGHPUT, FORMATION_OFFER_TICKS, FORMATION_OVERLOAD_QI, FORMATION_RECEIPT_LIMIT,
+  FORMATION_REPAIR_COST, FORMATION_SETUP_COST, formationLinkAvailability } from './formationNetworkEngine';
 import { createInfirmaryState, INFIRMARY_DETOX_MAX, INFIRMARY_HEAL_FRACTION, INFIRMARY_MAX_BEDS, INFIRMARY_QUEUE_TICKS,
   INFIRMARY_SHIFT_TICKS, INFIRMARY_TREATMENT_HERBS, INFIRMARY_TREATMENT_STONES } from './infirmaryEngine';
 import { createHabitatState, HABITAT_MIN_HEALTH, HABITAT_RESTORATION_TICKS,
@@ -85,7 +88,7 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY FORMATION_NETWORK REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const marketQty = num(1,12,true), marketPrice = num(1,500,true);
@@ -200,6 +203,16 @@ const shape = structure({
       attestations:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,tick,verdict:one('supports','contradicts')})),
       appeal:optional(structure({tick,actorId:id,verdict:one('upheld','rejected'),reason:text})),settledTick:otick,
       reputationSectId:oid,reputationPenalty:percentage,reputationRestored:percentage,reason:otext}))}),
+  formations:structure({nextId:num(1,100_000_000,true),links:arr(SAVE_COLLECTION_LIMIT,structure({
+    id,sectAId:id,sectBId:id,siteAId:id,siteBId:id,proposerId:id,recipientLeaderId:id,proposerSectId:id,
+    openedTick:tick,offerExpiresTick:tick,steps:num(1,160,true),status:one('offered','active','broken','ended','declined','expired'),
+    openedPaymentEach:count,fundedTick:otick,settledTick:otick,endReason:optional(one('site_lost','hostility')),
+    heldA:num(0,FORMATION_BUFFER_CAP,true),heldB:num(0,FORMATION_BUFFER_CAP,true),sentTotal:doctrineAmount,deliveredTotal:doctrineAmount,transmissionLoss:doctrineAmount,
+    drawnTotal:doctrineAmount,dissipatedTotal:doctrineAmount,repairTotal:doctrineAmount,lastDispatchTick:otick,lastDrawTick:otick,
+    lastRepairTick:otick,brokenTick:otick,receipts:arr(FORMATION_RECEIPT_LIMIT,structure({tick,
+      kind:one('dispatch','overload','draw','repair','dissipate'),actorId:oid,fromSiteId:oid,toSiteId:oid,
+      sent:optional(count),delivered:optional(count),lost:optional(count),drawn:optional(count),stonesSpent:optional(count),dissipated:optional(count)}))
+  }))}),
   infirmaries:structure({nextId:num(1,100_000_000,true),
     shifts:arr(SAVE_COLLECTION_LIMIT,structure({id,guardId:id,sectId:id,siteId:id,startedTick:tick,expiresTick:tick,lastServedTick:otick})),
     cases:arr(SAVE_COLLECTION_LIMIT,structure({id,patientId:id,sectId:id,siteId:id,queuedTick:tick,expiresTick:tick,
@@ -357,6 +370,7 @@ function verifyWorld(value: unknown): WorldState {
     ? { ...value,
       ...(!Object.hasOwn(value, 'mentorship') ? { mentorship: { offers: [], lineage: [], budgets: [] } } : {}),
       ...(!Object.hasOwn(value, 'decisionTrace') ? { decisionTrace: { records: [] } } : {}),
+      ...(!Object.hasOwn(value, 'formations') ? { formations: createFormationNetworkState() } : {}),
       ...(!Object.hasOwn(value, 'infirmaries') ? { infirmaries: createInfirmaryState() } : {}),
       ...(!Object.hasOwn(value, 'habitats') ? { habitats: createHabitatState() } : {}),
       ...(!Object.hasOwn(value, 'chronicleErrata') ? { chronicleErrata: createChronicleErrataState() } : {}),
@@ -395,6 +409,83 @@ function verifyWorld(value: unknown): WorldState {
   const sector = unique(w.sects, (item) => item.id, 'sects.id');
   const locations = unique(w.locations, (item) => item.id, 'locations.id');
   const map = unique(w.terrain.tiles, (item) => item.id, 'terrain.tiles.id');
+  unique(w.formations.links, ({ id }) => id, 'formations.links.id');
+  unique(w.formations.links.filter(({ status }) => status === 'offered' || status === 'active' || status === 'broken'),
+    ({ sectAId, sectBId }) => JSON.stringify([sectAId, sectBId]), 'formations.links.active_pair');
+  for (const link of w.formations.links) {
+    const serial = Number(link.id.match(/^formation-link-([1-9][0-9]*)$/)?.[1]);
+    const funded = link.status === 'active' || link.status === 'broken' || link.status === 'ended';
+    const open = link.status === 'offered' || link.status === 'active' || link.status === 'broken';
+    if (!Number.isSafeInteger(serial) || serial >= w.formations.nextId || link.sectAId >= link.sectBId ||
+        !sector.has(link.sectAId) || !sector.has(link.sectBId) || link.siteAId === link.siteBId ||
+        !actor.has(link.proposerId) || !actor.has(link.recipientLeaderId) || link.proposerId === link.recipientLeaderId ||
+        (link.proposerSectId !== link.sectAId && link.proposerSectId !== link.sectBId) ||
+        link.openedTick > w.tick || link.offerExpiresTick !== link.openedTick + FORMATION_OFFER_TICKS ||
+        (funded !== (link.fundedTick !== undefined)) || link.openedPaymentEach !== (funded ? FORMATION_SETUP_COST : 0) ||
+        (link.fundedTick !== undefined && (link.fundedTick < link.openedTick || link.fundedTick >= link.offerExpiresTick || link.fundedTick > w.tick)) ||
+        (open !== (link.settledTick === undefined)) ||
+        (link.settledTick !== undefined && (link.settledTick < (link.fundedTick ?? link.openedTick) || link.settledTick > w.tick)) ||
+        (link.status === 'offered' && link.offerExpiresTick <= w.tick) ||
+        (link.status === 'expired' && link.settledTick! < link.offerExpiresTick) ||
+        (link.status === 'declined' && link.settledTick! >= link.offerExpiresTick) ||
+        (link.status === 'ended' ? link.endReason !== 'site_lost' : link.endReason !== undefined)) fail('formations.links.references');
+    if ((link.status === 'active' || link.status === 'broken') && formationLinkAvailability(w, link) === 'site_lost') fail('formations.links.endpoints');
+    const stamps = [link.lastDispatchTick, link.lastDrawTick, link.lastRepairTick, link.brokenTick];
+    if (stamps.some((stamp) => stamp !== undefined && (!funded || stamp < link.fundedTick! || stamp > (link.settledTick ?? w.tick))) ||
+        (link.status === 'broken' && (link.brokenTick === undefined || (link.lastRepairTick ?? -1) >= link.brokenTick)) ||
+        (link.status === 'active' && link.brokenTick !== undefined && (link.lastRepairTick ?? -1) <= link.brokenTick) ||
+        ((link.repairTotal > 0) !== (link.lastRepairTick !== undefined)) ||
+        (link.lastRepairTick !== undefined && link.brokenTick === undefined)) fail('formations.links.timestamps');
+    if (link.sentTotal !== link.transmissionLoss + link.deliveredTotal ||
+        link.deliveredTotal !== link.drawnTotal + link.dissipatedTotal + link.heldA + link.heldB ||
+        link.repairTotal % FORMATION_REPAIR_COST !== 0 ||
+        (!funded && [link.sentTotal,link.drawnTotal,link.repairTotal,link.receipts.length].some(Boolean)) ||
+        (link.status === 'ended' ? (link.heldA !== 0 || link.heldB !== 0) : link.dissipatedTotal !== 0) ||
+        ((link.sentTotal > 0) !== (link.lastDispatchTick !== undefined)) ||
+        ((link.drawnTotal > 0) !== (link.lastDrawTick !== undefined))) fail('formations.links.conservation');
+    const observed = { sent:0, delivered:0, lost:0, drawn:0, dissipated:0, stonesSpent:0 };
+    const uses = new Set<string>();
+    const latest = new Map<string, number>();
+    for (const receipt of link.receipts) {
+      const { tick: when, kind, actorId, fromSiteId, toSiteId, sent, delivered, lost, drawn, stonesSpent, dissipated } = receipt;
+      const category = kind === 'dispatch' || kind === 'overload' ? 'transfer' : kind;
+      const use = JSON.stringify([category, when]);
+      const keys = Object.keys(receipt);
+      const exactShape = (fields: readonly string[]) => keys.length === fields.length && keys.every((key) => fields.includes(key));
+      const base = ['tick','kind','actorId','fromSiteId'];
+      if (!funded || when < link.fundedTick! || when > (link.settledTick ?? w.tick) || uses.has(use) ||
+          (kind !== 'dissipate' && (!actorId || !actor.has(actorId) || (fromSiteId !== link.siteAId && fromSiteId !== link.siteBId)))) fail('formations.links.receipts.references');
+      uses.add(use);
+      if ((latest.get(category) ?? -1) > when) fail('formations.links.receipts.order');
+      latest.set(category, when);
+      if (kind === 'dispatch' || kind === 'overload') {
+        const amount = kind === 'dispatch' ? FORMATION_DISPATCH_QI : FORMATION_OVERLOAD_QI;
+        const through = Math.min(amount, FORMATION_MAX_THROUGHPUT);
+        const maximum = Math.max(0, through - Math.ceil(through / 5) - Math.ceil(link.steps / 6));
+        if (!exactShape([...base,'toSiteId','sent','delivered','lost']) || sent !== amount || delivered === undefined || lost === undefined ||
+            toSiteId !== (fromSiteId === link.siteAId ? link.siteBId : link.siteAId) ||
+            sent !== delivered + lost || delivered > maximum) fail('formations.links.receipts.transfer');
+        observed.sent += sent ?? 0; observed.delivered += delivered ?? 0; observed.lost += lost ?? 0;
+        if (kind === 'overload') latest.set('overload', when);
+      } else if (kind === 'draw') {
+        if (!exactShape([...base,'drawn']) || !(drawn && drawn <= FORMATION_DRAW_CAP)) fail('formations.links.receipts.draw');
+        observed.drawn += drawn ?? 0;
+      } else if (kind === 'repair') {
+        if (!exactShape([...base,'stonesSpent']) || stonesSpent !== FORMATION_REPAIR_COST) fail('formations.links.receipts.repair');
+        observed.stonesSpent += stonesSpent ?? 0;
+      } else {
+        if (!exactShape(['tick','kind','dissipated']) || link.status !== 'ended' || when !== link.settledTick ||
+            dissipated !== link.dissipatedTotal) fail('formations.links.receipts.dissipate');
+        observed.dissipated += dissipated ?? 0;
+      }
+    }
+    if ((link.status === 'ended') !== latest.has('dissipate') ||
+        [...latest].some(([key, when]) => key !== 'dissipate' && when !==
+          (key === 'transfer' ? link.lastDispatchTick : key === 'draw' ? link.lastDrawTick : key === 'overload' ? link.brokenTick : link.lastRepairTick))) fail('formations.links.receipts.last');
+    const totals = [link.sentTotal,link.deliveredTotal,link.transmissionLoss,link.drawnTotal,link.dissipatedTotal,link.repairTotal];
+    if (Object.values(observed).some((amount,index) => amount > totals[index] ||
+        (link.receipts.length < FORMATION_RECEIPT_LIMIT && amount !== totals[index]))) fail('formations.links.receipts.totals');
+  }
   const infirmarySerials = new Set<number>();
   const infirmaryShifts = new Map(w.infirmaries.shifts.map((shift) => [shift.id, shift]));
   const infirmaryPatientMax = new Map(w.cultivators.map(({ id, maxHp }) => [id, maxHp]));

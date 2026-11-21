@@ -1,5 +1,6 @@
 import type { Cultivator, FacilityKind, Sect, WorldState } from '../types/world';
 import { FACILITY_RULES, facilityBuildCost, isGuardAssignmentActive } from '../engine/sectEconomyEngine';
+import { FormationNetworkPanel } from './FormationNetworkPanel';
 import { InfirmaryPanel } from './InfirmaryPanel';
 import { isGuardOnDuty } from './mapStatusLabels';
 export { isGuardOnDuty } from './mapStatusLabels';
@@ -89,6 +90,7 @@ export function SectEconomyPanel({ cultivator, sect, world }: SectEconomyPanelPr
         <p className="text-[11px] text-slate-400">无驻守任务。</p>
       )}
       <InfirmaryPanel world={world} cultivator={cultivator} />
+      <FormationNetworkPanel world={world} cultivator={cultivator} />
     </section>
   );
 }
