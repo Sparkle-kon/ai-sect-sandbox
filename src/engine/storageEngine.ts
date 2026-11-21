@@ -3,6 +3,8 @@ import { createAlignedWeatherState } from './alignedWeatherEngine';
 import { alignedWeatherPinnedRuns } from './alignedWeatherTerms';
 import { observatoryStationValid } from './observatoryStation';
 import { validateAlignedWeatherHistory } from './storageAlignedWeatherValidation';
+import { validateWitnessedPersonalStory } from './storageWitnessedPersonalStoryValidation';
+import { createWitnessedPersonalStoryState } from './witnessedPersonalStory';
 import { validateProtagonistHistory } from './storageProtagonistValidation';
 import { createProtagonistSuccessionState } from './protagonistSuccession';
 import { validateCourierHandoffHistory } from './storageCourierHandoffValidation';
@@ -349,6 +351,9 @@ const shape = structure({
     ballots:arr(5,structure({voterId:id,vote,reason:text,source})),tally:structure({support:count,oppose:count,abstain:count,required:count}),
     status:one('passed','rejected','stale'),outcome:text})),
   chronicleArchive:structure({anchors:arr(384,anchor),chapters:arr(SAVE_COLLECTION_LIMIT,chronicleChapter)}),
+  witnessedPersonalStory:structure({scenes:arr(SAVE_COLLECTION_LIMIT,structure({
+    eventId:id,tick,year:tick,month,siteId:id,kind:one('duel','socialize','breakthrough'),actorIds:arr(2,id),witnessIds:ids,
+  }))}),
   protagonistSuccession:structure({lastEvaluatedTick:otick,arcs:arr(SAVE_COLLECTION_LIMIT,structure({
     id,actorId:id,openedTick:tick,predecessorArcId:oid,opening:arr(3,protagonistEvidence),support:arr(8,protagonistEvidence),
     endedTick:otick,closeReason:optional(one('public_death','receded','evidence_lost')),death:optional(protagonistEvidence),
@@ -910,6 +915,7 @@ function verifyWorld(value: unknown): WorldState {
       ...(!Object.hasOwn(value, 'serviceRetirement') ? { serviceRetirement: createServiceRetirementState() } : {}),
       ...(!Object.hasOwn(value, 'couriers') ? { couriers: createSealedCourierState() } : {}),
       ...(!Object.hasOwn(value, 'protagonistSuccession') ? { protagonistSuccession: createProtagonistSuccessionState() } : {}),
+      ...(!Object.hasOwn(value, 'witnessedPersonalStory') ? { witnessedPersonalStory: createWitnessedPersonalStoryState() } : {}),
       ...(!Object.hasOwn(value, 'watchlists') ? { watchlists: createWatchlistState() } : {}),
       ...(!Object.hasOwn(value, 'villageWorks') ? { villageWorks: createVillageWorksState() } : {}),
       ...(!Object.hasOwn(value, 'households') ? { households: createHouseholdState() } : {}),
@@ -2841,6 +2847,7 @@ function verifyWorld(value: unknown): WorldState {
         chapter.biographies.some((entry) => entry.anchorIds.some((id) => !anchors.has(id)))) fail('coldHistory.chapters.references');
   }
   validateProtagonistHistory(w,chapters,actor,fail);
+  validateWitnessedPersonalStory(w,actor,fail);
   w.coldHistory = freezeColdHistory(w.coldHistory);
   return w;
 }

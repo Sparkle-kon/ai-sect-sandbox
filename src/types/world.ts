@@ -916,6 +916,18 @@ export interface ProtagonistArc {
   closeReason?: 'public_death' | 'receded' | 'evidence_lost';
   death?: ProtagonistEvidence;
 }
+export interface WitnessedPersonalScene {
+  eventId: string;
+  tick: number;
+  year: number;
+  month: number;
+  siteId: string;
+  kind: 'duel' | 'socialize' | 'breakthrough';
+  actorIds: string[];
+  witnessIds: string[];
+}
+export interface WitnessedPersonalStoryState { scenes: WitnessedPersonalScene[] }
+
 export interface ProtagonistSuccessionState {
   arcs: ProtagonistArc[];
   lastEvaluatedTick?: number;
@@ -3110,6 +3122,7 @@ export interface WorldState {
   playerAvatar: PlayerAvatarState;
   chronicleArchive: ChronicleArchive;
   protagonistSuccession: ProtagonistSuccessionState;
+  witnessedPersonalStory: WitnessedPersonalStoryState;
   councils: CouncilRecord[];
   tick: number;
   interventionSequence: number;

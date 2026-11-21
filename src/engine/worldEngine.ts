@@ -70,6 +70,7 @@ import { maintainMentorship, mentorshipTechniqueMultiplier, resolveMentorshipAct
 import { worldRandom } from './worldRandom';
 import { consumeAvatarOrder, maintainPlayerAvatar } from './avatarEngine';
 import { archiveChronicleEvents } from './novelGenerator';
+import { advanceWitnessedPersonalStory, captureWitnessedPersonalScene } from './witnessedPersonalStory';
 import { advanceProtagonistSuccession } from './protagonistSuccession';
 import { settleChronicleOffline } from './chronicleRuntime';
 import { settleAnnualCouncilOffline } from './councilRuntime';
@@ -949,6 +950,8 @@ export function advanceWorldTick(
       newEvents.push(event);
       witnessEvent(nextState, event);
     });
+    if (evt && (decision.chosenAction === 'DUEL' || decision.chosenAction === 'SOCIALIZE' || decision.chosenAction === 'BREAKTHROUGH'))
+      captureWitnessedPersonalScene(nextState, evt);
     const validEffect = decision.chosenAction === cultivator.currentAction && (evt !== null ||
       decision.chosenAction === 'REST' || decision.chosenAction === 'CULTIVATE' ||
       (decision.chosenAction === 'EXPLORE' && previousLocation !== cultivator.locationId));
@@ -1005,6 +1008,7 @@ export function advanceWorldTick(
   recordNewDeathsForReincarnation(prevState, nextState, newEvents);
   archiveChronicleEvents(nextState, newEvents);
   nextState.events = [...newEvents, ...nextState.events].slice(0, 120);
+  advanceWitnessedPersonalStory(nextState);
   if (councilMode === 'utility') {
     settleAnnualCouncilOffline(nextState);
     settleChronicleOffline(nextState);

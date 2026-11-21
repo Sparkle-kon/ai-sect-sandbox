@@ -1,4 +1,6 @@
 import { FAST_FORWARD_MAX_TICKS } from './engine/fastForwardEngine';
+import { projectWitnessedPersonalStory } from './engine/witnessedPersonalStory';
+import { WitnessedPersonalStory, WitnessedStoryScopeToggle } from './components/WitnessedPersonalStory';
 import { createPublicDialogueResolver } from './engine/publicDialogueProvenance';
 import { projectEarnedChronicleLead, projectProtagonistSuccession } from './engine/protagonistSuccession';
 import { projectChronicleLead, publicChronicleSceneEvents } from './engine/chronicleLead';
@@ -134,6 +136,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
   const actorHeading = useRef<HTMLHeadingElement>(null);
   useEffect(() => writeWorkspaceFoldPreferences(foldPreferences), [foldPreferences]);
   const [chronicleFilter, setChronicleFilter] = useState<ChronicleCategoryFilter>('all');
+  const [personalStoryChoice, setPersonalStoryChoice] = useState<{actorId:string;scope:string}>();
   const [focusTrail, setFocusTrail] = useState<ChronicleTrail>();
   const [chronicleReturn, setChronicleReturn] = useState<ChronicleFeedReturn>();
   const [focusNotice, setFocusNotice] = useState<string>();
@@ -633,6 +636,16 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
   const selectedCultivator = resolveWorkspaceActor(visibleWorld, selectedCultivatorId);
   const aliveCount = visibleWorld.cultivators.filter((c) => c.alive).length;
   const activeActorId = selectedCultivator?.id ?? null;
+  const mayReadPersonal = Boolean(selectedCultivator?.alive && selectedCultivator.hp > 0);
+  const personalStoryActive = mayReadPersonal && personalStoryChoice?.actorId === activeActorId &&
+    personalStoryChoice?.scope === viewScopeKey;
+  const personalStory = React.useMemo(() => readingChronicle && personalStoryActive && activeActorId ?
+    projectWitnessedPersonalStory(visibleWorld,activeActorId) : undefined,
+    [readingChronicle,personalStoryActive,activeActorId,visibleWorld]);
+  useEffect(() => {
+    setPersonalStoryChoice((previous) => previous && mayReadPersonal && previous.actorId === activeActorId &&
+      previous.scope === viewScopeKey ? previous : undefined);
+  }, [activeActorId,viewScopeKey,mayReadPersonal]);
   const selectedSettlementId = visibleWorld.settlements.villages.find((village) => village.locationId === selectedCultivator?.locationId)?.id;
   useEffect(() => {
     if (selectedCultivatorId !== activeActorId) setSelectedCultivatorId(activeActorId);
@@ -853,11 +866,16 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
         </div>,
         chronicle: <WorkspaceSections label="纪事与历史" initialOpen={opened('chronicle', 'feed')}
           {...fold('chronicle')} forcedOpen={chronicleReturn && ordinaryChronicleFold !== 'feed' ? 'feed' : undefined} sections={[
-          { id: 'feed', label: '山河见闻', content: <React.Suspense fallback={<p role="status">载入山河见闻…</p>}><ChronicleFeed
-            events={chronicleScenes} lead={chronicleLead} succession={succession} resolvePublicDialogue={publicDialogue?.event}
-            category={chronicleFilter} onCategoryChange={setChronicleFilter} focusOptions={resolver?.build}
-            causality={(eventId) => chronicleCauses?.get(eventId)}
-            onJump={followChronicle} returnPosition={chronicleReturn} onReturnHandled={clearChronicleReturn} focusNotice={focusNotice} /></React.Suspense> },
+          { id: 'feed', label: '山河见闻', content: <React.Suspense fallback={<p role="status">载入山河见闻…</p>}>
+            {selectedCultivator && mayReadPersonal && !chronicleReturn && <WitnessedStoryScopeToggle selectedName={selectedCultivator.name}
+              active={personalStoryActive}
+              onToggle={() => setPersonalStoryChoice(personalStoryActive ? undefined : {actorId:selectedCultivator.id,scope:viewScopeKey})} />}
+            {personalStory && !chronicleReturn ? <WitnessedPersonalStory story={personalStory} /> : <ChronicleFeed
+              events={chronicleScenes} lead={chronicleLead} succession={succession} resolvePublicDialogue={publicDialogue?.event}
+              category={chronicleFilter} onCategoryChange={setChronicleFilter} focusOptions={resolver?.build}
+              causality={(eventId) => chronicleCauses?.get(eventId)}
+              onJump={followChronicle} returnPosition={chronicleReturn} onReturnHandled={clearChronicleReturn} focusNotice={focusNotice} />}
+          </React.Suspense> },
           { id: 'library', label: '藏书阁与故事', content: <React.Suspense fallback={<p role="status">载入藏书阁…</p>}><ChronicleLibraryPanel world={visibleWorld} cultivator={selectedCultivator} scopeKey={viewScopeKey} /></React.Suspense> },
           { id: 'notebook', label: '书签与地图批注', content: <React.Suspense fallback={<p role="status">载入分支记录…</p>}>
             <ChronicleNotebookPanel key={`${timeline.activeBranchId}:${preview?.tick ?? 'live'}:${activeActorId ?? ''}`}

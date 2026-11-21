@@ -66,6 +66,7 @@ import { createOathState } from '../engine/oathEngine';
 import { createMentorshipState } from '../engine/mentorshipEngine';
 import { createWorldRandom, DEFAULT_WORLD_SEED } from '../engine/worldRandom';
 import { createPlayerAvatarState } from '../engine/avatarEngine';
+import { createWitnessedPersonalStoryState } from '../engine/witnessedPersonalStory';
 import { createProtagonistSuccessionState } from '../engine/protagonistSuccession';
 import { archiveChronicleEvents, createChronicleArchive } from '../engine/novelGenerator';
 import { memoryDecayRate } from '../engine/memoryEngine';
@@ -429,6 +430,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     playerAvatar: createPlayerAvatarState(),
     chronicleArchive: createChronicleArchive(),
     protagonistSuccession: createProtagonistSuccessionState(),
+    witnessedPersonalStory: createWitnessedPersonalStoryState(),
     locations,
     terrain: generateTerrain(locations, seed),
     mapPresentation: { tick: 1, trails: [], effects: [] },
