@@ -73,6 +73,7 @@ const ChronicleLibraryPanel = React.lazy(async () => ({ default: (await import('
 const WorldOccasionsPanel = React.lazy(async () => ({ default: (await import('./components/WorldOccasionsPanel')).WorldOccasionsPanel }));
 const ExpeditionRescuePanel = React.lazy(async () => ({ default: (await import('./components/ExpeditionRescuePanel')).ExpeditionRescuePanel }));
 const WeatherAtlasPanel = React.lazy(async () => ({ default: (await import('./components/WeatherAtlasPanel')).WeatherAtlasPanel }));
+const ShortShiftPanel = React.lazy(async () => ({ default: (await import('./components/ShortShiftPanel')).ShortShiftPanel }));
 const MarketCaravansPanel = React.lazy(async () => ({ default: (await import('./components/MarketCaravansPanel')).MarketCaravansPanel }));
 const MortalVillagesPanel = React.lazy(async () => ({ default: (await import('./components/MortalVillagesPanel')).MortalVillagesPanel }));
 const DecisionTracePanel = React.lazy(async () => ({ default: (await import('./components/DecisionTracePanel')).DecisionTracePanel }));
@@ -93,6 +94,7 @@ interface ChronicleTrail extends ChronicleFeedReturn {
 const chronicleWorkspace = { site: 'map', actor: 'people', sect: 'sect' } as const;
 const chronicleFeedFact = (entry: WorldEvent) => !entry.id.startsWith('evt-sealed-dispatch-') &&
   !(entry.witnessScope === 'participants' && (entry.id.startsWith('evt-sparring-') || entry.id.startsWith('evt-expedition-rescue-') ||
+    entry.id.startsWith('evt-short-shift-') ||
     /^evt-pilgrimage-[1-9]\d*-(?:camp(?:-expiry|-interruption)?|dismantled|resumed)-\d+$/.test(entry.id)));
 type FastForwardPhase = 'idle' | 'running' | 'pausing' | 'paused' | 'staging' | 'ready' | 'error';
 type FastForwardViewState = { phase: FastForwardPhase; progress?: FastForwardProgress; notice?: string };
@@ -792,7 +794,11 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
             className={`${action} bg-violet-900/60 text-violet-100 hover:bg-violet-800`}>打开长老议事厅</button> }]),
         ]} />,
         world: <WorkspaceSections label="世界与设置" initialOpen={opened('world')} sections={[
-          { id: 'weather', label: '灵候图与观测', content: <React.Suspense fallback={<p role="status">载入世界记录…</p>}><WeatherAtlasPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense> },
+          { id: 'weather', label: '灵候图与观测', content: <div className="space-y-2.5">
+            <React.Suspense fallback={<p role="status">载入世界记录…</p>}><WeatherAtlasPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense>
+            {activeActorId && visibleWorld.shortShifts.shifts.some(({ hostId, workerId }) => activeActorId === hostId || activeActorId === workerId) &&
+              <React.Suspense fallback={<p role="status">载入短聘凭证…</p>}><ShortShiftPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense>}
+          </div> },
           { id: 'markets', label: '坊市与商队', content: <React.Suspense fallback={<p role="status">载入世界记录…</p>}><MarketCaravansPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense> },
           { id: 'villages', label: '凡人村镇与赈济', content: <React.Suspense fallback={<p role="status">载入世界记录…</p>}><MortalVillagesPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense> },
           { id: 'occasions', label: '比武与秘境盛会', content: <React.Suspense fallback={<p role="status">载入盛会记录…</p>}><WorldOccasionsPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense> },

@@ -1,5 +1,6 @@
 import { availableSeasonReviewActions, SEASON_REVIEW_WINDOW } from './seasonReviewEngine';
 import { availableObservatoryActions } from './fieldObservatoryEngine';
+import { availableShortShiftActions } from './shortShiftEngine';
 import { availableOathArbitrationActions } from './oathArbitrationEngine';
 import { availableVillageCensusActions } from './villageCensusEngine';
 import { availableRoadActions } from './roadEngine';
@@ -205,7 +206,13 @@ export function computeHeuristicDecision(
   const surveyOptions = mayFundWeather || Object.hasOwn(world.fieldObservatories.byActor, cultivator.id)
     ? availableObservatoryActions(cultivator, world) : [];
   const dueWeather = surveyOptions.find(({ observatoryMove }) => observatoryMove === 'measure');
-  const observe = dueWeather ?? surveyOptions.find(({ observatoryMove }) => observatoryMove === 'relay') ??
+  if (dueWeather) return { ...dueWeather, chosenAction: 'FIELD_OBSERVATORY', innerMonologue: '如期完成本人先前约定的实测，不以短聘替代。' };
+  const shiftChoices = world.shortShifts.shifts.some((row) =>
+    (row.status === 'offered' || row.status === 'active') && row.workerId === cultivator.id)
+    ? availableShortShiftActions(cultivator, world) : [];
+  const acceptedWork = shiftChoices.find(({ shortShiftMove }) => shortShiftMove === 'work');
+  if (acceptedWork) return { ...acceptedWork, chosenAction: 'SHORT_SHIFT', innerMonologue: '按自己应允的短聘到场做值，不改变宗籍。' };
+  const observe = surveyOptions.find(({ observatoryMove }) => observatoryMove === 'relay') ??
     (mayFundWeather ? surveyOptions.find(({ observatoryMove }) => observatoryMove === 'fund') : undefined);
   if (observe) return { ...observe, chosenAction: 'FIELD_OBSERVATORY', innerMonologue: '只记录到场实测；推测另记，转给同伴的仍是当时旧读数。' };
   const arbitrationMarks = world.oathArbitrations;
@@ -736,6 +743,18 @@ export function computeHeuristicDecision(
     if (letter) return { ...letter, chosenAction: 'SEALED_COURIER', innerMonologue: '按确定地址请可信使本人选择接不接，不追索收信人行踪。' };
   }
 
+  const suitedToShift = cultivator.hp >= cultivator.maxHp * .8 && cultivator.personality !== '嗜血';
+  const respondToShift = shiftChoices.find(({ shortShiftMove }) => shortShiftMove === (suitedToShift ? 'accept' : 'decline'));
+  if (respondToShift) return { ...respondToShift, chosenAction: 'SHORT_SHIFT', innerMonologue: suitedToShift
+    ? '我有余力值一班，按正式列出的条款自行应允。' : '此时不宜受聘，由我自行谢绝。' };
+  if (cultivator.sectRank === '掌门' && world.tick >= 36 &&
+      (world.tick + cultivator.id.charCodeAt(cultivator.id.length - 1)) % 31 === 7 &&
+      (cultivator.personality === '刚正' || cultivator.personality === '逍遥') &&
+      Object.hasOwn(world.fieldObservatories.byActor, cultivator.id)) {
+    const invitation = availableShortShiftActions(cultivator, world).find(({ shortShiftMove }) => shortShiftMove === 'offer');
+    if (invitation) return { ...invitation, chosenAction: 'SHORT_SHIFT', innerMonologue: '只为已有实测的观象点请在场道友短聘，须本人同意。' };
+  }
+
   // 5. Socialize; trust in fellowship makes seeking a partner more attractive.
   const fellowship = cultivator.reflections.some(
     (entry) => entry.kind === 'belief' && entry.theme === 'community' && entry.intensity >= 6
@@ -862,6 +881,7 @@ export async function requestCultivatorLLMDecision(
   const relocationOptions = availableRelocationActions(cultivator, world);
   const honorReviewOptions = availableSeasonReviewActions(cultivator, world);
   const observatoryOptions = availableObservatoryActions(cultivator, world, requestTick);
+  const shortShiftOptions = availableShortShiftActions(cultivator, world, requestTick);
   const censusOptions = availableVillageCensusActions(cultivator, world);
   const roadOptions = availableRoadActions(cultivator, world);
   const probationOptions = availableProbationActions(cultivator, world);
@@ -920,6 +940,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 本宗邦交：${JSON.stringify(world.diplomacy.filter((relation) => relation.sectAId === cultivator.sectId || relation.sectBId === cultivator.sectId))}；公示的外事权限：${JSON.stringify(availableDiplomacyActions(cultivator, world))}
 - 赛季复核只选真实可核验收据；提交不会改写原榜：${JSON.stringify(honorReviewOptions)}
 - 临时观象只复制实际地点的 fund、到期 measure 或带原日期 relay；只能记录实测，不能填写强度：${JSON.stringify(observatoryOptions)}
+- 跨宗短聘只复制现场许可的 offer、accept、decline、withdraw 或 work；offer 用已列的目标修士和真实观象日期，其他只用该短聘编号。不能填写报酬、地点、天气或宗籍：${JSON.stringify(shortShiftOptions)}
 - 坊籍核点必须本人在场，只可复制已列村落：${JSON.stringify(censusOptions)}
 - 驿路选项要求实地维修和真实资源；巡礼只有实际列出的付费路才可选，普通路线不另收路费：${JSON.stringify(roadOptions)}
 - 赎责见习必须复制已列动作；赈济另走真实 DELIVER_RELIEF，复籍不抹去原处分：${JSON.stringify(probationOptions)}
@@ -1090,6 +1111,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'FURNACE_RESERVATION',
             'SPARRING',
             'EXPEDITION_RESCUE',
+            'SHORT_SHIFT',
             'RELIC_EXHIBIT',
             'PROBATION',
             'ROAD',
@@ -1133,6 +1155,11 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             item.targetExpeditionRescueId === parsed.targetExpeditionRescueId) : undefined;
           if (chosenAction === 'EXPEDITION_RESCUE' && (!legalRescue || Object.keys(parsed).some((field) =>
             !['chosenAction', 'innerMonologue', 'spokenLine', 'rescueMove', 'targetOccasionId', 'targetExpeditionRescueId'].includes(field)))) return undefined;
+          const legalShortShift = chosenAction === 'SHORT_SHIFT' ? shortShiftOptions.find((item) =>
+            item.shortShiftMove === parsed.shortShiftMove && item.targetCultivatorId === parsed.targetCultivatorId &&
+            item.targetObservatoryTick === parsed.targetObservatoryTick && item.targetShortShiftId === parsed.targetShortShiftId) : undefined;
+          if (chosenAction === 'SHORT_SHIFT' && (!legalShortShift || Object.keys(parsed).some((field) =>
+            !['chosenAction', 'innerMonologue', 'spokenLine', 'shortShiftMove', 'targetCultivatorId', 'targetObservatoryTick', 'targetShortShiftId'].includes(field)))) return undefined;
           const legalWorkshop = chosenAction === 'WORKSHOP' ? workshopOptions.find((item) =>
             item.workshopMove === parsed.workshopMove && item.targetWorkshopId === parsed.targetWorkshopId &&
             item.targetCultivatorId === parsed.targetCultivatorId && item.workshopTier === parsed.workshopTier &&
@@ -1383,7 +1410,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             chosenAction,
             targetLocationId: legalFurnace ? legalFurnace.targetLocationId : legalSanctuary ? legalSanctuary.targetLocationId : legalRelocation ? legalRelocation.targetLocationId :
               chosenAction !== 'DOCTRINE' && typeof parsed.targetLocationId === 'string' ? parsed.targetLocationId : undefined,
-            targetCultivatorId: legalSparring ? legalSparring.targetCultivatorId : legalObservatory ? legalObservatory.targetCultivatorId : legalArbitration ? legalArbitration.targetCultivatorId : legalWorkshop ? legalWorkshop.targetCultivatorId : legalDoctrine ? legalDoctrine.targetCultivatorId : legalEstate ? legalEstate.targetCultivatorId : legalWitness ? legalWitness.targetCultivatorId : legalOath ? legalOath.targetCultivatorId : legalTraining ? legalTraining.targetCultivatorId
+            targetCultivatorId: legalShortShift ? legalShortShift.targetCultivatorId : legalSparring ? legalSparring.targetCultivatorId : legalObservatory ? legalObservatory.targetCultivatorId : legalArbitration ? legalArbitration.targetCultivatorId : legalWorkshop ? legalWorkshop.targetCultivatorId : legalDoctrine ? legalDoctrine.targetCultivatorId : legalEstate ? legalEstate.targetCultivatorId : legalWitness ? legalWitness.targetCultivatorId : legalOath ? legalOath.targetCultivatorId : legalTraining ? legalTraining.targetCultivatorId
               : typeof parsed.targetCultivatorId === 'string' ? parsed.targetCultivatorId : undefined,
             spokenLine: typeof parsed.spokenLine === 'string' ? parsed.spokenLine.trim().slice(0, 90) : undefined,
             facilityKind: legalInfrastructure?.facilityKind,
@@ -1485,7 +1512,9 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             targetOathId: legalArbitration?.targetOathId ?? (legalOath ? legalOath.targetOathId : undefined),
             targetScoreId: legalSeasonReview?.targetScoreId,
             observatoryMove: legalObservatory?.observatoryMove,
-            targetObservatoryTick: legalObservatory?.targetObservatoryTick,
+            targetObservatoryTick: legalShortShift?.targetObservatoryTick ?? legalObservatory?.targetObservatoryTick,
+            shortShiftMove: legalShortShift?.shortShiftMove,
+            targetShortShiftId: legalShortShift?.targetShortShiftId,
             arbitrationMove: legalArbitration?.arbitrationMove,
             targetTenderTick: legalArbitration?.targetTenderTick,
             oathTerm: legalOath ? legalOath.oathTerm : undefined,

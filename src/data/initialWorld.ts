@@ -10,6 +10,7 @@ import { createWorkshopState } from '../engine/workshopEngine';
 import { createFurnaceReservationState } from '../engine/furnaceReservationEngine';
 import { createSparringState } from '../engine/sparringEngine';
 import { createExpeditionRescueState } from '../engine/expeditionRescueEngine';
+import { createShortShiftState } from '../engine/shortShiftEngine';
 import { createTerrainSuccessionState } from '../engine/terrainSuccessionEngine';
 import { createResourceFlowState } from '../engine/resourceFlowEngine';
 import { createSharedCommonsState } from '../engine/sharedCommonsEngine';
@@ -297,6 +298,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     furnaceReservations: createFurnaceReservationState(),
     sparring: createSparringState(),
     expeditionRescues: createExpeditionRescueState(),
+    shortShifts: createShortShiftState(),
     relicExhibits: createRelicExhibitState(),
     probation: createProbationState(),
     roads: createRoadState(),

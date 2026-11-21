@@ -2,6 +2,8 @@ import type { WorldState } from '../types/world';
 import { SPARRING_ACTIVE_TICKS, SPARRING_OFFER_TICKS } from './sparringEngine';
 import { EXPEDITION_RESCUE_OFFER_TICKS, EXPEDITION_RESCUE_STRIDE } from './expeditionRescueEngine';
 import { terrainTileAt } from './terrainEngine';
+import { OBSERVATORY_LEAD_TICKS } from './fieldObservatoryEngine';
+import { SHORT_SHIFT_OFFER_TICKS, SHORT_SHIFT_WAGE } from './shortShiftEngine';
 
 export function validateSparringRelationships(w: WorldState, actor: ReadonlySet<string>,
   locations: ReadonlySet<string>, fail: (path: string) => never): void {
@@ -127,5 +129,66 @@ export function validateExpeditionRescueRelationships(world: WorldState, actors:
       const previous = tiles[index - 1];
       return !tile || (index > 0 && (!previous || Math.abs(tile.col - previous.col) + Math.abs(tile.row - previous.row) !== 1));
     })) fail('expeditionRescues.requests.path_steps');
+  }
+}
+
+export function validateShortShiftRelationships(world: WorldState, actors: ReadonlySet<string>,
+  sects: ReadonlySet<string>, fail: (path: string) => never): void {
+  const state = world.shortShifts;
+  if (!state.shifts.length) return;
+  const ids = new Set<string>();
+  const activeParties = new Set<string>();
+  const activeSites = new Set<string>();
+  const realAttendance = new Set<string>();
+  for (const row of state.shifts) {
+    const serial = Number(row.id.match(/^short-shift-([1-9][0-9]*)$/)?.[1]);
+    const isOpen = row.status === 'offered' || row.status === 'active';
+    const accepted = row.acceptedTick;
+    const source = Object.hasOwn(world.fieldObservatories.byActor, row.hostId)
+      ? world.fieldObservatories.byActor[row.hostId].runs.find(({ openedTick }) => openedTick === row.observatoryOpenedTick) : undefined;
+    if (!Number.isSafeInteger(serial) || serial >= state.nextId || ids.has(row.id) ||
+        row.hostId === row.workerId || !actors.has(row.hostId) || !actors.has(row.workerId) ||
+        row.hostSectId === row.workerSectId || !sects.has(row.hostSectId) || !sects.has(row.workerSectId) ||
+        row.observatoryOpenedTick + OBSERVATORY_LEAD_TICKS > row.offeredTick ||
+        row.offeredTick > world.tick || row.offerExpiresTick !== row.offeredTick + SHORT_SHIFT_OFFER_TICKS ||
+        (isOpen && !source) || (source && (source.status !== 'measured' || source.locationId !== row.siteId)) ||
+        (row.status === 'offered' && (accepted !== undefined || world.tick >= row.offerExpiresTick)) ||
+        (accepted === undefined) !== (row.shiftTick === undefined) ||
+        (accepted !== undefined && (accepted <= row.offeredTick || accepted >= row.offerExpiresTick ||
+          accepted > world.tick || row.shiftTick !== accepted + 1)) ||
+        (row.status === 'active' && (accepted === undefined || (row.shiftTick ?? 0) < world.tick)) ||
+        (isOpen !== (row.closedTick === undefined)) ||
+        (row.closedTick !== undefined && (row.closedTick < (accepted ?? row.offeredTick) || row.closedTick > world.tick)) ||
+        (row.escrowStones !== (row.status === 'active' ? SHORT_SHIFT_WAGE : 0)) ||
+        (row.paidStones !== (row.status === 'completed' ? SHORT_SHIFT_WAGE : 0)) ||
+        (row.refundedStones !== (accepted !== undefined && !isOpen && row.status !== 'completed' ? SHORT_SHIFT_WAGE : 0)) ||
+        (row.status === 'declined' ? row.closeReason !== 'declined' || row.closedById !== row.workerId || accepted !== undefined :
+          row.status === 'withdrawn' ? ((row.closeReason === 'host_withdrew' && row.closedById === row.hostId) ||
+            (row.closeReason === 'worker_withdrew' && row.closedById === row.workerId)) === false :
+          row.closedById !== undefined) ||
+        (row.status === 'revoked' && row.closeReason !== 'access_revoked' && row.closeReason !== 'party_lost') ||
+        (row.status === 'expired' && (accepted === undefined ?
+          row.closeReason !== 'offer_expired' || (row.closedTick ?? 0) < row.offerExpiresTick :
+          row.closeReason !== 'shift_missed' || (row.closedTick ?? 0) < (row.shiftTick ?? Infinity))) ||
+        ((isOpen || row.status === 'completed') && row.closeReason !== undefined) ||
+        ((row.status === 'completed') !== (row.attendance !== undefined))) fail('shortShifts.shifts.source');
+    ids.add(row.id);
+    if (isOpen) {
+      if (activeParties.has(row.workerId) || activeParties.has(row.hostId) || activeSites.has(row.siteId)) fail('shortShifts.shifts.overlap');
+      activeParties.add(row.workerId);
+      activeParties.add(row.hostId);
+      activeSites.add(row.siteId);
+    }
+    if (row.attendance) {
+      const { tick, reading: { kind, intensity } } = row.attendance;
+      const workerAt = JSON.stringify(['worker', row.workerId, tick]), siteAt = JSON.stringify(['site', row.siteId, tick]);
+      if (accepted === undefined || tick !== row.shiftTick || tick !== row.closedTick ||
+          Math.abs(intensity * 100 - Math.round(intensity * 100)) > 1e-8 ||
+          (kind === '平息' ? intensity !== 0 : intensity < .05) ||
+          realAttendance.has(workerAt) || realAttendance.has(siteAt))
+        fail('shortShifts.attendance.source');
+      realAttendance.add(workerAt);
+      realAttendance.add(siteAt);
+    }
   }
 }

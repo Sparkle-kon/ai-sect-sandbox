@@ -121,6 +121,9 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const ownPracticeSite = selected?.alive && selected.hp > 0 ? world.sparring.agreements.find((row) =>
     row.status === 'active' && row.siteId === selected.locationId && (row.deadlineTick ?? 0) > world.tick &&
     (row.proposerId === selected.id || row.partnerId === selected.id))?.siteId : undefined;
+  const ownShift = selected?.alive && selected.hp > 0 ? world.shortShifts.shifts.find((row) => row.status === 'active' &&
+    (row.shiftTick ?? 0) >= world.tick && row.siteId === selected.locationId &&
+    (row.hostId === selected.id || row.workerId === selected.id)) : undefined;
   const furnaceShift = useMemo(() => selected
     ? availableFurnaceSlotSummary(world, selected, selected.locationId) : undefined, [world, selected]);
   const mapView = useMemo(() => createTerrainMapView(world, selected, fog), [world, selected, fog]);
@@ -1133,6 +1136,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                 {location.furnaceGrade > 0 && <span className="text-emerald-300">· {location.furnaceGrade} 阶丹炉</span>}
                 {location.id === ownPracticeSite && isCurrentLocation(location.id) &&
                   <span className="text-sky-200">· 本人已约定自愿切磋</span>}
+                {location.id === ownShift?.siteId && location.ownerSectId === ownShift.hostSectId && isCurrentLocation(location.id) &&
+                  <span className="text-sky-200">· 本人已约定观象短聘</span>}
                 {location.id === selected?.locationId && furnaceShift && (furnaceShift.used + furnaceShift.reserved + furnaceShift.queued > 0) && <span className="text-amber-200">
                   · 炉位 {furnaceShift.used + furnaceShift.reserved}/{furnaceShift.capacity} 已用或预留 · 候炉 {furnaceShift.queued} 位
                 </span>}

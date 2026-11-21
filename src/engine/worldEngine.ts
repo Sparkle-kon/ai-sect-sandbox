@@ -9,6 +9,7 @@ import { advanceWorkshops, resolveWorkshopAction } from './workshopEngine';
 import { openFurnaceTurn, resolveFurnaceReservationAction, settleFurnaceTurn } from './furnaceReservationEngine';
 import { advanceSparring, resolveSparringAction, sparringLocksActor } from './sparringEngine';
 import { resolveExpeditionRescueAction } from './expeditionRescueEngine';
+import { advanceShortShifts, resolveShortShiftAction } from './shortShiftEngine';
 import { expeditionRescueCheckpoint } from './expeditionRescueCheckpoint';
 import { advanceTerrainSuccession, resolveTerrainRecovery } from './terrainSuccessionEngine';
 import { openResourceFlowMonth } from './resourceFlowEngine';
@@ -258,6 +259,8 @@ export function applyCultivatorBrainDecision(
       return resolveSparringAction(world, cultivator, decision);
     case 'EXPEDITION_RESCUE':
       return resolveExpeditionRescueAction(world, cultivator, decision);
+    case 'SHORT_SHIFT':
+      return resolveShortShiftAction(world, cultivator, decision);
     case 'TERRAIN_RECOVERY':
       return resolveTerrainRecovery(world, cultivator, decision);
     case 'SHARED_COMMONS':
@@ -879,7 +882,7 @@ export function advanceWorldTick(
     if (yearly) cultivator.reflections = synthesizeReflections(cultivator, nextState.tick);
   }
 
-  for (const event of [...advanceSparring(nextState), ...advanceDiplomacy(nextState, rng), ...advanceOccasions(nextState, rng), ...advanceOaths(nextState), ...advanceMarkets(nextState), ...advanceWitnesses(nextState), ...advanceSeasonReviews(nextState, (state, seasonId) =>
+  for (const event of [...advanceShortShifts(nextState), ...advanceSparring(nextState), ...advanceDiplomacy(nextState, rng), ...advanceOccasions(nextState, rng), ...advanceOaths(nextState), ...advanceMarkets(nextState), ...advanceWitnesses(nextState), ...advanceSeasonReviews(nextState, (state, seasonId) =>
     publicCompetitionStandings(state, seasonId).find(({ rank }) => rank === 1)), ...maintainSectPolitics(nextState), ...advanceBounties(nextState), ...advanceResearch(nextState), ...advanceWorkshops(nextState), ...advanceRelicExhibits(nextState), ...advanceProbation(nextState), ...advanceEstates(nextState), ...advanceDoctrines(nextState), ...advanceSectCredit(nextState), ...advanceSanctuaries(nextState), ...advancePilgrimages(nextState), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...reconcileCourierDeaths(nextState), ...advanceHouseholds(nextState)]) {
     newEvents.push(event);
     witnessEvent(nextState, event);

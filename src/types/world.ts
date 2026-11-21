@@ -114,6 +114,7 @@ export type ActionType =
   | 'FURNACE_RESERVATION'
   | 'SPARRING'
   | 'EXPEDITION_RESCUE'
+  | 'SHORT_SHIFT'
   | 'FORGE_ARTIFACT'
   | 'BIND_ARTIFACT'
   | 'REPAIR_ARTIFACT'
@@ -497,6 +498,8 @@ export interface LLMDecisionPayload {
   targetSparringId?: string;
   rescueMove?: ExpeditionRescueMove;
   targetExpeditionRescueId?: string;
+  shortShiftMove?: ShortShiftMove;
+  targetShortShiftId?: string;
   targetWorkshopId?: string;
   workshopTier?: WorkshopTier;
   workshopQuantity?: 1 | 2;
@@ -2225,6 +2228,30 @@ export interface ExpeditionRescue {
 }
 export interface ExpeditionRescueState { requests: ExpeditionRescue[]; nextId: number }
 
+export type ShortShiftMove = 'offer' | 'accept' | 'decline' | 'withdraw' | 'work';
+export interface ShortShift {
+  id: string;
+  hostId: string;
+  workerId: string;
+  hostSectId: string;
+  workerSectId: string;
+  siteId: string;
+  observatoryOpenedTick: number;
+  offeredTick: number;
+  offerExpiresTick: number;
+  status: 'offered' | 'active' | 'completed' | 'declined' | 'withdrawn' | 'revoked' | 'expired';
+  acceptedTick?: number;
+  shiftTick?: number;
+  closedTick?: number;
+  closedById?: string;
+  closeReason?: 'declined' | 'host_withdrew' | 'worker_withdrew' | 'access_revoked' | 'party_lost' | 'offer_expired' | 'shift_missed';
+  escrowStones: number;
+  paidStones: number;
+  refundedStones: number;
+  attendance?: { tick: number; reading: FieldWeatherReading };
+}
+export interface ShortShiftState { shifts: ShortShift[]; nextId: number }
+
 export type ProbationMove = 'request' | 'admit' | 'review' | 'withdraw' | 'restore';
 export type ProbationVote = 'support' | 'oppose';
 export type ProbationStatus = 'requested' | 'active' | 'ready' | 'reinstated' | 'withdrawn' | 'rejected' | 'expired';
@@ -2326,6 +2353,7 @@ export interface WorldState {
   furnaceReservations: FurnaceReservationState;
   sparring: SparringState;
   expeditionRescues: ExpeditionRescueState;
+  shortShifts: ShortShiftState;
   resourceFlow: ResourceFlowState;
   roads: RoadState;
   sharedCommons: SharedCommonsState;
