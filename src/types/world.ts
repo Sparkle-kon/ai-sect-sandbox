@@ -72,6 +72,9 @@ export type ActionType =
   | 'FILE_WITNESS_CLAIM'
   | 'ATTEST_WITNESS'
   | 'CHALLENGE_WITNESS'
+  | 'NAME_HEIR'
+  | 'CLAIM_ESTATE'
+  | 'HOLD_MEMORIAL'
   | 'GATHER_HERBS'
   | 'BREW_PILL'
   | 'USE_PILL'
@@ -287,6 +290,7 @@ export interface Cultivator {
   activeScheme?: CultivatorScheme;
   tribulation?: TribulationTrial;
   guardAssignment?: GuardAssignment;
+  namedHeirId?: string;
   alive: boolean;
 }
 
@@ -344,6 +348,7 @@ export interface LLMDecisionPayload {
   targetVolunteerId?: string;
   targetWitnessEventId?: string;
   targetWitnessClaimId?: string;
+  targetEstateId?: string;
   targetTechniqueId?: string;
   targetHerbId?: HerbId;
   targetPillId?: PillId;
@@ -810,7 +815,46 @@ export interface WitnessState {
   nextId: number;
 }
 
+export interface EstateAssets {
+  stones: number;
+  herbs: Record<HerbId, number>;
+  pills: Record<PillId, number>;
+  artifacts: Artifact[];
+}
+export interface EstateDistribution extends Omit<EstateAssets, 'artifacts'> {
+  artifactIds: string[];
+}
+export interface EstateEligibility {
+  actorId: string;
+  basis: 'nomination' | 'bond' | 'sect';
+  strength: number;
+}
+export interface EstateClaim extends EstateEligibility {
+  tick: number;
+}
+export interface EstateRecord {
+  id: string;
+  deceasedId: string;
+  locationId: string;
+  openedTick: number;
+  closesTick: number;
+  namedHeirId?: string;
+  sponsorSectId?: string;
+  status: 'open' | 'settled' | 'unclaimed';
+  holdings: EstateAssets;
+  distributed: EstateDistribution;
+  eligibleHeirs: EstateEligibility[];
+  claims: EstateClaim[];
+  beneficiaryId?: string;
+  settledTick?: number;
+  memorial?: { tick: number; organizerId: string; attendeeIds: string[]; relationshipImpacts: number };
+}
+export interface EstateState {
+  entries: EstateRecord[];
+}
+
 export interface WorldState {
+  estates: EstateState;
   witnesses: WitnessState;
   settlements: SettlementState;
   markets: MarketState;

@@ -1,3 +1,4 @@
+import { advanceEstates, resolveEstateAction } from './estateEngine';
 import { advanceWitnesses, resolveWitnessAction } from './witnessEngine';
 import { advanceSettlements, resolveSettlementAction } from './settlementEngine';
 import { advanceMarkets, resolveMarketAction } from './marketEngine';
@@ -165,6 +166,10 @@ export function applyCultivatorBrainDecision(
     case 'BREW_PILL':
     case 'USE_PILL':
       return resolveAlchemy(world, cultivator, decision, rng);
+    case 'NAME_HEIR':
+    case 'CLAIM_ESTATE':
+    case 'HOLD_MEMORIAL':
+      return resolveEstateAction(world, cultivator, decision);
     case 'FILE_WITNESS_CLAIM':
     case 'ATTEST_WITNESS':
     case 'CHALLENGE_WITNESS':
@@ -649,7 +654,7 @@ export function advanceWorldTick(
     if (yearly) cultivator.reflections = synthesizeReflections(cultivator, nextState.tick);
   }
 
-  for (const event of [...advanceDiplomacy(nextState, rng), ...advanceOccasions(nextState, rng), ...advanceOaths(nextState), ...advanceMarkets(nextState), ...advanceWitnesses(nextState), ...maintainSectPolitics(nextState), ...advanceBounties(nextState)]) {
+  for (const event of [...advanceDiplomacy(nextState, rng), ...advanceOccasions(nextState, rng), ...advanceOaths(nextState), ...advanceMarkets(nextState), ...advanceWitnesses(nextState), ...maintainSectPolitics(nextState), ...advanceBounties(nextState), ...advanceEstates(nextState)]) {
     newEvents.push(event);
     witnessEvent(nextState, event);
   }

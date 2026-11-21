@@ -58,7 +58,7 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const marketQty = num(1,12,true), marketPrice = num(1,500,true);
@@ -66,6 +66,7 @@ const pills = structure({foundation:count,golden:count,barrier:count,heart_poiso
 const technique = structure({id:oid,authorId:oid,createdTick:otick,name:id,spiritRoot:spirit});
 const artifact = structure({id:oid,tier:optional(one('法器','灵器','法宝','通天灵宝')),durability:optional(wealth),maxDurability:optional(wealth),boundTo:oid,
   soul:optional(structure({name:id,experience:percentage})),resonance:optional(percentage),name:id,spiritRoot:spirit});
+const eligibility = { actorId:id,basis:one('nomination','bond','sect'),strength:num(0,10_000) };
 const memory = structure({id,tick,content:text,importance:num(1,10),emotionalValence:num(-5,5),decayRate:num(0,10),
   consolidatedAtTick:otick,category:one('cultivation','combat','social','heavenly','whisper')});
 const dialogue = structure({kind:one('combat','trade','dual_cultivation','sect_diplomacy'),source,
@@ -103,7 +104,7 @@ const shape = structure({
       startedTick:tick,finishedTick:otick,stepIndex:count,steps:arr(32,structure({label:text,completedTick:otick})),targetCultivatorId:oid,targetLocationId:oid,artifactName:otext,outcome:otext})),
     tribulation:optional(structure({id,targetRealm:realm,startedTick:tick,stage:one('lightning','heart_demon','passed','failed'),nextWave:count,totalWaves:count,
       pressure:percentage,interruptions:count,resolvedTick:otick,lastOutcome:otext,lastActedTick:otick})),
-    guardAssignment:optional(structure({locationId:id,assignedTick:tick,expiresTick:tick})),alive:bool})),
+    guardAssignment:optional(structure({locationId:id,assignedTick:tick,expiresTick:tick})),namedHeirId:oid,alive:bool})),
   relationships:arr(8000,structure({fromId:id,toId:id,type:one('师徒','同门','道侣','血仇','挚友','竞争'),affinity,note:text})),
   events:arr(200,structure({...publicFact,witnessScope:optional(one('participants')),duelWinnerId:oid,damage:optional(arr(500,structure({cultivatorId:id,amount:wealth})))})),
   diplomacy:arr(1200,structure({sectAId:id,sectBId:id,affinity,pact:one('neutral','alliance','war'),sinceTick:tick,lastActionTick:otick})),
@@ -130,6 +131,12 @@ const shape = structure({
     status:one('passed','rejected','stale'),outcome:text})),
   chronicleArchive:structure({anchors:arr(384,anchor),chapters:arr(24,structure({id,chapterNumber:tick,startTick:tick,endTick:tick,title:text,
     anchors:arr(18,anchor),biographies:arr(8,structure({actorId:id,name:id,realm,sectName:otext,anchorIds:ids})),body:strings(25_000),source}))}),
+  estates:structure({entries:arr(500,structure({id,deceasedId:id,locationId:id,openedTick:tick,closesTick:tick,
+    namedHeirId:oid,sponsorSectId:oid,status:one('open','settled','unclaimed'),
+    holdings:structure({stones:wealth,herbs,pills,artifacts:arr(700,artifact)}),
+    distributed:structure({stones:wealth,herbs,pills,artifactIds:ids}),
+    eligibleHeirs:arr(500,structure(eligibility)),claims:arr(500,structure({...eligibility,tick})),
+    beneficiaryId:oid,settledTick:otick,memorial:optional(structure({tick,organizerId:id,attendeeIds:ids,relationshipImpacts:count}))}))}),
   witnesses:structure({nextId:tick,
     facts:arr(240,structure({eventId:id,tick,locationId:id,participantIds:arr(2,id),winnerId:id,witnessIds:ids})),
     claims:arr(80,structure({id,sourceEventId:id,publicationEventId:id,claimantId:id,subjectId:id,locationId:id,
@@ -179,6 +186,7 @@ function verifyWorld(value: unknown): WorldState {
   const candidate = value !== null && typeof value === 'object' && !Array.isArray(value)
     ? { ...value,
       ...(!Object.hasOwn(value, 'mentorship') ? { mentorship: { offers: [], lineage: [], budgets: [] } } : {}),
+      ...(!Object.hasOwn(value, 'estates') ? { estates: { entries: [] } } : {}),
       ...(!Object.hasOwn(value, 'witnesses') ? { witnesses: { facts: [], claims: [], nextId: 1 } } : {}),
       ...(!Object.hasOwn(value, 'settlements') ? { settlements: { villages: [], records: [] } } : {}),
       ...(!Object.hasOwn(value, 'markets') ? { markets: { orders: [], shipments: [], receipts: [], nextId: 1 } } : {}),
@@ -203,7 +211,8 @@ function verifyWorld(value: unknown): WorldState {
   }
   for (const site of w.locations) if (site.ownerSectId && !sector.has(site.ownerSectId)) fail('locations.ownerSectId');
   for (const person of w.cultivators) {
-    if ((person.sectId && !sector.has(person.sectId)) || !locations.has(person.locationId) || person.hp > person.maxHp ||
+    if ((person.sectId && !sector.has(person.sectId)) || (person.alive && !locations.has(person.locationId)) || person.hp > person.maxHp ||
+        (person.namedHeirId && (!actor.has(person.namedHeirId) || person.namedHeirId === person.id)) ||
         person.exploredTileIds.some((id) => !map.has(id)) || person.artifacts.some((art) => art.boundTo && !actor.has(art.boundTo))) fail('cultivators.references');
   }
   for (const edge of w.relationships) if (!actor.has(edge.fromId) || !actor.has(edge.toId) || edge.fromId === edge.toId) fail('relationships.references');
@@ -226,6 +235,23 @@ function verifyWorld(value: unknown): WorldState {
   if ((w.playerAvatar.possessedId && !actor.has(w.playerAvatar.possessedId)) ||
       (w.playerAvatar.pendingOrder && w.playerAvatar.pendingOrder.actorId !== w.playerAvatar.possessedId) ||
       w.playerAvatar.transcript.some((entry) => !actor.has(entry.targetCultivatorId) || (entry.actorId && !actor.has(entry.actorId)))) fail('playerAvatar.references');
+  unique(w.estates.entries, ({id}) => id, 'estates.id');
+  unique(w.estates.entries, ({deceasedId}) => deceasedId, 'estates.deceasedId');
+  const knownArtefacts = new Set(w.cultivators.flatMap((person) => person.artifacts.flatMap(({id}) => id ? [id] : [])));
+  for (const estate of w.estates.entries) {
+    if (!w.cultivators.some(({id,alive}) => id === estate.deceasedId && !alive) ||
+        (estate.namedHeirId && !actor.has(estate.namedHeirId)) || (estate.beneficiaryId && !actor.has(estate.beneficiaryId)) ||
+        (estate.sponsorSectId && !sector.has(estate.sponsorSectId)) || estate.closesTick < estate.openedTick ||
+        estate.eligibleHeirs.some(({actorId}) => !actor.has(actorId) || actorId === estate.deceasedId) ||
+        estate.claims.some(({actorId}) => !estate.eligibleHeirs.some((person) => person.actorId === actorId)) ||
+        (estate.memorial && (!actor.has(estate.memorial.organizerId) || estate.memorial.attendeeIds.some((id) => !actor.has(id))))) fail('estates.references');
+    unique(estate.eligibleHeirs, ({actorId}) => actorId, 'estates.eligibleHeirs');
+    unique(estate.claims, ({actorId}) => actorId, 'estates.claims');
+    for (const artifact of estate.holdings.artifacts) {
+      if (artifact.id && knownArtefacts.has(artifact.id)) fail('estates.duplicate_asset');
+      if (artifact.id) knownArtefacts.add(artifact.id);
+    }
+  }
   const factIds = unique(w.witnesses.facts, ({eventId}) => eventId, 'witnesses.facts.id');
   unique(w.witnesses.claims, ({id}) => id, 'witnesses.claims.id');
   for (const fact of w.witnesses.facts) {

@@ -36,6 +36,7 @@ import { WeatherAtlasPanel } from './components/WeatherAtlasPanel';
 import { MarketCaravansPanel } from './components/MarketCaravansPanel';
 import { MortalVillagesPanel } from './components/MortalVillagesPanel';
 import { AttestationPanel } from './components/AttestationPanel';
+import { EstateMemorialPanel } from './components/EstateMemorialPanel';
 import { createTimeline, forkTimeline, readTimelineHead, readTimelineSnapshot, recordTimelineWorld, selectTimelineBranch } from './engine/timelineEngine';
 import type { WorldTimeline } from './engine/timelineEngine';
 import { activeAvatar, possessAvatar, queueAvatarOrder } from './engine/avatarEngine';
@@ -423,6 +424,7 @@ export const App: React.FC = () => {
           <MentorshipPanel world={visibleWorld} cultivator={selectedCultivator} />
           <OathContractsPanel world={visibleWorld} cultivator={selectedCultivator} />
           <AttestationPanel world={visibleWorld} cultivator={selectedCultivator} />
+          <EstateMemorialPanel world={visibleWorld} cultivator={selectedCultivator} />
           {!preview && <section className="rounded-xl border border-slate-800 bg-slate-900/80 p-3">
             <button type="button" aria-expanded={storageOpen} onClick={() => setStorageOpen((open) => !open)}
               className="w-full rounded-md bg-slate-800 px-3 py-2 text-left text-sm text-slate-100">存档与世界种子</button>

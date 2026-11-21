@@ -1,3 +1,4 @@
+import { createEstateState } from '../engine/estateEngine';
 import { createWitnessState } from '../engine/witnessEngine';
 import { createSettlementState } from '../engine/settlementEngine';
 import { createMarketState } from '../engine/marketEngine';
@@ -224,6 +225,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED): WorldState {
     markets: createMarketState(),
     settlements: createSettlementState(locations, seed),
     witnesses: createWitnessState(),
+    estates: createEstateState(),
     tick: 1,
     interventionSequence: 0,
     year: 1001,

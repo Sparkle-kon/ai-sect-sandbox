@@ -1,3 +1,4 @@
+import { advanceEstates } from './estateEngine';
 import { archiveChronicleEvents } from './novelGenerator';
 import type { Cultivator, GodBrushKind, LocationNode, MapHazard, MapPoint, MapTile, WorldEvent, WorldState } from '../types/world';
 import { deriveMapPresentation } from './mapMotionEngine';
@@ -103,6 +104,7 @@ export function applyMapBrush(prev: WorldState, kind: GodBrushKind, points: MapP
       actorIds: hits.map(({ cultivatorId }) => cultivatorId), locationId, ...(hits.length ? { damage: hits } : {}),
     });
   }
+  brushEvents.push(...advanceEstates(world));
   archiveChronicleEvents(world, brushEvents);
   world.events = [...brushEvents, ...world.events].slice(0, 120);
   world.mapPresentation = deriveMapPresentation(prev, world, brushEvents);
