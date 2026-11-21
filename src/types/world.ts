@@ -88,6 +88,7 @@ export type ActionType =
   | 'RESEARCH'
   | 'SANCTUARY'
   | 'SECT_CREDIT'
+  | 'PILGRIMAGE'
   | 'GATHER_HERBS'
   | 'BREW_PILL'
   | 'USE_PILL'
@@ -383,6 +384,9 @@ export interface LLMDecisionPayload {
   targetHazardId?: string;
   ceasefireMove?: CeasefireMove;
   targetCeasefireId?: string;
+  pilgrimageMove?: PilgrimageMove;
+  targetPilgrimageId?: string;
+  targetPilgrimageNextStopId?: string;
   creditMove?: SectCreditMove;
   targetCreditId?: string;
   sanctuaryMove?: SanctuaryMove;
@@ -1365,7 +1369,42 @@ export interface SectCreditState {
   nextId: number;
 }
 
+export type PilgrimageMove = 'propose' | 'accept' | 'decline' | 'advance' | 'relieve' | 'withdraw';
+export type PilgrimageEndReason = 'declined' | 'offer_expiry' | 'journey_expiry' | 'withdrawn' | 'lost_site' | 'member_missing';
+export interface PilgrimageAid {
+  tick: number;
+  giverId: string;
+  receiverId: string;
+  locationId: string;
+  hpRestored: number;
+}
+export interface PilgrimageJourney {
+  id: string;
+  organizerId: string;
+  companionId: string;
+  stopIds: [string, string, string];
+  stopsVisited: Array<{ locationId: string; tick: number }>;
+  status: 'proposed' | 'active' | 'completed' | 'declined' | 'expired' | 'withdrawn' | 'interrupted';
+  proposedTick: number;
+  offerExpiresTick: number;
+  startedTick?: number;
+  expiresTick?: number;
+  settledTick?: number;
+  reason?: PilgrimageEndReason;
+  legIndex: number;
+  path: MapPoint[];
+  pathIndex: number;
+  lastMovedTick?: number;
+  spentByEach: number;
+  aid: PilgrimageAid[];
+}
+export interface PilgrimageState {
+  journeys: PilgrimageJourney[];
+  nextId: number;
+}
+
 export interface WorldState {
+  pilgrimages: PilgrimageState;
   credit: SectCreditState;
   sanctuary: SanctuaryState;
   research: ResearchState;

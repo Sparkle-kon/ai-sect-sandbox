@@ -21,6 +21,7 @@ import { BRUSH_LABELS, brushPoint, drawHazards, getVisibleHazards } from './mapB
 import { BEAST_COLORS, visibleBeastsByLocation } from './spiritBeastView';
 import { activeAvatar } from '../engine/avatarEngine';
 import { localQiWeather } from '../engine/weatherEngine';
+import { visiblePilgrimageMapCheckpoint } from './pilgrimageMapView';
 import { visibleSanctuaryMapMarks } from './sanctuaryView';
 
 const MapKeyboardExplorer = React.lazy(async () => ({ default: (await import('./MapKeyboardExplorer')).MapKeyboardExplorer }));
@@ -96,11 +97,12 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const sanctuaryMarks = useMemo(() => visibleSanctuaryMapMarks(world, mapView, selected), [world, mapView, selected]);
   const annotationPins = useMemo(() => annotationView?.mapAnnotationPins(world, mapView, selectedCultivatorId) ?? [], [annotationView, world, mapView, selectedCultivatorId]);
   const convoys = useMemo(() => visibleMapConvoys(world, mapView), [world, mapView]);
+  const pilgrimageMark = useMemo(() => visiblePilgrimageMapCheckpoint(world, mapView, selected), [world, mapView, selected]);
   const escortedCaravan = useMemo(() => visibleMapEscort(world, mapView, selected), [world, mapView, selected]);
   const hazards = useMemo(() => getVisibleHazards(world, mapView), [world, mapView]);
   const beastsByLocation = useMemo(() => visibleBeastsByLocation(world, mapView), [world, mapView]);
   const armedBrush = !fog && onBrushStroke && brush !== 'browse' ? brush : undefined;
-  const actorPositions = useMemo(() => mapActorPositions(seenLocations, liveActors), [seenLocations, liveActors]);
+  const actorPositions = useMemo(() => mapActorPositions(seenLocations, liveActors, mapView.trailPositions), [seenLocations, liveActors, mapView.trailPositions]);
   const selectedPoint = actorPositions.find(({ actor }) => actor.id === selectedCultivatorId);
   const followedActorId = selectedPoint?.actor.id;
   const followedX = selectedPoint?.x;
@@ -211,6 +213,17 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       annotationView?.drawMapAnnotationPins(ctx, annotationPins, camera.zoom);
       drawMapConvoys(ctx, convoys, camera.zoom);
       if (escortedCaravan) drawMapConvoys(ctx, [escortedCaravan], camera.zoom, '#7dd3fc');
+      if (pilgrimageMark) {
+        const { x, y } = pilgrimageMark.point;
+        ctx.save();
+        ctx.fillStyle = '#0f2632';
+        ctx.fillRect(x - 9, y - 32, 18, 16);
+        ctx.fillStyle = '#a5f3fc';
+        ctx.font = 'bold 12px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('巡', x, y - 20);
+        ctx.restore();
+      }
 
       // 3. Draw Spirit Vein connection lines between locations
       ctx.strokeStyle = 'rgba(56, 189, 248, 0.12)';
@@ -481,7 +494,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener('change', stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, hazards, convoys, escortedCaravan, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, hazards, convoys, escortedCaravan, pilgrimageMark, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -820,6 +833,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           </li>)}
         </ul>
       </details>}
+      {pilgrimageMark && <p className="sr-only">所选修士正沿巡礼路段行进：第 {pilgrimageMark.row} 行，第 {pilgrimageMark.col} 列。</p>}
       {escortedCaravan && <div className="border-t border-slate-800/80 px-3 text-xs text-sky-200">
         <button type="button" className="min-h-11 text-left" onClick={() => manualCamera(focusMapPoint(cameraRef.current, escortedCaravan.marker))}>
           定位所选护镖车队 · 第 {escortedCaravan.row} 行，第 {escortedCaravan.col} 列
@@ -876,7 +890,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                 <SpiritRootBadge root={location.spiritRoot} />
                 <span className="text-slate-400">· 灵气 {location.spiritQi}</span>
                 {tile && <span className="text-slate-400">· {tile.biome} · 地格灵气 {tile.spiritQi} · {world.sects.find(({ id }) => id === tile.ownerSectId)?.name ?? '无所属宗门'}</span>}
-                {fog && actorPositions.filter(({ actor }) => actor.locationId === location.id).map(({ actor }) => (
+                {fog && actorPositions.filter(({ actor }) => actor.locationId === location.id && !mapView.trailPositions.has(actor.id)).map(({ actor }) => (
                   <button key={actor.id} type="button" onClick={() => onSelectCultivator(actor.id)} className="rounded border border-slate-700 px-1.5 py-0.5 text-slate-200">
                     {actor.name}{actor.id === avatarId ? '（临身）' : ''}
                   </button>

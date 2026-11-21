@@ -11,6 +11,7 @@ import { enrichAnnualReflections } from './engine/reflectionEngine';
 import { enrichTickDialogues } from './engine/dialogueEngine';
 import { activeSiegeForActor } from './engine/diplomacyEngine';
 import { activeOccasionForActor } from './engine/occasionEngine';
+import { visiblePilgrimages } from './engine/pilgrimageEngine';
 import { applyMapBrush } from './engine/mapBrushEngine';
 import { GodBrushKind, LLMConfig, LLMDecisionPayload, MapPoint, WorldState } from './types/world';
 import { SandboxWorkspace, WorkspaceSections } from './components/SandboxWorkspace';
@@ -42,6 +43,7 @@ const RelationshipGraph = React.lazy(async () => ({ default: (await import('./co
 const GodConsole = React.lazy(async () => ({ default: (await import('./components/GodConsole')).GodConsole }));
 const SectResearchPanel = React.lazy(async () => ({ default: (await import('./components/SectResearchPanel')).SectResearchPanel }));
 const SanctuaryPanel = React.lazy(async () => ({ default: (await import('./components/SanctuaryPanel')).SanctuaryPanel }));
+const PilgrimagePanel = React.lazy(async () => ({ default: (await import('./components/PilgrimagePanel')).PilgrimagePanel }));
 const SectCreditPanel = React.lazy(async () => ({ default: (await import('./components/SectCreditPanel')).SectCreditPanel }));
 const CeasefirePanel = React.lazy(async () => ({ default: (await import('./components/CeasefirePanel')).CeasefirePanel }));
 const SectRelocationPanel = React.lazy(async () => ({ default: (await import('./components/SectRelocationPanel')).SectRelocationPanel }));
@@ -429,6 +431,11 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
               <React.Suspense fallback={<p role="status">载入师承记录…</p>}><MentorshipPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense>
               <React.Suspense fallback={<p role="status">载入关系图…</p>}><RelationshipGraph world={visibleWorld} selectedCultivatorId={activeActorId} onSelectCultivator={setSelectedCultivatorId} /></React.Suspense>
             </div> },
+            ...(workspace === 'people' && selectedCultivator && visiblePilgrimages(visibleWorld, selectedCultivator).length > 0 ? [{
+              id: 'pilgrimage', label: '朝山巡礼与共愿', content: <React.Suspense fallback={<p role="status">载入巡礼记录…</p>}>
+                <PilgrimagePanel world={visibleWorld} cultivator={selectedCultivator} />
+              </React.Suspense>,
+            }] : []),
             { id: 'trace', label: '天机溯因与单回合复盘', content: <React.Suspense fallback={<p role="status">载入决策纪要…</p>}>
               <DecisionTracePanel world={visibleWorld} cultivator={selectedCultivator} busy={isStepping} historical={!!preview} onReplay={compareDecision} />
             </React.Suspense> },

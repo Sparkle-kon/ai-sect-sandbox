@@ -67,6 +67,9 @@ export function deriveMapPresentation(prev: WorldState, next: WorldState, events
   };
   const damaged = new Set<string>();
   const paths = new Map<string, MapPoint[]>();
+  // A pilgrim has already traversed the actual checkpoint sequence, not a new unrestricted flight.
+  const pilgrimsMoved = new Set(next.pilgrimages.journeys.filter(({ lastMovedTick }) => lastMovedTick === next.tick)
+    .flatMap(({ organizerId, companionId }) => [organizerId, companionId]));
   for (const entry of events) {
     if (entry.tick !== next.tick) continue;
     const first = entry.actorIds[0] ? after.get(entry.actorIds[0]) : undefined;
@@ -84,7 +87,7 @@ export function deriveMapPresentation(prev: WorldState, next: WorldState, events
   for (const actor of next.cultivators) {
     const previous = before.get(actor.id);
     if (!previous) continue;
-    if (previous.locationId !== actor.locationId && actor.alive) {
+    if (previous.locationId !== actor.locationId && actor.alive && !pilgrimsMoved.has(actor.id)) {
       const origin = prevSites.get(previous.locationId) ?? nextSites.get(previous.locationId);
       const dest = nextSites.get(actor.locationId);
       if (origin && dest) {

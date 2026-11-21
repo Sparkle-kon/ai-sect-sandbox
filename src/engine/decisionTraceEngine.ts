@@ -1,3 +1,4 @@
+import { activePilgrimageForActor, pilgrimageCheckpoint } from './pilgrimageEngine';
 import { sameGeneratedWorld } from './worldIdentity';
 import type { CultivationRealm, Cultivator, DecisionTraceCandidate, DecisionTraceRecord, DecisionTraceState, LLMDecisionPayload, PublicTraceAction, WorldState } from '../types/world';
 import { knownMapLocations } from './terrainEngine';
@@ -32,7 +33,9 @@ export function legalTraceCandidates(world: WorldState, actor: Cultivator): Deci
     add({ action: 'FACE_TRIBULATION', reason: 'tribulation', score: heart ? 48 : 40 + health * 32, tribulationStance: 'defy' });
     return sortCandidates(result);
   }
+  if (pilgrimageCheckpoint(world, actor)) return [];
   add({ action: 'REST', reason: 'recover', score: 30 + (1 - health) * 68 });
+  if (activePilgrimageForActor(world, actor)) return sortCandidates(result);
   add({ action: 'CULTIVATE', reason: 'cultivate', score: 61 + health * 8 });
   const retryDelay = actor.tribulation?.stage === 'failed' && actor.tribulation.resolvedTick !== undefined &&
     world.tick - actor.tribulation.resolvedTick < 3;
@@ -41,7 +44,7 @@ export function legalTraceCandidates(world: WorldState, actor: Cultivator): Deci
   }
   const location = world.locations.find(({ id }) => id === actor.locationId);
   if (location && publicLocation(location.type)) {
-    const localPeers = world.cultivators.filter((other) => other.id !== actor.id && other.alive && other.hp > 0 && other.locationId === actor.locationId)
+    const localPeers = world.cultivators.filter((other) => other.id !== actor.id && other.alive && other.hp > 0 && other.locationId === actor.locationId && !pilgrimageCheckpoint(world, other))
       .sort((a, b) => a.id.localeCompare(b.id)).slice(0, 4);
     for (const peer of localPeers) add({ action: 'SOCIALIZE', reason: 'social', score: 44 + Number(Boolean(peer.sectId) && peer.sectId === actor.sectId) * 4,
       targetCultivatorId: peer.id });
@@ -109,7 +112,7 @@ const MECHANICAL_FIELDS = [
   'marketQuantity', 'marketLimitPrice', 'targetMarketOrderId', 'targetSettlementId', 'targetVolunteerId', 'targetWitnessEventId',
   'targetWitnessClaimId', 'targetEstateId', 'targetTechniqueId', 'targetHerbId', 'targetPillId', 'targetArtifactId', 'forgeTier',
   'tribulationStance', 'facilityKind', 'targetSectId', 'targetOccasionId', 'targetBountyId', 'targetBeastId',
-  'creditMove', 'targetCreditId', 'sanctuaryMove', 'targetSanctuaryId', 'researchMove', 'researchTopic', 'targetResearchId', 'researchWithdrawReason', 'ceasefireMove', 'targetCeasefireId', 'escortMove', 'targetShipmentId', 'targetEscortId', 'targetHazardId', 'seasonMove', 'editionMove', 'targetScriptureOriginalId', 'targetScriptureEditionId', 'relicMove', 'targetRelicFragmentId', 'targetRelicSetId', 'recollectionMove', 'relocationMove', 'targetRelocationId', 'doctrineMove', 'doctrineTheme', 'targetDoctrineSchoolId', 'targetDoctrineProposalId',
+  'pilgrimageMove', 'targetPilgrimageId', 'targetPilgrimageNextStopId', 'creditMove', 'targetCreditId', 'sanctuaryMove', 'targetSanctuaryId', 'researchMove', 'researchTopic', 'targetResearchId', 'researchWithdrawReason', 'ceasefireMove', 'targetCeasefireId', 'escortMove', 'targetShipmentId', 'targetEscortId', 'targetHazardId', 'seasonMove', 'editionMove', 'targetScriptureOriginalId', 'targetScriptureEditionId', 'relicMove', 'targetRelicFragmentId', 'targetRelicSetId', 'recollectionMove', 'relocationMove', 'targetRelocationId', 'doctrineMove', 'doctrineTheme', 'targetDoctrineSchoolId', 'targetDoctrineProposalId',
 ] as const satisfies readonly (keyof LLMDecisionPayload)[];
 
 export function rememberReplayDecision(tape: DecisionReplayTape, actorId: string, decision: LLMDecisionPayload, rngDraws = 0): void {

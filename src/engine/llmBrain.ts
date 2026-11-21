@@ -1,3 +1,4 @@
+import { activePilgrimageForActor, availablePilgrimageActions, pilgrimageCheckpoint } from './pilgrimageEngine';
 import { availableSectCreditActions } from './sectCreditEngine';
 import { activeSanctuaryPass, availableSanctuaryActions, sanctuaryCanShield } from './sanctuaryEngine';
 import { availableResearchActions } from './researchEngine';
@@ -75,6 +76,17 @@ export function computeHeuristicDecision(
       innerMonologue: tribulationStance === 'focus' ? '抱守道心，不为幻象所动。' : '雷云不散，且运转护身法诀抵挡。',
     };
   }
+  const pilgrim = activePilgrimageForActor(world, cultivator);
+  const pendingVow = world.pilgrimages.journeys.some((journey) => journey.status === 'proposed' && journey.companionId === cultivator.id);
+  if (pilgrim || pendingVow) {
+    const moves = availablePilgrimageActions(cultivator, world, false);
+    const worried = cultivator.hp < cultivator.maxHp * .35 || (pendingVow && cultivator.hp < cultivator.maxHp * .65);
+    const move = moves.find(({ pilgrimageMove }) => pilgrimageMove === 'relieve' ||
+      (worried ? pilgrimageMove === 'withdraw' || pilgrimageMove === 'decline' : pilgrimageMove === 'accept')) ??
+      moves.find(({ pilgrimageMove }) => pilgrimageMove === 'advance');
+    if (move) return { ...move, chosenAction: 'PILGRIMAGE', innerMonologue: '只按同伴应允与实走的路程行事。' };
+    if (pilgrim) return { chosenAction: 'REST', innerMonologue: '等同伴沿已知路段前行，到站再作休整。' };
+  }
   const currentLocation = world.locations.find(
     (l) => l.id === cultivator.locationId
   );
@@ -82,7 +94,7 @@ export function computeHeuristicDecision(
     (c) =>
       c.alive &&
       c.id !== cultivator.id &&
-      c.locationId === cultivator.locationId && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c)
+      c.locationId === cultivator.locationId && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c)
   );
 
   const localTile = currentLocation ? terrainTileAt(world, currentLocation.x, currentLocation.y) : undefined;
@@ -433,6 +445,12 @@ export function computeHeuristicDecision(
     if (move) return { ...move, chosenAction: 'SECT_CREDIT', innerMonologue: '按实有宗库借还，不得将另项托管当作余额。' };
   }
 
+  if (world.tick >= 30 && world.tick % 10 === 7 && !cultivator.guardAssignment &&
+    (cultivator.personality === '逍遥' || cultivator.personality === '刚正')) {
+    const vow = availablePilgrimageActions(cultivator, world).find(({ pilgrimageMove }) => pilgrimageMove === 'propose');
+    if (vow) return { ...vow, chosenAction: 'PILGRIMAGE', innerMonologue: '请道友自择去留，只走我们都知晓的山路。' };
+  }
+
   // 5. Socialize; trust in fellowship makes seeking a partner more attractive.
   const fellowship = cultivator.reflections.some(
     (entry) => entry.kind === 'belief' && entry.theme === 'community' && entry.intensity >= 6
@@ -500,12 +518,17 @@ export async function queryCultivatorLLMDecision(
   };
   if (!config.enabled || !config.apiKey.trim() || activeRelocationForActor(world, cultivator) || activeEscortForActor(world, cultivator)) return fallback();
 
+  const activeVow = activePilgrimageForActor(world, cultivator);
+  const onPilgrimagePath = activeVow && Boolean(pilgrimageCheckpoint(world, cultivator));
+  const pilgrimageOptions = availablePilgrimageActions(cultivator, world);
+  if (onPilgrimagePath && !pilgrimageOptions.length) return fallback();
+
   const location = world.locations.find((l) => l.id === cultivator.locationId);
   const coLocated = world.cultivators.filter(
     (c) =>
       c.alive &&
       c.id !== cultivator.id &&
-      c.locationId === cultivator.locationId && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c)
+      c.locationId === cultivator.locationId && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c)
   );
   const recalled = recallMemories(cultivator, world.tick).map((m) => ({
     tick: m.tick,
@@ -539,7 +562,10 @@ export async function queryCultivatorLLMDecision(
   const relicOptions = availableRelicActions(cultivator, world);
   const recollectionOptions = availableRecollectionActions(cultivator, world);
   const ownEcho = visibleRecollection(world, cultivator.id);
-  const prompt = `你是修仙沙盒世界中的修士【${cultivator.name}】（称号：${cultivator.title}）。
+  const prompt = activeVow ? `你是修仙沙盒中自愿参加巡礼的修士。只能使用本人的可执行行动，不许传送、额外援药或虚构站点。
+当前已实到 ${activeVow.stopsVisited.length - 1} 个巡礼站点；${onPilgrimagePath ? '仍在道路途中，不在旧站。' : '当前在已到达的实站，可调息。'}
+只允许复制以下巡礼选项：${JSON.stringify(pilgrimageOptions)}
+返回 JSON {"chosenAction":"PILGRIMAGE","pilgrimageMove":"照抄选项","targetPilgrimageId":"照抄","innerMonologue":"简短"}；${onPilgrimagePath ? '途中只选所列巡礼行动。' : '若留站调息可选 REST，不填写目标。'}` : `你是修仙沙盒世界中的修士【${cultivator.name}】（称号：${cultivator.title}）。
 【自身状态】
 - 境界：${cultivator.realm}${cultivator.realmStage}层（灵气进度：${cultivator.qiProgress}%）
 - 气血：${cultivator.hp}/${cultivator.maxHp} | 战力：${cultivator.combatPower}
@@ -558,6 +584,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 天机悬赏榜：${JSON.stringify(world.bounties.filter((item) => item.status === 'open').map(({id,targetCultivatorId,reward,reason}) => ({id,targetCultivatorId,reward,reason})))}；可接的追缉：${JSON.stringify(availableBountyHunts(cultivator, world))}
 - 天下公示的大会与秘境：${JSON.stringify(world.occasions.filter((item) => item.status === 'registration' || item.status === 'running').map(({id,title,kind,locationId,status,registrationClosesTick}) => ({id,title,kind,locationId,status,registrationClosesTick})))}；可报名项目：${JSON.stringify(availableOccasionJoins(cultivator, world))}
 - 本宗邦交：${JSON.stringify(world.diplomacy.filter((relation) => relation.sectAId === cultivator.sectId || relation.sectBId === cultivator.sectId))}；公示的外事权限：${JSON.stringify(availableDiplomacyActions(cultivator, world))}
+- 朝山巡礼只向在场同伴提议，两站必须是彼此知晓且可通行的地点。选择并原样复制当下巡礼选项：${JSON.stringify(pilgrimageOptions)}
 - 宗门信贷为规则固定的零息本金，仅能选实际库账有据的选项：${JSON.stringify(creditOptions)}
 - 避难敕令只在指定站点保护持票人的直接斗法，且护盾有限。可执行事务：${JSON.stringify(sanctuaryOptions)}
 - 共研只可使用本宗的实际议案、实有投入与已核实退出理由：${JSON.stringify(researchOptions)}
@@ -589,7 +616,7 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
 请以第一人称进行内心独白思考，并决定本回合行动。只输出合法的 JSON 对象（不要 Markdown 代码块），字段如下：
 {
   "innerMonologue": "你的第一人称内心独白（40字以内，体现你的性格与秘密目标）",
-  "chosenAction": "CULTIVATE | BREAKTHROUGH | EXPLORE | SOCIALIZE | DUEL | SCHEMING | PURSUE_SCHEME | AUTHOR_TECHNIQUE | STUDY_TECHNIQUE | GATHER_HERBS | BREW_PILL | USE_PILL | FORGE_ARTIFACT | BIND_ARTIFACT | REPAIR_ARTIFACT | AWAKEN_ARTIFACT | FACE_TRIBULATION | AMBUSH_TRIBULATION | CHALLENGE_LEADERSHIP | PLOT_COUP | BUILD_FACILITY | DISPATCH_GUARD | GUARD_DUTY | OFFER_ALLIANCE | DECLARE_WAR | DEMAND_TRIBUTE | LAUNCH_SIEGE | JOIN_OCCASION | PURSUE_BOUNTY | TAME_BEAST | TRADE | DUAL_CULTIVATE | SECT_DIPLOMACY | TEACH | ACCEPT_TUITION | DECLINE_TUITION | OFFER_OATH | ACCEPT_OATH | DECLINE_OATH | FULFILL_OATH | APPEAL_OATH | PLACE_MARKET_BUY | PLACE_MARKET_SELL | CANCEL_MARKET_ORDER | RECRUIT_SETTLER | DELIVER_RELIEF | FILE_WITNESS_CLAIM | ATTEST_WITNESS | CHALLENGE_WITNESS | NAME_HEIR | CLAIM_ESTATE | HOLD_MEMORIAL | DOCTRINE | RELOCATE | RECOLLECT | RELIC | SCRIPTURE | RANK_SEASON | ESCORT | CEASEFIRE | RESEARCH | SANCTUARY | SECT_CREDIT | REST 之一",
+  "chosenAction": "CULTIVATE | BREAKTHROUGH | EXPLORE | SOCIALIZE | DUEL | SCHEMING | PURSUE_SCHEME | AUTHOR_TECHNIQUE | STUDY_TECHNIQUE | GATHER_HERBS | BREW_PILL | USE_PILL | FORGE_ARTIFACT | BIND_ARTIFACT | REPAIR_ARTIFACT | AWAKEN_ARTIFACT | FACE_TRIBULATION | AMBUSH_TRIBULATION | CHALLENGE_LEADERSHIP | PLOT_COUP | BUILD_FACILITY | DISPATCH_GUARD | GUARD_DUTY | OFFER_ALLIANCE | DECLARE_WAR | DEMAND_TRIBUTE | LAUNCH_SIEGE | JOIN_OCCASION | PURSUE_BOUNTY | TAME_BEAST | TRADE | DUAL_CULTIVATE | SECT_DIPLOMACY | TEACH | ACCEPT_TUITION | DECLINE_TUITION | OFFER_OATH | ACCEPT_OATH | DECLINE_OATH | FULFILL_OATH | APPEAL_OATH | PLACE_MARKET_BUY | PLACE_MARKET_SELL | CANCEL_MARKET_ORDER | RECRUIT_SETTLER | DELIVER_RELIEF | FILE_WITNESS_CLAIM | ATTEST_WITNESS | CHALLENGE_WITNESS | NAME_HEIR | CLAIM_ESTATE | HOLD_MEMORIAL | DOCTRINE | RELOCATE | RECOLLECT | RELIC | SCRIPTURE | RANK_SEASON | ESCORT | CEASEFIRE | RESEARCH | SANCTUARY | SECT_CREDIT | PILGRIMAGE | REST 之一",
   "targetLocationId": "EXPLORE 可填已知地点 id（探索未知时省略）；宗门经营、迁宗或新设避难所只能填所列地点 id",
   "targetCultivatorId": "如果 chosenAction 为 SOCIALIZE / DUEL / SCHEMING / AMBUSH_TRIBULATION / CHALLENGE_LEADERSHIP / PLOT_COUP / DISPATCH_GUARD / TRADE / DUAL_CULTIVATE / SECT_DIPLOMACY / TEACH / OFFER_OATH / FILE_WITNESS_CLAIM / NAME_HEIR 则填目标修士 id；DOCTRINE 仅在所选事务列出该字段时填写；其余省略",
   "spokenLine": "简短台词（可选）",
@@ -606,6 +633,9 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
   "targetMarketOrderId": "撤单时选择自己仍可撤的挂单 id",
   "targetOathId": "回应、履行或申诉契书时，指定可用契书 id",
   "oathTerm": "提出契书时选择给定条款 foundation_pill 或 jade_herb",
+  "pilgrimageMove": "PILGRIMAGE 只复制所列 propose、accept、decline、advance、relieve 或 withdraw",
+  "targetPilgrimageId": "只复制可操作的巡礼 id",
+  "targetPilgrimageNextStopId": "提议的第二站，第一站用 targetLocationId，同行人用 targetCultivatorId，三者照抄选项",
   "creditMove": "SECT_CREDIT 只选所列 offer、accept、decline 或 repay，不许自行填写金额",
   "targetCreditId": "只复制信贷选项列出的议约 id",
   "sanctuaryMove": "SANCTUARY 只复制所列 found、take_pass、repair 或 surrender",
@@ -745,9 +775,17 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
             'RESEARCH',
             'SANCTUARY',
             'SECT_CREDIT',
+            'PILGRIMAGE',
           ];
           const chosenAction = parsed?.chosenAction;
           if (!chosenAction || !validActions.includes(chosenAction)) return undefined;
+
+          if (activeVow && chosenAction !== 'PILGRIMAGE' && (chosenAction !== 'REST' || onPilgrimagePath)) return undefined;
+          const legalPilgrimage = chosenAction === 'PILGRIMAGE' ? pilgrimageOptions.find((item) =>
+            item.pilgrimageMove === parsed.pilgrimageMove && item.targetPilgrimageId === parsed.targetPilgrimageId &&
+            item.targetLocationId === parsed.targetLocationId && item.targetPilgrimageNextStopId === parsed.targetPilgrimageNextStopId &&
+            item.targetCultivatorId === parsed.targetCultivatorId) : undefined;
+          if (chosenAction === 'PILGRIMAGE' && (!legalPilgrimage || parsed.targetSectId !== undefined)) return undefined;
 
           const legalCredit = chosenAction === 'SECT_CREDIT' ? creditOptions.find((item) =>
             item.creditMove === parsed.creditMove && item.targetSectId === parsed.targetSectId &&
@@ -918,6 +956,9 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
             forgeTier: legalArtifact?.forgeTier,
             targetHerbId: legalAlchemy?.targetHerbId,
             targetPillId: legalAlchemy?.targetPillId,
+            pilgrimageMove: legalPilgrimage?.pilgrimageMove,
+            targetPilgrimageId: legalPilgrimage?.targetPilgrimageId,
+            targetPilgrimageNextStopId: legalPilgrimage?.targetPilgrimageNextStopId,
             creditMove: legalCredit?.creditMove,
             targetCreditId: legalCredit?.targetCreditId,
             sanctuaryMove: legalSanctuary?.sanctuaryMove,

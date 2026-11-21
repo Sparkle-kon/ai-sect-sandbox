@@ -1,3 +1,5 @@
+import { terrainTileAt } from './terrainEngine';
+import { createPilgrimageState, PILGRIMAGE_ACTIVE_TICKS, PILGRIMAGE_LEG_COST, PILGRIMAGE_OFFER_TICKS, PILGRIMAGE_RELIEF_HP } from './pilgrimageEngine';
 import { createSectCreditState, SECT_CREDIT_COLLECTION_TICKS, SECT_CREDIT_OFFER_TICKS,
   SECT_CREDIT_PAYMENT_MAX, SECT_CREDIT_PRINCIPAL, SECT_CREDIT_TERM_TICKS } from './sectCreditEngine';
 import { createSanctuaryState, SANCTUARY_BLOCK_HP, SANCTUARY_CHARTER_TICKS, SANCTUARY_FOUND_COST,
@@ -78,7 +80,7 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const marketQty = num(1,12,true), marketPrice = num(1,500,true);
@@ -181,6 +183,15 @@ const shape = structure({
       attestations:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,tick,verdict:one('supports','contradicts')})),
       appeal:optional(structure({tick,actorId:id,verdict:one('upheld','rejected'),reason:text})),settledTick:otick,
       reputationSectId:oid,reputationPenalty:percentage,reputationRestored:percentage,reason:otext}))}),
+  pilgrimages:structure({nextId:num(1,100_000_000,true),journeys:arr(SAVE_COLLECTION_LIMIT,structure({
+    id,organizerId:id,companionId:id,stopIds:arr(3,id),stopsVisited:arr(3,structure({locationId:id,tick})),
+    status:one('proposed','active','completed','declined','expired','withdrawn','interrupted'),
+    proposedTick:tick,offerExpiresTick:tick,startedTick:otick,expiresTick:otick,settledTick:otick,
+    reason:optional(one('declined','offer_expiry','journey_expiry','withdrawn','lost_site','member_missing')),
+    legIndex:num(0,2,true),path:arr(6402,structure({x:num(0,1000),y:num(0,600)})),
+    pathIndex:num(0,6401,true),lastMovedTick:otick,spentByEach:num(0,2 * PILGRIMAGE_LEG_COST,true),
+    aid:arr(4,structure({tick,giverId:id,receiverId:id,locationId:id,hpRestored:num(Number.MIN_VALUE,PILGRIMAGE_RELIEF_HP)}))
+  }))}),
   credit:structure({nextId:num(1,100_000_000,true),
     loans:arr(SAVE_COLLECTION_LIMIT,structure({id,lenderSectId:id,borrowerSectId:id,lenderSignerId:id,borrowerSignerId:id,
       openedTick:tick,offerExpiresTick:tick,status:one('offered','active','paid','defaulted','declined','expired'),
@@ -312,6 +323,7 @@ function verifyWorld(value: unknown): WorldState {
     ? { ...value,
       ...(!Object.hasOwn(value, 'mentorship') ? { mentorship: { offers: [], lineage: [], budgets: [] } } : {}),
       ...(!Object.hasOwn(value, 'decisionTrace') ? { decisionTrace: { records: [] } } : {}),
+      ...(!Object.hasOwn(value, 'pilgrimages') ? { pilgrimages: createPilgrimageState() } : {}),
       ...(!Object.hasOwn(value, 'credit') ? { credit: createSectCreditState() } : {}),
       ...(!Object.hasOwn(value, 'sanctuary') ? { sanctuary: createSanctuaryState() } : {}),
       ...(!Object.hasOwn(value, 'research') ? { research: createResearchState() } : {}),
@@ -346,6 +358,78 @@ function verifyWorld(value: unknown): WorldState {
   const sector = unique(w.sects, (item) => item.id, 'sects.id');
   const locations = unique(w.locations, (item) => item.id, 'locations.id');
   const map = unique(w.terrain.tiles, (item) => item.id, 'terrain.tiles.id');
+  unique(w.pilgrimages.journeys, ({ id }) => id, 'pilgrimages.journeys.id');
+  const reservedPilgrims = new Set<string>();
+  const pilgrimageSites = new Map(w.locations.map((site) => [site.id, site]));
+  for (const row of w.pilgrimages.journeys) {
+    const serial = Number(row.id.match(/^pilgrimage-([1-9][0-9]*)$/)?.[1]);
+    const pending = row.status === 'proposed';
+    const active = row.status === 'active';
+    const existing = pending || active;
+    const started = row.startedTick !== undefined && row.expiresTick !== undefined;
+    const moving = row.path.length > 0;
+    const validReason = row.status === 'withdrawn' ? row.reason === 'withdrawn' :
+      row.status === 'declined' ? row.reason === 'declined' :
+      row.status === 'interrupted' ? row.reason === 'member_missing' || row.reason === 'lost_site' :
+      row.status === 'expired' ? row.reason === (started ? 'journey_expiry' : 'offer_expiry') : row.reason === undefined;
+    if (!Number.isSafeInteger(serial) || serial >= w.pilgrimages.nextId ||
+        row.stopIds.length !== 3 || new Set(row.stopIds).size !== 3 ||
+        row.organizerId === row.companionId || !actor.has(row.organizerId) || !actor.has(row.companionId) ||
+        row.proposedTick > w.tick || row.offerExpiresTick !== row.proposedTick + PILGRIMAGE_OFFER_TICKS ||
+        ((row.startedTick === undefined) !== (row.expiresTick === undefined)) ||
+        (started && (row.startedTick! < row.proposedTick || row.startedTick! >= row.offerExpiresTick ||
+          row.expiresTick !== row.startedTick! + PILGRIMAGE_ACTIVE_TICKS || row.startedTick! > w.tick)) ||
+        (existing !== (row.settledTick === undefined)) ||
+        (row.settledTick !== undefined && (row.settledTick > w.tick || row.settledTick < (row.startedTick ?? row.proposedTick))) ||
+        !validReason || (active && (!started || row.expiresTick! <= w.tick)) ||
+        (pending && (started || row.offerExpiresTick <= w.tick)) ||
+        (row.status === 'declined' && started) ||
+        (row.status === 'completed' ? !started || row.legIndex !== 2 : row.legIndex > 1) ||
+        (row.status === 'expired' && row.settledTick! < (started ? row.expiresTick! : row.offerExpiresTick)) ||
+        (existing && row.stopIds.some((id) => !pilgrimageSites.has(id) || pilgrimageSites.get(id)?.type === 'secret_realm'))) fail('pilgrimages.journeys.references');
+    if (existing) {
+      for (const memberId of [row.organizerId, row.companionId]) {
+        if (reservedPilgrims.has(memberId)) fail('pilgrimages.journeys.membership');
+        reservedPilgrims.add(memberId);
+      }
+    }
+    if (active && [row.organizerId, row.companionId].some((id) => !w.cultivators.some((member) =>
+      member.id === id && member.alive && member.hp > 0 && member.locationId === row.stopIds[row.legIndex]))) fail('pilgrimages.journeys.occupants');
+    if (row.stopsVisited.length !== (started ? row.legIndex + 1 : 0) || (!started && row.legIndex !== 0) ||
+        row.stopsVisited.some((stop, index) => stop.locationId !== row.stopIds[index] ||
+          (index === 0 ? stop.tick !== row.startedTick : stop.tick <= row.stopsVisited[index - 1].tick) ||
+          stop.tick >= (row.expiresTick ?? 0) || stop.tick > (row.settledTick ?? w.tick))) fail('pilgrimages.journeys.arrivals');
+    const launched = row.spentByEach / PILGRIMAGE_LEG_COST;
+    if (!Number.isInteger(launched) || launched < row.legIndex || launched > row.legIndex + 1 ||
+        (!started && launched !== 0) || (active && launched !== row.legIndex + Number(moving)) ||
+        (row.status === 'withdrawn' && launched !== row.legIndex) ||
+        (Boolean(launched) !== (row.lastMovedTick !== undefined)) ||
+        (row.lastMovedTick !== undefined && (row.lastMovedTick <= (row.startedTick ?? Infinity) ||
+          row.lastMovedTick < (row.stopsVisited.at(-1)?.tick ?? 0) ||
+          row.lastMovedTick > (row.settledTick ?? w.tick) || row.lastMovedTick >= (row.expiresTick ?? 0)))) fail('pilgrimages.journeys.spend');
+    if (moving) {
+      const origin = pilgrimageSites.get(row.stopIds[row.legIndex]);
+      const dest = pilgrimageSites.get(row.stopIds[row.legIndex + 1]);
+      const first = row.path[0], last = row.path.at(-1);
+      if (!active || !origin || !dest || !last || row.path.length < 3 || row.pathIndex < 1 || row.pathIndex >= row.path.length - 1 ||
+          first.x !== origin.x || first.y !== origin.y || last.x !== dest.x || last.y !== dest.y) fail('pilgrimages.journeys.path');
+      const tilePath = row.path.map((point) => terrainTileAt(w, point.x, point.y));
+      if (tilePath.some((tile, index) => {
+        const earlier = tilePath[index - 1];
+        return !tile || (index > 0 && (!earlier || Math.abs(tile.col - earlier.col) + Math.abs(tile.row - earlier.row) > 1));
+      })) fail('pilgrimages.journeys.path_tile');
+    } else if (row.pathIndex !== 0) fail('pilgrimages.journeys.path_index');
+    unique(row.aid, ({ giverId, locationId }) => JSON.stringify([giverId, locationId]), 'pilgrimages.journeys.aid_once');
+    if (row.aid.some((given) => {
+      const hit = row.stopsVisited.findIndex(({ locationId }) => locationId === given.locationId);
+      const nextArrival = row.stopsVisited[hit + 1];
+      return !(given.giverId === row.organizerId && given.receiverId === row.companionId ||
+        given.giverId === row.companionId && given.receiverId === row.organizerId) ||
+        hit < 0 || hit >= 2 || given.tick <= row.stopsVisited[hit].tick ||
+        given.tick >= (row.expiresTick ?? 0) || given.tick > (row.settledTick ?? w.tick) ||
+        Boolean(nextArrival && given.tick > nextArrival.tick);
+    })) fail('pilgrimages.journeys.aid_references');
+  }
   unique(w.credit.loans, ({ id }) => id, 'credit.loans.id');
   unique(w.credit.loans.filter(({ status }) => status === 'offered' || status === 'active'),
     ({ borrowerSectId }) => borrowerSectId, 'credit.loans.active_borrower');

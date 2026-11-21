@@ -1,3 +1,4 @@
+import { createPilgrimageState } from '../engine/pilgrimageEngine';
 import { createSectCreditState } from '../engine/sectCreditEngine';
 import { createSanctuaryState } from '../engine/sanctuaryEngine';
 import { createResearchState } from '../engine/researchEngine';
@@ -250,6 +251,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     research: createResearchState(),
     sanctuary: createSanctuaryState(),
     credit: createSectCreditState(),
+    pilgrimages: createPilgrimageState(),
     witnesses: createWitnessState(),
     estates: createEstateState(),
     decisionTrace: createDecisionTraceState(),

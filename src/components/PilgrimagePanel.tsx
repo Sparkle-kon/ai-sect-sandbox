@@ -1,0 +1,76 @@
+import { PILGRIMAGE_LEG_COST, PILGRIMAGE_RELIEF_HP, visiblePilgrimages } from '../engine/pilgrimageEngine';
+import type { Cultivator, PilgrimageJourney, WorldState } from '../types/world';
+
+const STATUS: Record<PilgrimageJourney['status'], string> = {
+  proposed: '同行邀约待回应', active: '巡礼进行中', completed: '已完成巡礼',
+  declined: '同行者已拒绝', expired: '已过期', withdrawn: '已退出', interrupted: '巡礼中断',
+};
+const END: Record<NonNullable<PilgrimageJourney['reason']>, string> = {
+  declined: '同行者未同意', offer_expiry: '邀约期满，未获得同意', journey_expiry: '巡礼期限已到',
+  withdrawn: '一位参与者主动退出', lost_site: '原路线站点已失效', member_missing: '至少一位同行者无法继续',
+};
+
+export function PilgrimagePanel({ world, cultivator }: { world: WorldState; cultivator?: Cultivator }) {
+  const selected = world.cultivators.find(({ id }) => id === cultivator?.id);
+  const rows = visiblePilgrimages(world, selected).sort((a, b) => (
+    Number(b.journey.status === 'active' || b.journey.status === 'proposed') -
+    Number(a.journey.status === 'active' || a.journey.status === 'proposed')
+  ) || b.journey.proposedTick - a.journey.proposedTick);
+  if (!selected || rows.length === 0) return null;
+  const people = new Map(world.cultivators.map(({ id, name }) => [id, name]));
+  const sites = new Map(world.locations.map(({ id, name }) => [id, name]));
+
+  return (
+    <section aria-label="本人巡礼与共愿档案" className="min-w-0 space-y-2 rounded-xl border border-teal-400/25 bg-slate-900/70 p-3 text-slate-100 sm:p-4">
+      <header className="space-y-1">
+        <h4 className="text-sm font-semibold text-teal-100">本人巡礼与共愿档案</h4>
+        <p className="break-words text-xs text-slate-300">{selected.name} · Tick #{world.tick}</p>
+        <p className="text-xs leading-relaxed text-slate-400">须由同地的受邀修士自行接受。两段实际启程各耗每人 {PILGRIMAGE_LEG_COST} 灵石；途中不能远程施援。到站后每人每站最多用一株翡翠灵叶施援，为同伴回复最多 {PILGRIMAGE_RELIEF_HP} 点气血。此页只读。</p>
+      </header>
+      <div className="max-h-[29rem] space-y-2 overflow-y-auto">
+        {rows.map(({ journey, checkpoint, knownStopIds }) => {
+          const known = new Set(knownStopIds);
+          const stopName = (id: string) => known.has(id) ? sites.get(id) ?? '旧站名称已不可查' : '此时点不可查的站点';
+          const visited = new Map(journey.stopsVisited.filter(({ tick }) => tick <= world.tick).map(({ locationId, tick }) => [locationId, tick]));
+          const aid = journey.aid.filter(({ tick }) => tick <= world.tick);
+          const routeDone = journey.stopIds.slice(1).filter((id) => visited.has(id)).length;
+          const accepted = journey.startedTick !== undefined && journey.startedTick <= world.tick;
+          const currentLeg = journey.legIndex + 1;
+          const other = people.get(journey.organizerId === selected.id ? journey.companionId : journey.organizerId) ?? '同行者姓名未详';
+          return (
+            <details key={journey.id} className="min-w-0 rounded border border-slate-800 bg-slate-950/55">
+              <summary className="min-h-11 cursor-pointer break-words px-3 py-2 text-xs font-semibold text-teal-100">
+                {STATUS[journey.status]} · {journey.organizerId === selected.id ? '本人发起' : '本人受邀'} · {other}
+              </summary>
+              <div className="space-y-2 break-words px-3 pb-3 text-xs leading-relaxed text-slate-300">
+                <p>发出邀约：Tick #{journey.proposedTick} · 回应截止 Tick #{journey.offerExpiresTick}</p>
+                {accepted && <p>同行者已接受 · Tick #{journey.startedTick}{journey.expiresTick !== undefined && ` · 巡礼截止 Tick #${journey.expiresTick}`}</p>}
+                {journey.reason && <p>结案：{END[journey.reason]}{journey.settledTick !== undefined && ` · Tick #${journey.settledTick}`}</p>}
+                {journey.status === 'completed' && journey.settledTick !== undefined && <p>实际完成：Tick #{journey.settledTick}</p>}
+                <p>实际已到检查站：{routeDone}/2 · 每人已实付：{journey.spentByEach} 灵石</p>
+                {journey.status === 'active' && checkpoint && currentLeg <= 2 && <p className="text-teal-200">正在第 {currentLeg} 段路上，尚未抵达下一站。</p>}
+                <ol aria-label="按顺序查看起点和两处检查站" className="space-y-1">
+                  {journey.stopIds.map((id, index) => {
+                    const tick = visited.get(id);
+                    return <li key={index}>{index === 0 ? '会合起点' : `检查站 ${index}`}：{stopName(id)} · {tick === undefined ? '尚未到站' : `实际到站 Tick #${tick}`}</li>;
+                  })}
+                </ol>
+                <div className="border-t border-slate-800 pt-2">
+                  <p className="font-medium text-teal-100">实录同行施援</p>
+                  {aid.length > 0 ? (
+                    <ol className="list-inside list-disc space-y-1">
+                      {aid.map((relief, index) => (
+                        <li key={index}>Tick #{relief.tick} · {stopName(relief.locationId)} · {relief.giverId === selected.id ? '本人施援' : '同行者施援'}
+                          {relief.receiverId === selected.id ? '给本人' : '给同行者'} · 实际恢复 {relief.hpRestored} 点气血</li>
+                      ))}
+                    </ol>
+                  ) : <p className="text-slate-400">尚无实际施援记录。</p>}
+                </div>
+              </div>
+            </details>
+          );
+        })}
+      </div>
+    </section>
+  );
+}

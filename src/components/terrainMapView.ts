@@ -1,4 +1,5 @@
-import type { Cultivator, LocationNode, MapTile, TerrainBiome, WorldState } from '../types/world';
+import { pilgrimageCheckpoint } from '../engine/pilgrimageEngine';
+import type { Cultivator, LocationNode, MapPoint, MapTile, TerrainBiome, WorldState } from '../types/world';
 import { currentVisibleTileIds, terrainTileAt } from '../engine/terrainEngine';
 
 export const BIOME_PALETTE: Record<TerrainBiome, { base: string; detail: string; swatch: string }> = {
@@ -21,21 +22,30 @@ export function createTerrainMapView(world: WorldState, viewer: Cultivator | und
   }
   const isCurrentLocation = (id: string) => !current || current.has(locationTile.get(id)?.id ?? '');
   const seenLocations = world.locations.filter(({ id }) => !known || known.has(locationTile.get(id)?.id ?? ''));
-  const liveActors = world.cultivators.filter((actor) => actor.alive && isCurrentLocation(actor.locationId));
+  const trailPositions = new Map<string, MapPoint>();
+  const liveActors = world.cultivators.filter((actor) => {
+    if (!actor.alive) return false;
+    const checkpoint = pilgrimageCheckpoint(world, actor);
+    if (!checkpoint) return isCurrentLocation(actor.locationId);
+    if (current && !current.has(terrainTileAt(world, checkpoint.x, checkpoint.y)?.id ?? '')) return false;
+    trailPositions.set(actor.id, checkpoint);
+    return true;
+  });
   return {
-    current, known, locationTile, tileState, isCurrentLocation, seenLocations, liveActors,
+    current, known, locationTile, tileState, isCurrentLocation, seenLocations, liveActors, trailPositions,
   };
 }
 
 /** Same actor centers drive pixels and click hit tests, including under fog. */
-export function mapActorPositions(locations: LocationNode[], actors: Cultivator[]) {
+export function mapActorPositions(locations: LocationNode[], actors: Cultivator[], trailPositions?: ReadonlyMap<string, MapPoint>) {
   const groups = new Map<string, Cultivator[]>();
   for (const actor of actors) {
+    if (trailPositions?.has(actor.id)) continue;
     const group = groups.get(actor.locationId) ?? [];
     group.push(actor);
     groups.set(actor.locationId, group);
   }
-  return locations.flatMap((location) => {
+  const stationary = locations.flatMap((location) => {
     const group = groups.get(location.id) ?? [];
     return group.map((actor, index) => {
       const angle = (index / group.length) * Math.PI * 2 - Math.PI / 4;
@@ -43,4 +53,18 @@ export function mapActorPositions(locations: LocationNode[], actors: Cultivator[
       return { actor, x: location.x + Math.cos(angle) * radius, y: location.y + Math.sin(angle) * radius };
     });
   });
+  const trailGroups = new Map<string, Array<{ actor: Cultivator; point: MapPoint }>>();
+  for (const actor of actors) {
+    const point = trailPositions?.get(actor.id);
+    if (!point) continue;
+    const key = `${point.x}/${point.y}`;
+    const arrivals = trailGroups.get(key) ?? [];
+    arrivals.push({ actor, point });
+    trailGroups.set(key, arrivals);
+  }
+  return [...stationary, ...[...trailGroups.values()].flatMap((group) => group.map(({ actor, point }, index) => {
+    const angle = 2 * Math.PI * index / group.length;
+    const radius = group.length > 1 ? 10 : 0;
+    return { actor, x: point.x + Math.cos(angle) * radius, y: point.y + Math.sin(angle) * radius };
+  }))];
 }
