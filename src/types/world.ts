@@ -1216,10 +1216,38 @@ export interface EscortState {
 }
 
 export interface ScenarioOrigin {
-  version: 1;
+  version: 1 | 2;
   ruleset: 1;
   id: string;
   endTick: number;
+}
+
+export type ScenarioObjective =
+  | { kind: 'cultivator_survives'; actorId: string }
+  | { kind: 'living_population'; minimum: number }
+  | { kind: 'site_qi'; locationId: string; minimum: number }
+  | { kind: 'sect_treasury'; sectId: string; minimum: number };
+
+export type ScenarioAuditEvidence =
+  | { kind: 'cultivator_survives'; found: boolean; alive: boolean; hp: number }
+  | { kind: 'living_population'; count: number }
+  | { kind: 'site_qi'; found: boolean; qi: number }
+  | { kind: 'sect_treasury'; found: boolean; atSite: number; inTransit: number; total: number };
+
+export type ScenarioAuditCard = { id: string; passed: boolean } & {
+  [Kind in ScenarioObjective['kind']]: {
+    objective: Extract<ScenarioObjective, { kind: Kind }>;
+    evidence: Extract<ScenarioAuditEvidence, { kind: Kind }>;
+  };
+}[ScenarioObjective['kind']];
+
+export interface ScenarioAudit {
+  version: 1;
+  scenarioId: string;
+  seed: number;
+  profileId: WorldgenProfileId;
+  evaluatedTick: number;
+  cards: ScenarioAuditCard[];
 }
 
 export interface AnnotationBookmark {
@@ -1608,6 +1636,7 @@ export interface WorldState {
   ceasefires: CeasefireState;
   annotations: AnnotationState;
   scenarioOrigin?: ScenarioOrigin;
+  scenarioAudit?: ScenarioAudit;
   escorts: EscortState;
   competitions: CompetitionState;
   scriptures: ScriptureState;

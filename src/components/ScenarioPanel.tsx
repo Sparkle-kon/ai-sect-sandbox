@@ -4,7 +4,8 @@ import {
   SCENARIO_MAX_BYTES, SCENARIO_MAX_COMMANDS, SCENARIO_MAX_TICKS, ScenarioError,
 } from '../engine/scenarioEngine';
 import { WORLDGEN_PROFILES, isWorldgenProfileId } from '../engine/worldgenProfiles';
-import type { WorldgenProfileId, WorldState } from '../types/world';
+import { ScenarioAuditCards, ScenarioObjectiveEditor } from './ScenarioObjectives';
+import type { ScenarioObjective, WorldgenProfileId, WorldState } from '../types/world';
 
 type Fixture = ReturnType<typeof createScenarioFixture>;
 type Scheduled = Fixture['commands'][number];
@@ -12,7 +13,7 @@ type Command = Scheduled['command'];
 type Cue = Extract<Command, { type: 'WHISPER_MIND' }>['cue'];
 type Targets = ReturnType<typeof scenarioInitialTargets>;
 type Progress = { tick: number; endTick: number; completedCommands: number; totalCommands: number };
-export interface ScenarioDraft { seed: string; profileId: WorldgenProfileId; endTick: string; commands: Scheduled[] }
+export interface ScenarioDraft { seed: string; profileId: WorldgenProfileId; endTick: string; commands: Scheduled[]; objectives?: ScenarioObjective[] }
 export interface ScenarioPreview { result: WorldState; fixture: Fixture; authority: WorldState; revision: number }
 const TYPES: Record<Command['type'], string> = { SPAWN_TREASURE: '赐下机缘', TRIBULATION_STRIKE: '落下天雷', DEMONIC_TIDE: '血月潮汐', WHISPER_MIND: '预设天机提示' };
 const CUES: Record<Cue, string> = { focus: '凝神', rest: '调息', caution: '谨慎' };
@@ -32,7 +33,7 @@ export function fixtureFromScenarioDraft(draft: ScenarioDraft): Fixture {
   const endTick = scenarioInteger(draft.endTick, SCENARIO_MAX_TICKS, 1);
   if (seed === undefined) throw new Error('种子须为 0 至 4294967295 的整数。');
   if (endTick === undefined) throw new Error(`末回合须为 1 至 ${SCENARIO_MAX_TICKS} 的整数。`);
-  return createScenarioFixture(seed, draft.profileId, endTick, draft.commands);
+  return createScenarioFixture(seed, draft.profileId, endTick, draft.commands, draft.objectives ?? []);
 }
 
 export async function readScenarioFile(file: Pick<File, 'size' | 'text'>): Promise<Fixture> {
@@ -155,7 +156,7 @@ export function ScenarioPanel({ world, busy, onApply }: { world: WorldState; bus
       const incoming = await readScenarioFile(file);
       if (!stillActive(job)) return;
       setTarget('');
-      updateDraft(() => ({ seed: String(incoming.seed), profileId: incoming.profileId, endTick: String(incoming.endTick), commands: incoming.commands }),
+      updateDraft(() => ({ seed: String(incoming.seed), profileId: incoming.profileId, endTick: String(incoming.endTick), commands: incoming.commands, objectives: incoming.objectives ?? [] }),
         '剧本已校验并载入草稿；当前世界未改动，须重新离线预演。');
     } catch (reason) {
       if (stillActive(job)) setError(message(reason));
@@ -259,8 +260,11 @@ export function ScenarioPanel({ world, busy, onApply }: { world: WorldState; bus
           </li>)}
         </ol>}
       </details>
+      <ScenarioObjectiveEditor key={`${draft.seed}:${draft.profileId}`} objectives={draft.objectives ?? []} catalog={catalog}
+        onChange={(objectives) => updateDraft((previous) => ({ ...previous, objectives }))} />
+      <ScenarioAuditCards world={world} />
       <div className={`${panel} space-y-1.5`}>
-        <p className="text-xs text-slate-400">剧本文件只有谱系、种子、时限和预设指令，不含存档数据、聊天原文或模型服务凭证。</p>
+        <p className="text-xs text-slate-400">剧本文件只有谱系、种子、时限、预设指令与可选目标，不含存档数据、聊天原文或模型服务凭证。</p>
         <label className="grid min-w-0 gap-1 text-xs text-slate-300">导入剧本 JSON（最大 {kb} KiB）
           <input className={`${field} max-w-full py-1.5`} type="file" accept=".json,application/json" onChange={(event) => {
             const file = event.currentTarget.files?.[0];
@@ -297,6 +301,7 @@ export function ScenarioResult({ preview, ready, changed, confirming, onConfirm,
       {publicEvents.length > 0 && <ul className="space-y-1 text-xs text-slate-400" aria-label="最近可见的公开纪事">
         {publicEvents.map((event) => <li key={event.id} className="break-words">Tick #{event.tick} · {event.title}</li>)}
       </ul>}
+      <ScenarioAuditCards world={result} preview />
       {changed && <p className="text-xs text-amber-200">当前世界自预演开始后已变化。请暂停推演后重新预演。</p>}
       {!confirming ? <button type="button" className={button} disabled={!ready} onClick={onConfirm}>载入预演后的世界</button> : (
         <div className="space-y-1.5 rounded border border-amber-700 bg-amber-950/40 p-2 text-xs text-amber-100" aria-label="确认替换当前世界">

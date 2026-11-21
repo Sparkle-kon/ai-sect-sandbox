@@ -1,5 +1,6 @@
 import { createInitialWorld } from '../data/initialWorld';
-import type { ScenarioOrigin, WorldgenProfileId, WorldState } from '../types/world';
+import { normalizeScenarioObjectives, sealScenarioAudit, validateScenarioObjectiveReferences } from './scenarioObjectiveEngine';
+import type { ScenarioObjective, ScenarioOrigin, WorldgenProfileId, WorldState } from '../types/world';
 import { advanceWorldTick, executeGodIntervention, type GodInterventionCommand } from './worldEngine';
 import { isWorldSeed } from './worldRandom';
 import { isWorldgenProfileId } from './worldgenProfiles';
@@ -9,6 +10,7 @@ export const SCENARIO_MAX_TICKS = 120;
 export const SCENARIO_MAX_COMMANDS = 48;
 export const SCENARIO_FORMAT = 'ai-sect-scenario';
 export const SCENARIO_VERSION = 1;
+export const SCENARIO_OBJECTIVES_VERSION = 2;
 export const SCENARIO_RULESET = 1;
 
 export type ScenarioWhisperCue = 'focus' | 'rest' | 'caution';
@@ -22,15 +24,18 @@ export type ScenarioCommand =
   | { type: 'WHISPER_MIND'; targetCultivatorId: string; cue: ScenarioWhisperCue };
 
 export interface ScenarioStep { tick: number; command: ScenarioCommand }
-export interface ScenarioFixture {
+interface ScenarioFixtureBase {
   format: typeof SCENARIO_FORMAT;
-  version: typeof SCENARIO_VERSION;
   ruleset: typeof SCENARIO_RULESET;
   seed: number;
   profileId: WorldgenProfileId;
   endTick: number;
   commands: ScenarioStep[];
 }
+export type ScenarioFixture = ScenarioFixtureBase & (
+  | { version: typeof SCENARIO_VERSION; objectives?: never }
+  | { version: typeof SCENARIO_OBJECTIVES_VERSION; objectives: ScenarioObjective[] }
+);
 export interface ScenarioReplayProgress { tick: number; endTick: number; completedCommands: number; totalCommands: number }
 export interface ScenarioReplayOptions {
   signal?: AbortSignal;
@@ -84,8 +89,11 @@ function normalizeCommand(value: unknown): ScenarioCommand | undefined {
 }
 
 function normalizeFixture(value: unknown): ScenarioFixture {
-  const record = exactRecord(value, ['format', 'version', 'ruleset', 'seed', 'profileId', 'endTick', 'commands']);
-  if (!record || record.format !== SCENARIO_FORMAT || record.version !== SCENARIO_VERSION || record.ruleset !== SCENARIO_RULESET) {
+  const versionProperty = value !== null && typeof value === 'object' ? Object.getOwnPropertyDescriptor(value, 'version') : undefined;
+  const v2 = versionProperty && 'value' in versionProperty && versionProperty.value === SCENARIO_OBJECTIVES_VERSION;
+  const fields = ['format', 'version', 'ruleset', 'seed', 'profileId', 'endTick', 'commands'];
+  const record = exactRecord(value, v2 ? [...fields, 'objectives'] : fields);
+  if (!record || record.format !== SCENARIO_FORMAT || record.version !== (v2 ? SCENARIO_OBJECTIVES_VERSION : SCENARIO_VERSION) || record.ruleset !== SCENARIO_RULESET) {
     throw new ScenarioError('schema', '不是支持版本的剧本文件，或含有剧本格式不允许的字段。');
   }
   const { seed, profileId, endTick, commands } = record;
@@ -106,7 +114,11 @@ function normalizeFixture(value: unknown): ScenarioFixture {
     previous = tick;
     return { tick, command };
   });
-  return { format: SCENARIO_FORMAT, version: SCENARIO_VERSION, ruleset: SCENARIO_RULESET, seed: seed >>> 0, profileId, endTick, commands: normalized };
+  if (!v2) return { format: SCENARIO_FORMAT, version: SCENARIO_VERSION, ruleset: SCENARIO_RULESET, seed: seed >>> 0, profileId, endTick, commands: normalized };
+  let objectives: ScenarioObjective[];
+  try { objectives = normalizeScenarioObjectives(record.objectives); }
+  catch { throw new ScenarioError('schema', '纪元目标无效：只支持有限的结构化、非重复条件。'); }
+  return { format: SCENARIO_FORMAT, version: SCENARIO_OBJECTIVES_VERSION, ruleset: SCENARIO_RULESET, seed: seed >>> 0, profileId, endTick, commands: normalized, objectives };
 }
 
 function requireReference(world: WorldState, step: ScenarioStep, commandIndex: number, initial: boolean): void {
@@ -125,6 +137,10 @@ function prepare(input: unknown): { fixture: ScenarioFixture; world: WorldState 
   const fixture = normalizeFixture(input);
   const world = createInitialWorld(fixture.seed, fixture.profileId);
   fixture.commands.forEach((step, index) => requireReference(world, step, index, true));
+  if (fixture.version === SCENARIO_OBJECTIVES_VERSION) {
+    try { validateScenarioObjectiveReferences(world, fixture.objectives); }
+    catch { throw new ScenarioError('initial_ref', '纪元目标只允许引用该种子和谱系实际生成的起始人物、地点或宗门。'); }
+  }
   return { fixture, world };
 }
 
@@ -133,8 +149,10 @@ export function validateScenarioFixture(input: unknown): ScenarioFixture {
 }
 
 export function createScenarioFixture(seed: number, profileId: WorldgenProfileId,
-  endTick = 1, commands: readonly ScenarioStep[] = []): ScenarioFixture {
-  return validateScenarioFixture({ format: SCENARIO_FORMAT, version: SCENARIO_VERSION, ruleset: SCENARIO_RULESET, seed, profileId, endTick, commands: [...commands] });
+  endTick = 1, commands: readonly ScenarioStep[] = [], objectives: readonly ScenarioObjective[] = []): ScenarioFixture {
+  return validateScenarioFixture(objectives.length > 0
+    ? { format: SCENARIO_FORMAT, version: SCENARIO_OBJECTIVES_VERSION, ruleset: SCENARIO_RULESET, seed, profileId, endTick, commands: [...commands], objectives: [...objectives] }
+    : { format: SCENARIO_FORMAT, version: SCENARIO_VERSION, ruleset: SCENARIO_RULESET, seed, profileId, endTick, commands: [...commands] });
 }
 
 export function decodeScenarioFixture(text: string): ScenarioFixture {
@@ -157,12 +175,14 @@ export function encodeScenarioFixture(input: unknown): string {
 
 export function scenarioInitialTargets(seed: number, profileId: WorldgenProfileId): {
   cultivators: Array<{ id: string; name: string }>; locations: Array<{ id: string; name: string }>;
+  sects: Array<{ id: string; name: string }>;
 } {
   if (!isWorldSeed(seed) || !isWorldgenProfileId(profileId)) throw new ScenarioError('schema', '剧本种子或创世预设无效。');
   const world = createInitialWorld(seed, profileId);
   return {
     cultivators: world.cultivators.filter((actor) => actor.alive && actor.hp > 0).map(({ id, name }) => ({ id, name })),
     locations: world.locations.map(({ id, name }) => ({ id, name })),
+    sects: world.sects.map(({ id, name }) => ({ id, name })),
   };
 }
 
@@ -176,7 +196,7 @@ function originOf(fixture: ScenarioFixture): ScenarioOrigin {
     b = ((b ^ BigInt(canonical.charCodeAt(canonical.length - 1 - i))) * prime) & mask;
   }
   const hash = `${a.toString(16).padStart(16, '0')}${b.toString(16).padStart(16, '0')}`;
-  return { version: SCENARIO_VERSION, ruleset: SCENARIO_RULESET, id: `scenario-${hash}`, endTick: fixture.endTick };
+  return { version: fixture.version, ruleset: SCENARIO_RULESET, id: `scenario-${hash}`, endTick: fixture.endTick };
 }
 
 function applyStep(world: WorldState, step: ScenarioStep, index: number): WorldState {
@@ -217,6 +237,9 @@ function* run(input: unknown): Generator<ScenarioReplayProgress, WorldState> {
     yield progress();
   }
   world.scenarioOrigin = originOf(fixture);
+  if (fixture.version === SCENARIO_OBJECTIVES_VERSION) {
+    world.scenarioAudit = sealScenarioAudit(world, fixture.objectives);
+  }
   return world;
 }
 

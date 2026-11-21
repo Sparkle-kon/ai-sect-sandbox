@@ -1,3 +1,5 @@
+import { normalizeScenarioObjectives, SCENARIO_AUDIT_VERSION, SCENARIO_MAX_OBJECTIVES, SCENARIO_MAX_POPULATION_TARGET,
+  SCENARIO_MAX_SITE_QI_TARGET, SCENARIO_MAX_TREASURY_TARGET, scenarioObjectivePassed } from './scenarioObjectiveEngine';
 import { createTerritorialLeaseState, LEASE_DEPOSIT, LEASE_OFFER_TICKS, LEASE_QUOTA, LEASE_TERM_TICKS, LEASE_UNIT_RENT, territorialLeaseAvailability } from './territorialLeaseEngine';
 import { createFormationNetworkState, FORMATION_BUFFER_CAP, FORMATION_DISPATCH_QI, FORMATION_DRAW_CAP,
   FORMATION_MAX_THROUGHPUT, FORMATION_OFFER_TICKS, FORMATION_OVERLOAD_QI, FORMATION_RECEIPT_LIMIT,
@@ -106,6 +108,23 @@ const dialogue = structure({kind:one('combat','trade','dual_cultivation','sect_d
   turns:arr(24,structure({speakerId:id,speakerName:id,text}))});
 const publicFact = {id,tick,year:tick,month,title:text,description:text,category:eventCategory,actorIds:ids,locationId:oid,dialogue:optional(dialogue)};
 const anchor = structure(publicFact);
+const scenarioObjective: Validator = (value, path) => {
+  const kind = (value as {kind?:unknown} | null)?.kind;
+  if (kind === 'cultivator_survives') return structure({kind:one(kind),actorId:id})(value,path);
+  if (kind === 'living_population') return structure({kind:one(kind),minimum:num(1,SCENARIO_MAX_POPULATION_TARGET,true)})(value,path);
+  if (kind === 'site_qi') return structure({kind:one(kind),locationId:id,minimum:num(0,SCENARIO_MAX_SITE_QI_TARGET,true)})(value,path);
+  if (kind === 'sect_treasury') return structure({kind:one(kind),sectId:id,minimum:num(0,SCENARIO_MAX_TREASURY_TARGET,true)})(value,path);
+  fail(path);
+};
+const scenarioEvidence: Validator = (value, path) => {
+  const kind = (value as {kind?:unknown} | null)?.kind;
+  if (kind === 'cultivator_survives') return structure({kind:one(kind),found:bool,alive:bool,hp:wealth})(value,path);
+  if (kind === 'living_population') return structure({kind:one(kind),count:tick})(value,path);
+  if (kind === 'site_qi') return structure({kind:one(kind),found:bool,qi:num(0,150)})(value,path);
+  if (kind === 'sect_treasury') return structure({kind:one(kind),found:bool,atSite:wealth,inTransit:wealth,total:num(0,2_000_000_000)})(value,path);
+  fail(path);
+};
+
 const chronicleReading: Validator = (value, path) => {
   if ((value as {kind?:unknown} | null)?.kind === 'duel') return structure({kind:one('duel'),winnerId:id})(value,path);
   return structure({kind:one('relief'),delivery:one('full_supplies','unfunded')})(value,path);
@@ -318,7 +337,9 @@ const shape = structure({
       departedTick:otick,settledTick:otick,lastAdvancedTick:otick,reason:otext})),
     abandonedSites:arr(SAVE_COLLECTION_LIMIT,structure({id,planId:id,sectId:id,originId:id,destinationId:id,tick,
       originalType:locationKind,facilities:facilityLevels,arrayHp:wealth,arrayMaxHp:wealth}))}),
-  scenarioOrigin:optional(structure({version:one(1),ruleset:one(1),id:strings(100,1),endTick:num(1,120,true)})),
+  scenarioOrigin:optional(structure({version:one(1,2),ruleset:one(1),id:strings(100,1),endTick:num(1,120,true)})),
+  scenarioAudit:optional(structure({version:one(SCENARIO_AUDIT_VERSION),scenarioId:id,seed:unsigned32,profileId:one('classic','spirit-bloom','fractured-frontier'),
+    evaluatedTick:num(1,120,true),cards:arr(SCENARIO_MAX_OBJECTIVES,structure({id,objective:scenarioObjective,passed:bool,evidence:scenarioEvidence}))})),
   worldgen:optional(structure({algorithm:one(1),profileId:one('classic','spirit-bloom','fractured-frontier'),
     seed:unsigned32,birthTick:one(1),resources:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,locationId:id,pathSteps:num(0,6402,true)}))})),
   doctrines:structure({nextId:num(1,100_000_000,true),
@@ -857,6 +878,24 @@ function verifyWorld(value: unknown): WorldState {
       (row.target.kind === 'site' && /[\u0000-\u001f\u007f]/.test(row.target.siteName))) fail('annotations.notes.references');
   if (w.scenarioOrigin && (w.scenarioOrigin.endTick > w.tick || !w.worldgen ||
       !/^scenario-[0-9a-f]{32}$/.test(w.scenarioOrigin.id))) fail('scenarioOrigin.references');
+  if (Boolean(w.scenarioAudit) !== (w.scenarioOrigin?.version === 2)) fail('scenarioAudit.authority');
+  if (w.scenarioAudit) {
+    const { scenarioId, seed, profileId, evaluatedTick, cards } = w.scenarioAudit;
+    if (!w.scenarioOrigin || scenarioId !== w.scenarioOrigin.id || evaluatedTick !== w.scenarioOrigin.endTick ||
+        evaluatedTick > w.tick || seed !== w.random.seed || profileId !== w.worldgen?.profileId) fail('scenarioAudit.authority');
+    try { normalizeScenarioObjectives(cards.map(({ objective }) => objective)); }
+    catch { fail('scenarioAudit.objectives'); }
+    for (const [index, card] of cards.entries()) {
+      const { objective, evidence, passed } = card;
+      if (card.id !== 'objective-' + (index + 1) || objective.kind !== evidence.kind) fail('scenarioAudit.cards.identity');
+      if (passed !== scenarioObjectivePassed(objective, evidence)) fail('scenarioAudit.cards.verdict');
+      if (evidence.kind === 'cultivator_survives' &&
+          ((!evidence.found && (evidence.alive || evidence.hp !== 0)) || (evidence.alive && evidence.hp <= 0))) fail('scenarioAudit.cards.survival');
+      if (evidence.kind === 'site_qi' && !evidence.found && evidence.qi !== 0) fail('scenarioAudit.cards.qi');
+      if (evidence.kind === 'sect_treasury' &&
+          (evidence.total !== evidence.atSite + evidence.inTransit || (!evidence.found && evidence.total !== 0))) fail('scenarioAudit.cards.treasury');
+    }
+  }
   if (w.worldgen) {
     const birthActors = unique(w.worldgen.resources, (item) => item.actorId, 'worldgen.resources.actorId');
     if (w.worldgen.seed !== w.random.seed || w.worldgen.birthTick > w.tick ||

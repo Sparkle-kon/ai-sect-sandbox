@@ -99,6 +99,16 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const weatherAtVisibleSites = useMemo(() => new Map(seenLocations
     .filter(({ id }) => isCurrentLocation(id))
     .map((site) => [site.id, localQiWeather(world, site)])), [world, seenLocations, isCurrentLocation]);
+  const scenarioSiteProofs = useMemo(() => {
+    const audit = world.scenarioAudit;
+    const results = new Map<string, { tick: number; passed: boolean; qi: number }>();
+    if (!audit || audit.evaluatedTick > world.tick) return results;
+    for (const { objective, evidence, passed } of audit.cards) if (objective.kind === 'site_qi' && evidence.kind === 'site_qi' &&
+      evidence.found && isCurrentLocation(objective.locationId)) {
+      results.set(objective.locationId, { tick: audit.evaluatedTick, passed, qi: evidence.qi });
+    }
+    return results;
+  }, [world, isCurrentLocation]);
   const localLeaseSites = useMemo(() => visibleLeaseMapSites(world, mapView, selected), [world, mapView, selected]);
   const formationLines = useMemo(() => visibleFormationMapLinks(world, mapView, selected), [world, mapView, selected]);
   const localClinic = useMemo(() => {
@@ -920,6 +930,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
             const localBeasts = beastsByLocation.get(location.id) ?? [];
             const habitatView = localHabitat.get(location.id);
             const leaseMark = localLeaseSites.get(location.id);
+            const assessed = scenarioSiteProofs.get(location.id);
             const sanctuary = sanctuaryMarks.get(location.id);
             return (
               <li key={location.id} className="inline-flex items-center gap-1.5">
@@ -946,6 +957,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                 {habitatView && <span className="text-emerald-200">· 复育栖地 {habitatView.wildOccupancy ?? 0}/{habitatView.capacity} 野兽</span>}
                 {localClinic?.siteId === location.id && <span className="text-rose-200">· 静养床 {localClinic.capacity.available}/{localClinic.capacity.beds} 可用</span>}
                 {leaseMark && <span className="text-amber-200">· {leaseMark.role === 'owner' ? '本宗授权' : '本宗采集许可'} · 余 {leaseMark.remaining} 株</span>}
+                {assessed && <span className="text-cyan-200">· 剧本末回合 #{assessed.tick} 凭证：灵气 {assessed.qi}（{assessed.passed ? '通过' : '未通过'}）</span>}
                 {localCouncil && <span className="text-violet-300">· 本月议决：{localCouncil.title}</span>}
                 {besiegedLocationIds.has(location.id) && <span className="text-rose-300">· 围攻中</span>}
                 {localOccasions.map((occasion) => (
