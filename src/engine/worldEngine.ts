@@ -11,6 +11,7 @@ import { openResourceFlowMonth } from './resourceFlowEngine';
 import { advanceSharedCommons, resolveSharedCommonsAction } from './sharedCommonsEngine';
 import { resolveServiceRetirementAction } from './serviceRetirementEngine';
 import { cloneWorldWithColdHistory, compactColdHistory } from './coldHistoryEngine';
+import { advanceCausalChronicle } from './chronicleCausalityEngine';
 import { activeCourierForActor, advanceCouriers, courierActedThisTick, courierCheckpoint, reconcileCourierDeaths, resolveCourierAction } from './sealedCourierEngine';
 import { captureWatchDigests } from './watchlistEngine';
 import { advanceVillageWorks, resolveVillageWorksAction } from './villageWorksEngine';
@@ -870,6 +871,7 @@ export function advanceWorldTick(
   advanceFieldObservatories(nextState);
   closeVillageCensusPeriod(nextState);
   compactColdHistory(nextState);
+  advanceCausalChronicle(nextState);
   if (nextState.watchlists.watches.length) {
     if (traceOptions?.onWatchBatch) traceOptions.onWatchBatch(newEvents);
     else {

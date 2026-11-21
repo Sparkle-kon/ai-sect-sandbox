@@ -1,4 +1,6 @@
 import { escortDirective, settleEscortWithShipment } from './escortEngine';
+import { causalChronicleEventId, recordCausalChronicleNode } from './chronicleCausalityEngine';
+import type { CausalChronicleOutcome, CausalChroniclePredecessor } from '../types/world';
 import { flowActor, flowOrder, flowShipment, recordResourceFlow } from './resourceFlowEngine';
 import type { Cultivator, HerbId, LLMDecisionPayload, MarketGood, MarketOrder, MarketReceipt, MarketShipment, MarketState, LocationNode, WorldEvent, WorldState } from '../types/world';
 import { terrainTileAt } from './terrainEngine';
@@ -137,8 +139,10 @@ export function resolveMarketAction(world: WorldState, actor: Cultivator, decisi
   world.markets.orders.push(order);
   transfer(world, order.id, 'order_deposit', 'stone', escrowStones, [actor.id], flowActor(actor.id), flowOrder(order.id));
   transfer(world, order.id, 'order_deposit', order.good, escrowGoods, [actor.id], flowActor(actor.id), flowOrder(order.id));
-  return event(world, order.id, side === 'buy' ? '坊市买单入簿' : '坊市卖单入簿',
+  const fact = event(world, order.id, side === 'buy' ? '坊市买单入簿' : '坊市卖单入簿',
     `${actor.name}挂出${quantity}份${MARKET_GOODS[good].label}，限价${limitPrice}灵石，履约资产交由坊市保管。`, [actor.id], order.locationId);
+  recordCausalChronicleNode(world, fact, { kind: side === 'buy' ? 'market_buy_order' : 'market_sell_order', entityId: order.id });
+  return fact;
 }
 
 function record(world: WorldState, trade: Pick<MarketReceipt, 'buyerId' | 'sellerId' | 'originId' | 'destinationId' | 'good' | 'quantity' | 'unitPrice'>,
@@ -152,6 +156,15 @@ function record(world: WorldState, trade: Pick<MarketReceipt, 'buyerId' | 'selle
 }
 
 type Trade = Pick<MarketShipment, 'buyerId' | 'sellerId' | 'originId' | 'destinationId' | 'good' | 'quantity' | 'unitPrice'>;
+
+function matchingProof(world: WorldState, bid: MarketOrder, ask: MarketOrder): CausalChroniclePredecessor[] {
+  const buyId = causalChronicleEventId(world, 'market_buy_order', bid.id);
+  const sellId = causalChronicleEventId(world, 'market_sell_order', ask.id);
+  return [
+    ...(buyId ? [{ eventId: buyId, relation: 'matched_buy_order' as const }] : []),
+    ...(sellId ? [{ eventId: sellId, relation: 'matched_sell_order' as const }] : []),
+  ];
+}
 
 function match(world: WorldState, bid: MarketOrder, ask: MarketOrder, buyer: Cultivator, seller: Cultivator,
   origin: LocationNode, destination: LocationNode): WorldEvent {
@@ -179,8 +192,11 @@ function match(world: WorldState, bid: MarketOrder, ask: MarketOrder, buyer: Cul
     transfer(world, ref, 'price_improvement', 'stone', difference, [buyer.id], flowOrder(bid.id), flowActor(buyer.id));
     transfer(world, ref, 'local_fill', 'stone', price, participants, flowOrder(bid.id), flowActor(seller.id));
     transfer(world, ref, 'local_fill', ask.good, quantity, participants, flowOrder(ask.id), flowActor(buyer.id));
-    return event(world, `fill-${world.markets.nextId - 1}`, '坊市当场结算',
+    const fact = event(world, `fill-${world.markets.nextId - 1}`, '坊市当场结算',
       `${quantity}份${MARKET_GOODS[ask.good].label}成交，每份${unitPrice}灵石，货款当场交割。`, [buyer.id, seller.id], origin.id);
+    recordCausalChronicleNode(world, fact, { kind: 'market_settlement', entityId: ref, outcome: 'local_fill',
+      predecessors: matchingProof(world, bid, ask) });
+    return fact;
   }
   const eta = Math.min(6, Math.max(2, Math.ceil(Math.hypot(origin.x - destination.x, origin.y - destination.y) / 160) +
     (weatherTravelFriction(world, origin, destination) >= .45 ? 1 : 0)));
@@ -191,9 +207,12 @@ function match(world: WorldState, bid: MarketOrder, ask: MarketOrder, buyer: Cul
   transfer(world, shipment.id, 'price_improvement', 'stone', difference, [buyer.id], flowOrder(bid.id), flowActor(buyer.id));
   transfer(world, shipment.id, 'shipment_departure', 'stone', price, participants, flowOrder(bid.id), flowShipment(shipment.id));
   transfer(world, shipment.id, 'shipment_departure', ask.good, quantity, participants, flowOrder(ask.id), flowShipment(shipment.id));
-  return event(world, shipment.id, '跨坊商队启程',
+  const fact = event(world, shipment.id, '跨坊商队启程',
     `${quantity}份${MARKET_GOODS[ask.good].label}由${origin.name}运往${destination.name}，预计${eta}回合。货款待到货结算。`,
     [buyer.id, seller.id], origin.id);
+  recordCausalChronicleNode(world, fact, { kind: 'market_shipment', entityId: shipment.id,
+    predecessors: matchingProof(world, bid, ask) });
+  return fact;
 }
 
 function routeDanger(world: WorldState, shipment: MarketShipment, origin: LocationNode, destination: LocationNode,
@@ -231,24 +250,30 @@ function settleShipment(world: WorldState, shipment: MarketShipment): WorldEvent
   const isOnRoute = route?.managed ? route.crossedTileIds.length > 0 :
     world.tick > shipment.departedTick + (route?.baselineDelay ?? 0) && world.tick <= effectiveArrival;
   let status: Exclude<MarketShipment['status'], 'in_transit'>;
+  let outcome: Extract<CausalChronicleOutcome, 'delivered' | 'route_loss' | 'escort_failed' | 'endpoint_missing' | 'market_closed'>;
   let reason: string;
   if (!origin || !destination) {
     status = 'returned';
+    outcome = 'endpoint_missing';
     reason = `商路已撤销，退买方${price}灵石、卖方${shipment.quantity}份货`;
   } else if (route?.forceReturn) {
     status = 'returned';
+    outcome = 'escort_failed';
     reason = `护送无法继续，按原货账退买方${price}灵石、卖方${shipment.quantity}份货`;
   } else if (route?.hold) return undefined;
   else if (isOnRoute && routeDanger(world, shipment, origin, destination, route)) {
     status = 'lost';
+    outcome = 'route_loss';
     reason = `商队途经当回合灾区，遗失${shipment.quantity}份货并退买方${price}灵石`;
   } else if (route?.managed ? !route.arrived : world.tick < effectiveArrival) return undefined;
   else if (marketClosureReason(world, destination.id)) {
     if (world.tick < effectiveArrival + 3) return undefined;
     status = 'returned';
+    outcome = 'market_closed';
     reason = `目的坊市持续关闭，退买方${price}灵石、卖方${shipment.quantity}份货`;
   } else {
     status = 'delivered';
+    outcome = 'delivered';
     reason = `买方收货${shipment.quantity}份，卖方收到${price}灵石`;
   }
   if (status === 'delivered') {
@@ -275,8 +300,12 @@ function settleShipment(world: WorldState, shipment: MarketShipment): WorldEvent
     recordResourceFlow(world, { kind: 'loss', mechanism: 'market', refId: shipment.id, reason: 'shipment_loss',
       good: shipment.good, amount: shipment.quantity, visibility: { kind: 'participants', actorIds: participants }, from });
   }
-  return event(world, shipment.id, status === 'delivered' ? '商队到货结算' : status === 'lost' ? '商队货损退款' : '商队退运退款',
+  const fact = event(world, shipment.id, status === 'delivered' ? '商队到货结算' : status === 'lost' ? '商队货损退款' : '商队退运退款',
     `${reason}。`, [buyer.id, seller.id], shipment.destinationId);
+  const departureId = causalChronicleEventId(world, 'market_shipment', shipment.id);
+  recordCausalChronicleNode(world, fact, { kind: 'market_settlement', entityId: shipment.id, outcome,
+    predecessors: departureId ? [{ eventId: departureId, relation: 'settled_shipment' }] : [] });
+  return fact;
 }
 
 export function advanceMarkets(world: WorldState): WorldEvent[] {

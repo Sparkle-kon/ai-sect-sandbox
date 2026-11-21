@@ -1,5 +1,6 @@
 import type { CeasefireMove, CeasefireState, Cultivator, LLMDecisionPayload, Sect, SectCeasefire, SectSiege, WorldEvent, WorldState } from '../types/world';
 import { noteTerrainVisit } from './terrainEngine';
+import { causalChronicleEventId, recordCausalChronicleNode } from './chronicleCausalityEngine';
 
 export const CEASEFIRE_BOND = 60;
 export const CEASEFIRE_DURATION = 12;
@@ -119,13 +120,15 @@ function event(world: WorldState, deal: SectCeasefire, slug: string, title: stri
     description, category: 'diplomacy', actorIds, ...(locationId ? { locationId } : {}), ...(privateOnly ? { witnessScope: 'participants' as const } : {}) };
 }
 
-function withdrawArmies(world: WorldState, deal: SectCeasefire): string[] {
+function withdrawArmies(world: WorldState, deal: SectCeasefire): { moved: string[]; withdrawn: string[] } {
   const moved = new Set<string>();
+  const withdrawn: string[] = [];
   for (const siege of pairedSieges(world, deal.proposerSectId, deal.targetSectId).filter(activeArmy)) {
     siege.status = 'withdrawn';
     siege.lastResolvedTick = world.tick;
     siege.outcome = '双方签订停战，联军有序撤回各宗山门；不记攻防胜负或罚款。';
     deal.withdrawnSiegeIds.push(siege.id);
+    withdrawn.push(siege.id);
     const attacker = getSect(world, siege.attackerSectId);
     for (const id of new Set(siege.participantIds)) {
       const actor = getActor(world, id);
@@ -146,7 +149,7 @@ function withdrawArmies(world: WorldState, deal: SectCeasefire): string[] {
       tribute.resolvedTick = world.tick;
     }
   }
-  return [...moved];
+  return { moved: [...moved], withdrawn };
 }
 
 function closeWithoutSigning(world: WorldState, deal: SectCeasefire, status: 'declined' | 'expired'): WorldEvent {
@@ -163,7 +166,7 @@ function sign(world: WorldState, deal: SectCeasefire, proposer: Sect, recipient:
   recipient.spiritStones -= deal.terms.bondPerSide;
   payer.spiritStones -= deal.terms.aidAmount;
   deal.escrow = { proposerBond: deal.terms.bondPerSide, targetBond: deal.terms.bondPerSide, aid: deal.terms.aidAmount };
-  const returned = withdrawArmies(world, deal);
+  const { moved, withdrawn } = withdrawArmies(world, deal);
   deal.status = 'active';
   deal.signedTick = world.tick;
   deal.endsTick = world.tick + deal.terms.duration;
@@ -172,10 +175,17 @@ function sign(world: WorldState, deal: SectCeasefire, proposer: Sect, recipient:
   standing.sinceTick = world.tick;
   standing.lastActionTick = world.tick;
   standing.affinity = Math.min(100, standing.affinity + 10);
-  const actors = [...new Set([deal.proposerId, deal.targetLeaderId, ...returned])];
-  return event(world, deal, 'signed', '两宗签署停战撤军议约',
+  const actors = [...new Set([deal.proposerId, deal.targetLeaderId, ...moved])];
+  const signed = event(world, deal, 'signed', '两宗签署停战撤军议约',
     `双方托管实际保证金及${deal.terms.aidAmount}灵石重建款，有序撤回${deal.withdrawnSiegeIds.length}支参战队伍，暂停敌对行为。`,
     actors, false, proposer.headquartersId);
+  const predecessors = withdrawn.flatMap(siegeId => {
+    const eventId = causalChronicleEventId(world, 'siege_launched', siegeId);
+    return eventId ? [{ eventId, relation: 'withdrew_siege' as const }] : [];
+  });
+  recordCausalChronicleNode(world, signed, { kind: 'truce_signed', entityId: deal.id, predecessors,
+    outcome: withdrawn.length > 0 ? 'truce_with_withdrawal' : 'truce_signed' });
+  return signed;
 }
 
 function refundAid(world: WorldState, deal: SectCeasefire): void {

@@ -27,6 +27,8 @@ import { createInfirmaryState, INFIRMARY_DETOX_MAX, INFIRMARY_HEAL_FRACTION, INF
 import { createHabitatState, HABITAT_MIN_HEALTH, HABITAT_RESTORATION_TICKS,
   HABITAT_SURVEY_DELAY, HABITAT_SURVEY_WINDOW } from './habitatEngine';
 import { CHRONICLE_ERRATA_MAX_RETELLINGS, CHRONICLE_ERRATA_WINDOW, createChronicleErrataState } from './chronicleErrataEngine';
+import { CAUSAL_CHRONICLE_MAX_NODES, CAUSAL_CHRONICLE_MAX_PREDECESSORS, causalChronicleOutcomeCompatible,
+  causalPredecessorCompatible, createCausalChronicleState } from './chronicleCausalityEngine';
 import { terrainTileAt } from './terrainEngine';
 import { createPilgrimageState, PILGRIMAGE_ACTIVE_TICKS, PILGRIMAGE_LEG_COST, PILGRIMAGE_OFFER_TICKS, PILGRIMAGE_RELIEF_HP, PILGRIMAGE_TILE_STRIDE } from './pilgrimageEngine';
 import { createSectCreditState, SECT_CREDIT_COLLECTION_TICKS, SECT_CREDIT_OFFER_TICKS,
@@ -211,6 +213,7 @@ const shape = structure({
   sects:arr(48,structure({id,name:id,alignment:one('正道','魔道','中立'),color:strings(80),doctrine:text,reputation:num(-1_000_000,1_000_000),spiritStones:wealth,headquartersId:id,
     pavilion:arr(350,technique),leaderId:oid, arrayHp:wealth,arrayMaxHp:wealth,
     facilities:facilityLevels,
+    officeVacancy:optional(structure({eventId:id,tick})),
     succession:optional(structure({tick,method:one('election','challenge','coup'),previousLeaderId:oid,leaderId:id,supporterIds:ids})),
     monthlyEconomy:optional(structure({tick,taxes:wealth,mining:wealth,upkeep:wealth,net:num(-1_000_000_000,1_000_000_000)}))})),
   locations:arr(1200,structure({id,name:id,x:num(0,1000),y:num(0,600),type:one('sect_hq','spirit_vein','secret_realm','market','abyss'),spiritRoot:spirit,
@@ -233,6 +236,14 @@ const shape = structure({
     guardAssignment:optional(structure({locationId:id,assignedTick:tick,expiresTick:tick})),namedHeirId:oid,alive:bool})),
   relationships:arr(SAVE_COLLECTION_LIMIT,structure({fromId:id,toId:id,type:one('师徒','同门','道侣','血仇','挚友','竞争'),affinity,note:text})),
   events:arr(200,structure({...publicFact,witnessScope:optional(one('participants')),duelWinnerId:oid,damage:optional(arr(SAVE_COLLECTION_LIMIT,structure({cultivatorId:id,amount:wealth})))})),
+  chronicleCausality:structure({nextSequence:num(1,Number.MAX_SAFE_INTEGER,true), nodes:arr(CAUSAL_CHRONICLE_MAX_NODES,structure({
+    eventId:id,tick,sequence:num(1,Number.MAX_SAFE_INTEGER,true),locationId:oid,entityId:id,
+    kind:one('siege_launched','truce_signed','sect_vacancy','sect_election','market_buy_order','market_sell_order','market_shipment','market_settlement'),
+    predecessors:arr(CAUSAL_CHRONICLE_MAX_PREDECESSORS,structure({eventId:id,relation:one('withdrew_siege',
+      'filled_vacancy','matched_buy_order','matched_sell_order','settled_shipment')})),
+    outcome:optional(one('truce_with_withdrawal','truce_signed','elected','local_fill','delivered','route_loss','escort_failed',
+      'endpoint_missing','market_closed')),
+  }))}),
   diplomacy:arr(1200,structure({sectAId:id,sectBId:id,affinity,pact:one('neutral','alliance','war'),sinceTick:tick,lastActionTick:otick})),
   sieges:arr(2000,structure({id,attackerSectId:id,defenderSectId:id,destinationId:id,participantIds:ids,status:one('marching','sieging','victory','repelled','withdrawn'),
     startedTick:tick,rounds:count,lastResolvedTick:otick,outcome:otext})),
@@ -607,6 +618,7 @@ function verifyWorld(value: unknown): WorldState {
       ...(!Object.hasOwn(value, 'infirmaries') ? { infirmaries: createInfirmaryState() } : {}),
       ...(!Object.hasOwn(value, 'habitats') ? { habitats: createHabitatState() } : {}),
       ...(!Object.hasOwn(value, 'chronicleErrata') ? { chronicleErrata: createChronicleErrataState() } : {}),
+      ...(!Object.hasOwn(value, 'chronicleCausality') ? { chronicleCausality: createCausalChronicleState() } : {}),
       ...(!Object.hasOwn(value, 'pilgrimages') ? { pilgrimages: createPilgrimageState() } : {}),
       ...(!Object.hasOwn(value, 'credit') ? { credit: createSectCreditState() } : {}),
       ...(!Object.hasOwn(value, 'sanctuary') ? { sanctuary: createSanctuaryState() } : {}),
@@ -641,6 +653,44 @@ function verifyWorld(value: unknown): WorldState {
   const actor = unique(w.cultivators, (item) => item.id, 'cultivators.id');
   const sector = unique(w.sects, (item) => item.id, 'sects.id');
   const locations = unique(w.locations, (item) => item.id, 'locations.id');
+  const causalNodes = new Map(w.chronicleCausality.nodes.map((node) => [node.eventId, node]));
+  for (const sect of w.sects) if (sect.officeVacancy) {
+    const { eventId, tick: opened } = sect.officeVacancy;
+    const evidence = causalNodes.get(eventId);
+    if (sect.leaderId !== undefined || opened > w.tick || eventId !== `evt-${opened}-${sect.id}-leadership-office-vacant` ||
+        (evidence && (evidence.kind !== 'sect_vacancy' || evidence.entityId !== sect.id || evidence.tick !== opened))) {
+      fail('sects.officeVacancy.source');
+    }
+  }
+  if (causalNodes.size !== w.chronicleCausality.nodes.length) fail('chronicleCausality.events.unique');
+  if (causalNodes.size) {
+    const liveFacts = new Map<string, typeof w.events>();
+    for (const fact of w.events) if (causalNodes.has(fact.id)) {
+      const matching = liveFacts.get(fact.id);
+      if (matching) matching.push(fact);
+      else liveFacts.set(fact.id, [fact]);
+    }
+    let previousSequence = 0;
+    let previousTick = 0;
+    for (const node of w.chronicleCausality.nodes) {
+      const live = liveFacts.get(node.eventId);
+      if (node.sequence <= previousSequence || node.sequence >= w.chronicleCausality.nextSequence ||
+          node.tick < previousTick || node.tick > w.tick || !causalChronicleOutcomeCompatible(node.kind, node.outcome) ||
+          (live && (live.length !== 1 || live[0].tick !== node.tick || live[0].locationId !== node.locationId ||
+            live[0].witnessScope === 'participants' || live[0].category !== 'diplomacy')) ||
+          node.eventId.startsWith('evt-sealed-dispatch-')) fail('chronicleCausality.events.source');
+      previousSequence = node.sequence;
+      previousTick = node.tick;
+      unique(node.predecessors, ({ eventId }) => eventId, 'chronicleCausality.predecessors.unique');
+      unique(node.predecessors.filter(({ relation }) => relation !== 'withdrew_siege'),
+        ({ relation }) => relation, 'chronicleCausality.predecessors.role');
+      for (const edge of node.predecessors) {
+        const source = causalNodes.get(edge.eventId);
+        if (!source || source.sequence >= node.sequence || source.tick > node.tick ||
+            !causalPredecessorCompatible(node, source, edge.relation)) fail('chronicleCausality.predecessors.reference');
+      }
+    }
+  }
   const map = unique(w.terrain.tiles, (item) => item.id, 'terrain.tiles.id');
   if ((w.terrainSuccession.lastAdvancedTick ?? 0) > w.tick) fail('terrainSuccession.lastAdvancedTick');
   unique(w.terrainSuccession.cells, ({ tileId }) => tileId, 'terrainSuccession.cells.tile');

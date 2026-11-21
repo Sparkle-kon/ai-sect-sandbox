@@ -222,6 +222,7 @@ export interface Sect {
   headquartersId: string;
   pavilion: Technique[];
   leaderId?: string;
+  officeVacancy?: { eventId: string; tick: number };
   succession?: SectSuccession;
   facilities: Record<FacilityKind, number>;
   arrayHp: number;
@@ -356,6 +357,31 @@ export interface WorldEvent {
   duelWinnerId?: string;
   damage?: Array<{ cultivatorId: string; amount: number }>;
   locationId?: string;
+}
+
+export type CausalChronicleKind = 'siege_launched' | 'truce_signed' | 'sect_vacancy' | 'sect_election' |
+  'market_buy_order' | 'market_sell_order' | 'market_shipment' | 'market_settlement';
+export type CausalChronicleRelation = 'withdrew_siege' | 'filled_vacancy' | 'matched_buy_order' |
+  'matched_sell_order' | 'settled_shipment';
+export type CausalChronicleOutcome = 'truce_with_withdrawal' | 'truce_signed' | 'elected' | 'local_fill' |
+  'delivered' | 'route_loss' | 'escort_failed' | 'endpoint_missing' | 'market_closed';
+export interface CausalChroniclePredecessor {
+  eventId: string;
+  relation: CausalChronicleRelation;
+}
+export interface CausalChronicleNode {
+  eventId: string;
+  tick: number;
+  sequence: number;
+  kind: CausalChronicleKind;
+  entityId: string;
+  locationId?: string;
+  predecessors: CausalChroniclePredecessor[];
+  outcome?: CausalChronicleOutcome;
+}
+export interface CausalChronicleState {
+  nodes: CausalChronicleNode[];
+  nextSequence: number;
 }
 
 export interface LLMConfig {
@@ -2214,6 +2240,7 @@ export interface WorldState {
   infirmaries: InfirmaryState;
   habitats: HabitatState;
   chronicleErrata: ChronicleErrataState;
+  chronicleCausality: CausalChronicleState;
   pilgrimages: PilgrimageState;
   credit: SectCreditState;
   sanctuary: SanctuaryState;

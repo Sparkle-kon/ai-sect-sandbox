@@ -1,5 +1,6 @@
 import { activeCourierForActor } from './sealedCourierEngine';
 import { activeCeasefireBetween } from './ceasefireEngine';
+import { recordCausalChronicleNode } from './chronicleCausalityEngine';
 import { activeEscortForActor } from './escortEngine';
 import { activeRelocationForActor, activeRelocationForSect } from './relocationEngine';
 import type { ActionType, Cultivator, LLMDecisionPayload, Sect, SectDiplomaticRelation, SectSiege, WorldEvent, WorldState } from '../types/world';
@@ -116,8 +117,10 @@ export function resolveDiplomacyAction(world: WorldState, actor: Cultivator, dec
   const siege: SectSiege = { id: `siege-${world.tick}-${own.id}-${target.id}`, attackerSectId: own.id, defenderSectId: target.id,
     destinationId: target.headquartersId, participantIds: participants.map(({ id }) => id), status: 'marching', startedTick: world.tick, rounds: 0 };
   world.sieges.push(siege);
-  return makeEvent(world, token, '宗门集结攻山', `${own.name}耗费${SIEGE_COST}灵石，集结${participants.length}名修士向${target.name}出征。`,
+  const launched = makeEvent(world, token, '宗门集结攻山', `${own.name}耗费${SIEGE_COST}灵石，集结${participants.length}名修士向${target.name}出征。`,
     siege.participantIds, own.headquartersId);
+  recordCausalChronicleNode(world, launched, { kind: 'siege_launched', entityId: siege.id });
+  return launched;
 }
 
 function livedPower(force: Cultivator[]): number {

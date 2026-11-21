@@ -42,6 +42,7 @@ import { CHRONICLE_FOCUS_UNAVAILABLE, createChronicleFocusResolver } from './eng
 import type { ChronicleFocusRequest } from './engine/chronicleFocusEngine';
 import type { ChronicleCategoryFilter, ChronicleFeedPosition, ChronicleFeedReturn } from './components/ChronicleFeed';
 import { FocusedSectSummary } from './components/FocusedSectSummary';
+import { visibleCausalChronicle } from './engine/chronicleCausalityEngine';
 
 const AgentInspector = React.lazy(async () => ({ default: (await import('./components/AgentInspector')).AgentInspector }));
 const AttestationPanel = React.lazy(async () => ({ default: (await import('./components/AttestationPanel')).AttestationPanel }));
@@ -541,6 +542,9 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
     visibleWorld.cultivators[0];
   const aliveCount = visibleWorld.cultivators.filter((c) => c.alive).length;
   const activeActorId = selectedCultivator?.id ?? null;
+  const chronicleCauses = useMemo(() => workspace === 'chronicle'
+    ? new Map(visibleCausalChronicle(visibleWorld, activeActorId, 120).map((row) => [row.entry.eventId, row]))
+    : undefined, [visibleWorld, activeActorId, workspace]);
   const currentFocusScope = focusTrail?.scope === viewScopeKey && focusTrail.revision === saveContextVersion.current;
   const trail = currentFocusScope ? focusTrail : undefined;
   const resolver = useMemo(() => workspace === 'chronicle' || trail
@@ -687,6 +691,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
           { id: 'feed', label: '当世纪事', content: <React.Suspense fallback={<p role="status">载入当世纪事…</p>}><ChronicleFeed
             events={visibleWorld.events.filter((entry) => !entry.id.startsWith('evt-sealed-dispatch-'))}
             category={chronicleFilter} onCategoryChange={setChronicleFilter} focusOptions={resolver?.build}
+            causality={(eventId) => chronicleCauses?.get(eventId)}
             onJump={followChronicle} returnPosition={chronicleReturn} onReturnHandled={clearChronicleReturn} focusNotice={focusNotice} /></React.Suspense> },
           { id: 'library', label: '藏书阁与史书', content: <React.Suspense fallback={<p role="status">载入藏书阁…</p>}><ChronicleLibraryPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense> },
           { id: 'notebook', label: '书签与地图批注', content: <React.Suspense fallback={<p role="status">载入分支记录…</p>}>

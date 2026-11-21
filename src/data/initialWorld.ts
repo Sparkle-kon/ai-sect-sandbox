@@ -1,4 +1,5 @@
 import { createCompetitionReviewState } from '../engine/seasonReviewEngine';
+import { createCausalChronicleState } from '../engine/chronicleCausalityEngine';
 import { createFieldObservatoriesState } from '../engine/fieldObservatoryEngine';
 import { createOathArbitrationState } from '../engine/oathArbitrationEngine';
 import { createVillageCensusesState } from '../engine/villageCensusEngine';
@@ -275,6 +276,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     credit: createSectCreditState(),
     pilgrimages: createPilgrimageState(),
     chronicleErrata: createChronicleErrataState(),
+    chronicleCausality: createCausalChronicleState(),
     habitats: createHabitatState(),
     infirmaries: createInfirmaryState(),
     formations: createFormationNetworkState(),

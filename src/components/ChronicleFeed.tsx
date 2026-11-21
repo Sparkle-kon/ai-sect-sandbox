@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ScrollText } from 'lucide-react';
 import type { WorldEvent } from '../types/world';
+import type { CausalChronicleView } from '../engine/chronicleCausalityEngine';
 import type { ChronicleFocusOptions, ChronicleFocusRequest } from '../engine/chronicleFocusEngine';
 import { DialogueTranscript } from './DialogueTranscript';
 
@@ -17,6 +18,7 @@ interface ChronicleFeedProps {
   returnPosition?: ChronicleFeedReturn;
   onReturnHandled?: (token: number) => void;
   focusNotice?: string;
+  causality?: (eventId: string) => CausalChronicleView | undefined;
 }
 
 const CATEGORY_BADGE: Record<
@@ -58,7 +60,7 @@ export const findChronicleReturnTarget = <T extends { dataset: DOMStringMap }>(
   dataset.eventId === request.eventId && dataset.targetKind === request.kind && dataset.targetId === request.targetId);
 
 export function ChronicleFeed({
-  events, category, onCategoryChange, focusOptions, onJump, returnPosition, onReturnHandled, focusNotice,
+  events, category, onCategoryChange, focusOptions, onJump, returnPosition, onReturnHandled, focusNotice, causality,
 }: ChronicleFeedProps) {
   const [localCategory, setLocalCategory] = useState<ChronicleCategoryFilter>('all');
   const filter = category ?? localCategory;
@@ -121,6 +123,7 @@ export function ChronicleFeed({
         {visible.map((evt) => {
           const badge = CATEGORY_BADGE[evt.category];
           const options = evt.witnessScope !== 'participants' && onJump ? focusOptions?.(evt.id) : undefined;
+          const cause = evt.witnessScope !== 'participants' ? causality?.(evt.id) : undefined;
           return (
             <article key={evt.id} className="min-w-0 space-y-1 rounded-lg border border-slate-800/80 bg-slate-950/80 p-2.5">
               <div className="flex min-w-0 flex-wrap items-center justify-between gap-1.5">
@@ -142,6 +145,7 @@ export function ChronicleFeed({
                 ))}
               </div>}
               {options?.withheld && <p className="text-xs text-slate-400">部分词条当前不可定位，不显示未核实位置。</p>}
+              {cause?.entry.eventId === evt.id && (cause.previous.length > 0 || cause.entry.outcome !== undefined) && <ChronicleCausalityReceipt view={cause} />}
               {evt.dialogue && <DialogueTranscript dialogue={evt.dialogue} />}
             </article>
           );
@@ -149,4 +153,42 @@ export function ChronicleFeed({
       </div>
     </div>
   );
+}
+
+const causalFactLabel: Record<CausalChronicleView['entry']['kind'], string> = {
+  siege_launched: '发起围攻', truce_signed: '停战签订', sect_vacancy: '掌门职位出缺', sect_election: '掌门选举',
+  market_buy_order: '挂出买单', market_sell_order: '挂出卖单', market_shipment: '商队启程', market_settlement: '交易结算',
+};
+const causalRelationLabel: Record<CausalChronicleView['previous'][number]['relation'], string> = {
+  withdrew_siege: '停战实际撤回的围攻', filled_vacancy: '选举实际填补的空缺',
+  matched_buy_order: '实际撮合的买单', matched_sell_order: '实际撮合的卖单', settled_shipment: '实际结算的商队',
+};
+const causalOutcomeLabel: Record<NonNullable<CausalChronicleView['entry']['outcome']>, string> = {
+  truce_with_withdrawal: '停战生效，并有围攻实际撤回', truce_signed: '停战生效',
+  elected: '已正式选出掌门', local_fill: '已在本地交割', delivered: '商队已到货交割',
+  route_loss: '路途货损', escort_failed: '护送失败，货物未交割', endpoint_missing: '站点已失效，未完成交割', market_closed: '坊市关闭，未完成交割',
+};
+
+function ChronicleCausalityReceipt({ view }: { view: CausalChronicleView }) {
+  return <details className="min-w-0 rounded border border-slate-800 bg-slate-900/55">
+    <summary className="min-h-11 cursor-pointer break-words px-2 py-2 text-xs font-semibold text-amber-100">逆查可证原因</summary>
+    <div className="space-y-1.5 px-2 pb-2 text-xs leading-relaxed text-slate-300">
+      <p>按公开实录逆查：先看结果，再看确有凭据的前因。</p>
+      <CausalTrace node={view} />
+      <p className="text-slate-400">只展示当前可核验的链路。止于此处不代表没有更早原因；不以同名纪事补链。</p>
+    </div>
+  </details>;
+}
+
+function CausalTrace({ node }: { node: CausalChronicleView }) {
+  return <>
+    <p className="break-words"><span className="font-semibold text-slate-200">{causalFactLabel[node.entry.kind]} · Tick #{node.entry.tick}</span>
+      {node.entry.outcome !== undefined && ` · 实际结果：${causalOutcomeLabel[node.entry.outcome]}`}</p>
+    {node.previous.length > 0 && <ol className="space-y-1 border-l border-slate-700 pl-2" aria-label="已核验的前因">
+      {node.previous.map(({ relation, node: predecessor }) => <li key={`${relation}:${predecessor.entry.eventId}`} className="min-w-0">
+        <p className="break-words text-amber-200">{causalRelationLabel[relation]}</p>
+        <CausalTrace node={predecessor} />
+      </li>)}
+    </ol>}
+  </>;
 }

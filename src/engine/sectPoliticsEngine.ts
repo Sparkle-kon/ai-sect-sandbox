@@ -4,6 +4,7 @@ import type { Cultivator, LLMDecisionPayload, Sect, SectRank, SectSuccession, Wo
 import { artifactPowerMultiplier } from './artifactEngine';
 import { recordMemory } from './memoryEngine';
 import { dropInheritance } from './techniqueEngine';
+import { recordCausalChronicleNode } from './chronicleCausalityEngine';
 
 const RANKS: SectRank[] = ['外门弟子', '内门弟子', '真传弟子', '长老', '太上长老', '掌门'];
 export const SECT_PROMOTION_RULES: Array<{ rank: SectRank; realm: Cultivator['realm']; contribution: number }> = [
@@ -59,6 +60,7 @@ function appoint(world: WorldState, sect: Sect, candidate: Cultivator, method: S
     if (person.sectId === sect.id && person.sectRank === '掌门') person.sectRank = earnedSectRank(person);
   }
   sect.leaderId = candidate.id;
+  delete sect.officeVacancy;
   candidate.sectRank = '掌门';
   sect.succession = { tick: world.tick, method, previousLeaderId, leaderId: candidate.id, supporterIds: backing.map((person) => person.id) };
 }
@@ -74,6 +76,16 @@ export function maintainSectPolitics(world: WorldState): WorldEvent[] {
     }
     if (incumbent) continue;
     const previousLeaderId = sect.leaderId;
+    // Only a formerly recorded incumbent can prove that the office became vacant.
+    // The public fact does not publish the former member's private reason for leaving.
+    const vacancy = previousLeaderId && world.cultivators.some(({ id }) => id === previousLeaderId)
+      ? event(world, sect, 'office-vacant', `${sect.name}掌门之职出缺`,
+        '本宗掌门职位已空缺，未公布个人离职原因。', [], 'diplomacy') : undefined;
+    if (vacancy) {
+      recordCausalChronicleNode(world, vacancy, { kind: 'sect_vacancy', entityId: sect.id });
+      sect.officeVacancy = { eventId: vacancy.id, tick: vacancy.tick };
+      results.push(vacancy);
+    }
     if (!members.length) {
       delete sect.leaderId;
       continue;
@@ -91,10 +103,15 @@ export function maintainSectPolitics(world: WorldState): WorldEvent[] {
       b.candidate.contribution - a.candidate.contribution || b.candidate.combatPower - a.candidate.combatPower ||
       a.candidate.id.localeCompare(b.candidate.id));
     const winner = votes[0];
+    const vacancyId = sect.officeVacancy?.eventId;
     appoint(world, sect, winner.candidate, 'election', winner.voters, previousLeaderId);
     const description = `${sect.name}掌门出缺，${winner.candidate.name}${winner.voters.length ? `获${winner.voters.length}名同门推举` : '依辈分与贡献顺位'}继承掌门之位。`;
     recordMemory(winner.candidate, world.tick, description, 9, 'social', 4);
-    results.push(event(world, sect, `vacancy-${winner.candidate.id}`, `${sect.name}推举新掌门`, description, [winner.candidate.id, ...winner.voters.map(({ id }) => id)], 'diplomacy'));
+    const election = event(world, sect, `vacancy-${winner.candidate.id}`, `${sect.name}推举新掌门`, description,
+      [winner.candidate.id, ...winner.voters.map(({ id }) => id)], 'diplomacy');
+    recordCausalChronicleNode(world, election, { kind: 'sect_election', entityId: sect.id, outcome: 'elected',
+      ...(vacancyId ? { predecessors: [{ eventId: vacancyId, relation: 'filled_vacancy' }] } : {}) });
+    results.push(election);
   }
   return results;
 }
