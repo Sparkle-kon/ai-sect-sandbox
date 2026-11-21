@@ -150,6 +150,7 @@ export type ActionType =
   | 'ROUTE_WARNING'
   | 'PAVILION_LOAN'
   | 'WORKSHOP_CAPACITY'
+  | 'CIVIC_MEMORIAL'
   | 'FORGE_ARTIFACT'
   | 'BIND_ARTIFACT'
   | 'REPAIR_ARTIFACT'
@@ -552,6 +553,9 @@ export interface LLMDecisionPayload {
   routeWarningMove?: RouteWarningMove;
   pavilionLoanMove?: PavilionLoanMove;
   workshopCapacityMove?: WorkshopCapacityMove;
+  civicMemorialMove?: CivicMemorialMove;
+  targetCivicDeedId?: string;
+  targetCivicMemorialId?: string;
   targetPavilionLoanId?: string;
   targetRouteObservationId?: string;
   targetRouteWarningId?: string;
@@ -1116,6 +1120,44 @@ export interface SettlementRecord {
   stones: number;
   herbs: number;
   description: string;
+}
+export type CivicMemorialMove = 'propose'|'verify';
+export interface CivicErrataEvidence {
+  retellings:Array<{id:string;tick:number;reading:ChronicleReliefReading}>;
+  correction?:{id:string;tick:number;reading:'full_supplies'};
+}
+export interface CivicReliefDeed {
+  id:string;
+  reliefRecordId:string;
+  settlementId:string;
+  siteId:string;
+  subjectId:string;
+  volunteerId:string;
+  householdId:string;
+  name:string;
+  enrolledTick:number;
+  tick:number;
+  stones:number;
+  herbs:number;
+  witnessIds:string[];
+  errata?:CivicErrataEvidence;
+}
+export interface CivicMemorial {
+  id:string;
+  deedId:string;
+  proposerId:string;
+  proposerDonationTick:number;
+  proposerDonationKind:VillageGranaryDonation;
+  openedTick:number;
+  expiresTick:number;
+  status:'proposed'|'verified'|'expired';
+  verification?:{tick:number;verifierId:string;subjectStatus:'recruited'|'deceased';stonesSpent:number;earthRootsSpent:number};
+}
+export interface CivicMemorialsState {
+  deeds:CivicReliefDeed[];
+  memorials:CivicMemorial[];
+  nextDeedId:number;
+  nextMemorialId:number;
 }
 export interface SettlementState {
   villages: MortalSettlement[];
@@ -2205,7 +2247,7 @@ export interface SharedCommonsPact {
 export interface SharedCommonsState { pacts: SharedCommonsPact[]; nextId: number }
 
 export type ResourceFlowGood = 'stone' | MarketGood;
-export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation' | 'terrain' | 'workshop' | 'road' | 'observatory' | 'pilgrimage' | 'granary' | 'furnace_safety' | 'artifact_salvage' | 'village_supply';
+export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation' | 'terrain' | 'workshop' | 'road' | 'observatory' | 'pilgrimage' | 'granary' | 'furnace_safety' | 'artifact_salvage' | 'village_supply' | 'civic_memorial';
 export type ResourceFlowAccount =
   | { kind: 'actor' | 'site' | 'sect' | 'order' | 'shipment' | 'relocation' | 'workshop' | 'salvage' | 'granary' | 'village_supply'; id: string }
   | { kind: 'oath'; id: string; pocket: 'payment' | 'collateral' };
@@ -2738,6 +2780,7 @@ export interface WorldState {
   villageSupply: VillageSupplyState;
   routeWarnings: RouteWarningsState;
   pavilionLoans: PavilionLoansState;
+  civicMemorials: CivicMemorialsState;
   resourceFlow: ResourceFlowState;
   roads: RoadState;
   sharedCommons: SharedCommonsState;

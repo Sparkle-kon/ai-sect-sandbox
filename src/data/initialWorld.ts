@@ -20,6 +20,7 @@ import { createVillageGranariesState } from '../engine/villageGranaryEngine';
 import { createVillageSupplyState } from '../engine/villageSupplyEngine';
 import { createRouteWarningsState } from '../engine/routeWarningEngine';
 import { createPavilionLoansState } from '../engine/pavilionLoanEngine';
+import { createCivicMemorialsState } from '../engine/civicMemorialEngine';
 import { createCaravanRestitutionState } from '../engine/caravanRestitutionEngine';
 import { createTerrainSuccessionState } from '../engine/terrainSuccessionEngine';
 import { createResourceFlowState } from '../engine/resourceFlowEngine';
@@ -320,6 +321,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     villageSupply: createVillageSupplyState(),
     routeWarnings: createRouteWarningsState(),
     pavilionLoans: createPavilionLoansState(),
+    civicMemorials: createCivicMemorialsState(),
     relicExhibits: createRelicExhibitState(),
     probation: createProbationState(),
     roads: createRoadState(),

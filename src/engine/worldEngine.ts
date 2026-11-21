@@ -16,6 +16,7 @@ import { advanceHouseholdNames, resolveHouseholdNameAction } from './householdNa
 import { resolveVillageGranaryAction } from './villageGranaryEngine';
 import { advanceVillageSupply, resolveVillageSupplyAction } from './villageSupplyEngine';
 import { resolvePavilionLoanAction } from './pavilionLoanEngine';
+import { advanceCivicMemorials,resolveCivicMemorialAction } from './civicMemorialEngine';
 import { advanceRouteWarnings,availableRouteWarningActions,resolveRouteWarningAction } from './routeWarningEngine';
 import { resolveCaravanRestitutionAction } from './caravanRestitutionEngine';
 import { boundaryReliefCheckpoint } from './boundaryReliefCheckpoint';
@@ -291,6 +292,8 @@ export function applyCultivatorBrainDecision(
       return resolveApprenticeCohortAction(world, cultivator, decision);
     case 'HOUSEHOLD_NAME':
       return resolveHouseholdNameAction(world, cultivator, decision);
+    case 'CIVIC_MEMORIAL':
+      return resolveCivicMemorialAction(world,cultivator,decision);
     case 'WORKSHOP_CAPACITY':
       return resolveWorkshopCapacityAction(world, cultivator, decision);
     case 'PAVILION_LOAN':
@@ -932,6 +935,7 @@ export function advanceWorldTick(
     newEvents.push(event);
     witnessEvent(nextState, event);
   }
+  advanceCivicMemorials(nextState);
   advanceChronicleErrata(nextState);
   for (const actor of nextState.cultivators) if (actor.alive) noteTerrainVisit(nextState, actor);
   maintainPlayerAvatar(nextState);

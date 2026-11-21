@@ -1,3 +1,4 @@
+import { captureCivicReliefDeed } from './civicMemorialEngine';
 import { closeVillageCensusPeriod, openVillageCensusPeriod, recordVillageCensusMaturation, recordVillageCensusSettlement } from './villageCensusEngine';
 import { recordProbationRelief } from './probationEngine';
 import { initializeHouseholds, matureHouseholdBirth, recordHouseholdBirth, recordHouseholdMigration, recordHouseholdMortality,
@@ -7,7 +8,8 @@ import { attachRecollectionAfterRecruitment, MORTAL_MATURITY_TICKS, maturingRein
 import type { Cultivator, LLMDecisionPayload, LocationNode, MortalSettlement, MortalVolunteer, ReincarnationCase, SettlementRecord, SettlementState, SpiritRoot, WorldEvent, WorldState } from '../types/world';
 import { knownMapLocations, noteTerrainVisit, terrainTileAt } from './terrainEngine';
 
-export const SETTLEMENT_RELIEF = { stones: 12, jade_leaf: 2 } as const;
+import { SETTLEMENT_RELIEF } from './settlementReliefTerms';
+export { SETTLEMENT_RELIEF } from './settlementReliefTerms';
 export const SETTLEMENT_RECRUIT_STIPEND = 25;
 export const SETTLEMENT_STRESS_LIMIT = 65;
 export { MORTAL_MATURITY_TICKS } from './reincarnationEngine';
@@ -102,7 +104,10 @@ function log(world: WorldState, village: MortalSettlement, row: Omit<SettlementR
   const actual: SettlementRecord = { ...row, id: rowId, tick: world.tick, settlementId: village.id };
   world.settlements.records.push(actual);
   world.settlements.records = world.settlements.records.slice(-96);
-  if (actual.kind === 'relief') recordProbationRelief(world, actual);
+  if (actual.kind === 'relief') {
+    recordProbationRelief(world, actual);
+    captureCivicReliefDeed(world, actual);
+  }
   else recordVillageCensusSettlement(world, actual);
   return { id: `evt-${rowId}`, tick: world.tick, year: world.year, month: world.month,
     title, description: row.description, actorIds: [row.actorId, row.cultivatorId].filter((id): id is string => Boolean(id)),
