@@ -22,6 +22,8 @@ import { buildMapPresentation, MAP_EFFECT_LABELS, MOTION_MS } from './mapPresent
 import { drawFlights, drawMapEffects } from './mapPresentationDraw';
 import { centerCamera, clientToMapViewport, closestViewportTarget, DEFAULT_CAMERA, MAP_HEIGHT, MAP_WIDTH, MAX_ZOOM, panCamera, screenToMap, viewportPixelDistance, zoomCamera } from './mapCamera';
 import type { CameraPoint, MapCamera } from './mapCamera';
+import { CLUSTER_RADIUS_PX, mapActorPage, pickActorMarker, planActorMarkers, visibleMarkerMembers } from './mapActorClusters';
+import type { MapActorMarker, MarkerViewport } from './mapActorClusters';
 import { focusMapPoint, mapCameraCommand, mapKeyboardCommand, shouldAnimateMap } from './mapKeyboard';
 import type { MapCameraCommand } from './mapKeyboard';
 import { BRUSH_LABELS, brushPoint, drawHazards, getVisibleHazards } from './mapBrushView';
@@ -47,6 +49,7 @@ interface WorldMapCanvasProps {
   onSelectLocation?: (loc: LocationNode) => void;
   onBrushStroke?: (kind: GodBrushKind, points: MapPoint[]) => void;
   compact?: boolean;
+  scopeKey?: string;
 }
 
 export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
@@ -56,6 +59,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   onSelectLocation,
   onBrushStroke,
   compact = false,
+  scopeKey = '',
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [camera, setCamera] = useState(DEFAULT_CAMERA);
@@ -89,6 +93,11 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     brush?: GodBrushKind; points: MapPoint[];
   } | undefined>();
   const [fog, setFog] = useState(false);
+  const [cluster, setCluster] = useState<{ marker: Extract<MapActorMarker, { kind: 'cluster' }>; scope: string; tick: number }>();
+  const [clusterSearch, setClusterSearch] = useState('');
+  const [clusterPage, setClusterPage] = useState(0);
+  const clusterHeadingRef = useRef<HTMLHeadingElement>(null);
+  const clusterScope = `${scopeKey}|${fog ? `viewer:${selectedCultivatorId ?? ''}` : 'world'}`;
   const [heat, setHeat] = useState(false);
   const [tileDetailsOpen, setTileDetailsOpen] = useState(false);
   const selected = world.cultivators.find((c) => c.id === selectedCultivatorId);
@@ -155,7 +164,25 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     updateCamera(focusMapPoint(cameraRef.current, { x: followedX, y: followedY }));
   }, [followsSelection, followedActorId, followedX, followedY]);
   const presentation = useMemo(() => buildMapPresentation(world, mapView, actorPositions), [world, mapView, actorPositions]);
-  const paintedActors = useRef<typeof actorPositions>([]);
+  const paintedActors = useRef<{
+    markers: ReturnType<typeof planActorMarkers>; positions: typeof actorPositions; camera: MapCamera; size: MarkerViewport; scope: string;
+  }>();
+  const actorById = useMemo(() => new Map(actorPositions.map(({ actor }) => [actor.id, actor])), [actorPositions]);
+  const clusterActors = useMemo(() =>
+    cluster && cluster.scope === clusterScope && world.tick >= cluster.tick
+      ? visibleMarkerMembers(cluster.marker, actorById) : [], [cluster, clusterScope, world.tick, actorById]);
+  const drillPage = mapActorPage(clusterActors, clusterSearch, clusterPage);
+  useEffect(() => {
+    if (cluster && !clusterActors.length) setCluster(undefined);
+  }, [cluster, clusterActors.length]);
+  useEffect(() => { if (cluster) clusterHeadingRef.current?.focus({ preventScroll: true }); }, [cluster]);
+  const visibleActorsAtSite = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const { actor } of actorPositions) {
+      if (!mapView.trailPositions.has(actor.id)) counts.set(actor.locationId, (counts.get(actor.locationId) ?? 0) + 1);
+    }
+    return counts;
+  }, [actorPositions, mapView.trailPositions]);
   const playback = useRef<{ source: WorldState['mapPresentation']; start: number } | undefined>();
   const selectedScheme = selected?.activeScheme;
   const selectedSect = selected && world.sects.find((sect) => sect.id === selected.sectId);
@@ -180,6 +207,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const villagesAt = new Map(world.settlements.villages.map((village) => [village.locationId, village]));
   const currentCouncils = new Map(world.councils.filter((record) => record.tick === world.tick).map((record) => [record.sectId, record]));
   for (const actor of liveActors) {
+    if (mapView.trailPositions.has(actor.id)) continue; // Never count a moving pilgrim at its saved departure site.
     if (isGuardOnDuty(actor, world)) {
       guardsByLocation.set(actor.locationId, (guardsByLocation.get(actor.locationId) ?? 0) + 1);
     }
@@ -222,6 +250,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
 
     const width = canvas.width;
     const height = canvas.height;
+    let markerSize: MarkerViewport = canvas.getBoundingClientRect();
+    let staticMarkers: ReturnType<typeof planActorMarkers> | undefined;
 
     const hasMotion = presentation.routes.size > 0 || presentation.effects.length > 0;
     if (playback.current?.source !== world.mapPresentation) {
@@ -430,9 +460,32 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
 
       // 5. Draw only actors in the current field of view.
       const frameActors = drawFlights(ctx, actorPositions, presentation.routes, elapsed, animate);
-      paintedActors.current = frameActors;
+      const markers = frameActors === actorPositions
+        ? (staticMarkers ??= planActorMarkers(frameActors, camera, markerSize, selectedCultivatorId))
+        : planActorMarkers(frameActors, camera, markerSize, selectedCultivatorId);
+      paintedActors.current = { markers, positions: actorPositions, camera, size: markerSize, scope: clusterScope };
       const marked = new Set<string>();
-      for (const { actor: cultivator, x: cx, y: cy } of frameActors) {
+      for (const marker of markers) {
+          if (marker.kind === 'cluster') {
+            // Cluster circles and labels are CSS-pixel sized and hit-tested at this exact center.
+            ctx.save();
+            ctx.setTransform(width / markerSize.width, 0, 0, height / markerSize.height, 0, 0);
+            ctx.beginPath();
+            ctx.arc(marker.x, marker.y, CLUSTER_RADIUS_PX, 0, Math.PI * 2);
+            ctx.fillStyle = '#075985';
+            ctx.fill();
+            ctx.strokeStyle = '#bae6fd';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+            ctx.fillStyle = '#f0f9ff';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.font = 'bold 11px sans-serif';
+            ctx.fillText(String(marker.ids.length), marker.x, marker.y + 0.5, 26);
+            ctx.restore();
+            continue;
+          }
+          const { actor: cultivator, x: cx, y: cy } = marker.point;
           const sect = world.sects.find((s) => s.id === cultivator.sectId);
           const color = sect?.color ?? '#38bdf8';
           const isSelected = cultivator.id === selectedCultivatorId;
@@ -536,12 +589,21 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     preference?.addEventListener('change', stopOrStart);
     document.addEventListener('visibilitychange', stopOrStart);
     stopOrStart();
+    const resize = typeof ResizeObserver === 'function' ? new ResizeObserver(() => {
+      const next = canvas.getBoundingClientRect();
+      if (next.width === markerSize.width && next.height === markerSize.height) return;
+      markerSize = next;
+      staticMarkers = undefined;
+      stopOrStart();
+    }) : undefined;
+    resize?.observe(canvas);
     return () => {
+      resize?.disconnect();
       if (frame !== undefined) window.cancelAnimationFrame(frame);
       preference?.removeEventListener('change', stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, hazards, convoys, escortedCaravan, formationLines, localLeaseSites, pilgrimageMark, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, hazards, convoys, escortedCaravan, formationLines, localLeaseSites, pilgrimageMark, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -609,11 +671,24 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     }
     const size = event.currentTarget.getBoundingClientRect();
     if (!screen || active.moved || viewportPixelDistance(screen, active.initial, size) >= (active.isTouch ? 9 : 5)) return;
-    const currentIds = new Set(actorPositions.map(({ actor }) => actor.id));
     const radius = active.isTouch ? 22 : Math.max(10, cameraRef.current.zoom * 20 * size.width / MAP_WIDTH);
-    const picked = closestViewportTarget(paintedActors.current.filter(({ actor }) => currentIds.has(actor.id)),
-      cameraRef.current, screen, size, radius);
-    if (picked) { onSelectCultivator(picked.actor.id); return; }
+    const painted = paintedActors.current;
+    if (!painted || painted.scope !== clusterScope || painted.positions !== actorPositions || painted.camera !== cameraRef.current ||
+        painted.size.width !== size.width || painted.size.height !== size.height) return;
+    const picked = pickActorMarker(painted.markers, { x: screen.x * size.width / MAP_WIDTH, y: screen.y * size.height / MAP_HEIGHT }, active.isTouch);
+    if (picked) {
+      const members = visibleMarkerMembers(picked, actorById);
+      if (picked.kind === 'actor' && members[0]) {
+        setCluster(undefined);
+        onSelectCultivator(members[0].id);
+      } else if (picked.kind === 'cluster' && members.length > 0) {
+        setClusterSearch('');
+        setClusterPage(0);
+        setCluster({ marker: picked, scope: clusterScope, tick: world.tick });
+      }
+      return;
+    }
+    setCluster(undefined);
     const clickedLocation = closestViewportTarget(seenLocations.filter((site) => isCurrentLocation(site.id)),
       cameraRef.current, screen, size, radius);
     if (clickedLocation) focusSite(clickedLocation);
@@ -772,6 +847,36 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           </svg>
         </button>
       </div>
+      {clusterActors.length > 0 && <section className="space-y-2 border-t border-sky-900 bg-slate-900 px-3 py-2 text-xs text-slate-200"
+        aria-label="聚合修士列表">
+        <div className="flex items-center justify-between gap-2">
+          <h3 ref={clusterHeadingRef} tabIndex={-1} className="font-semibold">此标记中的可见修士 · {clusterActors.length} 位</h3>
+          <button type="button" className="min-h-11 rounded border border-slate-700 px-2" onClick={() => {
+            setCluster(undefined); canvasRef.current?.focus({ preventScroll: true });
+          }}>关闭列表</button>
+        </div>
+        <label className="grid gap-1">搜索聚合修士
+          <input type="search" value={clusterSearch} placeholder="姓名、境界或编号"
+            className="min-h-11 min-w-0 rounded border border-slate-700 bg-slate-950 px-2 text-base"
+            onChange={(event) => { setClusterSearch(event.currentTarget.value); setClusterPage(0); }} />
+        </label>
+        <p role="status">匹配 {drillPage.total} 位{drillPage.total > 0 && ` · 第 ${drillPage.page + 1}/${drillPage.pages} 页`}</p>
+        <ul className="grid gap-1 sm:grid-cols-2">
+          {drillPage.actors.map((actor) => <li key={actor.id} className="min-w-0">
+            <button type="button" className="min-h-11 w-full break-words rounded border border-slate-700 px-2 text-left"
+              onClick={() => {
+                if (!actorById.has(actor.id)) return;
+                locateActor(actor.id); setCluster(undefined); canvasRef.current?.focus({ preventScroll: true });
+              }}>{actor.name} · {actor.realm}{actor.realmStage}层</button>
+          </li>)}
+        </ul>
+        {drillPage.pages > 1 && <div className="flex gap-2" aria-label="聚合列表分页">
+          <button type="button" className="min-h-11 rounded border border-slate-700 px-2 disabled:opacity-35"
+            disabled={drillPage.page === 0} onClick={() => setClusterPage(drillPage.page - 1)}>上一页</button>
+          <button type="button" className="min-h-11 rounded border border-slate-700 px-2 disabled:opacity-35"
+            disabled={drillPage.page + 1 === drillPage.pages} onClick={() => setClusterPage(drillPage.page + 1)}>下一页</button>
+        </div>}
+      </section>}
       <details className="border-t border-slate-800/80 bg-slate-900/40" onToggle={(event) => setExplorerOpen(event.currentTarget.open)}>
         <summary ref={(node) => { explorerSummary.current = node; }} className="flex min-h-11 cursor-pointer items-center px-3 text-xs font-semibold text-slate-300 focus-visible:outline focus-visible:outline-amber-300">山河索引</summary>
         {explorerOpen && <React.Suspense fallback={<p className="px-3 pb-2 text-xs text-slate-300" role="status">载入山河索引…</p>}>
@@ -945,11 +1050,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                 <SpiritRootBadge root={location.spiritRoot} />
                 <span className="text-slate-400">· 灵气 {location.spiritQi}</span>
                 {tile && <span className="text-slate-400">· {tile.biome} · 地格灵气 {tile.spiritQi} · {world.sects.find(({ id }) => id === tile.ownerSectId)?.name ?? '无所属宗门'}</span>}
-                {fog && actorPositions.filter(({ actor }) => actor.locationId === location.id && !mapView.trailPositions.has(actor.id)).map(({ actor }) => (
-                  <button key={actor.id} type="button" onClick={() => onSelectCultivator(actor.id)} className="rounded border border-slate-700 px-1.5 py-0.5 text-slate-200">
-                    {actor.name}{actor.id === avatarId ? '（临身）' : ''}
-                  </button>
-                ))}
+                {fog && (visibleActorsAtSite.get(location.id) ?? 0) > 0 &&
+                  <span className="text-slate-300">· 可见修士 {visibleActorsAtSite.get(location.id)} 位（山河索引可查）</span>}
                 {location.furnaceGrade > 0 && <span className="text-emerald-300">· {location.furnaceGrade} 阶丹炉</span>}
                 {guardCount > 0 && <span className="text-indigo-300">· 驻守 {guardCount} 人</span>}
                 {homeSect && homeSect.arrayMaxHp > 0 && (

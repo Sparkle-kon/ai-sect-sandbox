@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "verify": "npm run typecheck && npm run test && npm run build",
-    "balance": "vite-node scripts/simulationBalance.ts"
+    "balance": "vite-node scripts/simulationBalance.ts",
+    "map:benchmark": "vite-node scripts/mapRosterBenchmark.ts"
   },
   "dependencies": {
     "lucide-react": "^0.460.0",

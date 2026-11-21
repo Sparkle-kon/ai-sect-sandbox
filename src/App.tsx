@@ -73,6 +73,7 @@ const panel = 'space-y-2 rounded-xl border border-slate-800 bg-slate-900 p-3';
 export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSection }) => {
   const [workspace, setWorkspace] = useState<WorkspaceId>(initialWorkspace);
   const [world, setWorld] = useState<WorldState>(() => createInitialWorld());
+  const [viewEpoch, setViewEpoch] = useState(0);
   const authority = useRef(world);
   const [timeline, setTimeline] = useState(() => createTimeline(world));
   const history = useRef(timeline);
@@ -293,6 +294,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
   const replaceWorld = (next: WorldState, expected: WorldState): boolean => {
     if (stepInFlight.current || browsing.current || authority.current !== expected) return false;
     replayTapes.current.clear();
+    setViewEpoch((previous) => previous + 1);
     activateTimeline(createTimeline(next), next);
     return true;
   };
@@ -306,6 +308,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
     const next = createInitialWorld(active.random.seed, active.worldgen?.profileId ?? 'classic');
     replayTapes.current.clear();
     // Emergency reset invalidates an in-flight model tick, which cannot commit afterward.
+    setViewEpoch((previous) => previous + 1);
     activateTimeline(createTimeline(next), next);
   };
 
@@ -348,6 +351,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
   };
 
   const visibleWorld = preview?.world ?? world;
+  const viewScopeKey = `${viewEpoch}:${timeline.activeBranchId}:${preview?.tick ?? 'live'}`;
   const compareDecision = (traceId: string, candidateId: string): DecisionReplayResult => {
     const trace = visibleWorld.decisionTrace.records.find(({ id }) => id === traceId);
     const saved = trace && replayTapes.current.get(history.current.activeBranchId)?.get(trace.tick);
@@ -406,7 +410,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
 
       <SandboxWorkspace active={workspace} onChange={openWorkspace} views={{
         map: <div className="grid min-w-0 items-start gap-2.5 lg:grid-cols-[minmax(0,1fr)_17rem] lg:gap-4">
-          <div className="min-w-0"><WorldMapCanvas compact world={visibleWorld} selectedCultivatorId={activeActorId}
+          <div className="min-w-0"><WorldMapCanvas compact scopeKey={viewScopeKey} world={visibleWorld} selectedCultivatorId={activeActorId}
             onSelectCultivator={setSelectedCultivatorId} onBrushStroke={preview ? undefined : handleBrushStroke} /></div>
           <aside className={`${panel} min-w-0`} aria-label="当前修士">
             <div className="flex flex-wrap items-center justify-between gap-1.5">
@@ -429,7 +433,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
             { id: 'mind', label: '心声、记忆与流言', content: inspect('mind') },
             { id: 'relationships', label: '关系与师承', content: <div className="space-y-2.5">
               <React.Suspense fallback={<p role="status">载入师承记录…</p>}><MentorshipPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense>
-              <React.Suspense fallback={<p role="status">载入关系图…</p>}><RelationshipGraph world={visibleWorld} selectedCultivatorId={activeActorId} onSelectCultivator={setSelectedCultivatorId} /></React.Suspense>
+              <React.Suspense fallback={<p role="status">载入关系图…</p>}><RelationshipGraph key={viewScopeKey} world={visibleWorld} selectedCultivatorId={activeActorId} onSelectCultivator={setSelectedCultivatorId} /></React.Suspense>
             </div> },
             ...(workspace === 'people' && selectedCultivator && visiblePilgrimages(visibleWorld, selectedCultivator).length > 0 ? [{
               id: 'pilgrimage', label: '朝山巡礼与共愿', content: <React.Suspense fallback={<p role="status">载入巡礼记录…</p>}>

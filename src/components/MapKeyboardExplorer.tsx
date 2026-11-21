@@ -6,19 +6,21 @@ import { isActiveTrial } from './mapStatusLabels';
 import { MAP_EFFECT_LABELS } from './mapPresentationView';
 import type { buildMapPresentation } from './mapPresentationView';
 import type { createTerrainMapView, mapActorPositions } from './terrainMapView';
+import { MAP_ACTOR_PAGE_SIZE, mapActorPage } from './mapActorClusters';
 import type { MapCameraCommand } from './mapKeyboard';
 
 type Terrain = ReturnType<typeof createTerrainMapView>;
 type ActorPositions = ReturnType<typeof mapActorPositions>;
 type Presentation = ReturnType<typeof buildMapPresentation>;
-const PAGE_SIZE = 8;
+const PAGE_SIZE = MAP_ACTOR_PAGE_SIZE;
 const control = 'min-h-11 min-w-0 rounded border border-slate-700 bg-slate-950 px-2 text-xs text-slate-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300 disabled:opacity-40';
 const directions = [['left', '向左'], ['right', '向右'], ['up', '向上'], ['down', '向下'], ['in', '放大'], ['out', '缩小'], ['home', '复位']] as const;
 
 export function mapExplorerIndex(world: WorldState, view: Terrain, actorPositions: ActorPositions, presentation: Presentation) {
   const sites = view.seenLocations.map((site) => ({ site, current: view.isCurrentLocation(site.id) }));
   const current = new Map(sites.filter((item) => item.current).map(({ site }) => [site.id, site]));
-  const actors = actorPositions.flatMap(({ actor }) => current.has(actor.locationId) ? [actor] : []);
+  const visibleActorIds = new Set(view.liveActors.map(({ id }) => id));
+  const actors = actorPositions.flatMap(({ actor }) => visibleActorIds.has(actor.id) && actor.alive ? [actor] : []);
   const privateEvents = world.events.filter((event) => event.tick === world.tick && event.witnessScope === 'participants');
   const events: Array<{ id: string; label: string; site: LocationNode }> = [];
   for (const effect of presentation.effects) {
@@ -50,6 +52,7 @@ export function mapExplorerIndex(world: WorldState, view: Terrain, actorPosition
     if (label) events.push({ id: `doctrine-${record.id}`, label, site });
   }
   for (const actor of actors) {
+    if (view.trailPositions.has(actor.id)) continue;
     const site = current.get(actor.locationId);
     if (site && isActiveTrial(actor.tribulation)) events.push({ id: `trial-${actor.id}`, label: `${actor.name}正在渡劫`, site });
   }
@@ -74,15 +77,18 @@ export function MapKeyboardExplorer({ world, view, actorPositions, presentation,
   const uid = useId();
   const [kind, setKind] = useState<'sites' | 'actors' | 'events'>('sites');
   const [page, setPage] = useState(0);
+  const [actorSearch, setActorSearch] = useState('');
+  const actorPage = mapActorPage(kind === 'actors' ? index.actors : [], actorSearch, page);
   const focusOwner = useRef<HTMLElement>();
   const rows = kind === 'sites' ? index.sites.map(({ site, current }) => ({ key: site.id, title: site.name,
     summary: current ? '当前可定位' : '已探索，当前不可见', activate: () => onSite(site) }))
-    : kind === 'actors' ? index.actors.map((actor) => ({ key: actor.id, title: actor.name,
+    : kind === 'actors' ? actorPage.actors.map((actor) => ({ key: actor.id, title: actor.name,
       summary: `${actor.realm} ${actor.realmStage}层`, activate: () => onActor(actor) }))
       : index.events.map(({ id, label, site }) => ({ key: id, title: label, summary: site.name, activate: () => onSite(site) }));
-  const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const count = kind === 'actors' ? actorPage.total : rows.length;
+  const pages = Math.max(1, Math.ceil(count / PAGE_SIZE));
   const currentPage = Math.min(page, pages - 1);
-  const visible = rows.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+  const visible = kind === 'actors' ? rows : rows.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
   useEffect(() => {
     const previous = focusOwner.current;
     if (previous && !previous.isConnected) {
@@ -106,7 +112,11 @@ export function MapKeyboardExplorer({ world, view, actorPositions, presentation,
       <select id={`${uid}-directory`} value={kind} className={control} onChange={(event) => { setKind(event.target.value as typeof kind); setPage(0); }}>
         <option value="sites">地点</option><option value="actors">可见修士</option><option value="events">当前可见事件</option>
       </select>
-      <p className="text-xs text-slate-400">{rows.length ? `${rows.length} 项 · 第 ${currentPage + 1}/${pages} 页` : '当前视野内无此类目标。'}</p>
+      {kind === 'actors' && <label className="grid gap-1 text-xs text-slate-300">搜索可见修士
+        <input type="search" className={control} value={actorSearch} placeholder="姓名、境界或编号"
+          onChange={(event) => { setActorSearch(event.currentTarget.value); setPage(0); }} />
+      </label>}
+      <p className="text-xs text-slate-400" role="status">{count ? `${count} 项 · 第 ${currentPage + 1}/${pages} 页` : '当前视野内无此类目标。'}</p>
       {visible.length > 0 && <ul className="grid min-w-0 gap-1.5 sm:grid-cols-2" aria-label="可定位目标">
         {visible.map((row) => <li key={`${kind}-${row.key}`} className="min-w-0">
           <button type="button" className={`${control} w-full break-words py-1 text-left`} onClick={row.activate}
