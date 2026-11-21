@@ -1,3 +1,5 @@
+import { StoryFirstHome } from './components/StoryFirstHome';
+import { projectStoryHomepage } from './engine/storyHomepage';
 import { FAST_FORWARD_MAX_TICKS } from './engine/fastForwardEngine';
 import { projectWitnessedPersonalStory } from './engine/witnessedPersonalStory';
 import { WitnessedPersonalStory, WitnessedStoryScopeToggle } from './components/WitnessedPersonalStory';
@@ -128,8 +130,19 @@ const saveTimelineIdentity = (): string | undefined => {
 const action = 'inline-flex min-h-11 items-center justify-center gap-1.5 rounded-md px-3 text-xs font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300 disabled:opacity-40';
 const panel = 'space-y-2 rounded-xl border border-slate-800 bg-slate-900 p-3';
 
-export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSection }) => {
-  const [workspace, setWorkspace] = useState<WorkspaceId>(initialWorkspace);
+export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) => {
+  const [dashboardOpen, setDashboardOpen] = useState(initialWorkspace !== undefined);
+  const [workspace, setWorkspace] = useState<WorkspaceId>(initialWorkspace ?? 'map');
+  const storyMoreRef = useRef<HTMLButtonElement>(null);
+  const dashboardHeading = useRef<HTMLHeadingElement>(null);
+  const renderedDashboard = useRef(dashboardOpen);
+  const [storyNotice, setStoryNotice] = useState<string>();
+  useEffect(() => {
+    if (renderedDashboard.current === dashboardOpen) return;
+    renderedDashboard.current = dashboardOpen;
+    window.scrollTo({top:0,behavior:'instant'});
+    (dashboardOpen ? dashboardHeading.current : storyMoreRef.current)?.focus({preventScroll:true});
+  }, [dashboardOpen]);
   const [foldPreferences, setFoldPreferences] = useState(readWorkspaceFoldPreferences);
   const [handedness, setHandedness] = useState(readHandednessPreference);
   const [rosterFocus, setRosterFocus] = useState<{ id: string; scope: string }>();
@@ -302,12 +315,12 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
   }, [llmConfig, updateWorld, retainReplay]);
 
   useEffect(() => {
-    if (!isRunning) return;
+    if (!dashboardOpen || !isRunning) return;
     const timer = setInterval(() => {
       void handleStepTick();
     }, tickIntervalMs);
     return () => clearInterval(timer);
-  }, [isRunning, tickIntervalMs, handleStepTick]);
+  }, [dashboardOpen, isRunning, tickIntervalMs, handleStepTick]);
 
   const handleConveneCouncil = useCallback(async (plan: CouncilPlan) => {
     const starting = authority.current;
@@ -623,7 +636,8 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
       (base, orders, mode, onActor, replayDraws) => advanceWorldTick(base, orders, undefined, mode, undefined, { captureTrace: false, onActor, replayDraws }));
   };
   const visibleHistory = timeline.branches.find(({ id }) => id === timeline.activeBranchId)?.snapshots;
-  const readingChronicle = workspace === 'chronicle';
+  const readingChronicle = dashboardOpen && workspace === 'chronicle';
+  const storyHome = React.useMemo(() => dashboardOpen ? undefined : projectStoryHomepage(world), [dashboardOpen,world]);
   const chronicleScenes = React.useMemo(() => readingChronicle ? publicChronicleSceneEvents(visibleWorld) : [], [readingChronicle,visibleWorld]);
   const publicDialogue = React.useMemo(() => readingChronicle ? createPublicDialogueResolver(visibleWorld) : undefined, [readingChronicle,visibleWorld]);
   const succession = React.useMemo(() => readingChronicle &&
@@ -732,7 +746,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
     setWorkspace('chronicle');
   };
   const clearChronicleReturn = (token: number) => setChronicleReturn((previous) => previous?.token === token ? undefined : previous);
-  const opened = (view: WorkspaceId, fallback?: string) => initialWorkspace === view ? initialSection ?? fallback : fallback;
+  const opened = (view: WorkspaceId, fallback?: string) => (initialWorkspace ?? 'map') === view ? initialSection ?? fallback : fallback;
   const ordinaryChronicleFold = foldPreferences.sections.chronicle === undefined
     ? opened('chronicle', 'feed') : foldPreferences.sections.chronicle;
   const rememberFold = (view: Exclude<WorkspaceId, 'map'>, id: string | null) => {
@@ -759,6 +773,34 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
     writeHandednessPreference(next);
   };
 
+  const openDashboard = () => {
+    if (stepInFlight.current) return;
+    setStoryNotice(undefined);
+    setDashboardOpen(true);
+  };
+  const backToStory = () => {
+    if (stepInFlight.current || fastForwardRun.current) return;
+    setIsRunning(false);
+    if (browsing.current) clearPreview();
+    else discardChronicleContext();
+    setFocusNotice(undefined);
+    setAnalyticsOpen(false);
+    setCouncilOpen(false);
+    setStoryNotice(undefined);
+    setDashboardOpen(false);
+  };
+  const advanceStory = () => {
+    if (dashboardOpen || stepInFlight.current || browsing.current || fastForwardRun.current) return;
+    setStoryNotice(undefined);
+    void handleStepTick().catch(() => setStoryNotice('未能翻到下一幕，请重试。'));
+  };
+
+  if (storyHome) return <main data-story-home data-story-turn={storyHome.calendar.tick} className="min-h-dvh bg-slate-950 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
+    <StoryFirstHome scene={storyHome.scene} leadName={storyHome.lead?.name}
+      busy={isStepping} moreRef={storyMoreRef} notice={storyNotice}
+      onContinue={advanceStory} onMore={openDashboard} />
+  </main>;
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col pt-[env(safe-area-inset-top)]"
       data-controls-hand={handedness} data-controls-workspace={workspace}
@@ -771,10 +813,12 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
               <Sparkles aria-hidden="true" className="h-5 w-5 text-amber-400" />
             </div>
             <div className="min-w-0">
-              <h1 className="text-base font-bold tracking-wide text-slate-100">天道沙盒<span className="hidden sm:inline"> · AI修仙宗门与群像模拟器</span></h1>
+              <h1 ref={dashboardHeading} tabIndex={-1} className="text-base font-bold tracking-wide text-slate-100">天道沙盒<span className="hidden sm:inline"> · AI修仙宗门与群像模拟器</span></h1>
               <p className="break-words text-xs text-slate-300">仙历 {visibleWorld.year}年{visibleWorld.month}月 · 在世 {aliveCount} · 已陨落 {visibleWorld.cultivators.length - aliveCount}</p>
             </div>
           </div>
+          <button type="button" disabled={isStepping || fastForwardLocked} onClick={backToStory}
+            className={`${action} bg-slate-800 text-amber-100`}>回到故事</button>
           <div aria-label="推演控制" data-control-dock="repeat" className={`flex flex-wrap items-center gap-1.5 ${handedness === 'default' && workspace !== 'map' && !preview && !isRunning ? 'max-sm:hidden' : ''}`}>
             {preview ? (
               <><span className="text-xs text-amber-200">历史只读 · Tick #{preview.tick}</span>

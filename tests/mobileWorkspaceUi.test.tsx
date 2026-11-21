@@ -7,8 +7,19 @@ import { GodConsole } from '../src/components/GodConsole';
 import { createInitialWorld } from '../src/data/initialWorld';
 
 describe('mobile-first sandbox workspaces', () => {
-  it('defaults exclusively to the map and selected character summary without mounting secondary stacks', () => {
+  it('shows only Continue and More on the story-first public entry', () => {
     const html = renderToStaticMarkup(<App />);
+    expect(html.match(/<button\b/g)).toHaveLength(2);
+    expect(html).toMatch(/>继续<\/button>/);
+    expect(html).toMatch(/>\s*更多\s*<\/button>/);
+    expect(html).toContain('data-story-home');
+    expect(html).toContain('主角未定');
+    expect(html).toContain('陨仙墟异动');
+    for (const text of ['role="tab"','单步推演','自动推演','在世 ','存档管理','当前修士','fast-forward']) expect(html).not.toContain(text);
+  });
+
+  it('opens the detailed map without mounting secondary stacks', () => {
+    const html = renderToStaticMarkup(<App initialWorkspace="map" />);
     expect(html.match(/role="tab"/g)).toHaveLength(5);
     expect(html.match(/role="tab"[^>]*aria-selected="true"/g)).toHaveLength(1);
     expect(html).toMatch(/tab-map[^>]*role="tab" aria-selected="true"/);
