@@ -3236,7 +3236,27 @@ export interface AuthoredEraOrigin {
   effects:AuthoredEraEffect[];
 }
 
+export type SimulationRegionId='west'|'center'|'east';
+export interface RegionalRegistration {
+  kind:'actor'|'site'|'settlement';id:string;originRegionId:SimulationRegionId;registeredTick:number;
+}
+export interface RegionalRoute {
+  kind:'road'|'courier'|'escort'|'relocation'|'pilgrimage'|'village_supply'|'danxia_medicine'|'boundary_relief'|'expedition_rescue';
+  id:string;firstKnownTick:number;regions:SimulationRegionId[];
+}
+export interface RegionalDeferredActor {
+  actorId:string;regionId:SimulationRegionId;year:number;deferredMonths:number;lastDeferredTick:number;
+}
+export interface RegionalAnnualSummary {
+  year:number;tick:number;regionId:SimulationRegionId;actorMonths:number;waivedActorMonths:number;actors:number;qiAdded:number;hpAdded:number;
+}
+export interface RegionalSimulationState {
+  version:1;focusSiteId:string;registrations:RegionalRegistration[];routes:RegionalRoute[];
+  actors:RegionalDeferredActor[];annual:RegionalAnnualSummary[];
+}
+
 export interface WorldState {
+  regionalSimulation?:RegionalSimulationState;
   authoredEraOrigin?:AuthoredEraOrigin;
   fieldObservatories: FieldObservatoriesState;
   danxiaShortages: DanxiaShortagesState;

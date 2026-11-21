@@ -1,3 +1,4 @@
+import { beginRegionalSimulationTurn, deferRegionalActorTurn, finishRegionalSimulationTurn, recordRegionalTurnRegistry, renewRegionalProtectionAfterEvent } from './regionalSimulationEngine';
 import {advanceDoctrineMaturity,resolveDoctrineMaturityAction} from './doctrineMaturityEngine';
 import { advanceDanxiaMedicine, resolveDanxiaMedicineAction } from './danxiaMedicineEngine';
 import { advanceDanxiaSeasonReviews, resolveDanxiaReviewAction } from './danxiaSeasonReviewEngine';
@@ -868,6 +869,7 @@ export function advanceWorldTick(
   for (const event of newEvents) witnessEvent(nextState, event);
   openFurnaceTurn(nextState);
   beginClinicDutyTurn(nextState);
+  const regionalTurn=beginRegionalSimulationTurn(nextState);
 
   for (const cultivator of [...nextState.cultivators]) {
     if (!cultivator.alive) continue;
@@ -918,6 +920,7 @@ export function advanceWorldTick(
           if (event) {
             newEvents.push(event);
             witnessEvent(nextState, event);
+            renewRegionalProtectionAfterEvent(regionalTurn);
             continue;
           }
         } else if (supplied && traceOptions?.tape) {
@@ -990,6 +993,9 @@ export function advanceWorldTick(
       }
     }
 
+    if(deferRegionalActorTurn(nextState,regionalTurn,cultivator,expeditionOrder??provided??supplied??fieldNegotiation,
+      ()=>!!requiredBeforeOrdinaryDecision(cultivator,nextState)))continue;
+
     let decisionDraws = 0;
     if (provided && traceOptions?.replayDraws) {
       const replayedDraws = traceOptions.replayDraws[cultivator.id] ?? 0;
@@ -1025,6 +1031,7 @@ export function advanceWorldTick(
       avatarDecision ? 'avatar' : modelProposal && !modelOrdinaryReplaced ? 'model' : 'utility', validEffect);
     creditSectService(nextState, cultivator, evt);
     if (evt) {
+      renewRegionalProtectionAfterEvent(regionalTurn);
       if (cultivator.realm !== previousRealm) recordBreakthroughCompetition(nextState, cultivator, previousRealm, evt);
       if (decision.chosenAction === 'AMBUSH_TRIBULATION') {
         const opponent = nextState.cultivators.find((candidate) => candidate.id !== cultivator.id && evt.actorIds.includes(candidate.id));
@@ -1053,6 +1060,7 @@ export function advanceWorldTick(
     if (yearly) cultivator.reflections = synthesizeReflections(cultivator, nextState.tick);
   }
 
+  finishRegionalSimulationTurn(nextState,regionalTurn);
   for (const event of [...advanceApprenticeCohorts(nextState), ...advanceBoundaryReliefs(nextState), ...advanceShortShifts(nextState), ...advanceSparring(nextState), ...advanceDiplomacy(nextState, rng), ...advanceOccasions(nextState, rng), ...advanceOaths(nextState), ...advanceMarkets(nextState), ...advanceWitnesses(nextState), ...advanceSeasonReviews(nextState, (state, seasonId) =>
     publicCompetitionStandings(state, seasonId).find(({ rank }) => rank === 1)), ...maintainSectPolitics(nextState), ...advanceDoctrineFoundings(nextState), ...advanceDoctrineMaturity(nextState,prevState), ...advanceBounties(nextState), ...advanceResearch(nextState), ...advanceWorkshops(nextState), ...advanceDamageAssurance(nextState), ...advanceRelicExhibits(nextState), ...advanceProbation(nextState), ...advanceToolLoans(nextState), ...advanceEstates(nextState), ...advanceDoctrines(nextState), ...advanceSectCredit(nextState), ...advanceSanctuaries(nextState), ...advancePilgrimages(nextState), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceCareFollowups(nextState), ...advanceDanxiaShortages(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...reconcileCourierDeaths(nextState), ...advanceHouseholds(nextState), ...advanceHouseholdNames(nextState)]) {
     newEvents.push(event);
@@ -1095,6 +1103,7 @@ export function advanceWorldTick(
   const mainEventIds=new Set(newEvents.map(({id})=>id));
   const completedEvents=[...newEvents,...nextState.events.filter(({id,tick})=>tick===nextState.tick&&!mainEventIds.has(id))];
   recordEraHistoryTurn(prevState,nextState,completedEvents);
+  recordRegionalTurnRegistry(nextState);
   traceOptions?.onCompletedEvents?.(completedEvents);
   nextState.mapPresentation = traceOptions?.capturePresentation === false
     ? { tick: nextState.tick, trails: [], effects: [] }

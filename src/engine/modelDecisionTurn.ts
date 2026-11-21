@@ -1,3 +1,5 @@
+import { regionalModelPassiveActorIds } from './regionalSimulationEngine';
+import { requiredBeforeOrdinaryDecision } from './llmBrain';
 import {activeDanxiaMedicineEscort} from './danxiaMedicineTerms';
 import type { Cultivator, LLMDecisionPayload, WorldState } from '../types/world';
 import { activeAvatar } from './avatarEngine';
@@ -48,11 +50,12 @@ interface ModelDecisionTurnResult {
 
 /** Scope is a starting snapshot. Eligibility is not a claim that every planned action survives canonical simulation. */
 export function modelDecisionCandidates(world: WorldState): Cultivator[] {
+  const passive=regionalModelPassiveActorIds(world,actor=>!!requiredBeforeOrdinaryDecision(actor,world));
   const pending = world.playerAvatar.pendingOrder;
   const nextTick = world.tick + 1;
   const commandedId = pending?.queuedTick === world.tick && (world.playerAvatar.possessionUntilTick ?? 0) > nextTick &&
     activeAvatar(world)?.id === pending.actorId ? pending.actorId : undefined;
-  return world.cultivators.filter((actor) => actor.alive && actor.hp > 0 && actor.id !== commandedId &&
+  return world.cultivators.filter((actor) => actor.alive && actor.hp > 0 && actor.id !== commandedId && !passive.has(actor.id) &&
     (world.month < 12 || actor.age + 1 < actor.lifespan) &&
     (!activeCourierForActor(world, actor) || availableCourierHandoffActions(actor, world, nextTick).some(({ courierHandoffMove }) => courierHandoffMove === 'offer')) &&
     !activeDanxiaMedicineEscort(world,actor)&&!activeEscortForActor(world, actor) && !activeRelocationForActor(world, actor) &&

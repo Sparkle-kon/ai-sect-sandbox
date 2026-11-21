@@ -1,3 +1,4 @@
+import {REGIONAL_SIMULATION_VERSION,regionForPoint,SIMULATION_REGION_NAMES} from '../engine/regionalSimulationEngine';
 import {localDoctrineFoundingNotice} from '../engine/doctrineFoundingEngine';
 import {localDanxiaSeasonReviewSite} from '../engine/danxiaSeasonReviewEngine';
 import { VILLAGE_WORK_RULES, visibleVillageWorks } from '../engine/villageWorksEngine';
@@ -58,7 +59,7 @@ import { projectLocalToolLoanStatus } from '../engine/toolLoanEngine';
 import { projectLocalSeedCulture } from '../engine/seedCultureEngine';
 import { drawRouteWarningMarks,paintedRouteWarningGeometry } from './routeWarningMapDraw';
 import { getCurrentBoundaryCoverage } from '../engine/boundaryReliefEngine';
-import { currentVisibleTileIds, terrainTileAt } from '../engine/terrainEngine';
+import { currentVisibleTileIds, knownMapLocations, terrainTileAt } from '../engine/terrainEngine';
 import { courierCheckpoint } from '../engine/sealedCourierEngine';
 import { pilgrimageCheckpoint } from '../engine/pilgrimageEngine';
 import { expeditionRescueCheckpoint } from '../engine/expeditionRescueCheckpoint';
@@ -348,6 +349,13 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const avatarId = activeAvatar(world)?.id;
   const selectedArtifact = selected?.alive ? equippedArtifact(selected) : undefined;
   const selectedLocation = selected && seenLocations.find((loc) => loc.id === selected.locationId);
+  const selectedKnownRegion = useMemo(() => {
+    if (world.regionalSimulation?.version !== REGIONAL_SIMULATION_VERSION || !selected?.alive || selected.hp <= 0 ||
+        !selectedLocation || selectedLocation.type === 'secret_realm' || selectedLocation.type === 'abyss') return undefined;
+    const tile = terrainTileAt(world, selectedLocation.x, selectedLocation.y);
+    if (!tile || !knownMapLocations(world, selected).includes(selectedLocation) || !currentVisibleTileIds(world, selected).has(tile.id)) return undefined;
+    return regionForPoint(world, selectedLocation);
+  }, [world, selected, selectedLocation]);
   const selectedTrial = selected?.tribulation;
   const selectedBounty = selected && relevantBounty(world.bounties, selected.id);
   const activeSieges = world.sieges.filter(isActiveCampaign);
@@ -1215,6 +1223,9 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           {fog ? `${selected?.name ?? '无修士'}视角 · 已探索 ${mapView.known?.size ?? 0}/${world.terrain.tiles.length} 格 · 视野内 ${mapView.current?.size ?? 0} 格` : '天道全图 · 宗门色线为领地边界'}
         </span>
         {heat && <span className="text-[11px] text-slate-400">蓝色至橙红色表示灵气由低到高。</span>}
+        {toolsExpanded && selectedKnownRegion && <span className="text-[11px] text-emerald-200">
+          所选已知地点所属地域：{SIMULATION_REGION_NAMES[selectedKnownRegion]}
+        </span>}
       </div>
       <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-800 px-4 py-2 text-[11px] text-slate-300" aria-label="地图视角与画笔">
         {([

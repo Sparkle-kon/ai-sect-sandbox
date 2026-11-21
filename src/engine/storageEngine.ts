@@ -4,6 +4,7 @@ import { validateSeasonalHousing } from './storageSeasonalHousingValidation';
 import { validateMentorTransfers } from './storageMentorTransferValidation';
 import { sameGeneratedWorld } from './worldIdentity';
 import {validateAuthoredEraHistory} from './storageAuthoredEraValidation';
+import {validateRegionalSimulation} from './storageRegionalSimulationValidation';
 import {validateEraDesignDraft} from './eraDesignSchema';
 import { createAlignedWeatherState } from './alignedWeatherEngine';
 import { alignedWeatherPinnedRuns } from './alignedWeatherTerms';
@@ -915,6 +916,19 @@ const shape = structure({
     abandonedSites:arr(SAVE_COLLECTION_LIMIT,structure({id,planId:id,sectId:id,originId:id,destinationId:id,tick,
       originalType:locationKind,facilities:facilityLevels,arrayHp:wealth,arrayMaxHp:wealth}))}),
   scenarioOrigin:optional(structure({version:one(1,2,3),ruleset:one(1),id:strings(100,1),endTick:num(1,120,true)})),
+  regionalSimulation:optional(structure({
+    version:one(1),focusSiteId:id,
+    registrations:arr(SAVE_COLLECTION_LIMIT,structure({kind:one('actor','site','settlement'),id,
+      originRegionId:one('west','center','east'),registeredTick:tick})),
+    routes:arr(SAVE_COLLECTION_LIMIT,structure({kind:one('road','courier','escort','relocation','pilgrimage','village_supply','danxia_medicine','boundary_relief','expedition_rescue'),
+      id,firstKnownTick:tick,regions:arr(3,one('west','center','east'))})),
+    actors:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,regionId:one('west','center','east'),year:tick,
+      deferredMonths:num(0,12,true),lastDeferredTick:tick})),
+    annual:arr(36,structure({year:tick,tick,regionId:one('west','center','east'),
+      actorMonths:num(0,Number.MAX_SAFE_INTEGER,true),waivedActorMonths:num(0,Number.MAX_SAFE_INTEGER,true),
+      actors:num(0,Number.MAX_SAFE_INTEGER,true),
+      qiAdded:num(0,Number.MAX_SAFE_INTEGER),hpAdded:num(0,Number.MAX_SAFE_INTEGER)})),
+  })),
   authoredEraOrigin:optional(structure({version:one(1),id,openedTick:tick,year:tick,month,
     draft:(value,path)=>{try{validateEraDesignDraft(value);}catch{fail(path);}},
     baselineDigest:authoredHash,designDigest:authoredHash,rulesRevision:strings(128,1),openingEventIds:ids,effects:arr(3,authoredEraEffect)})),
@@ -3046,6 +3060,7 @@ function verifyWorld(value: unknown): WorldState {
   validateWitnessedPersonalStory(w,actor,fail);
   validateEraHistory(w,fail);
   validateAuthoredEraHistory(w,fail);
+  validateRegionalSimulation(w,fail);
   w.coldHistory = freezeColdHistory(w.coldHistory);
   return w;
 }

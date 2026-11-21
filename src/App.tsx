@@ -68,6 +68,10 @@ import { createTimeline, forkTimeline, readTimelineHead, readTimelineSnapshot, r
 import type { TimelineSnapshot, WorldTimeline } from './engine/timelineEngine';
 import {findEraEntryCandidate,projectEraEntryCandidates} from './engine/eraEntryCandidates';
 import {createTerrainMapView} from './components/terrainMapView';
+import {configureRegionalSimulation,projectRegionalSimulation,regionForPoint} from './engine/regionalSimulationEngine';
+import {isScopedExpeditionGate} from './engine/expeditionOmenTerms';
+import {REGIONAL_BENCHMARK} from './components/regionalBenchmark';
+import type {RegionalFocusOption,RegionalSimulationControls} from './components/RegionalSimulationPanel';
 import { possessAvatar, queueAvatarOrder, queueAvatarSalvage } from './engine/avatarEngine';
 import type { ArtifactSalvageControls } from './components/ArtifactPanel';
 import { resolveAvatarSnapshot } from './engine/avatarRuntime';
@@ -82,6 +86,7 @@ import type { FairModelTurnState } from './engine/fairModelTurnEngine';
 import { modelDecisionCandidates, runModelDecisionTurn } from './engine/modelDecisionTurn';
 import type { FairModelCoverage } from './engine/modelDecisionTurn';
 
+const RegionalSimulationPanel=React.lazy(async()=>({default:(await import('./components/RegionalSimulationPanel')).RegionalSimulationPanel}));
 const AgentInspector = React.lazy(async () => ({ default: (await import('./components/AgentInspector')).AgentInspector }));
 const WorldMapCanvas = React.lazy(async () => ({ default: (await import('./components/WorldMapCanvas')).WorldMapCanvas }));
 const AttestationPanel = React.lazy(async () => ({ default: (await import('./components/AttestationPanel')).AttestationPanel }));
@@ -769,6 +774,42 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
       projectEarnedChronicleLead(visibleWorld,chronicleScenes,visibleWorld.tick) : undefined,
     [readingChronicle,visibleWorld,chronicleScenes]);
   const selectedCultivator = resolveWorkspaceActor(visibleWorld, selectedCultivatorId);
+  const regionalReadActive=dashboardOpen&&workspace==='world'&&!preview;
+  const regionalAvatar=regionalReadActive?activeAvatar(world):undefined;
+  const regionalViewer=regionalAvatar??selectedCultivator;
+  const regionalSites=useMemo<RegionalFocusOption[]>(()=>{
+    if(!regionalReadActive||!regionalViewer?.alive)return [];
+    const map=createTerrainMapView(world,regionalViewer,true);
+    return map.seenLocations.flatMap(site=>{
+      const region=regionForPoint(world,site);
+      return region&&site.type!=='secret_realm'&&site.type!=='abyss'&&!isScopedExpeditionGate(site)?
+        [{siteId:site.id,name:site.name,region}]:[];
+    });
+  },[regionalReadActive,regionalViewer,world]);
+  const regionalView=regionalReadActive?projectRegionalSimulation(world):undefined;
+  const regionalRevision=saveContextVersion.current;
+  const regionalDisabled=isRunning||isStepping||fastForwardLocked;
+  const regionalControls:RegionalSimulationControls={
+    scopeKey:`${viewScopeKey}:${regionalRevision}:${regionalViewer?.id??''}`,
+    revisionKey:world,availableSites:regionalSites,comparison:REGIONAL_BENCHMARK,
+    mode:{enabled:!!world.regionalSimulation,version:regionalView?.version,
+      focus:regionalSites.find(row=>row.siteId===world.regionalSimulation?.focusSiteId),
+      effective:regionalView&&{region:regionalView.focus,avatarDriven:!!regionalAvatar},
+      registeredRegions:regionalView?.registeredRegions,annual:regionalView?.annual},
+    disabled:regionalDisabled,disabledReason:regionalDisabled?'先暂停推演或长局，再调整本分支。':undefined,
+    onChange:change=>{
+      if(change.kind!=='set_focus'||!regionalReadActive||regionalDisabled||
+        !canUseSaveContext(world,regionalRevision)||history.current!==timeline||
+        !!fastForwardRun.current||campaignGuard.current||
+        !regionalSites.some(row=>row.siteId===change.siteId))return false;
+      const changed=updateWorld(current=>{
+        if(current!==world||current.regionalSimulation?.focusSiteId===change.siteId)return current;
+        const draft={...current,regionalSimulation:current.regionalSimulation&&structuredClone(current.regionalSimulation)};
+        return configureRegionalSimulation(draft,change.siteId)?draft:current;
+      });
+      return changed!==world;
+    },
+  };
   const campaignStopOptions=useMemo(()=>readingChronicle&&campaign.available&&!preview?
     visibleCampaignStopOptions(visibleWorld,selectedCultivator):[],[readingChronicle,campaign.available,preview,visibleWorld,selectedCultivator]);
   const campaignSelectedStop=campaign.active&&campaign.record?.stopCondition?{
@@ -1383,6 +1424,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
                 <button type="button" disabled={isStepping} onClick={handleReset} className={`${action} bg-slate-800 text-slate-200 hover:bg-slate-700`}>
                   <RotateCcw aria-hidden="true" className="h-4 w-4" />重置修仙纪元</button>
               </div>
+              <React.Suspense fallback={null}><RegionalSimulationPanel {...regionalControls}/></React.Suspense>
               <React.Suspense fallback={<p role="status">载入存档管理…</p>}>
                 <WorldStoragePanel world={world} busy={isStepping} eraBlocked={fastForwardLocked || isRunning} canUseEraContext={(candidate,version)=>!fastForwardRun.current && canUseSaveContext(candidate,version)} contextVersion={saveContextVersion.current}
                   canUseContext={canUseSaveContext} sourceBranch={sourceBranch} timeline={timeline}
