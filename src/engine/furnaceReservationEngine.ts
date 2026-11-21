@@ -2,6 +2,7 @@ import type {
   Cultivator, FurnaceReservation, FurnaceReservationState, FurnaceUseKind, FurnaceUseReceipt, LLMDecisionPayload,
   LocationNode, WorldEvent, WorldState,
 } from '../types/world';
+import { isFurnaceSafetyClosed } from './furnaceSafetyEngine';
 
 export const FURNACE_QUEUE_TICKS = 4;
 export const FURNACE_USE_RETENTION_TICKS = 6;
@@ -16,6 +17,8 @@ export interface FurnaceView {
   siteId: string;
   tick: number;
   capacity: number;
+  closed?: true;
+  installedCapacity?: number;
   slots: Array<{ slot: number; status: 'free' | 'reserved' | 'used'; isOwn: boolean }>;
   queue: Array<{ position: number; requestedTick: number; expiresTick: number; isOwn: boolean }>;
   ownReservations: FurnaceReservation[];
@@ -27,6 +30,8 @@ const isLive = (actor: Cultivator | undefined): actor is Cultivator => Boolean(a
 const open = (row: FurnaceReservation) => row.status === 'queued' || row.status === 'reserved';
 const capacity = (site: LocationNode | undefined) =>
   site?.furnaceGrade === 1 || site?.furnaceGrade === 2 || site?.furnaceGrade === 3 ? site.furnaceGrade : 0;
+const operatingCapacity = (world: WorldState, site: LocationNode, tick: number) =>
+  isFurnaceSafetyClosed(world,site.id,tick) ? 0 : capacity(site);
 const at = (world: WorldState, siteId: string) => world.locations.find(site => site.id === siteId);
 const first = (a: FurnaceReservation, b: FurnaceReservation) =>
   a.requestedTick - b.requestedTick || (a.actorId < b.actorId ? -1 : a.actorId > b.actorId ? 1 : 0);
@@ -43,6 +48,10 @@ function physicallyAt(world: WorldState, actor: Cultivator | undefined, siteId: 
       (row.status === 'active' || row.lastMovedTick === tick || row.startedTick === tick)) &&
     !world.escorts.contracts.some(row => row.status === 'active' && row.escortId === id) &&
     !world.relocations.plans.some(row => row.status === 'in_transit' && row.garrisonIds.includes(id)) &&
+    !world.boundaryReliefs.cases.some(row => row.incomingId === id && (row.status === 'travelling' || row.status === 'returning')) &&
+    !world.expeditionRescues.requests.some(row => row.gateSiteId === siteId && (row.explorerId === id || row.rescuerId === id) &&
+      row.supplySpent === 1 && (row.status === 'extracting' || row.status === 'interrupted' && row.pathIndex > 0 &&
+        !row.arrivedIds?.includes(id) && world.occasions.some(occasion => occasion.id === row.occasionId && occasion.status === 'running'))) &&
     !world.sieges.some(row => (row.status === 'marching' || row.status === 'sieging') && row.participantIds.includes(id)) &&
     !world.occasions.some(row => (row.status === 'registration' || row.status === 'running') && row.participantIds.includes(id));
 }
@@ -59,6 +68,22 @@ function unavailable(world: WorldState, row: FurnaceReservation, tick: number, s
   if (row.status === 'reserved' && (row.assignedTick ?? -1) < tick) return 'turn_missed';
   if (row.expiresTick <= tick) return 'queue_expired';
   return undefined;
+}
+
+/** An eligible waiting row keeps its original identity and priority during a genuine closure. */
+function suspendFurnaceTurn(world: WorldState,row: FurnaceReservation,site: LocationNode|undefined): boolean {
+  if (!site || !isFurnaceSafetyClosed(world,site.id,world.tick)) return false;
+  if (row.requestedTick < world.tick && row.lastSuspendedTick !== world.tick) {
+    if (row.status === 'reserved') {
+      row.status = 'queued';
+      delete row.assignedTick;
+      delete row.slot;
+    }
+    row.lastSuspendedTick = world.tick;
+    row.suspendedTicks = (row.suspendedTicks ?? 0) + 1;
+    row.expiresTick++;
+  }
+  return true;
 }
 
 function finish(row: FurnaceReservation, status: 'used' | 'cancelled' | 'expired', tick: number, reason?: FurnaceReason) {
@@ -81,16 +106,18 @@ function allocations(world: WorldState, site: LocationNode, tick: number, consid
   const rows = reservations.filter(row => row.siteId === site.id && open(row));
   const actors = rows.length > 3 ? new Map(world.cultivators.map(person => [person.id,person])) : undefined;
   const valid = rows.filter(row => !unavailable(world,row,tick,site,actors?.get(row.actorId)));
+  const queue = valid.filter(row => row.status === 'queued').sort(first);
+  const total = operatingCapacity(world,site,tick);
+  if (!total) return { used, reserved, queue, occupied:new Set(used.keys()) };
   for (const row of valid) {
     if (row.status === 'reserved' && row.assignedTick === tick && row.slot !== undefined && !used.has(row.slot)) {
       reserved.set(row.slot,row as Assigned);
     }
   }
   const occupied = new Set([...used.keys(),...reserved.keys()]);
-  const queue = valid.filter(row => row.status === 'queued').sort(first);
   for (const row of considerQueued ? queue : []) {
     if (row.requestedTick >= tick) continue; // Today’s requests cannot displace today’s craft.
-    const slot = availableSlot(capacity(site),occupied);
+    const slot = availableSlot(total,occupied);
     if (slot === undefined) break;
     occupied.add(slot);
     reserved.set(slot,{ ...row,status:'reserved',assignedTick:tick,slot });
@@ -107,9 +134,10 @@ export function openFurnaceTurn(world: WorldState): void {
   const queuedBySite = new Set<string>();
   for (const row of reservations) {
     if (!open(row)) continue;
-    const reason = unavailable(world,row,world.tick,sites.get(row.siteId),actors.get(row.actorId));
+    const site = sites.get(row.siteId);
+    const reason = unavailable(world,row,world.tick,site,actors.get(row.actorId));
     if (reason) finish(row,reasonStatus(reason),world.tick,reason);
-    else if (row.status === 'queued' && row.requestedTick < world.tick) queuedBySite.add(row.siteId);
+    else if (!suspendFurnaceTurn(world,row,site) && row.status === 'queued' && row.requestedTick < world.tick) queuedBySite.add(row.siteId);
   }
   const byId = new Map(reservations.map(row => [row.id,row]));
   for (const id of queuedBySite) {
@@ -131,9 +159,12 @@ export function settleFurnaceTurn(world: WorldState): void {
   const actors = new Map(world.cultivators.map(actor => [actor.id,actor]));
   for (const row of state.reservations) {
     if (!open(row)) continue;
-    const reason = unavailable(world,row,world.tick,sites.get(row.siteId),actors.get(row.actorId)) ??
-      (row.status === 'reserved' && row.assignedTick === world.tick ? 'turn_missed' : undefined);
+    const site = sites.get(row.siteId);
+    const reason = unavailable(world,row,world.tick,site,actors.get(row.actorId));
     if (reason) finish(row,reasonStatus(reason),world.tick,reason);
+    else if (!suspendFurnaceTurn(world,row,site) && row.status === 'reserved' && row.assignedTick === world.tick) {
+      finish(row,'expired',world.tick,'turn_missed');
+    }
   }
   state.uses = state.uses.filter(row => row.tick > world.tick - FURNACE_USE_RETENTION_TICKS);
   const pins = new Set(state.uses.flatMap(row => row.reservationId ? [row.reservationId] : []));
@@ -146,7 +177,7 @@ export function settleFurnaceTurn(world: WorldState): void {
 /** Preview a possible next-turn grant for model decisions; only the actual turn mutates occupancy. */
 export function heldFurnaceReservation(world: WorldState, actor: Cultivator, executionTick = world.tick): FurnaceReservation | undefined {
   const site = at(world,actor.locationId);
-  if (!validTick(world,executionTick) || !site || !capacity(site) || !physicallyAt(world,actor,site.id,executionTick) ||
+  if (!validTick(world,executionTick) || !site || !operatingCapacity(world,site,executionTick) || !physicallyAt(world,actor,site.id,executionTick) ||
       !world.cultivators.includes(actor) || !world.furnaceReservations.reservations.some(row => row.actorId === actor.id && open(row))) return undefined;
   const held = [...allocations(world,site,executionTick).reserved.values()].find(row => row.actorId === actor.id);
   return held ? { ...held } : undefined;
@@ -154,7 +185,7 @@ export function heldFurnaceReservation(world: WorldState, actor: Cultivator, exe
 
 function actualOption(world: WorldState, actor: Cultivator, siteId: string, kind: FurnaceUseKind, workshopOrderId: string | undefined, tick: number) {
   const site = at(world,siteId);
-  if (!validTick(world,tick) || !useKinds.has(kind) || !site || !capacity(site) || !physicallyAt(world,actor,siteId,tick) || !world.cultivators.includes(actor) ||
+  if (!validTick(world,tick) || !useKinds.has(kind) || !site || !operatingCapacity(world,site,tick) || !physicallyAt(world,actor,siteId,tick) || !world.cultivators.includes(actor) ||
     (kind === 'workshop') !== (workshopOrderId !== undefined) ||
     (workshopOrderId !== undefined && !workshopActive(world,actor.id,siteId,workshopOrderId,tick)) ||
     world.furnaceReservations.uses.some(row => row.actorId === actor.id && row.tick === tick)) return undefined;
@@ -193,7 +224,7 @@ export function availableFurnaceReservationActions(actor: Cultivator, world: Wor
     (executionTick === world.tick || !unavailable(world,row,executionTick,at(world,row.siteId),actor)));
   if (active) return [{ action:'FURNACE_RESERVATION',furnaceMove:'cancel',targetFurnaceReservationId:active.id }];
   const site = at(world,actor.locationId);
-  if (!site || !capacity(site) || !physicallyAt(world,actor,site.id,executionTick)) return [];
+  if (!site || !operatingCapacity(world,site,executionTick) || !physicallyAt(world,actor,site.id,executionTick)) return [];
   const base = { action:'FURNACE_RESERVATION',furnaceMove:'reserve',targetLocationId:site.id } as const;
   return [base,...world.workshops.orders.filter(row => workshopActive(world,actor.id,site.id,row.id,executionTick + 1))
     .map(row => ({ ...base,targetWorkshopId:row.id }))];
@@ -230,9 +261,10 @@ export function getFurnaceView(world: WorldState, viewer?: Cultivator, siteId = 
   const site = siteId && at(world,siteId);
   if (!site || !physicallyAt(world,viewer,site.id,world.tick) || !world.cultivators.includes(viewer) || !capacity(site)) return undefined;
   const { used,reserved,queue } = allocations(world,site,world.tick,false);
+  const operational = operatingCapacity(world,site,world.tick);
   return {
-    siteId:site.id,tick:world.tick,capacity:capacity(site),
-    slots:Array.from({ length:capacity(site) },(_,index) => {
+    siteId:site.id,tick:world.tick,capacity:operational,...(!operational ? {closed:true as const,installedCapacity:capacity(site)} : {}),
+    slots:Array.from({ length:operational },(_,index) => {
       const slot = index + 1;
       const holder = used.get(slot) ?? reserved.get(slot);
       return { slot, status:used.has(slot) ? 'used' : holder ? 'reserved' : 'free', isOwn:holder?.actorId === viewer.id };
@@ -253,6 +285,7 @@ export function availableFurnaceSlotSummary(world: WorldState, viewer?: Cultivat
   if (!site || !capacity(site) || !viewer || !world.cultivators.includes(viewer) ||
     !physicallyAt(world,viewer,site.id,world.tick)) return undefined;
   const { used, reserved, queue } = allocations(world,site,world.tick,false);
-  return { capacity:capacity(site), queued:queue.length,
-    used:[...used.keys()].filter(slot => slot <= capacity(site)).length, reserved:reserved.size };
+  const operational = operatingCapacity(world,site,world.tick);
+  return { capacity:operational, queued:queue.length,
+    used:[...used.keys()].filter(slot => slot <= operational).length, reserved:reserved.size };
 }

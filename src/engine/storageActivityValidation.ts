@@ -1,9 +1,11 @@
-import type { ResourceFlowEntry, VillageGranaryReceipt, WorldState } from '../types/world';
+import type { FurnaceSafetyCase, FurnaceSafetyReceipt, ResourceFlowEntry, VillageGranaryReceipt, WorldState } from '../types/world';
 import { SPARRING_ACTIVE_TICKS, SPARRING_OFFER_TICKS } from './sparringEngine';
 import { EXPEDITION_RESCUE_OFFER_TICKS, EXPEDITION_RESCUE_STRIDE } from './expeditionRescueEngine';
 import { VILLAGE_GRANARY_CAPACITY, VILLAGE_GRANARY_DISASTER_WINDOW, VILLAGE_GRANARY_DONATION, VILLAGE_GRANARY_DRAW,
   VILLAGE_GRANARY_MIN_STRESS, VILLAGE_GRANARY_RECEIPT_LIMIT, VILLAGE_GRANARY_RELIEF_COOLDOWN,
   VILLAGE_GRANARY_STRESS_REDUCTION } from './villageGranaryEngine';
+import { furnaceSafetyDamage, FURNACE_SAFETY_INSPECT_STONES, FURNACE_SAFETY_REOPEN_INTEGRITY,
+  FURNACE_SAFETY_REPAIR } from './furnaceSafetyEngine';
 import { terrainTileAt } from './terrainEngine';
 import { OBSERVATORY_LEAD_TICKS } from './fieldObservatoryEngine';
 import { COHORT_GRADUATION_MASTERY, COHORT_LESSON_DELAY } from './apprenticeCohortEngine';
@@ -551,5 +553,98 @@ export function validateVillageGranaryRelationships(world: WorldState, actors: R
   }
   for (const [receiptKey, {tick}] of durableReceipts) {
     if (complete.has(tick) && journal.get(receiptKey)?.size !== 2) return fail('villageGranaries.journal.missing');
+  }
+}
+
+export function validateFurnaceSafetyRelationships(world: WorldState, actors: ReadonlySet<string>, sects: ReadonlySet<string>,
+  fail: (path: string) => never): void {
+  const locations = new Map(world.locations.map(location => [location.id,location]));
+  const hazards = new Map(world.mapHazards.map(hazard => [hazard.id,hazard]));
+  const ids = new Set<string>();
+  const impacts = new Set<string>();
+  const siteHeads = new Map<string,FurnaceSafetyCase>();
+  const receipts = new Map<string,FurnaceSafetyReceipt>();
+  const cases = [...world.furnaceSafety.cases].sort((a,b)=>a.damagedTick-b.damagedTick);
+  const key = (id:string,tick:number)=>JSON.stringify([id,tick]);
+  for (const row of cases) {
+    const site = locations.get(row.siteId);
+    const hazard = hazards.get(row.hazardId);
+    const impact = JSON.stringify([row.siteId,row.hazardId]);
+    const serial = Number(row.id.match(/^furnace-safety-([1-9][0-9]*)$/)?.[1]);
+    const previous = siteHeads.get(row.siteId);
+    if (!Number.isSafeInteger(serial) || serial >= world.furnaceSafety.nextId || ids.has(row.id) || impacts.has(impact) ||
+        !sects.has(row.ownerAtDamage) || !site || !site.furnaceGrade || site.type === 'secret_realm' || site.type === 'abyss' ||
+        terrainTileAt(world,site.x,site.y)?.id !== row.hazardTileId ||
+        row.damagedTick <= row.hazardCreatedTick || row.damagedTick > world.tick ||
+        row.integrityBefore < FURNACE_SAFETY_REOPEN_INTEGRITY ||
+        (previous && (previous.reopenedTick === undefined || previous.reopenedTick >= row.damagedTick || row.integrityBefore !== previous.integrity)) ||
+        (hazard && (hazard.kind !== 'beast_tide' || hazard.tileId !== row.hazardTileId || hazard.intensity !== row.severity ||
+          hazard.createdTick !== row.hazardCreatedTick || hazard.expiresTick <= row.damagedTick)))
+      return fail('furnaceSafety.cases.impact');
+    ids.add(row.id);
+    impacts.add(impact);
+    siteHeads.set(row.siteId,row);
+    let actual = Math.max(0,row.integrityBefore-furnaceSafetyDamage(row.severity));
+    let last = row.damagedTick;
+    for (const [index,receipt] of row.receipts.entries()) {
+      if (!actors.has(receipt.actorId) || !sects.has(receipt.ownerSectId) || receipt.tick <= last || receipt.tick > world.tick ||
+          receipt.integrityBefore !== actual || (index === 0) !== (receipt.kind === 'inspect'))
+        return fail('furnaceSafety.cases.receipts');
+      if (receipt.kind === 'repair') {
+        if (actual >= FURNACE_SAFETY_REOPEN_INTEGRITY) return fail('furnaceSafety.cases.repair');
+        actual = Math.min(100,actual+FURNACE_SAFETY_REPAIR.recovery);
+      }
+      if (receipt.kind === 'reopen' && (actual < FURNACE_SAFETY_REOPEN_INTEGRITY || index !== row.receipts.length-1 ||
+          row.reopenedTick !== receipt.tick)) return fail('furnaceSafety.cases.reopen');
+      if (receipt.integrityAfter !== actual) return fail('furnaceSafety.cases.integrity');
+      receipts.set(key(row.id,receipt.tick),receipt);
+      last = receipt.tick;
+    }
+    if (actual !== row.integrity || (row.reopenedTick !== undefined) !== (row.receipts.at(-1)?.kind === 'reopen'))
+      return fail('furnaceSafety.cases.integrity');
+  }
+  const bySite = new Map<string,FurnaceSafetyCase[]>();
+  for (const row of cases) {
+    const prior = bySite.get(row.siteId) ?? [];
+    prior.push(row);
+    bySite.set(row.siteId,prior);
+  }
+  const closedAt = (siteId:string,tick:number) => bySite.get(siteId)?.some(row =>
+    row.damagedTick <= tick && (row.reopenedTick === undefined || row.reopenedTick >= tick));
+  for (const use of world.furnaceReservations.uses) if (closedAt(use.siteId,use.tick)) return fail('furnaceSafety.closed_use');
+  for (const row of world.furnaceReservations.reservations) {
+    if (row.status === 'reserved' && row.assignedTick !== undefined && closedAt(row.siteId,row.assignedTick))
+      return fail('furnaceSafety.closed_reservation');
+    const last = row.lastSuspendedTick;
+    const head = siteHeads.get(row.siteId);
+    if (last !== undefined && (!head || last >= head.damagedTick && !closedAt(row.siteId,last)))
+      return fail('furnaceSafety.reservation_pause');
+  }
+  for (const month of world.resourceFlow.months) {
+    const booked = new Map<string,Set<string>>();
+    for (const entry of month.entries) if (entry.mechanism === 'furnace_safety') {
+      const ref = key(entry.refId,entry.tick);
+      const receipt = receipts.get(ref);
+      // Details from a compacted historical case can remain in the rolling general journal.
+      if (!receipt) {
+        if (ids.has(entry.refId)) return fail('furnaceSafety.journal.source');
+        continue;
+      }
+      const charge = receipt.kind === 'inspect' && entry.good === 'stone' ? FURNACE_SAFETY_INSPECT_STONES :
+        receipt.kind === 'repair' && entry.good === 'stone' ? FURNACE_SAFETY_REPAIR.stones :
+        receipt.kind === 'repair' && entry.good === 'earth_root' ? FURNACE_SAFETY_REPAIR.roots : undefined;
+      const reason = receipt.kind === 'inspect' ? 'furnace_safety_inspection' : 'furnace_safety_repair';
+      const goods = booked.get(ref) ?? new Set<string>();
+      if (charge === undefined || entry.reason !== reason || entry.amount !== charge || entry.kind !== 'consumption' ||
+          entry.from.kind !== 'actor' || entry.from.id !== receipt.actorId || entry.visibility.kind !== 'participants' ||
+          entry.visibility.actorIds.length !== 1 || entry.visibility.actorIds[0] !== receipt.actorId || goods.has(entry.good))
+        return fail('furnaceSafety.journal.custody');
+      goods.add(entry.good);
+      booked.set(ref,goods);
+    }
+    if (month.entries.length === month.totalEntries) for (const row of cases) for (const receipt of row.receipts) {
+      if (receipt.tick === month.tick && receipt.kind !== 'reopen' &&
+          booked.get(key(row.id,receipt.tick))?.size !== (receipt.kind === 'inspect' ? 1 : 2)) return fail('furnaceSafety.journal.missing');
+    }
   }
 }

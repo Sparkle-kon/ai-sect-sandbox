@@ -92,6 +92,7 @@ import { advanceBounties, pursueBounty, recordTransgression } from './bountyEngi
 import { knownMapLocations, noteTerrainVisit } from './terrainEngine';
 import { deriveMapPresentation } from './mapMotionEngine';
 import { advanceMapHazards } from './mapBrushEngine';
+import { resolveFurnaceSafetyAction } from './furnaceSafetyEngine';
 import { advanceSpiritBeasts, petCombatBonus, tameSpiritBeast } from './spiritBeastEngine';
 
 export type GodInterventionType =
@@ -264,6 +265,8 @@ export function applyCultivatorBrainDecision(
       return resolveRelicExhibitAction(world, cultivator, decision);
     case 'WORKSHOP':
       return resolveWorkshopAction(world, cultivator, decision, rng);
+    case 'FURNACE_SAFETY':
+      return resolveFurnaceSafetyAction(world,cultivator,decision);
     case 'FURNACE_RESERVATION':
       return resolveFurnaceReservationAction(world, cultivator, decision);
     case 'SPARRING':

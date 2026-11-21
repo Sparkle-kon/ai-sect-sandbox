@@ -23,6 +23,7 @@ const REASONS: Readonly<Record<string, string>> = {
   order_deposit: '挂单托管', order_release: '撤单或到期退回', price_improvement: '限价差退回',
   local_fill: '现场交割', shipment_departure: '商队启程转入保管', shipment_delivery: '商队到货交割',
   shipment_return: '商队退运退款退货', shipment_refund: '货损退款', shipment_loss: '实际货损',
+  furnace_safety_inspection: '现场验炉实耗灵石', furnace_safety_repair: '炉体修缮实耗备料',
   granary_donation: '捐入村镇义仓', granary_draw: '灾后短缺实际支用',
   shipment_salvage: '幸存原物转入封存',
   shipment_survived: '真实幸存货物转入封存', caravan_restitution: '核实封存原货后归还原卖方',

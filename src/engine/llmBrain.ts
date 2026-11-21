@@ -14,6 +14,7 @@ import { availableWorkshopActions } from './workshopEngine';
 import { availableSparringActions, sparringLocksActor, SPARRING_QI_COST } from './sparringEngine';
 import { availableExpeditionRescueActions, EXPEDITION_RESCUE_DISTRESS_HP } from './expeditionRescueEngine';
 import { availableFurnaceReservationActions, heldFurnaceReservation } from './furnaceReservationEngine';
+import { availableFurnaceSafetyActions } from './furnaceSafetyEngine';
 import { COGNITIVE_RESPONSE_GUIDE } from './llmCognitiveResponseGuide';
 import { availableTerrainRecoveryActions } from './terrainSuccessionEngine';
 import { availableSharedCommonsActions } from './sharedCommonsEngine';
@@ -333,6 +334,14 @@ export function computeHeuristicDecision(
     if (offer) return { ...offer, chosenAction: 'SPARRING', innerMonologue: '正事办妥，只邀同道自愿练习一轮。' };
   }
 
+  if (cultivator.hp >= cultivator.maxHp * .65 && world.furnaceSafety.cases.some((row) =>
+      row.siteId === cultivator.locationId && row.reopenedTick === undefined)) {
+    const safety = availableFurnaceSafetyActions(cultivator, world)[0];
+    if (safety) return { chosenAction: safety.action, furnaceSafetyMove: safety.furnaceSafetyMove,
+      targetFurnaceSafetyId: safety.targetFurnaceSafetyId, innerMonologue: safety.furnaceSafetyMove === 'inspect' ?
+        '待兽潮退去，在现场实付验明炉损，不把核验当修复。' : safety.furnaceSafetyMove === 'repair' ?
+        '本地验炉已有实据，现用自己的实物修补，不擅启炉。' : '已按实物和炉况通过复检；本轮仍不开炉。' };
+  }
   const workshopState = world.workshops.orders;
   if (cultivator.hp >= cultivator.maxHp * .65) {
     const held = heldFurnaceReservation(world, cultivator);
@@ -1006,6 +1015,8 @@ export async function requestCultivatorLLMDecision(
   const exhibitOptions = availableRelicExhibitActions(cultivator, world);
   const workshopOptions = availableWorkshopActions(cultivator, world, true, requestTick);
   const furnaceOptions = availableFurnaceReservationActions(cultivator, world, requestTick);
+  const furnaceSafetyOptions = availableFurnaceSafetyActions(cultivator, world, requestTick)
+    .map(({ action, furnaceSafetyMove, targetFurnaceSafetyId }) => ({ action, furnaceSafetyMove, targetFurnaceSafetyId }));
   const sparringOptions = availableSparringActions(cultivator, world, true, requestTick);
   const recoveryOptions = availableTerrainRecoveryActions(cultivator, world);
   const commonsOptions = availableSharedCommonsActions(cultivator, world);
@@ -1103,6 +1114,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 自身天劫：${JSON.stringify(isTribulationActive(cultivator) ? cultivator.tribulation : null)}；如果正在应劫，须选择 FACE_TRIBULATION；同地可袭扰的仇敌：${JSON.stringify(availableAmbushTargets(cultivator, world).map((target) => ({ id: target.id, name: target.name })))}
 - 法宝状况：${JSON.stringify(cultivator.artifacts)}；本地可用炼器行动：${JSON.stringify(availableArtifactActions(cultivator, world, requestTick))}
 - 丹毒：${cultivator.pillToxicity}/100；灵药包：${JSON.stringify(cultivator.herbs)}；已有丹药：${JSON.stringify(cultivator.pills)}；允许的炼丹行动：${JSON.stringify(availableAlchemy(cultivator, world, requestTick))}
+- 炉体停用只用本人、此地、执行回合许可的 inspect、repair 或 reopen，照抄 targetFurnaceSafetyId。不得填写完整度、奖惩、物资、地点、复开日期或额外炉位；复开本轮仍停炉：${JSON.stringify(furnaceSafetyOptions)}
 - 炉位预约仅复制执行回合的实际许可：${JSON.stringify(furnaceOptions)}；预约不是已开炉，不自填时间、容量或物料。
 - 自愿切磋只使用执行回合的许可：${JSON.stringify(sparringOptions)}；双方分别应允，认输即停，不自行填伤势、胜负或惩罚。
 - 秘境应援仅限本人确已接获且到场可行的执行许可：${JSON.stringify(rescueOptions)}；只复制合法动作与编号，不填坐标、补给或战利品。
@@ -1237,6 +1249,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'TERRAIN_RECOVERY',
             'WORKSHOP',
             'FURNACE_RESERVATION',
+            'FURNACE_SAFETY',
             'SPARRING',
             'EXPEDITION_RESCUE',
             'SHORT_SHIFT',
@@ -1279,6 +1292,10 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             item.targetWorkshopId === parsed.targetWorkshopId && item.targetFurnaceReservationId === parsed.targetFurnaceReservationId) : undefined;
           if (chosenAction === 'FURNACE_RESERVATION' && (!legalFurnace || Object.keys(parsed).some((field) =>
             !['innerMonologue', 'chosenAction', 'spokenLine', 'furnaceMove', 'targetLocationId', 'targetWorkshopId', 'targetFurnaceReservationId'].includes(field)))) return undefined;
+          const legalFurnaceSafety = chosenAction === 'FURNACE_SAFETY' ? furnaceSafetyOptions.find((item) =>
+            item.furnaceSafetyMove === parsed.furnaceSafetyMove && item.targetFurnaceSafetyId === parsed.targetFurnaceSafetyId) : undefined;
+          if (chosenAction === 'FURNACE_SAFETY' && (!legalFurnaceSafety || Object.keys(parsed).some((field) =>
+            !['chosenAction', 'innerMonologue', 'spokenLine', 'furnaceSafetyMove', 'targetFurnaceSafetyId'].includes(field)))) return undefined;
           const legalSparring = chosenAction === 'SPARRING' ? sparringOptions.find((item) =>
             item.sparringMove === parsed.sparringMove && item.targetCultivatorId === parsed.targetCultivatorId &&
             item.targetSparringId === parsed.targetSparringId && item.sparringRounds === parsed.sparringRounds) : undefined;
@@ -1601,6 +1618,8 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             sparringRounds: legalSparring?.sparringRounds,
             furnaceMove: legalFurnace?.furnaceMove,
             targetFurnaceReservationId: legalFurnace?.targetFurnaceReservationId,
+            furnaceSafetyMove: legalFurnaceSafety?.furnaceSafetyMove,
+            targetFurnaceSafetyId: legalFurnaceSafety?.targetFurnaceSafetyId,
             targetWorkshopId: legalFurnace?.targetWorkshopId ?? legalWorkshop?.targetWorkshopId,
             workshopTier: legalWorkshop?.workshopTier,
             workshopQuantity: legalWorkshop?.workshopQuantity,

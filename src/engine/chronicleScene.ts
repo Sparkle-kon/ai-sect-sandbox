@@ -86,6 +86,10 @@ export function writeChronicleScene(fact: ChronicleSceneFact): ChronicleSceneTex
     }
   }
   if (fact.category === 'heavenly') {
+    if (title === '兽潮实损，炉事暂止' && text === '兽潮损伤实有丹炉，本炉停用；装炉品阶与已有凭据不改。') {
+      return {title:'兽潮之后，炉火暂歇',
+        paragraph:'兽潮伤了原有的丹炉，炉火只得暂歇。旧炉的品阶没有跌，过去已经结清的炉事也还在账上；眼下，这座炉子确实不能再开。'};
+    }
     const trial = title === '天劫降临' ? trialStarts.exec(text) : null;
     if (trial) {
       const [,actor,stage,waves] = trial;

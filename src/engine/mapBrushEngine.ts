@@ -1,4 +1,5 @@
 import { advanceProbation } from './probationEngine';
+import { damageFurnacesFromBeastTide } from './furnaceSafetyEngine';
 import { advanceRelicExhibits } from './relicExhibitEngine';
 import { advanceWorkshops } from './workshopEngine';
 import { rebaselineTerrainPaint, recordTerrainMeteor } from './terrainSuccessionEngine';
@@ -143,8 +144,10 @@ export function advanceMapHazards(world: WorldState): WorldEvent[] {
   const tileIds = new Set(world.terrain.tiles.map(({ id }) => id));
   world.mapHazards = world.mapHazards.filter((hazard) => hazard.expiresTick > world.tick && tileIds.has(hazard.tileId));
   const events: WorldEvent[] = [];
+  const structuralEvents: WorldEvent[] = [];
   for (const hazard of world.mapHazards) {
     if (hazard.kind === 'meteor' || hazard.createdTick >= world.tick) continue;
+    if (hazard.kind === 'beast_tide') structuralEvents.push(...damageFurnacesFromBeastTide(world,hazard));
     const id = `evt-${world.tick}-${hazard.id}`;
     if (world.events.some((entry) => entry.id === id)) continue;
     const people = peopleAtTile(world, hazard.tileId);
@@ -159,5 +162,5 @@ export function advanceMapHazards(world: WorldState): WorldEvent[] {
       category: defeated ? 'death' : 'heavenly', actorIds: damage.map(({ cultivatorId }) => cultivatorId),
       damage, locationId: people[0]?.locationId });
   }
-  return events;
+  return [...events, ...structuralEvents];
 }

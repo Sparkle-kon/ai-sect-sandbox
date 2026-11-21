@@ -232,7 +232,7 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
       {scriptureCatalog?.original && <React.Suspense fallback={<p role="status" className="text-xs text-slate-400">载入经义校勘…</p>}>
         <ScriptureEditionPanel world={world} actor={cultivator} catalog={scriptureCatalog} />
       </React.Suspense>}
-      <AlchemyPanel cultivator={cultivator} location={location} />
+      <AlchemyPanel world={world} cultivator={cultivator} location={location} />
       </>}
       {mind && <>
       <RecollectionPanel world={world} actorId={cultivator.id} />

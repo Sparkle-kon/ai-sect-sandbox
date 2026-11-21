@@ -523,7 +523,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         const scrollCount = loc.inheritanceScrolls.length;
         const scrollMarker = scrollCount > 0 ? ` 遗卷×${scrollCount}` : '';
         const scrollWidth = ctx.measureText(scrollMarker).width;
-        const furnaceMarker = loc.furnaceGrade > 0 ? ` 炉${loc.furnaceGrade}` : '';
+        const closedFurnace = selected?.locationId === loc.id && isCurrentLocation(loc.id) && furnaceShift?.capacity === 0;
+        const furnaceMarker = loc.furnaceGrade > 0 ? closedFurnace ? ' 闭炉' : ` 炉${loc.furnaceGrade}` : '';
         const furnaceWidth = ctx.measureText(furnaceMarker).width;
         const guardCount = guardsByLocation.get(loc.id) ?? 0;
         const guardMarker = guardCount > 0 ? ` 卫${guardCount}` : '';
@@ -540,7 +541,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         }
 
         if (furnaceMarker) {
-          ctx.fillStyle = '#86efac';
+          ctx.fillStyle = closedFurnace ? '#fbbf24' : '#86efac';
           ctx.fillText(furnaceMarker, labelStart + placeWidth + markerWidth + scrollWidth, loc.y - 26);
         }
         if (guardMarker) {
@@ -750,7 +751,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener('change', stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, hazards, convoys, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, observedSalvageSites, localGranary, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, hazards, convoys, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, observedSalvageSites, localGranary, furnaceShift, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1233,9 +1234,12 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                   <span className="text-sky-200">· 本人已约定自愿切磋</span>}
                 {location.id === ownShift?.siteId && location.ownerSectId === ownShift.hostSectId && isCurrentLocation(location.id) &&
                   <span className="text-sky-200">· 本人已约定观象短聘</span>}
-                {location.id === selected?.locationId && furnaceShift && (furnaceShift.used + furnaceShift.reserved + furnaceShift.queued > 0) && <span className="text-amber-200">
-                  · 炉位 {furnaceShift.used + furnaceShift.reserved}/{furnaceShift.capacity} 已用或预留 · 候炉 {furnaceShift.queued} 位
-                </span>}
+                {location.id === selected?.locationId && isCurrentLocation(location.id) && furnaceShift &&
+                  (furnaceShift.capacity === 0 || furnaceShift.used + furnaceShift.reserved + furnaceShift.queued > 0) && <span className="text-amber-200">
+                    {furnaceShift.capacity === 0 ? '· 现场停炉，本轮无可用炉位' :
+                      `· 炉位 ${furnaceShift.used + furnaceShift.reserved}/${furnaceShift.capacity} 已用或预留`}
+                    {' · 候炉 '}{furnaceShift.queued} 位
+                  </span>}
                 {guardCount > 0 && <span className="text-indigo-300">· 驻守 {guardCount} 人</span>}
                 {coverage && <span className="text-indigo-200">· Tick {coverage.tick} 现场确认：{coverage.kind === 'gap' ? '岗位空缺' :
                   coverage.kind === 'relief' ? '接替者已实到' : '有实际驻守'}</span>}

@@ -112,6 +112,7 @@ export type ActionType =
   | 'PROBATION'
   | 'WORKSHOP'
   | 'FURNACE_RESERVATION'
+  | 'FURNACE_SAFETY'
   | 'SPARRING'
   | 'EXPEDITION_RESCUE'
   | 'SHORT_SHIFT'
@@ -497,6 +498,8 @@ export interface LLMDecisionPayload {
   probationVote?: ProbationVote;
   workshopMove?: WorkshopMove;
   furnaceMove?: 'reserve' | 'cancel';
+  furnaceSafetyMove?: FurnaceSafetyMove;
+  targetFurnaceSafetyId?: string;
   targetFurnaceReservationId?: string;
   sparringMove?: SparringMove;
   sparringRounds?: 1 | 2;
@@ -2090,7 +2093,7 @@ export interface SharedCommonsPact {
 export interface SharedCommonsState { pacts: SharedCommonsPact[]; nextId: number }
 
 export type ResourceFlowGood = 'stone' | MarketGood;
-export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation' | 'terrain' | 'workshop' | 'road' | 'observatory' | 'pilgrimage' | 'granary';
+export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation' | 'terrain' | 'workshop' | 'road' | 'observatory' | 'pilgrimage' | 'granary' | 'furnace_safety';
 export type ResourceFlowAccount =
   | { kind: 'actor' | 'site' | 'sect' | 'order' | 'shipment' | 'relocation' | 'workshop' | 'salvage' | 'granary'; id: string }
   | { kind: 'oath'; id: string; pocket: 'payment' | 'collateral' };
@@ -2178,6 +2181,8 @@ export interface FurnaceReservation {
   actorId: string;
   siteId: string;
   workshopOrderId?: string;
+  suspendedTicks?: number;
+  lastSuspendedTick?: number;
   requestedTick: number;
   expiresTick: number;
   status: 'queued' | 'reserved' | 'used' | 'cancelled' | 'expired';
@@ -2200,6 +2205,31 @@ export interface FurnaceReservationState {
   uses: FurnaceUseReceipt[];
   nextId: number;
 }
+
+export type FurnaceSafetyMove = 'inspect' | 'repair' | 'reopen';
+export interface FurnaceSafetyReceipt {
+  kind: FurnaceSafetyMove;
+  tick: number;
+  actorId: string;
+  ownerSectId: string;
+  integrityBefore: number;
+  integrityAfter: number;
+}
+export interface FurnaceSafetyCase {
+  id: string;
+  siteId: string;
+  ownerAtDamage: string;
+  hazardId: string;
+  hazardTileId: string;
+  hazardCreatedTick: number;
+  severity: 1 | 2 | 3;
+  damagedTick: number;
+  integrityBefore: number;
+  integrity: number;
+  receipts: FurnaceSafetyReceipt[];
+  reopenedTick?: number;
+}
+export interface FurnaceSafetyState { nextId: number; cases: FurnaceSafetyCase[] }
 
 export type SparringMove = 'offer' | 'accept' | 'decline' | 'withdraw' | 'ready' | 'yield';
 export interface SparringRound {
@@ -2503,6 +2533,7 @@ export interface WorldState {
   probation: ProbationState;
   workshops: WorkshopState;
   furnaceReservations: FurnaceReservationState;
+  furnaceSafety: FurnaceSafetyState;
   sparring: SparringState;
   expeditionRescues: ExpeditionRescueState;
   shortShifts: ShortShiftState;

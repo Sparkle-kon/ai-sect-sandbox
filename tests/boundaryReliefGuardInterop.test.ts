@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createInitialWorld } from '../src/data/initialWorld';
 import { boundaryReliefCheckpoint } from '../src/engine/boundaryReliefCheckpoint';
 import { advanceBoundaryReliefs, resolveBoundaryReliefAction } from '../src/engine/boundaryReliefEngine';
+import { availableFurnaceSlotSummary, canUseFurnace, getFurnaceView } from '../src/engine/furnaceReservationEngine';
 import { availableSectEconomyActions, isGuardPhysicallyOnDuty, maintainSectEconomy, resolveSectEconomyAction } from '../src/engine/sectEconomyEngine';
 import type { Cultivator, LLMDecisionPayload } from '../src/types/world';
 
@@ -64,6 +65,11 @@ describe('legacy guard and tracked relief interoperability', () => {
     expect(duty(incoming)).toBeNull();
     expect(incoming.locationId).toBe(hq.id);
     expect(incoming.guardAssignment).toBeUndefined();
+    hq.furnaceGrade = 1;
+    expect(getFurnaceView(world, incoming)).toBeUndefined();
+    expect(availableFurnaceSlotSummary(world, incoming)).toBeUndefined();
+    expect(canUseFurnace(world, incoming, hq.id, 'brew')).toBe(false);
+    expect(getFurnaceView(world, leader)?.siteId).toBe(hq.id);
     advance();
     expect(relief.status).toBe('travelling');
     expect(relief.pathIndex).toBeGreaterThan(0);
