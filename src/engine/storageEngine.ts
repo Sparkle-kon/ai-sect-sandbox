@@ -1,3 +1,4 @@
+import { isOrdinaryActionEvidence } from './ordinaryActionEvidence';
 import { validateEraHistory, validateEraHistoryShape } from './storageEraHistoryValidation';
 import { validateSeasonalHousing } from './storageSeasonalHousingValidation';
 import { validateMentorTransfers } from './storageMentorTransferValidation';
@@ -302,6 +303,7 @@ const shape = structure({
   locations:arr(1200,structure({id,name:id,x:num(0,1000),y:num(0,600),type:one('sect_hq','spirit_vein','secret_realm','market','abyss'),spiritRoot:spirit,
     spiritQi:num(0,150),ownerSectId:oid,inheritanceScrolls:arr(350,technique),herbs,herbCapacity:herbs,furnaceGrade:one(0,1,2,3),description:text})),
   cultivators:arr(SAVE_COLLECTION_LIMIT,structure({id,name:id,title:text,sectId:strings(240),sectRank,contribution:wealth,transgressions:percentage,disciplineRevision:otick,realm,realmStage:num(1,9,true),
+    ordinaryActionEvidence:optional((value,path)=>{if(!isOrdinaryActionEvidence(value))fail(path);}),
     qiProgress:percentage,hp:wealth,maxHp:num(1,1_000_000_000),combatPower:wealth,age:wealth,lifespan:wealth,
     personality:one('刚正','阴险','狂傲','苟道','痴情','嗜血','逍遥','诡诈'),locationId:id,spiritStones:wealth,karma:affinity,currentAction:action,
     innerMonologue:text,secretGoal:text,spiritRoot:spirit,technique,techniqueMastery:percentage,authoredTechnique:optional(technique),
@@ -980,6 +982,17 @@ function verifyWorld(value: unknown): WorldState {
     w.competitions = createCompetitionState(w.year, w.tick);
   }
   const actor = unique(w.cultivators, (item) => item.id, 'cultivators.id');
+  const ordinaryTrace = new Map(w.decisionTrace.records.map(row=>[row.id,row]));
+  for(const person of w.cultivators){
+    const receipt=person.ordinaryActionEvidence;
+    if(receipt===undefined)continue;
+    if(!isOrdinaryActionEvidence(receipt,w.tick))fail('cultivators.ordinaryActionEvidence');
+    // Retained conflicting traces fail closed. Their intentional global retention cap
+    // is not authority to erase a previously committed per-actor receipt.
+    const trace=ordinaryTrace.get(`decision-${receipt.tick}-${person.id}`);
+    if(trace&&(trace.tick!==receipt.tick||trace.actorId!==person.id||!trace.applied||trace.source==='avatar'||
+        trace.chosenAction!==(receipt.action==='GATHER_HERBS'?'redacted':receipt.action)))fail('cultivators.ordinaryActionEvidence.trace');
+  }
   const sector = unique(w.sects, (item) => item.id, 'sects.id');
   const locations = unique(w.locations, (item) => item.id, 'locations.id');
   const causalNodes = new Map(w.chronicleCausality.nodes.map((node) => [node.eventId, node]));

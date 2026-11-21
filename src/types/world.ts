@@ -335,7 +335,13 @@ export interface TribulationTrial {
   lastActedTick?: number;
 }
 
+/** Compact proven memory for ordinary choices, separate from narrative traces. */
+export type OrdinaryAction = 'REST'|'CULTIVATE'|'SOCIALIZE'|'EXPLORE'|'GATHER_HERBS';
+export interface OrdinaryActionEvidence {
+  readonly action:OrdinaryAction;readonly tick:number;readonly streak:1|2|3;
+}
 export interface Cultivator {
+  ordinaryActionEvidence?: OrdinaryActionEvidence;
   id: string;
   name: string;
   title: string;

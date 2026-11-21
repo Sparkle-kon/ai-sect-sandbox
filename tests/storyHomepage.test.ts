@@ -63,8 +63,9 @@ describe('compact exact native story homepage',()=>{
     }
     const cover=projectStoryHomepage(world);
     expect(world.tick).toBe(openingTick+4);
-    expect(cover.lead).toEqual({name:'顾行舟'});
-    expect(cover.scene).toMatchObject({earlier:false,title:expect.stringContaining('顾行舟')});
+    // The ordinary-choice rules evolve who earns the seat; there is still no preset protagonist.
+    expect(cover.lead).toEqual({name:'叶连翘'});
+    expect(cover.scene).toMatchObject({earlier:false,eventId:'evt-5-elder-danxia-2-alchemy',title:'叶连翘采集灵草'});
   });
 
   it('shows a previously earned active character, not a provisional scorer or dead name',()=>{

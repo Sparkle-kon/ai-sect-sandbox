@@ -62,8 +62,8 @@ describe('explicit random start uses portable exact seed and native deterministi
       });
     }
     expect(seen[0]?.names).not.toEqual(seen[1]?.names);
-    expect(seen[0]?.combat[0]).toBe('evt-15-npc-3-duel');
-    expect(seen[1]?.combat[0]).toBe('evt-11-npc-3-duel');
+    expect(seen[0]?.combat[0]).toBe('evt-11-npc-7-duel');
+    expect(seen[1]?.combat[0]).toBe('evt-4-npc-7-duel');
     expect(seen[0]?.deeds).not.toEqual(seen[1]?.deeds);
   },30_000);
 });

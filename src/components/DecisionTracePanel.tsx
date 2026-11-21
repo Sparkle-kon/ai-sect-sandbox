@@ -79,6 +79,7 @@ export function DecisionTracePanel({ world, cultivator, onReplay, busy = false, 
           <p className="text-xs text-slate-300">来源：{SOURCES[trace.source]} · {trace.applied ? '动作已应用' : '动作未应用'}</p>
           <div className="space-y-1 border-t border-slate-800 pt-2">
             <h4 className="text-xs font-semibold text-violet-100">当时合法候选与公开理由</h4>
+            <p className="text-xs text-slate-400">此处效用分仅用于复盘对照，不是当时的实际权重或模型判断。</p>
             {trace.candidates.length === 0 ? <p className="text-xs text-slate-400">无可公开候选。</p> : (
               <ul className="max-h-44 space-y-1 overflow-y-auto text-xs text-slate-300">
                 {trace.candidates.map((candidate) => <li key={candidate.id} className="break-words rounded bg-slate-950/60 p-1.5">

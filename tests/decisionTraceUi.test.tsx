@@ -41,6 +41,7 @@ describe('decision trace and isolated replay presentation', () => {
     const output = html();
     expect(output).toContain('来源：模型选项 · 动作已应用');
     expect(output).toContain('修炼 · 效用 9.25 · 积累修为');
+    expect(output).toContain('不是当时的实际权重或模型判断');
     expect(output).toContain('候选 1 · 调息');
     expect(output).not.toContain('候选 1 · 修炼');
     expect(output).toContain('地点未公开');

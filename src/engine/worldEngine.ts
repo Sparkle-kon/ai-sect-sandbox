@@ -1,3 +1,5 @@
+import { recordOrdinaryActionEvidence, snapshotOrdinaryAction } from './ordinaryActionEvidence';
+import { isOrdinaryIntentAction, matchesOrdinaryIntent, modelOrdinaryIntentOptions, rankOrdinaryIntents } from './ordinaryIntentEngine';
 import {recordEraHistoryTurn} from './eraHistoryIndex';
 import { advanceSeasonalHousing, recordSeasonalHousingMovement, resolveSeasonalHousingAction } from './seasonalHousingEngine';
 import { advanceMentorTransfers, resolveMentorTransferAction } from './mentorTransferEngine';
@@ -89,7 +91,7 @@ import {
   WorldEvent,
   WorldState,
 } from '../types/world';
-import { computeHeuristicDecision, utilityCeasefireDecision, utilityExpeditionRescueDecision } from './llmBrain';
+import { computeHeuristicDecision, requiredBeforeOrdinaryDecision, utilityCeasefireDecision, utilityExpeditionRescueDecision } from './llmBrain';
 import { maintainMemories, recordMemory } from './memoryEngine';
 import { synthesizeReflections } from './reflectionEngine';
 import { fabricateRumor, knownRumorLead, spreadRumors, witnessEvent } from './rumorEngine';
@@ -913,7 +915,27 @@ export function advanceWorldTick(
     }
 
     const supplied = precomputedDecisions && Object.hasOwn(precomputedDecisions, cultivator.id) ? precomputedDecisions[cultivator.id] : undefined;
-    const provided = (avatarOrder?.actorId === cultivator.id ? avatarOrder.decision : undefined) ?? supplied;
+    const avatarDecision = avatarOrder?.actorId === cultivator.id ? avatarOrder.decision : undefined;
+    const modelProposal = supplied && traceOptions?.modelActors?.has(cultivator.id) ? supplied : undefined;
+    let provided = avatarDecision ?? supplied;
+    let modelOrdinaryReplaced=false;
+    if(!avatarDecision&&modelProposal&&traceOptions?.replayDraws===undefined&&isOrdinaryIntentAction(modelProposal.chosenAction)){
+      const required=requiredBeforeOrdinaryDecision(cultivator,nextState);
+      if(required){
+        provided=required;modelOrdinaryReplaced=true;
+      }else{
+        const earlier=prevState.cultivators.find(actor=>actor.id===cultivator.id);
+        const offered=earlier?modelOrdinaryIntentOptions(prevState,earlier,nextState.tick):[];
+        if(earlier&&offered.length){
+          const target=modelProposal.targetLocationId;
+          const independentTrail=modelProposal.chosenAction==='EXPLORE'&&target!==undefined&&
+            knownRumorLead(earlier,prevState)===target&&knownRumorLead(cultivator,nextState)===target;
+          const stillLegal=offered.some(option=>matchesOrdinaryIntent(option,modelProposal))&&
+            rankOrdinaryIntents(nextState,cultivator).some(option=>matchesOrdinaryIntent(option,modelProposal));
+          if(!stillLegal&&!independentTrail){provided=undefined;modelOrdinaryReplaced=true;}
+        }
+      }
+    }
     let fieldNegotiation: LLMDecisionPayload | undefined;
     if (activeSiegeForActor(nextState, cultivator)) {
       if (!provided) fieldNegotiation = utilityCeasefireDecision(cultivator, nextState);
@@ -954,6 +976,7 @@ export function advanceWorldTick(
     if (traceOptions?.tape) rememberReplayDecision(traceOptions.tape, cultivator.id, decision, decisionDraws);
     const previousLocation = cultivator.locationId;
     const previousRealm = cultivator.realm;
+    const ordinaryBefore = snapshotOrdinaryAction(cultivator, decision);
     const evt = applyCultivatorBrainDecision(nextState, cultivator, decision, rng, undefined, (event) => {
       newEvents.push(event);
       witnessEvent(nextState, event);
@@ -967,10 +990,12 @@ export function advanceWorldTick(
     const validEffect = decision.chosenAction === cultivator.currentAction && (evt !== null ||
       decision.chosenAction === 'REST' || decision.chosenAction === 'CULTIVATE' ||
       (decision.chosenAction === 'EXPLORE' && previousLocation !== cultivator.locationId));
-    if (recordDecisionEffect && supplied) recordDecisionEffect(cultivator.id, validEffect);
+    recordOrdinaryActionEvidence(cultivator,nextState.tick,decision,ordinaryBefore,
+      {applied:validEffect,avatar:avatarOrder?.actorId===cultivator.id,event:evt});
+    if (recordDecisionEffect && supplied) recordDecisionEffect(cultivator.id, !avatarDecision && !modelOrdinaryReplaced && validEffect);
     traceOptions?.onActor?.(cultivator.id, candidates, validEffect);
     if (captureTrace) recordDecisionTrace(nextState, cultivator.id, candidates, decision,
-      avatarOrder?.actorId === cultivator.id ? 'avatar' : traceOptions?.modelActors?.has(cultivator.id) ? 'model' : 'utility', validEffect);
+      avatarDecision ? 'avatar' : modelProposal && !modelOrdinaryReplaced ? 'model' : 'utility', validEffect);
     creditSectService(nextState, cultivator, evt);
     if (evt) {
       if (cultivator.realm !== previousRealm) recordBreakthroughCompetition(nextState, cultivator, previousRealm, evt);
