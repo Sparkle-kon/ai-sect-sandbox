@@ -55,7 +55,7 @@ const FORMAT = 'ai-sect-sandbox';
 const VERSION = 1;
 // Variable-size roster ledgers are constrained by the file byte budget, not an NPC-count limit.
 const SAVE_COLLECTION_LIMIT = WORLD_SAVE_MAX_BYTES;
-type ErrorCode = 'size' | 'json' | 'version' | 'invalid_world' | 'invalid_slot' | 'slot_limit' | 'not_found' | 'storage';
+type ErrorCode = 'size' | 'json' | 'version' | 'invalid_world' | 'invalid_slot' | 'slot_limit' | 'not_found' | 'storage' | 'slot_conflict' | 'storage_read_only' | 'integrity' | 'storage_blocked';
 export class WorldSaveError extends Error {
   constructor(readonly code: ErrorCode, message: string) { super(message); this.name = 'WorldSaveError'; }
 }
@@ -2403,120 +2403,294 @@ export function decodeWorldSave(text: string): WorldState {
 }
 
 export interface SaveSlotSummary { id: string; label: string; savedAt: number; tick: number; year: number; month: number; seed: number; profileId?: WorldgenProfileId }
-interface SaveSlot { summary: SaveSlotSummary; content: string }
-export interface SaveBackend {
-  list(): Promise<SaveSlotSummary[]>;
-  get(id: string): Promise<SaveSlot | undefined>;
-  put(slot: SaveSlot): Promise<void>;
-  remove(id: string): Promise<boolean>;
+export interface SaveBranchSource { branchId: string; label?: string; timelineId?: string }
+export type SaveSlotRevision = string;
+export type SaveSlotExpected = SaveSlotRevision | null;
+export type SavePointKind = 'current' | 'previous';
+export interface SavePointSelection {
+  slotId: string;
+  headRevision: SaveSlotExpected;
+  point: SavePointKind;
+  revision: SaveSlotRevision;
+  formatVersion: typeof VERSION;
+  sourceBranch?: SaveBranchSource;
+  seal: string;
 }
+export interface SavePointInfo { summary: SaveSlotSummary; selection: SavePointSelection }
+export interface SaveSlotInspection {
+  id: string;
+  headRevision: SaveSlotExpected;
+  current?: SavePointInfo;
+  previous?: SavePointInfo;
+  currentDamaged: boolean;
+  previousDamaged: boolean;
+}
+export interface SaveCapabilities { backend: 'indexeddb' | 'localstorage' | 'memory'; writable: boolean; recovery: boolean; crossTab: boolean }
 
-export function createMemorySaveBackend(): SaveBackend {
-  const rows = new Map<string, SaveSlot>();
-  return {
-    list: async () => [...rows.values()].map(({ summary }) => ({ ...summary })),
-    get: async (id) => { const slot = rows.get(id); return slot ? structuredClone(slot) : undefined; },
-    put: async (slot) => { rows.set(slot.summary.id, structuredClone(slot)); },
-    remove: async (id) => rows.delete(id),
-  };
+interface SaveJournal { revision: SaveSlotRevision; formatVersion: typeof VERSION; sourceBranch?: SaveBranchSource; seal: string }
+interface SaveSlot { summary: SaveSlotSummary; content: string; journal?: SaveJournal }
+interface SealedSlot extends SaveSlot { journal: SaveJournal }
+interface SaveIndexRow extends SaveSlotSummary { revision: SaveSlotRevision }
+interface RawSlotSnapshot { index: unknown; current: unknown; previous: unknown }
+type SaveCommit = { id: string; inspected: RawSlotSnapshot } &
+  ({ kind: 'write'; current: SealedSlot; previous?: SealedSlot } | { kind: 'remove' });
+export interface SaveBackend {
+  capabilities: SaveCapabilities;
+  list(): Promise<unknown[]>;
+  read(id: string): Promise<RawSlotSnapshot>;
+  commit(change: SaveCommit): Promise<void>;
 }
 
 const PREFIX = 'ai-sect-sandbox:saves:v1:';
-const storageError = () => new WorldSaveError('storage', '无法访问浏览器存档。存储可能被禁用或已满。');
-const correctId = (id: string) => typeof id === 'string' && /^[a-zA-Z0-9_-]{1,32}$/.test(id);
-const checkSlotId = (id: string) => { if (!correctId(id)) throw new WorldSaveError('invalid_slot', '存档位编号无效。'); };
-const checkSummary = (summary: SaveSlotSummary) => {
-  if (!summary || !correctId(summary.id) || typeof summary.label !== 'string' || !summary.label || summary.label.length > 60 ||
-      !Number.isSafeInteger(summary.savedAt) || summary.savedAt < 0 || !Number.isSafeInteger(summary.tick) || summary.tick < 0 ||
-      !Number.isSafeInteger(summary.year) || summary.year < 0 || !Number.isSafeInteger(summary.month) || summary.month < 1 ||
-      summary.month > 12 || !Number.isSafeInteger(summary.seed) || summary.seed < 0 || summary.seed > 0xffffffff ||
-      (summary.profileId !== undefined && !isWorldgenProfileId(summary.profileId))) throw storageError();
-  return { id: summary.id, label: summary.label, savedAt: summary.savedAt, tick: summary.tick, year: summary.year, month: summary.month, seed: summary.seed, ...(summary.profileId ? { profileId: summary.profileId } : {}) };
-};
+const SAVE_DATABASE = 'ai-sect-sandbox-saves';
+const DATABASE_VERSION = 2;
+const storageError = () => new WorldSaveError('storage', '无法访问浏览器存档。存储可能被禁用或已满，已有存档未清除。');
+const conflictError = () => new WorldSaveError('slot_conflict', '此槽已在另一操作中变化，未执行。请刷新后重新选择。');
+const limitError = () => new WorldSaveError('slot_limit', '存档位已满。');
+const readOnlyError = () => new WorldSaveError('storage_read_only', '当前后端只能读取旧档；不能安全覆盖、删除或建立恢复点。可使用 JSON 文件。');
+const integrityError = () => new WorldSaveError('integrity', '此存档版本无法通过完整性校验。不会自动改读其他版本或替换当前世界。');
+const blockedError = () => new WorldSaveError('storage_blocked', '浏览器存档正在切换版本；请关闭其他旧游戏标签后刷新重试。');
+const rightId = (id: unknown): id is string => typeof id === 'string' && /^[a-zA-Z0-9_-]{1,32}$/.test(id);
+const goodRevision = (revision: unknown): revision is SaveSlotRevision => typeof revision === 'string' &&
+  /^(?:r:[0-9a-f]{32}|legacy:[0-9a-f]{64})$/.test(revision);
+const validSeal = (seal: unknown): seal is string => typeof seal === 'string' && /^[0-9a-f]{64}$/.test(seal);
+const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value && typeof value === 'object' && !Array.isArray(value));
+const ownsOnly = (value: Record<string, unknown>, keys: readonly string[]) => Object.keys(value).every(key => keys.includes(key));
+function checkId(id: unknown): asserts id is string {
+  if (!rightId(id)) throw new WorldSaveError('invalid_slot', '存档位编号无效。');
+}
+
+function checkSummary(summary: unknown): SaveSlotSummary {
+  if (!isRecord(summary)) throw integrityError();
+  const { id, label, savedAt, tick, year, month, seed, profileId } = summary;
+  const safeNumber = (value: unknown, lo: number, hi = Number.MAX_SAFE_INTEGER): value is number =>
+    typeof value === 'number' && Number.isSafeInteger(value) && value >= lo && value <= hi;
+  if (!rightId(id) || typeof label !== 'string' || !label || label.length > 60 ||
+      !safeNumber(savedAt, 0) || !safeNumber(tick, 0) || !safeNumber(year, 0) || !safeNumber(month, 1, 12) ||
+      !safeNumber(seed, 0, 0xffffffff) || (profileId !== undefined && !isWorldgenProfileId(profileId))) throw integrityError();
+  return { id, label, savedAt, tick, year, month, seed, ...(profileId === undefined ? {} : { profileId }) };
+}
+
+function checkBranch(source: unknown): SaveBranchSource | undefined {
+  if (source === undefined) return undefined;
+  const safeKey = (key: unknown): key is string => typeof key === 'string' && /^[a-zA-Z0-9_-]{1,80}$/.test(key);
+  if (!isRecord(source) || !ownsOnly(source, ['branchId','label','timelineId']) || !safeKey(source.branchId) ||
+      (source.timelineId !== undefined && !safeKey(source.timelineId)) ||
+      (source.label !== undefined && (typeof source.label !== 'string' || !source.label.trim() || source.label.length > 80 ||
+        /[\u0000-\u001f\u007f]/.test(source.label)))) throw integrityError();
+  const { branchId, label, timelineId } = source;
+  return { branchId, ...(label === undefined ? {} : { label }), ...(timelineId === undefined ? {} : { timelineId }) };
+}
+
+function indexRevision(raw: unknown, id: string): SaveSlotRevision | undefined {
+  if (!isRecord(raw) || !goodRevision(raw.revision)) return undefined;
+  try { return checkSummary(raw).id === id ? raw.revision : undefined; } catch { return undefined; }
+}
+const summaryKey = (s: SaveSlotSummary) => [s.id,s.label,s.savedAt,s.tick,s.year,s.month,s.seed,s.profileId ?? null];
+const branchKey = (branch?: SaveBranchSource) => branch ? [branch.branchId,branch.label ?? null,branch.timelineId ?? null] : null;
+const sameSummary = (left: SaveSlotSummary, right: SaveSlotSummary) => JSON.stringify(summaryKey(left)) === JSON.stringify(summaryKey(right));
+const sameBranch = (left?: SaveBranchSource, right?: SaveBranchSource) => JSON.stringify(branchKey(left)) === JSON.stringify(branchKey(right));
+const toHex = (bytes: Uint8Array) => Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+const createRevision = () => `r:${toHex(globalThis.crypto.getRandomValues(new Uint8Array(16)))}`;
+const validStorageCrypto = () => Boolean(globalThis.crypto?.subtle && globalThis.crypto?.getRandomValues);
+async function digest(value: unknown) {
+  if (!validStorageCrypto()) throw storageError();
+  const bytes = new TextEncoder().encode(JSON.stringify(value));
+  return toHex(new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', bytes)));
+}
+const legacyDigest = (summary: SaveSlotSummary, content: string) =>
+  digest([FORMAT,VERSION,'legacy',summaryKey(summary),content]);
+const slotSeal = (summary: SaveSlotSummary, content: string, revision: SaveSlotRevision, sourceBranch?: SaveBranchSource) =>
+  digest([FORMAT,VERSION,'journal',summaryKey(summary),revision,branchKey(sourceBranch),content]);
+
+interface ValidPoint {
+  summary: SaveSlotSummary;
+  content: string;
+  world: WorldState;
+  revision: SaveSlotRevision;
+  seal: string;
+  sourceBranch?: SaveBranchSource;
+  legacy: boolean;
+}
+async function readPoint(raw: unknown, id: string, point: SavePointKind): Promise<ValidPoint | undefined> {
+  if (raw === undefined) return undefined;
+  if (!isRecord(raw) || !ownsOnly(raw, ['summary','content','journal']) || typeof raw.content !== 'string' ||
+      !isRecord(raw.summary) || !ownsOnly(raw.summary, ['id','label','savedAt','tick','year','month','seed','profileId'])) throw integrityError();
+  const summary = checkSummary(raw.summary);
+  if (summary.id !== id) throw integrityError();
+  const world = decodeWorldSave(raw.content);
+  if (summary.tick !== world.tick || summary.year !== world.year || summary.month !== world.month || summary.seed !== world.random.seed ||
+      (summary.profileId !== undefined && summary.profileId !== world.worldgen?.profileId)) throw integrityError();
+  if (raw.journal === undefined) {
+    if (point === 'previous') throw integrityError();
+    const seal = await legacyDigest(summary, raw.content);
+    return { summary, content: raw.content, world, revision: `legacy:${seal}`, seal, legacy: true };
+  }
+  const j = raw.journal;
+  if (!isRecord(j) || !ownsOnly(j, ['formatVersion','revision','sourceBranch','seal']) ||
+      j.formatVersion !== VERSION || !goodRevision(j.revision) || !validSeal(j.seal)) throw integrityError();
+  const sourceBranch = checkBranch(j.sourceBranch);
+  const legacy = j.revision.startsWith('legacy:');
+  if (!legacy && summary.profileId !== world.worldgen?.profileId) throw integrityError();
+  if (legacy && (point !== 'previous' || sourceBranch || j.revision !== `legacy:${await legacyDigest(summary, raw.content)}`)) throw integrityError();
+  if (j.seal !== await slotSeal(summary, raw.content, j.revision, sourceBranch)) throw integrityError();
+  return { summary, content: raw.content, world, revision: j.revision, seal: j.seal, sourceBranch, legacy };
+}
+
+function requireCurrentIndex(raw: RawSlotSnapshot, validated: ValidPoint, id: string) {
+  if (indexRevision(raw.index, id) === validated.revision && sameSummary(checkSummary(raw.index), validated.summary)) return;
+  if (!validated.legacy) throw integrityError();
+  // An actual v1 IndexedDB slot always has an index. The legacy local fallback also exposes the same view.
+  if (!isRecord(raw.index) || Object.hasOwn(raw.index, 'revision') || !sameSummary(checkSummary(raw.index), validated.summary)) throw integrityError();
+}
+function rawEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  try {
+    // Payloads can be 8 MiB; compare their original bytes as strings, without serializing
+    // another full pair inside an active write transaction.
+    if (isRecord(a) && isRecord(b) && Object.hasOwn(a, 'content') && Object.hasOwn(b, 'content')) {
+      const { content: left, ...aMeta } = a;
+      const { content: right, ...bMeta } = b;
+      return left === right && JSON.stringify(aMeta) === JSON.stringify(bMeta);
+    }
+    return JSON.stringify(a) === JSON.stringify(b);
+  }
+  catch { return false; }
+}
+function sameRawSnapshot(left: RawSlotSnapshot, right: RawSlotSnapshot) {
+  return rawEqual(left.index,right.index) && rawEqual(left.current,right.current) && rawEqual(left.previous,right.previous);
+}
+const emptySnapshot = (row: RawSlotSnapshot) => row.current === undefined && row.index === undefined && row.previous === undefined;
+const getIndex = (slot: SealedSlot): SaveIndexRow => ({ ...slot.summary, revision: slot.journal.revision });
+
+export function createMemorySaveBackend(): SaveBackend {
+  const rows = new Map<string, RawSlotSnapshot>();
+  const lookup = (id: string): RawSlotSnapshot => rows.get(id) ?? { index: undefined, current: undefined, previous: undefined };
+  return {
+    capabilities: { backend: 'memory', writable: true, recovery: true, crossTab: false },
+    list: async () => [...rows.values()].map(row => structuredClone(row.index)).filter(index => index !== undefined),
+    read: async (id) => structuredClone(lookup(id)),
+    commit: async (change) => {
+      const current = lookup(change.id);
+      if (!sameRawSnapshot(current, change.inspected)) throw conflictError();
+      if (change.kind === 'remove') { rows.delete(change.id); return; }
+      if (emptySnapshot(current) && rows.size >= WORLD_SAVE_MAX_SLOTS) throw limitError();
+      rows.set(change.id, structuredClone({ index: getIndex(change.current), current: change.current, previous: change.previous }));
+    },
+  };
+}
 
 function localBackend(storage: Storage): SaveBackend {
-  const key = (id: string) => PREFIX + id;
-  const get = async (id: string): Promise<SaveSlot | undefined> => {
-    const raw = storage.getItem(key(id));
-    return raw === null ? undefined : JSON.parse(raw) as SaveSlot;
+  const get = (id: string): unknown => {
+    const raw = storage.getItem(PREFIX + id);
+    if (raw === null) return undefined;
+    try { return JSON.parse(raw) as unknown; } catch { return null; }
   };
   return {
-    get,
+    capabilities: { backend: 'localstorage', writable: false, recovery: false, crossTab: false },
     list: async () => {
       const keys = Array.from({ length: storage.length }, (_, i) => storage.key(i));
-      const rows = await Promise.all(keys.filter((k): k is string => !!k?.startsWith(PREFIX)).map((k) => get(k.slice(PREFIX.length))));
-      return rows.flatMap((slot) => slot ? [slot.summary] : []);
+      return keys.flatMap(key => {
+        if (!key?.startsWith(PREFIX)) return [];
+        const row = get(key.slice(PREFIX.length));
+        return isRecord(row) ? [row.summary] : [];
+      });
     },
-    put: async (slot) => { storage.setItem(key(slot.summary.id), JSON.stringify(slot)); },
-    remove: async (id) => { const found = storage.getItem(key(id)) !== null; if (found) storage.removeItem(key(id)); return found; },
+    read: async (id) => {
+      const current = get(id);
+      return { index: isRecord(current) ? current.summary : undefined, current, previous: undefined };
+    },
+    commit: async () => { throw readOnlyError(); },
+  };
+}
+
+const SAVE_TABLES = ['worlds','summaries','recoveries'];
+function readIndexedSlot(tx: IDBTransaction, id: string, got: (row: RawSlotSnapshot) => void) {
+  const index = tx.objectStore('summaries').get(id);
+  const current = tx.objectStore('worlds').get(id);
+  const previous = tx.objectStore('recoveries').get(id);
+  let remaining = 3;
+  index.onsuccess = current.onsuccess = previous.onsuccess = () => {
+    if (--remaining === 0) got({ index: index.result as unknown, current: current.result as unknown, previous: previous.result as unknown });
   };
 }
 
 function indexedBackend(db: IDBDatabase): SaveBackend {
-  function access<T>(table: 'worlds' | 'summaries', mode: IDBTransactionMode, open: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(table, mode);
-      const req = open(tx.objectStore(table));
-      tx.oncomplete = () => resolve(req.result);
-      tx.onabort = tx.onerror = () => reject(storageError());
-    });
-  }
-  const get = (id: string) => access<SaveSlot | undefined>('worlds', 'readonly', (store) => store.get(id));
   return {
-    get,
-    list: () => access<SaveSlotSummary[]>('summaries', 'readonly', (store) => store.getAll()),
-    put: (slot) => new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(['worlds','summaries'], 'readwrite');
-      const store = tx.objectStore('worlds');
-      const put = () => { store.put(slot); tx.objectStore('summaries').put(slot.summary); };
-      const existing = store.count(slot.summary.id);
-      let capped = false;
-      existing.onsuccess = () => {
-        if (existing.result) put();
-        else {
-          const n = store.count();
-          n.onsuccess = () => {
-            if (n.result >= WORLD_SAVE_MAX_SLOTS) { capped = true; tx.abort(); }
-            else put();
-          };
-        }
-      };
-      tx.oncomplete = () => resolve();
-      tx.onabort = tx.onerror = () => reject(capped ? new WorldSaveError('slot_limit', '存档位已满。') : storageError());
+    capabilities: { backend: 'indexeddb', writable: true, recovery: true, crossTab: true },
+    list: () => new Promise((resolve, reject) => {
+      const tx = db.transaction('summaries', 'readonly');
+      const req = tx.objectStore('summaries').getAll();
+      tx.oncomplete = () => resolve(req.result as unknown[]);
+      tx.onabort = () => reject(storageError());
     }),
-    remove: (id) => new Promise<boolean>((resolve, reject) => {
-      const tx = db.transaction(['worlds','summaries'], 'readwrite');
-      const store = tx.objectStore('worlds');
-      const check = store.count(id);
-      check.onsuccess = () => { if (check.result) { store.delete(id); tx.objectStore('summaries').delete(id); } };
-      tx.oncomplete = () => resolve(check.result > 0);
-      tx.onabort = tx.onerror = () => reject(storageError());
+    read: (id) => new Promise((resolve, reject) => {
+      const tx = db.transaction(SAVE_TABLES, 'readonly');
+      let result: RawSlotSnapshot;
+      readIndexedSlot(tx, id, row => { result = row; });
+      tx.oncomplete = () => resolve(result);
+      tx.onabort = () => reject(storageError());
+    }),
+    commit: (change) => new Promise((resolve, reject) => {
+      const tx = db.transaction(SAVE_TABLES, 'readwrite');
+      const world = tx.objectStore('worlds');
+      const index = tx.objectStore('summaries');
+      const recovery = tx.objectStore('recoveries');
+      let failure: WorldSaveError | undefined;
+      const abort = (error: WorldSaveError) => { failure = error; tx.abort(); };
+      const put = () => {
+        try {
+          if (change.kind === 'remove') { world.delete(change.id); index.delete(change.id); recovery.delete(change.id); }
+          else {
+            if (change.previous) recovery.put(change.previous);
+            world.put(change.current);
+            index.put(getIndex(change.current));
+          }
+        } catch { abort(storageError()); }
+      };
+      readIndexedSlot(tx, change.id, row => {
+        // No promises in the write transaction: the completed preflight is compared to the exact three rows
+        // observed now, then all mutations and the capacity check remain inside this transaction.
+        if (!sameRawSnapshot(row, change.inspected)) { abort(conflictError()); return; }
+        if (change.kind === 'write' && emptySnapshot(row)) {
+          const count = world.count();
+          count.onsuccess = () => { if (count.result >= WORLD_SAVE_MAX_SLOTS) abort(limitError()); else put(); };
+        } else put();
+      });
+      tx.oncomplete = () => resolve();
+      tx.onabort = () => reject(failure ?? storageError());
     }),
   };
 }
 
 async function browserBackend(): Promise<SaveBackend> {
-  try {
-    if (typeof indexedDB !== 'undefined') {
-      const db = await new Promise<IDBDatabase>((resolve, reject) => {
-        const req = indexedDB.open('ai-sect-sandbox-saves', 1);
-        let finished = false;
-        const finish = (db?: IDBDatabase) => {
-          if (finished) { db?.close(); return; }
-          finished = true; clearTimeout(timer);
-          if (db) resolve(db); else reject(storageError());
-        };
-        const timer = setTimeout(() => finish(), 3000);
-        req.onupgradeneeded = () => {
-          if (!req.result.objectStoreNames.contains('worlds')) req.result.createObjectStore('worlds', { keyPath: 'summary.id' });
-          if (!req.result.objectStoreNames.contains('summaries')) req.result.createObjectStore('summaries', { keyPath: 'id' });
-        };
-        req.onsuccess = () => finish(req.result);
-        req.onerror = req.onblocked = () => finish();
-      });
-      return indexedBackend(db);
-    }
-  } catch { /* A backend that cannot be opened may fall back, but failed writes never silently switch backends. */ }
+  // Do not mistake an upgrade-blocked or denied open for a separate, empty namespace.
+  if (typeof indexedDB !== 'undefined') {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      let finished = false;
+      const req = indexedDB.open(SAVE_DATABASE, DATABASE_VERSION);
+      const finish = (db?: IDBDatabase, error?: WorldSaveError) => {
+        if (finished) { db?.close(); return; }
+        finished = true;
+        clearTimeout(timer);
+        if (db) resolve(db); else reject(error ?? storageError());
+      };
+      const timer = setTimeout(() => finish(undefined, blockedError()), 3000);
+      req.onupgradeneeded = () => {
+        if (finished) { req.transaction?.abort(); return; }
+        if (!req.result.objectStoreNames.contains('worlds')) req.result.createObjectStore('worlds', { keyPath: 'summary.id' });
+        if (!req.result.objectStoreNames.contains('summaries')) req.result.createObjectStore('summaries', { keyPath: 'id' });
+        if (!req.result.objectStoreNames.contains('recoveries')) req.result.createObjectStore('recoveries', { keyPath: 'summary.id' });
+      };
+      req.onsuccess = () => {
+        req.result.onversionchange = () => req.result.close();
+        finish(req.result);
+      };
+      req.onerror = () => finish(undefined, req.error?.name === 'VersionError' ? blockedError() : storageError());
+      req.onblocked = () => finish(undefined, blockedError());
+    });
+    return indexedBackend(db);
+  }
   try {
     if (typeof localStorage !== 'undefined') {
       void localStorage.length;
@@ -2525,6 +2699,24 @@ async function browserBackend(): Promise<SaveBackend> {
   } catch { /* a browser may deny even read access */ }
   throw storageError();
 }
+
+const infoFor = (id: string, headRevision: SaveSlotExpected, point: SavePointKind, value: ValidPoint): SavePointInfo => ({
+  summary: value.summary,
+  selection: {
+    slotId: id, headRevision, point, revision: value.revision, seal: value.seal, formatVersion: VERSION,
+    ...(value.sourceBranch === undefined ? {} : { sourceBranch: value.sourceBranch }),
+  },
+});
+
+async function pointOrDamage(raw: RawSlotSnapshot, id: string, kind: SavePointKind) {
+  try {
+    const validated = await readPoint(raw[kind], id, kind);
+    if (kind === 'current' && validated) requireCurrentIndex(raw, validated, id);
+    return { validated, damaged: kind === 'current' && !validated && raw.index !== undefined };
+  } catch { return { validated: undefined, damaged: true }; }
+}
+const headFor = (raw: RawSlotSnapshot, id: string, current?: ValidPoint): SaveSlotExpected =>
+  indexRevision(raw.index, id) ?? current?.revision ?? null;
 
 export function createSaveStore(backend?: SaveBackend, now: () => number = Date.now) {
   let opened: Promise<SaveBackend> | undefined;
@@ -2536,40 +2728,103 @@ export function createSaveStore(backend?: SaveBackend, now: () => number = Date.
     return run;
   }
   return {
-    list: () => operations(async (store) => (await store.list()).map(checkSummary)
-      .sort((a, b) => b.savedAt - a.savedAt || a.id.localeCompare(b.id))),
-    load: (id: string) => operations(async (store) => {
-      checkSlotId(id);
-      const slot = await store.get(id);
-      if (!slot) throw new WorldSaveError('not_found', '这个存档位是空的。');
-      const summary = checkSummary(slot.summary);
-      if (summary.id !== id) throw storageError();
-      const world = decodeWorldSave(slot.content);
-      if (summary.tick !== world.tick || summary.year !== world.year || summary.month !== world.month || summary.seed !== world.random.seed ||
-          (summary.profileId !== undefined && summary.profileId !== world.worldgen?.profileId)) throw storageError();
-      return world;
+    capabilities: () => operations(async (store) => ({ ...store.capabilities,
+      writable: store.capabilities.writable && validStorageCrypto(), recovery: store.capabilities.recovery && validStorageCrypto() })),
+    list: () => operations(async (store) => (await store.list()).flatMap(row => {
+      try { return [checkSummary(row)]; } catch { return []; }
+    }).sort((a, b) => b.savedAt - a.savedAt || a.id.localeCompare(b.id))),
+    inspect: (id: string) => operations(async (store): Promise<SaveSlotInspection> => {
+      checkId(id);
+      const raw = await store.read(id);
+      const [current, previous] = await Promise.all([pointOrDamage(raw,id,'current'),pointOrDamage(raw,id,'previous')]);
+      const headRevision = headFor(raw, id, current.validated);
+      return { id, headRevision, currentDamaged: current.damaged, previousDamaged: previous.damaged,
+        ...(current.validated ? { current: infoFor(id,headRevision,'current',current.validated) } : {}),
+        ...(previous.validated ? { previous: infoFor(id,headRevision,'previous',previous.validated) } : {}) };
     }),
-    save: (id: string, label: string, world: WorldState) => {
-      // Snapshot synchronously before the async backend queue so world mutations cannot alter the selected save.
+    load: (id: string) => operations(async (store) => {
+      checkId(id);
+      const raw = await store.read(id);
+      const current = await readPoint(raw.current, id, 'current');
+      if (!current) { if (!emptySnapshot(raw)) throw integrityError(); throw new WorldSaveError('not_found', '这个存档位是空的。'); }
+      requireCurrentIndex(raw, current, id);
+      return current.world;
+    }),
+    loadSelected: (selection: SavePointSelection) => {
+      // Clone the reviewed selector before asynchronous browser work; callers cannot mutate it while queued.
+      let wanted: SavePointSelection;
+      try { wanted = structuredClone(selection); } catch { return Promise.reject<WorldState>(integrityError()); }
+      return operations(async (store) => {
+        checkId(wanted?.slotId);
+        if ((wanted.point !== 'current' && wanted.point !== 'previous') || wanted.formatVersion !== VERSION ||
+          !goodRevision(wanted.revision) || !validSeal(wanted.seal) || (wanted.headRevision !== null && !goodRevision(wanted.headRevision))) throw integrityError();
+        const sourceBranch = checkBranch(wanted.sourceBranch);
+        const raw = await store.read(wanted.slotId);
+        let current: ValidPoint | undefined;
+        if (!indexRevision(raw.index, wanted.slotId) || wanted.point === 'current') {
+          current = (await pointOrDamage(raw,wanted.slotId,'current')).validated;
+        }
+        if (headFor(raw,wanted.slotId,current) !== wanted.headRevision) throw conflictError();
+        const value = wanted.point === 'current' ? current : (await pointOrDamage(raw,wanted.slotId,'previous')).validated;
+        if (!value) {
+          if (raw[wanted.point] === undefined) throw conflictError();
+          throw integrityError();
+        }
+        if (value.revision !== wanted.revision || value.seal !== wanted.seal || !sameBranch(value.sourceBranch, sourceBranch)) throw conflictError();
+        if (!sameRawSnapshot(raw, await store.read(wanted.slotId))) throw conflictError();
+        return value.world;
+      });
+    },
+    save: (id: string, label: string, world: WorldState, expected: SaveSlotExpected = null, source?: SaveBranchSource) => {
       let content: string;
       let summary: SaveSlotSummary;
+      let sourceBranch: SaveBranchSource | undefined;
       try {
-        checkSlotId(id);
+        checkId(id);
+        if (expected !== null && !goodRevision(expected)) throw conflictError();
         const name = typeof label === 'string' ? label.trim() : '';
         if (!name || name.length > 60) throw new WorldSaveError('invalid_slot', '存档名称须为 1 至 60 个字符。');
+        sourceBranch = checkBranch(source);
+        // Snapshot at call time, not after waiting for a backend operation or SHA-256.
         content = encodeWorldSave(world);
         summary = checkSummary({ id, label: name, savedAt: now(), tick: world.tick, year: world.year, month: world.month, seed: world.random.seed, profileId: world.worldgen?.profileId });
       } catch (error) { return Promise.reject<SaveSlotSummary>(error); }
       return operations(async (store) => {
-        const previous = (await store.list()).map(checkSummary);
-        const prior = previous.find((slot) => slot.id === id);
-        if (!prior && previous.length >= WORLD_SAVE_MAX_SLOTS) throw new WorldSaveError('slot_limit', '存档位已满。');
-        if (prior) summary.savedAt = Math.max(summary.savedAt, prior.savedAt + 1);
-        await store.put({ summary, content });
+        if (!store.capabilities.writable || !validStorageCrypto()) throw readOnlyError();
+        const raw = await store.read(id);
+        let previous: SealedSlot | undefined;
+        if (expected === null) { if (!emptySnapshot(raw)) throw conflictError(); }
+        else {
+          const current = await readPoint(raw.current,id,'current');
+          if (!current || current.revision !== expected) throw conflictError();
+          requireCurrentIndex(raw,current,id);
+          summary.savedAt = Math.max(summary.savedAt, current.summary.savedAt + 1);
+          checkSummary(summary);
+          const seal = current.legacy ? await slotSeal(current.summary,current.content,current.revision) : current.seal;
+          previous = {
+            summary: current.summary, content: current.content,
+            journal: { revision: current.revision, formatVersion: VERSION, seal,
+              ...(current.sourceBranch === undefined ? {} : { sourceBranch: current.sourceBranch }) },
+          };
+        }
+        const revision = createRevision();
+        const seal = await slotSeal(summary,content,revision,sourceBranch);
+        const current: SealedSlot = { summary, content, journal: { revision, formatVersion: VERSION, seal,
+          ...(sourceBranch === undefined ? {} : { sourceBranch }) } };
+        await store.commit({ kind: 'write', id, inspected: raw, current, previous });
         return { ...summary };
       });
     },
-    delete: (id: string) => operations(async (store) => { checkSlotId(id); return store.remove(id); }),
+    delete: (id: string, expected: SaveSlotRevision) => operations(async (store) => {
+      checkId(id);
+      if (!goodRevision(expected)) throw conflictError();
+      if (!store.capabilities.writable || !validStorageCrypto()) throw readOnlyError();
+      const raw = await store.read(id);
+      const current = indexRevision(raw.index,id) ? undefined : (await pointOrDamage(raw,id,'current')).validated;
+      if (headFor(raw,id,current) !== expected) throw conflictError();
+      await store.commit({ kind: 'remove', id, inspected: raw });
+      return true;
+    }),
   };
 }
 

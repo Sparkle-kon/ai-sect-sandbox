@@ -1,9 +1,9 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { importWorldFile, parseWorldSeed, sameSaveSlotRevision, stageWorldCreation, WorldStoragePanel } from '../src/components/WorldStoragePanel';
+import { describeConfirmation, importWorldFile, parseWorldSeed, sameSaveSlotRevision, sameStorageContext, SavePointRows, stageWorldCreation, WorldStoragePanel } from '../src/components/WorldStoragePanel';
 import { createInitialWorld } from '../src/data/initialWorld';
 import { encodeWorldSave, WORLD_SAVE_MAX_BYTES } from '../src/engine/storageEngine';
-import type { SaveSlotSummary } from '../src/engine/storageEngine';
+import type { SaveSlotInspection, SaveSlotSummary } from '../src/engine/storageEngine';
 import { WORLDGEN_PROFILES } from '../src/engine/worldgenProfiles';
 
 describe('world storage UI boundary', () => {
@@ -11,14 +11,16 @@ describe('world storage UI boundary', () => {
     const world = createInitialWorld(981);
     const unexpected = () => { throw new Error('SSR must not touch browser storage'); };
     const markup = renderToStaticMarkup(<WorldStoragePanel world={world} busy={false}
-      store={{ list: unexpected, load: unexpected, save: unexpected, delete: unexpected }}
+      store={{ list: unexpected, inspect: unexpected, loadSelected: unexpected, capabilities: unexpected, save: unexpected, delete: unexpected }}
       onRestore={unexpected} onNewWorld={unexpected} />);
     expect(markup).toContain('当前世界：种子 981 · Tick #1');
     expect(markup).toContain('value="981"');
     expect(markup).toContain('本机存档槽（0/12）');
     expect(markup).toContain('value="slot-12"');
     expect(markup).toContain('刷新存档槽');
-    expect(markup).toContain('读取存档');
+    expect(markup).toContain('核验此槽');
+    expect(markup).toContain('请先核验此槽，再选择要读取的存档副本');
+    expect(markup).not.toContain('读取恢复点');
     expect(markup).toContain('删除存档');
     expect(markup).toContain('导出当前世界 JSON');
     expect(markup).toContain('accept=".json,application/json"');
@@ -50,6 +52,38 @@ describe('world storage UI boundary', () => {
     expect(sameSaveSlotRevision(newSlot, { ...newSlot })).toBe(true);
     expect(sameSaveSlotRevision(newSlot, reviewed)).toBe(false);
     expect(sameSaveSlotRevision(newSlot, { ...newSlot, profileId: 'classic' })).toBe(false);
+  });
+
+  it('keeps a corrupt current copy distinct from one verified recovery point and its exact identity', () => {
+    const summary = { id: 'slot-1', label: '上次合法修订', tick: 10, year: 2, month: 2, seed: 5, savedAt: 1000 } satisfies SaveSlotSummary;
+    const selection = { slotId: 'slot-1', headRevision: 'head-a', point: 'previous', revision: 'prior-a', formatVersion: 1,
+      sourceBranch: { branchId: 'branch-a', label: '归档分支', timelineId: 'timeline-a' }, seal: 'opaque-not-rendered' } as const;
+    const review = { id: 'slot-1', headRevision: 'head-a', currentDamaged: true, previousDamaged: false,
+      previous: { summary, selection } } satisfies SaveSlotInspection;
+    const load = vi.fn();
+    const exporter = vi.fn();
+    const html = renderToStaticMarkup(<SavePointRows review={review} recoverySupported readOnly onLoad={load} onExport={exporter} />);
+    expect(html).toContain('当前版 · 完整性校验失败');
+    expect(html).toContain('恢复点 · 已校验');
+    expect(html).toContain('来源分支：归档分支');
+    expect(html).toMatch(/<button[^>]+disabled=""[^>]*>读取恢复点/);
+    expect(html).toContain('导出恢复点 JSON');
+    expect(html).not.toMatch(/opaque-not-rendered|读取当前版/);
+    expect(load).not.toHaveBeenCalled();
+    expect(exporter).not.toHaveBeenCalled();
+    expect(describeConfirmation({ kind: 'delete', review })).toContain('当前版和恢复点（含已损坏的副本）');
+    expect(describeConfirmation({ kind: 'restore', info: review.previous })).toContain('不会自动更改槽内副本');
+    expect(describeConfirmation({ kind: 'restore', info: review.previous })).toContain('恢复点 · 归档分支');
+  });
+
+  it('invalidates exact authority on branch, generation, timeline or world changes', () => {
+    const world = createInitialWorld(12);
+    const a = { world, version: 4, branchId: 'A', timelineId: 't1' };
+    expect(sameStorageContext(a, { ...a })).toBe(true);
+    expect(sameStorageContext(a, { ...a, world: structuredClone(world) })).toBe(false);
+    expect(sameStorageContext(a, { ...a, version: 5 })).toBe(false);
+    expect(sameStorageContext(a, { ...a, branchId: 'B' })).toBe(false);
+    expect(sameStorageContext(a, { ...a, timelineId: 't2' })).toBe(false);
   });
 
   it('stages the exact seed, profile, and reviewed world, rejecting unrecognized profiles', () => {

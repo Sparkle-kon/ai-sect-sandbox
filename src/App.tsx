@@ -1,3 +1,4 @@
+import type { SaveBranchSource } from './engine/storageEngine';
 import { courierCheckpoint } from './engine/sealedCourierEngine';
 import { applyWatchMutation, captureWatchDigests } from './engine/watchlistEngine';
 import type { WatchlistCommand, WatchlistMutationResult } from './engine/watchlistEngine';
@@ -71,6 +72,10 @@ const SectCouncilModal = React.lazy(async () => ({ default: (await import('./com
 const AnalyticsModal = React.lazy(async () => ({ default: (await import('./components/AnalyticsModal')).AnalyticsModal }));
 
 interface AppProps { initialWorkspace?: WorkspaceId; initialSection?: string }
+const saveTimelineIdentity = (): string | undefined => {
+  try { return globalThis.crypto?.randomUUID?.(); }
+  catch { return undefined; }
+};
 const action = 'inline-flex min-h-11 items-center justify-center gap-1.5 rounded-md px-3 text-xs font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300 disabled:opacity-40';
 const panel = 'space-y-2 rounded-xl border border-slate-800 bg-slate-900 p-3';
 
@@ -78,6 +83,8 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
   const [workspace, setWorkspace] = useState<WorkspaceId>(initialWorkspace);
   const [world, setWorld] = useState<WorldState>(() => createInitialWorld());
   const [viewEpoch, setViewEpoch] = useState(0);
+  const saveContextVersion = useRef(0);
+  const [saveTimelineId, setSaveTimelineId] = useState(saveTimelineIdentity);
   const authority = useRef(world);
   const [timeline, setTimeline] = useState(() => createTimeline(world));
   const history = useRef(timeline);
@@ -277,6 +284,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
   };
 
   const activateTimeline = (next: WorldTimeline, incoming: WorldState) => {
+    saveContextVersion.current += 1;
     setIsRunning(false);
     clearPreview();
     updateTimeline(next);
@@ -314,16 +322,22 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
     return applied === proposed.world ? 'saved' : 'stale';
   };
 
-  const replaceWorld = (next: WorldState, expected: WorldState): boolean => {
-    if (stepInFlight.current || browsing.current || authority.current !== expected) return false;
+  const canUseSaveContext = (expected: WorldState, contextVersion?: number): boolean =>
+    !stepInFlight.current && !browsing.current && authority.current === expected &&
+    (contextVersion === undefined || contextVersion === saveContextVersion.current);
+
+  const replaceWorld = (next: WorldState, expected: WorldState, expectedContextVersion?: number): boolean => {
+    if (!canUseSaveContext(expected, expectedContextVersion)) return false;
     replayTapes.current.clear();
+    setSaveTimelineId(saveTimelineIdentity());
     setViewEpoch((previous) => previous + 1);
     activateTimeline(createTimeline(next), next);
     return true;
   };
 
-  const newWorldFromSeed = (seed: number, profileId: WorldgenProfileId, expected: WorldState): boolean =>
-    isWorldSeed(seed) && isWorldgenProfileId(profileId) && replaceWorld(createInitialWorld(seed, profileId), expected);
+  const newWorldFromSeed = (seed: number, profileId: WorldgenProfileId, expected: WorldState, expectedContextVersion?: number): boolean =>
+    isWorldSeed(seed) && isWorldgenProfileId(profileId) && canUseSaveContext(expected, expectedContextVersion) &&
+    replaceWorld(createInitialWorld(seed, profileId), expected, expectedContextVersion);
 
   const handleReset = () => {
     if (browsing.current) return;
@@ -331,6 +345,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
     const next = createInitialWorld(active.random.seed, active.worldgen?.profileId ?? 'classic');
     replayTapes.current.clear();
     // Emergency reset invalidates an in-flight model tick, which cannot commit afterward.
+    setSaveTimelineId(saveTimelineIdentity());
     setViewEpoch((previous) => previous + 1);
     activateTimeline(createTimeline(next), next);
   };
@@ -343,6 +358,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
     if (!snapshot) { setTimelineNotice('此快照不在当前分支保留的范围内。'); return; }
     setIsRunning(false);
     setCouncilOpen(false);
+    saveContextVersion.current += 1;
     browsing.current = true;
     setPreview({ tick, world: snapshot });
   };
@@ -374,6 +390,10 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
   };
 
   const visibleWorld = preview?.world ?? world;
+  const activeSaveBranch = timeline.branches.find(({ id }) => id === timeline.activeBranchId);
+  const sourceBranch: SaveBranchSource | undefined = activeSaveBranch ? {
+    branchId: activeSaveBranch.id, label: activeSaveBranch.label, ...(saveTimelineId ? { timelineId: saveTimelineId } : {}),
+  } : undefined;
   const viewScopeKey = `${viewEpoch}:${timeline.activeBranchId}:${preview?.tick ?? 'live'}`;
   const compareDecision = (traceId: string, candidateId: string): DecisionReplayResult => {
     const trace = visibleWorld.decisionTrace.records.find(({ id }) => id === traceId);
@@ -547,7 +567,8 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
                   <RotateCcw aria-hidden="true" className="h-4 w-4" />重置修仙纪元</button>
               </div>
               <React.Suspense fallback={<p role="status">载入存档管理…</p>}>
-                <WorldStoragePanel world={world} busy={isStepping} onRestore={replaceWorld} onNewWorld={newWorldFromSeed} />
+                <WorldStoragePanel world={world} busy={isStepping} contextVersion={saveContextVersion.current}
+                  canUseContext={canUseSaveContext} sourceBranch={sourceBranch} onRestore={replaceWorld} onNewWorld={newWorldFromSeed} />
               </React.Suspense>
             </div> },
           ]),
