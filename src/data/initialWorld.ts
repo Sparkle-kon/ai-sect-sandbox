@@ -1,3 +1,4 @@
+import { createSettlementState } from '../engine/settlementEngine';
 import { createMarketState } from '../engine/marketEngine';
 import { createOathState } from '../engine/oathEngine';
 import { createMentorshipState } from '../engine/mentorshipEngine';
@@ -220,6 +221,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED): WorldState {
     mentorship: createMentorshipState(),
     oaths: createOathState(),
     markets: createMarketState(),
+    settlements: createSettlementState(locations, seed),
     tick: 1,
     interventionSequence: 0,
     year: 1001,

@@ -7,7 +7,7 @@ import { advanceWorldTick } from './worldEngine';
 export interface BalanceSettings { seed: number; ticks?: number; restBelow?: number }
 export interface BalanceReport {
   seed: number; steps: number; restBelow: number; initialLiving: number; finalLiving: number;
-  minimumLiving: number; maximumLiving: number; maximumRoster: number; extinctAtTick?: number;
+  minimumLiving: number; maximumLiving: number; maximumRoster: number; populationCeiling: number; extinctAtTick?: number;
   maximumEpisodicMemory: number; maximumCoreMemory: number; maximumRumors: number; maximumReflections: number;
   maximumTreasury: number; maximumPersonalStones: number; maximumTotalHerbs: number;
   activeSieges: number; completedSieges: number; longestObservedSiege: number; distinctSieges: number;
@@ -30,9 +30,11 @@ export function runBalanceSimulation({ seed, ticks, restBelow = 0 }: BalanceSett
   if (!checkNat(seed, 0xffffffff)) throw new RangeError('Seed must be uint32.');
   let world = createInitialWorld(seed);
   const initialLiving = world.cultivators.filter(({ alive }) => alive).length;
+  const populationCeiling = world.cultivators.length + new Set(world.settlements.villages.flatMap(({volunteers}) =>
+    volunteers.map(({id}) => id))).size;
   const report: BalanceReport = {
     seed, steps, restBelow: rest, initialLiving, finalLiving: initialLiving, minimumLiving: initialLiving, maximumLiving: initialLiving,
-    maximumRoster: world.cultivators.length, maximumEpisodicMemory: 0, maximumCoreMemory: 0, maximumTreasury: 0,
+    maximumRoster: world.cultivators.length, populationCeiling, maximumEpisodicMemory: 0, maximumCoreMemory: 0, maximumTreasury: 0,
     maximumPersonalStones: 0, maximumTotalHerbs: 0, maximumRumors: 0, maximumReflections: 0,
     activeSieges: 0, completedSieges: 0, longestObservedSiege: 0, distinctSieges: 0, supervisedRestOrders: 0, violations: [],
   };
@@ -51,7 +53,7 @@ export function runBalanceSimulation({ seed, ticks, restBelow = 0 }: BalanceSett
     report.maximumLiving = Math.max(report.maximumLiving, present);
     report.maximumRoster = Math.max(report.maximumRoster, world.cultivators.length);
     if (!present && report.extinctAtTick === undefined) report.extinctAtTick = world.tick;
-    if (world.cultivators.length > initialLiving * 4) violation('population_growth');
+    if (world.cultivators.length > populationCeiling) violation('population_growth');
     if (new Set(world.cultivators.map(({ id }) => id)).size !== world.cultivators.length) violation('duplicate_cultivator');
     let herbs = 0;
     for (const actor of world.cultivators) {

@@ -8,7 +8,7 @@ describe('seeded offline world balance benchmark', () => {
       const report = runBalanceSimulation({ seed, ticks });
       expect(report.violations, `seed ${seed}`).toEqual([]);
       expect(report.minimumLiving, `seed ${seed}`).toBeGreaterThan(0);
-      expect(report.maximumLiving).toBeLessThanOrEqual(report.initialLiving * 4);
+      expect(report.maximumRoster).toBeLessThanOrEqual(report.populationCeiling);
       expect(report.maximumEpisodicMemory).toBeLessThanOrEqual(EPISODIC_LIMIT);
       expect(report.maximumCoreMemory).toBeLessThanOrEqual(CORE_LIMIT);
       expect(report.maximumTotalHerbs).toBeGreaterThan(0);

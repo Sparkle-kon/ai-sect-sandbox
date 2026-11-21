@@ -1,3 +1,4 @@
+import { advanceSettlements, resolveSettlementAction } from './settlementEngine';
 import { advanceMarkets, resolveMarketAction } from './marketEngine';
 import { weatherTravelFriction } from './weatherEngine';
 import { advanceOaths, resolveOathAction } from './oathEngine';
@@ -163,6 +164,9 @@ export function applyCultivatorBrainDecision(
     case 'BREW_PILL':
     case 'USE_PILL':
       return resolveAlchemy(world, cultivator, decision, rng);
+    case 'RECRUIT_SETTLER':
+    case 'DELIVER_RELIEF':
+      return resolveSettlementAction(world, cultivator, decision);
     case 'PLACE_MARKET_BUY':
     case 'PLACE_MARKET_SELL':
     case 'CANCEL_MARKET_ORDER':
@@ -566,10 +570,10 @@ export function advanceWorldTick(
   const avatarOrder = consumeAvatarOrder(nextState);
   maintainAlchemy(nextState);
   maintainSectEconomy(nextState);
-  const newEvents: WorldEvent[] = [...advanceMapHazards(nextState), ...advanceSpiritBeasts(nextState, rng)];
+  const newEvents: WorldEvent[] = [...advanceMapHazards(nextState), ...advanceSettlements(nextState), ...advanceSpiritBeasts(nextState, rng)];
   for (const event of newEvents) witnessEvent(nextState, event);
 
-  for (const cultivator of nextState.cultivators) {
+  for (const cultivator of [...nextState.cultivators]) {
     if (!cultivator.alive) continue;
 
     // Age increment every 12 months

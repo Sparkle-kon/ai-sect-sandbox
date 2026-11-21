@@ -28,18 +28,19 @@ import { availableCouncilPlans } from './engine/councilEngine';
 import { commitCouncilSnapshot, settleAnnualCouncilOnline, settleCouncilSnapshot } from './engine/councilRuntime';
 import type { AvatarInteractionRequest, CouncilPlan } from './types/world';
 import { PossessionPanel } from './components/PossessionPanel';
-import { WorldStoragePanel } from './components/WorldStoragePanel';
 import { isWorldSeed } from './engine/worldRandom';
 import { TimelinePanel } from './components/TimelinePanel';
 import { MentorshipPanel } from './components/MentorshipPanel';
 import { OathContractsPanel } from './components/OathContractsPanel';
 import { WeatherAtlasPanel } from './components/WeatherAtlasPanel';
 import { MarketCaravansPanel } from './components/MarketCaravansPanel';
+import { MortalVillagesPanel } from './components/MortalVillagesPanel';
 import { createTimeline, forkTimeline, readTimelineHead, readTimelineSnapshot, recordTimelineWorld, selectTimelineBranch } from './engine/timelineEngine';
 import type { WorldTimeline } from './engine/timelineEngine';
 import { activeAvatar, possessAvatar, queueAvatarOrder } from './engine/avatarEngine';
 import { resolveAvatarSnapshot } from './engine/avatarRuntime';
 
+const WorldStoragePanel = React.lazy(async () => ({ default: (await import('./components/WorldStoragePanel')).WorldStoragePanel }));
 const AnalyticsModal = React.lazy(async () => ({ default: (await import('./components/AnalyticsModal')).AnalyticsModal }));
 
 export const App: React.FC = () => {
@@ -72,6 +73,7 @@ export const App: React.FC = () => {
   const stepInFlight = useRef(false);
   const [councilOpen, setCouncilOpen] = useState(false);
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
+  const [storageOpen, setStorageOpen] = useState(false);
   const [avatarNotice, setAvatarNotice] = useState<string>();
   const [lastManualCouncilId, setLastManualCouncilId] = useState<string>();
   const [tickIntervalMs, setTickIntervalMs] = useState(1800);
@@ -392,6 +394,7 @@ export const App: React.FC = () => {
           />
           <WeatherAtlasPanel world={visibleWorld} cultivator={selectedCultivator} />
           <MarketCaravansPanel world={visibleWorld} cultivator={selectedCultivator} />
+          <MortalVillagesPanel world={visibleWorld} cultivator={selectedCultivator} />
           <BountyBoard world={visibleWorld} />
           {!preview && <GodConsole
             world={world}
@@ -418,7 +421,13 @@ export const App: React.FC = () => {
           />
           <MentorshipPanel world={visibleWorld} cultivator={selectedCultivator} />
           <OathContractsPanel world={visibleWorld} cultivator={selectedCultivator} />
-          {!preview && <WorldStoragePanel world={world} busy={isStepping} onRestore={replaceWorld} onNewWorld={newWorldFromSeed} />}
+          {!preview && <section className="rounded-xl border border-slate-800 bg-slate-900/80 p-3">
+            <button type="button" aria-expanded={storageOpen} onClick={() => setStorageOpen((open) => !open)}
+              className="w-full rounded-md bg-slate-800 px-3 py-2 text-left text-sm text-slate-100">存档与世界种子</button>
+            {storageOpen && <React.Suspense fallback={<p className="py-2 text-sm text-slate-300" role="status">载入存档管理…</p>}>
+              <WorldStoragePanel world={world} busy={isStepping} onRestore={replaceWorld} onNewWorld={newWorldFromSeed} />
+            </React.Suspense>}
+          </section>}
           <RelationshipGraph
             world={visibleWorld}
             selectedCultivatorId={selectedCultivatorId}

@@ -67,6 +67,8 @@ export type ActionType =
   | 'PLACE_MARKET_BUY'
   | 'PLACE_MARKET_SELL'
   | 'CANCEL_MARKET_ORDER'
+  | 'RECRUIT_SETTLER'
+  | 'DELIVER_RELIEF'
   | 'GATHER_HERBS'
   | 'BREW_PILL'
   | 'USE_PILL'
@@ -332,6 +334,8 @@ export interface LLMDecisionPayload {
   marketQuantity?: number;
   marketLimitPrice?: number;
   targetMarketOrderId?: string;
+  targetSettlementId?: string;
+  targetVolunteerId?: string;
   targetTechniqueId?: string;
   targetHerbId?: HerbId;
   targetPillId?: PillId;
@@ -719,7 +723,49 @@ export interface MarketState {
   nextId: number;
 }
 
+export interface MortalVolunteer {
+  id: string;
+  name: string;
+  age: number;
+  spiritRoot: SpiritRoot;
+  willingness: number;
+  aptitude: number;
+  enlistedCultivatorId?: string;
+}
+export interface MortalSettlement {
+  id: string;
+  locationId: string;
+  name: string;
+  population: number;
+  capacity: number;
+  stress: number;
+  volunteers: MortalVolunteer[];
+  lastDisasterTick?: number;
+  lastReliefTick?: number;
+}
+export interface SettlementRecord {
+  id: string;
+  tick: number;
+  kind: 'disaster' | 'migration' | 'relief' | 'recruitment';
+  settlementId: string;
+  targetSettlementId?: string;
+  actorId?: string;
+  sectId?: string;
+  volunteerId?: string;
+  cultivatorId?: string;
+  people: number;
+  stones: number;
+  herbs: number;
+  description: string;
+}
+export interface SettlementState {
+  villages: MortalSettlement[];
+  records: SettlementRecord[];
+  lastAdvancedTick?: number;
+}
+
 export interface WorldState {
+  settlements: SettlementState;
   markets: MarketState;
   oaths: OathState;
   mentorship: MentorshipState;

@@ -1,3 +1,4 @@
+import { createSettlementState } from './settlementEngine';
 import { OATH_TERMS } from './oathEngine';
 import type { WorldState } from '../types/world';
 
@@ -57,7 +58,7 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const marketQty = num(1,12,true), marketPrice = num(1,500,true);
@@ -128,6 +129,12 @@ const shape = structure({
     status:one('passed','rejected','stale'),outcome:text})),
   chronicleArchive:structure({anchors:arr(384,anchor),chapters:arr(24,structure({id,chapterNumber:tick,startTick:tick,endTick:tick,title:text,
     anchors:arr(18,anchor),biographies:arr(8,structure({actorId:id,name:id,realm,sectName:otext,anchorIds:ids})),body:strings(25_000),source}))}),
+  settlements:structure({lastAdvancedTick:otick,
+    villages:arr(48,structure({id,locationId:id,name:id,population:count,capacity:count,stress:percentage,
+      volunteers:arr(80,structure({id,name:id,age:wealth,spiritRoot:spirit,willingness:percentage,aptitude:percentage,enlistedCultivatorId:oid})),
+      lastDisasterTick:otick,lastReliefTick:otick})),
+    records:arr(100,structure({id,tick,kind:one('disaster','migration','relief','recruitment'),settlementId:id,targetSettlementId:oid,
+      actorId:oid,sectId:oid,volunteerId:oid,cultivatorId:oid,people:count,stones:wealth,herbs:count,description:text}))}),
   markets:structure({nextId:tick,
     orders:arr(320,structure({id,sequence:tick,actorId:id,locationId:id,side:one('buy','sell'),good:marketGood,
       quantity:marketQty,remaining:num(0,12,true),limitPrice:marketPrice,escrowStones:wealth,escrowGoods:num(0,12,true),
@@ -164,12 +171,16 @@ function verifyWorld(value: unknown): WorldState {
   const candidate = value !== null && typeof value === 'object' && !Array.isArray(value)
     ? { ...value,
       ...(!Object.hasOwn(value, 'mentorship') ? { mentorship: { offers: [], lineage: [], budgets: [] } } : {}),
+      ...(!Object.hasOwn(value, 'settlements') ? { settlements: { villages: [], records: [] } } : {}),
       ...(!Object.hasOwn(value, 'markets') ? { markets: { orders: [], shipments: [], receipts: [], nextId: 1 } } : {}),
       ...(!Object.hasOwn(value, 'oaths') ? { oaths: { contracts: [], nextId: 1 } } : {}),
     } : value;
   shape(candidate, 'world');
   const w = candidate as WorldState;
   if (!w.cultivators.length || !w.locations.length) fail('world.minimum_entities');
+  if (value !== null && typeof value === 'object' && !Object.hasOwn(value, 'settlements')) {
+    w.settlements = createSettlementState(w.locations, w.random.seed);
+  }
   const actor = unique(w.cultivators, (item) => item.id, 'cultivators.id');
   const sector = unique(w.sects, (item) => item.id, 'sects.id');
   const locations = unique(w.locations, (item) => item.id, 'locations.id');
@@ -206,6 +217,20 @@ function verifyWorld(value: unknown): WorldState {
   if ((w.playerAvatar.possessedId && !actor.has(w.playerAvatar.possessedId)) ||
       (w.playerAvatar.pendingOrder && w.playerAvatar.pendingOrder.actorId !== w.playerAvatar.possessedId) ||
       w.playerAvatar.transcript.some((entry) => !actor.has(entry.targetCultivatorId) || (entry.actorId && !actor.has(entry.actorId)))) fail('playerAvatar.references');
+  const settlementIds = unique(w.settlements.villages, ({id}) => id, 'settlements.villages.id');
+  const volunteers = w.settlements.villages.flatMap((village) => village.volunteers);
+  const volunteerIds = unique(volunteers, ({id}) => id, 'settlements.volunteers.id');
+  unique(w.settlements.records, ({id}) => id, 'settlements.records.id');
+  for (const village of w.settlements.villages) {
+    if (!locations.has(village.locationId) || village.population > village.capacity ||
+        village.volunteers.some((volunteer) => volunteer.enlistedCultivatorId &&
+          (volunteer.enlistedCultivatorId !== `recruit-${volunteer.id}` || !actor.has(volunteer.enlistedCultivatorId)))) fail('settlements.villages.references');
+  }
+  for (const row of w.settlements.records) {
+    if (!settlementIds.has(row.settlementId) || (row.targetSettlementId && !settlementIds.has(row.targetSettlementId)) ||
+        (row.actorId && !actor.has(row.actorId)) || (row.sectId && !sector.has(row.sectId)) ||
+        (row.volunteerId && !volunteerIds.has(row.volunteerId)) || (row.cultivatorId && !actor.has(row.cultivatorId))) fail('settlements.records.references');
+  }
   const marketLocations = new Set(w.locations.filter(({type}) => type === 'market').map(({id}) => id));
   const marketOrders = unique(w.markets.orders, ({id}) => id, 'markets.orders.id');
   unique(w.markets.shipments, ({id}) => id, 'markets.shipments.id');

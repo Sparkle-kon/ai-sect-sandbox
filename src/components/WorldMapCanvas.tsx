@@ -90,6 +90,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const trialsByLocation = new Map<string, number>();
   const guardsByLocation = new Map<string, number>();
   const headquarters = new Map(world.sects.map((sect) => [sect.headquartersId, sect]));
+  const villagesAt = new Map(world.settlements.villages.map((village) => [village.locationId, village]));
   const currentCouncils = new Map(world.councils.filter((record) => record.tick === world.tick).map((record) => [record.sectId, record]));
   for (const actor of liveActors) {
     if (isGuardOnDuty(actor, world)) {
@@ -274,6 +275,15 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           ctx.font = 'bold 11px sans-serif';
           ctx.fillStyle = appearance.color;
           ctx.fillText(appearance.symbol, loc.x - 21, loc.y + 11);
+          ctx.restore();
+        }
+        const localVillage = villagesAt.get(loc.id);
+        if (localVillage && isCurrentLocation(loc.id)) {
+          ctx.save();
+          ctx.font = 'bold 10px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillStyle = localVillage.stress >= 55 ? '#fdba74' : '#bef264';
+          ctx.fillText(`村 ${localVillage.population}`, loc.x, loc.y + 43);
           ctx.restore();
         }
         const localCouncil = currentCouncils.get(headquarters.get(loc.id)?.id ?? '');
@@ -713,6 +723,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
             const homeSect = headquarters.get(location.id);
             const localOccasions = occasionsByLocation.get(location.id) ?? [];
             const localCouncil = currentCouncils.get(homeSect?.id ?? '');
+            const localVillage = villagesAt.get(location.id);
             const localWeather = weatherAtVisibleSites.get(location.id);
             const localBeasts = beastsByLocation.get(location.id) ?? [];
             return (
@@ -731,6 +742,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                 {homeSect && homeSect.arrayMaxHp > 0 && (
                   <span className="text-indigo-300">· 护山阵 {homeSect.arrayHp}/{homeSect.arrayMaxHp}</span>
                 )}
+                {localVillage && <span className="text-lime-200">· {localVillage.name} {localVillage.population} 人</span>}
                 {localWeather && <span style={{ color: WEATHER_MARK[localWeather.kind].color }}>
                   · 已观测：{localWeather.kind} {Math.round(localWeather.intensity * 100)}%
                 </span>}
