@@ -146,6 +146,7 @@ export type ActionType =
   | 'HOUSEHOLD_NAME'
   | 'CARAVAN_RESTITUTION'
   | 'VILLAGE_GRANARY'
+  | 'VILLAGE_SUPPLY'
   | 'FORGE_ARTIFACT'
   | 'BIND_ARTIFACT'
   | 'REPAIR_ARTIFACT'
@@ -544,6 +545,8 @@ export interface LLMDecisionPayload {
   targetHouseholdNameId?: string;
   restitutionMove?: CaravanRestitutionMove;
   granaryMove?: VillageGranaryMove;
+  villageSupplyMove?: VillageSupplyMove;
+  targetVillageSupplyId?: string;
   targetRestitutionId?: string;
   targetWorkshopId?: string;
   workshopTier?: WorkshopTier;
@@ -2123,9 +2126,9 @@ export interface SharedCommonsPact {
 export interface SharedCommonsState { pacts: SharedCommonsPact[]; nextId: number }
 
 export type ResourceFlowGood = 'stone' | MarketGood;
-export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation' | 'terrain' | 'workshop' | 'road' | 'observatory' | 'pilgrimage' | 'granary' | 'furnace_safety' | 'artifact_salvage';
+export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation' | 'terrain' | 'workshop' | 'road' | 'observatory' | 'pilgrimage' | 'granary' | 'furnace_safety' | 'artifact_salvage' | 'village_supply';
 export type ResourceFlowAccount =
-  | { kind: 'actor' | 'site' | 'sect' | 'order' | 'shipment' | 'relocation' | 'workshop' | 'salvage' | 'granary'; id: string }
+  | { kind: 'actor' | 'site' | 'sect' | 'order' | 'shipment' | 'relocation' | 'workshop' | 'salvage' | 'granary' | 'village_supply'; id: string }
   | { kind: 'oath'; id: string; pocket: 'payment' | 'collateral' };
 export type ResourceFlowVisibility =
   | { kind: 'observer' }
@@ -2476,14 +2479,17 @@ export interface CaravanRestitutionLot {
 }
 export interface CaravanRestitutionState { lots: CaravanRestitutionLot[] }
 
-export type VillageGranaryMove = 'donate' | 'draw';
+export type VillageGranaryDonation = 'donate' | 'donate_roots' | 'donate_stones';
+export type VillageGranaryMove = VillageGranaryDonation | 'draw';
 export type VillageGranaryReceipt =
-  | { tick: number; actorId: string; kind: 'donate' }
+  | { tick: number; actorId: string; kind: VillageGranaryDonation }
   | { tick: number; actorId: string; kind: 'draw'; stressBefore: number; stressAfter: number; disasterTick: number };
 export interface VillageGranary {
   settlementId: string;
   roots: number;
   stones: number;
+  rootOnlyDonations?: number;
+  stoneOnlyDonations?: number;
   donatedRoots: number;
   donatedStones: number;
   spentRoots: number;
@@ -2492,6 +2498,34 @@ export interface VillageGranary {
   receipts: VillageGranaryReceipt[];
 }
 export interface VillageGranariesState { granaries: VillageGranary[] }
+
+export type VillageSupplyMove = 'offer' | 'accept' | 'decline' | 'withdraw';
+export interface VillageSupplySigner { actorId:string; donationTick:number; donationKind:VillageGranaryDonation }
+export type VillageSupplyHazardProof = Pick<MapHazard,'id'|'kind'|'tileId'|'createdTick'|'expiresTick'|'intensity'>;
+export interface VillageSupplyLeg {
+  good:'earth_root'|'stone';
+  phase:'outbound'|'returning'|'delivered'|'returned'|'lost';
+  checkpoint:number;
+  lastAdvancedTick:number;
+  turnback?:{tick:number;checkpoint:number;cause:'destination_closed'|'unsafe_next';hazard?:VillageSupplyHazardProof};
+  settledTick?:number;
+  loss?:VillageSupplyHazardProof;
+}
+export interface VillageSupplyAgreement {
+  id:string;
+  fromSettlementId:string;
+  toSettlementId:string;
+  proposer:VillageSupplySigner;
+  offeredTick:number;
+  expiresTick:number;
+  status:'offered'|'active'|'completed'|'declined'|'withdrawn'|'expired';
+  acceptor?:VillageSupplySigner;
+  acceptedTick?:number;
+  closedTick?:number;
+  path?:string[];
+  legs?:[VillageSupplyLeg,VillageSupplyLeg];
+}
+export interface VillageSupplyState { agreements:VillageSupplyAgreement[]; nextId:number }
 
 export type ProbationMove = 'request' | 'admit' | 'review' | 'withdraw' | 'restore';
 export type ProbationVote = 'support' | 'oppose';
@@ -2603,6 +2637,7 @@ export interface WorldState {
   householdNames: HouseholdNameState;
   caravanRestitution: CaravanRestitutionState;
   villageGranaries: VillageGranariesState;
+  villageSupply: VillageSupplyState;
   resourceFlow: ResourceFlowState;
   roads: RoadState;
   sharedCommons: SharedCommonsState;

@@ -1,6 +1,7 @@
 import type { MapPoint,WorldState } from '../types/world';
 import { terrainTileAt } from '../engine/terrainEngine';
 import type { getVisibleHazards } from './mapBrushView';
+import type { VillageSupplyCheckpoint } from '../engine/villageSupplyEngine';
 import { MAP_CONVOY_STYLES } from './mapConvoyView';
 import type { VisibleCheckpoint,VisibleConvoy } from './mapConvoyView';
 import type { buildMapPresentation } from './mapPresentationView';
@@ -20,7 +21,7 @@ type Presentation=ReturnType<typeof buildMapPresentation>;
 /** Translate the exact paint inputs; do not search hidden actors, full routes, or remembered hazards. */
 export function paintedMapMarks(world:WorldState,view:Terrain,territories:readonly PaintedMapMark[],
   hazards:ReturnType<typeof getVisibleHazards>,convoys:readonly VisibleConvoy[],escort:VisibleCheckpoint|undefined,
-  presentation:Presentation):PaintedMapMark[] {
+  presentation:Presentation,supplies:readonly VillageSupplyCheckpoint[]=[]):PaintedMapMark[] {
   const isVisible=(point:MapPoint)=>{
     if(!Number.isFinite(point.x)||!Number.isFinite(point.y))return false;
     const tile=terrainTileAt(world,point.x,point.y);
@@ -44,6 +45,10 @@ export function paintedMapMarks(world:WorldState,view:Terrain,territories:readon
     id:'selected-escort',kind:'route',title:MAP_CONVOY_STYLES.escort.label,
     summary:`${MAP_CONVOY_STYLES.escort.symbolLabel} · 第 ${escort.row} 行第 ${escort.col} 列 · 只示可见路段`,
     point:escort.marker,
+  });
+  for(const mark of supplies) if(isVisible(mark.marker) && mark.route.every(isVisible)) result.push({
+    id:`village-supply:${mark.id}`,kind:'route',title:mark.returning?'可见村镇互助回程':'可见村镇互助运程',
+    summary:`菱形${mark.returning?'返':'运'}标 · 第 ${mark.row} 行第 ${mark.col} 列 · 只示可见路段`,point:mark.marker,
   });
   for(const [actorId,route] of presentation.routes) {
     const name=actors.get(actorId),point=route.points.at(-1);

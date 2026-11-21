@@ -1,8 +1,9 @@
 import type {
-  Cultivator, LLMDecisionPayload, MortalSettlement, VillageGranariesState, VillageGranary,
+  Cultivator, LLMDecisionPayload, MortalSettlement, VillageGranariesState, VillageGranary, VillageGranaryMove,
   VillageGranaryReceipt, WorldEvent, WorldState,
 } from '../types/world';
 import { flowActor, flowGranary, recordResourceFlow } from './resourceFlowEngine';
+import { villageSupplyNet } from './villageSupplyAccounting';
 
 export const VILLAGE_GRANARY_CAPACITY = { roots:20,stones:80 } as const;
 export const VILLAGE_GRANARY_DONATION = { roots:2,stones:8 } as const;
@@ -15,11 +16,11 @@ export const VILLAGE_GRANARY_RECEIPT_LIMIT = 64;
 
 export interface VillageGranaryOption {
   action: 'VILLAGE_GRANARY';
-  granaryMove: 'donate'|'draw';
+  granaryMove: VillageGranaryMove;
   targetSettlementId: string;
 }
 export type VillageGranaryReceiptView = (
-  | {kind:'donate';tick:number}
+  | {kind:VillageGranaryDonationMove;tick:number}
   | {kind:'draw';tick:number;stressBefore:number;stressAfter:number;disasterTick:number}
 ) & {own?:true};
 export interface VillageGranaryView extends Omit<VillageGranary,'receipts'> {
@@ -39,7 +40,7 @@ const live = (actor: Cultivator) => actor.alive && actor.hp > 0;
 const count = (value: number, minimum = 0) => Number.isSafeInteger(value) && value >= minimum;
 const finiteAtLeast = (value: number, minimum: number) => Number.isFinite(value) && value >= minimum;
 const exactPayload = new Set(['chosenAction','innerMonologue','spokenLine','granaryMove','targetSettlementId']);
-const granaryAt = (world: WorldState, villageId: string) =>
+export const granaryAt = (world: WorldState, villageId: string) =>
   world.villageGranaries.granaries.find(item => item.settlementId === villageId);
 
 function presentAt(world: WorldState,actor: Cultivator,tick: number): MortalSettlement|undefined {
@@ -70,11 +71,26 @@ function presentAt(world: WorldState,actor: Cultivator,tick: number): MortalSett
   return village;
 }
 
-function validBook(book: VillageGranary): boolean {
+export function presentAtVillageGranary(world: WorldState,actor: Cultivator,tick=world.tick): MortalSettlement|undefined {
+  return (tick===world.tick || tick===world.tick+1) && finiteAtLeast(actor.age,18) && world.cultivators.includes(actor)
+    ? presentAt(world,actor,tick) : undefined;
+}
+
+export type VillageGranaryDonationMove = Exclude<VillageGranaryMove,'draw'>;
+export const villageGranaryDonationAssets = (kind: VillageGranaryDonationMove): {roots:number;stones:number} => ({
+  roots:kind==='donate_stones'?0:VILLAGE_GRANARY_DONATION.roots,
+  stones:kind==='donate_roots'?0:VILLAGE_GRANARY_DONATION.stones,
+});
+export const villageGranaryDonationReason = (kind: VillageGranaryDonationMove) =>
+  kind==='donate_roots'?'granary_donation_roots':kind==='donate_stones'?'granary_donation_stones':'granary_donation';
+
+function validBook(book: VillageGranary, supply: ReturnType<typeof villageSupplyNet>): boolean {
   return count(book.roots) && count(book.stones) && book.roots <= VILLAGE_GRANARY_CAPACITY.roots &&
     book.stones <= VILLAGE_GRANARY_CAPACITY.stones && count(book.donatedRoots) && count(book.donatedStones) &&
-    count(book.spentRoots) && count(book.spentStones) && book.donatedRoots-book.spentRoots === book.roots &&
-    book.donatedStones-book.spentStones === book.stones;
+    count(book.spentRoots) && count(book.spentStones) && book.donatedRoots-book.spentRoots+supply.roots === book.roots &&
+    book.donatedStones-book.spentStones+supply.stones === book.stones &&
+    book.roots+supply.reserveRoots <= VILLAGE_GRANARY_CAPACITY.roots &&
+    book.stones+supply.reserveStones <= VILLAGE_GRANARY_CAPACITY.stones;
 }
 
 function localDisasterTick(world: WorldState,village: MortalSettlement): number|undefined {
@@ -95,20 +111,22 @@ function mayDraw(world: WorldState,village: MortalSettlement,book: VillageGranar
 
 export function availableVillageGranaryActions(actor: Cultivator,world: WorldState,
   executionTick = world.tick): VillageGranaryOption[] {
-  if ((executionTick !== world.tick && executionTick !== world.tick+1) || !Number.isFinite(actor.age) || actor.age < 18 ||
-    !world.cultivators.includes(actor)) return [];
-  const village = presentAt(world,actor,executionTick);
+  const village = presentAtVillageGranary(world,actor,executionTick);
   if (!village || !count(village.population,1)) return [];
   const book = granaryAt(world,village.id) ?? empty(village.id);
-  if (!validBook(book) || book.receipts.some(row => row.actorId === actor.id && row.tick === executionTick)) return [];
+  const supply = villageSupplyNet(world,village.id);
+  if (!validBook(book,supply) || book.receipts.some(row => row.actorId === actor.id && row.tick === executionTick)) return [];
   const options: VillageGranaryOption[] = [];
   const add = (granaryMove: VillageGranaryOption['granaryMove']) =>
     options.push({action:'VILLAGE_GRANARY',granaryMove,targetSettlementId:village.id});
   if (mayDraw(world,village,book,executionTick)) add('draw');
-  if (count(actor.herbs.earth_root,VILLAGE_GRANARY_DONATION.roots) && finiteAtLeast(actor.spiritStones,VILLAGE_GRANARY_DONATION.stones) &&
-    book.roots+VILLAGE_GRANARY_DONATION.roots <= VILLAGE_GRANARY_CAPACITY.roots &&
-    book.stones+VILLAGE_GRANARY_DONATION.stones <= VILLAGE_GRANARY_CAPACITY.stones &&
-    count(book.donatedRoots+VILLAGE_GRANARY_DONATION.roots) && count(book.donatedStones+VILLAGE_GRANARY_DONATION.stones)) add('donate');
+  for (const kind of ['donate','donate_roots','donate_stones'] as const) {
+    const {roots,stones}=villageGranaryDonationAssets(kind);
+    if ((roots===0 || count(actor.herbs.earth_root,roots)) && (stones===0 || finiteAtLeast(actor.spiritStones,stones)) &&
+      book.roots+supply.reserveRoots+roots <= VILLAGE_GRANARY_CAPACITY.roots &&
+      book.stones+supply.reserveStones+stones <= VILLAGE_GRANARY_CAPACITY.stones &&
+      count(book.donatedRoots+roots) && count(book.donatedStones+stones)) add(kind);
+  }
   return options;
 }
 
@@ -131,17 +149,27 @@ export function resolveVillageGranaryAction(world: WorldState,actor: Cultivator,
   const participant = flowActor(actor.id);
   const visibility = {kind:'participants' as const,actorIds:[actor.id]};
   let receipt: VillageGranaryReceipt;
-  if (choice.granaryMove === 'donate') {
-    const {roots,stones} = VILLAGE_GRANARY_DONATION;
-    actor.herbs.earth_root -= roots;
-    actor.spiritStones -= stones;
-    book.roots += roots; book.donatedRoots += roots;
-    book.stones += stones; book.donatedStones += stones;
-    receipt = {kind:'donate',tick,actorId:actor.id};
-    recordResourceFlow(world,{kind:'transfer',mechanism:'granary',reason:'granary_donation',refId:village.id,
-      from:participant,to:granary,good:'earth_root',amount:roots,visibility});
-    recordResourceFlow(world,{kind:'transfer',mechanism:'granary',reason:'granary_donation',refId:village.id,
-      from:participant,to:granary,good:'stone',amount:stones,visibility});
+  if (choice.granaryMove !== 'draw') {
+    const kind = choice.granaryMove;
+    const {roots,stones} = villageGranaryDonationAssets(kind);
+    const reason = villageGranaryDonationReason(kind);
+    if (roots) {
+      actor.herbs.earth_root -= roots;
+      book.roots += roots;
+      book.donatedRoots += roots;
+      if (kind==='donate_roots') book.rootOnlyDonations=(book.rootOnlyDonations??0)+1;
+      recordResourceFlow(world,{kind:'transfer',mechanism:'granary',reason,refId:village.id,
+        from:participant,to:granary,good:'earth_root',amount:roots,visibility});
+    }
+    if (stones) {
+      actor.spiritStones -= stones;
+      book.stones += stones;
+      book.donatedStones += stones;
+      if (kind==='donate_stones') book.stoneOnlyDonations=(book.stoneOnlyDonations??0)+1;
+      recordResourceFlow(world,{kind:'transfer',mechanism:'granary',reason,refId:village.id,
+        from:participant,to:granary,good:'stone',amount:stones,visibility});
+    }
+    receipt = {kind,tick,actorId:actor.id};
   } else {
     const {roots,stones} = VILLAGE_GRANARY_DRAW;
     const stressBefore = village.stress;
@@ -158,9 +186,10 @@ export function resolveVillageGranaryAction(world: WorldState,actor: Cultivator,
   }
   book.receipts.push(receipt);
   if (book.receipts.length > VILLAGE_GRANARY_RECEIPT_LIMIT) book.receipts.shift();
-  const donation = receipt.kind === 'donate';
+  const donation = receipt.kind !== 'draw';
   return {id,tick,year:world.year,month:world.month,category:'diplomacy',witnessScope:'participants',actorIds:[actor.id],
-    locationId:village.locationId,title:donation ? '实物捐入村落义仓' : '灾后短缺，义仓实耗',
+    locationId:village.locationId,title:receipt.kind==='donate_roots'?'实付玄土根入义仓':receipt.kind==='donate_stones'?'实付灵石入义仓':
+      donation?'实物捐入村落义仓':'灾后短缺，义仓实耗',
     description:donation ? '由本人现有库存实付，不改变人口或灾情。' : '从义仓扣除实物以缓和灾后压力，不计个人赈济或功绩。'};
 }
 
@@ -169,7 +198,7 @@ export function projectVillageGranary(world: WorldState,viewer?: Cultivator,sett
   const village = presentAt(world,viewer,world.tick);
   if (!village || (settlementId !== undefined && settlementId !== village.id)) return undefined;
   const book = granaryAt(world,village.id) ?? empty(village.id);
-  if (!validBook(book)) return undefined;
+  if (!validBook(book,villageSupplyNet(world,village.id))) return undefined;
   const {receipts,lastDrawTick,...balances} = book;
   const lastDisasterTick = localDisasterTick(world,village);
   return {...balances,siteId:village.locationId,stress:village.stress,

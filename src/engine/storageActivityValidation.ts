@@ -3,7 +3,8 @@ import { SPARRING_ACTIVE_TICKS, SPARRING_OFFER_TICKS } from './sparringEngine';
 import { EXPEDITION_RESCUE_OFFER_TICKS, EXPEDITION_RESCUE_STRIDE } from './expeditionRescueEngine';
 import { VILLAGE_GRANARY_CAPACITY, VILLAGE_GRANARY_DISASTER_WINDOW, VILLAGE_GRANARY_DONATION, VILLAGE_GRANARY_DRAW,
   VILLAGE_GRANARY_MIN_STRESS, VILLAGE_GRANARY_RECEIPT_LIMIT, VILLAGE_GRANARY_RELIEF_COOLDOWN,
-  VILLAGE_GRANARY_STRESS_REDUCTION } from './villageGranaryEngine';
+  VILLAGE_GRANARY_STRESS_REDUCTION, villageGranaryDonationAssets } from './villageGranaryEngine';
+import { villageSupplyNativeDeltas,villageSupplyNet } from './villageSupplyAccounting';
 import { furnaceSafetyDamage, FURNACE_SAFETY_INSPECT_STONES, FURNACE_SAFETY_REOPEN_INTEGRITY,
   FURNACE_SAFETY_REPAIR } from './furnaceSafetyEngine';
 import { terrainTileAt } from './terrainEngine';
@@ -472,56 +473,105 @@ export function validateVillageGranaryRelationships(world: WorldState, actors: R
   const key = (id: string, tick: number, actorId: string) => JSON.stringify([id, tick, actorId]);
   const durableReceipts = new Map<string, VillageGranaryReceipt>();
   const oldestReceipt = new Map<string, number>();
+  const signedAssets=(row:VillageGranaryReceipt):{roots:number;stones:number}=>row.kind==='draw'
+    ? {roots:-VILLAGE_GRANARY_DRAW.roots,stones:-VILLAGE_GRANARY_DRAW.stones}
+    : villageGranaryDonationAssets(row.kind);
+  const withinVault=(roots:number,stones:number)=>Number.isSafeInteger(roots) && Number.isSafeInteger(stones) &&
+    roots>=0 && stones>=0 && roots<=VILLAGE_GRANARY_CAPACITY.roots && stones<=VILLAGE_GRANARY_CAPACITY.stones;
   for (const granary of world.villageGranaries.granaries) {
-    const village = villages.get(granary.settlementId);
+    const id=granary.settlementId;
+    const village = villages.get(id);
     const receipts = granary.receipts;
-    const donationCount = granary.donatedRoots / VILLAGE_GRANARY_DONATION.roots;
-    const draws = granary.spentRoots / VILLAGE_GRANARY_DRAW.roots;
-    if (!village || oldestReceipt.has(granary.settlementId) || !Number.isInteger(donationCount) ||
-        !Number.isInteger(draws) || donationCount < 1 || granary.donatedStones !== donationCount * VILLAGE_GRANARY_DONATION.stones ||
-        granary.spentStones !== draws * VILLAGE_GRANARY_DRAW.stones ||
-        granary.roots !== granary.donatedRoots - granary.spentRoots || granary.stones !== granary.donatedStones - granary.spentStones ||
-        receipts.length !== Math.min(VILLAGE_GRANARY_RECEIPT_LIMIT, donationCount + draws))
+    const rootsOnly=granary.rootOnlyDonations??0;
+    const stonesOnly=granary.stoneOnlyDonations??0;
+    const mixed=granary.donatedRoots/VILLAGE_GRANARY_DONATION.roots-rootsOnly;
+    const allDonations=mixed+rootsOnly+stonesOnly;
+    const draws=granary.spentRoots/VILLAGE_GRANARY_DRAW.roots;
+    const lifetime=allDonations+draws;
+    const supply=villageSupplyNet(world,id);
+    const external=villageSupplyNativeDeltas(world,id);
+    if (!village || oldestReceipt.has(id) || ![rootsOnly,stonesOnly,mixed,draws,lifetime].every(n=>Number.isSafeInteger(n)&&n>=0) ||
+        allDonations < 1 || granary.rootOnlyDonations===0 || granary.stoneOnlyDonations===0 ||
+        granary.donatedStones !== (mixed+stonesOnly)*VILLAGE_GRANARY_DONATION.stones ||
+        granary.spentStones !== draws*VILLAGE_GRANARY_DRAW.stones ||
+        granary.roots !== granary.donatedRoots-granary.spentRoots+supply.roots ||
+        granary.stones !== granary.donatedStones-granary.spentStones+supply.stones ||
+        !withinVault(granary.roots+supply.reserveRoots,granary.stones+supply.reserveStones) ||
+        receipts.length !== Math.min(VILLAGE_GRANARY_RECEIPT_LIMIT,lifetime))
       return fail('villageGranaries.inventory');
-    oldestReceipt.set(granary.settlementId, receipts.length === VILLAGE_GRANARY_RECEIPT_LIMIT ? receipts[0].tick : -1);
-    if ((draws > 0) !== (granary.lastDrawTick !== undefined) ||
-        (granary.lastDrawTick !== undefined && (granary.lastDrawTick > world.tick ||
-          granary.lastDrawTick > (village.lastReliefTick ?? -1) || granary.lastDrawTick >= receipts[0].tick &&
-          !receipts.some((receipt) => receipt.kind === 'draw' && receipt.tick === granary.lastDrawTick))))
+    const head = receipts[0]?.tick ?? -1;
+    oldestReceipt.set(id,receipts.length===VILLAGE_GRANARY_RECEIPT_LIMIT?head:-1);
+    if ((draws>0) !== (granary.lastDrawTick!==undefined) ||
+      (granary.lastDrawTick!==undefined && (granary.lastDrawTick>world.tick ||
+        granary.lastDrawTick>(village.lastReliefTick??-1) ||
+        granary.lastDrawTick>=(external.length && lifetime>receipts.length?head+1:head) &&
+        !receipts.some(receipt=>receipt.kind==='draw' && receipt.tick===granary.lastDrawTick))))
       return fail('villageGranaries.lastDrawTick');
-    let previousTick = -1;
-    let previousDraw = -Infinity;
-    let roots = granary.roots - receipts.reduce((net, row) => net + (row.kind === 'donate'
-      ? VILLAGE_GRANARY_DONATION.roots : -VILLAGE_GRANARY_DRAW.roots), 0);
-    let retainedDonations = 0;
-    let retainedDraws = 0;
+    let previousTick=-1;
+    let previousDraw=-Infinity;
+    const kept={donate:0,donate_roots:0,donate_stones:0,draw:0};
     for (const receipt of receipts) {
-      const receiptKey = key(granary.settlementId, receipt.tick, receipt.actorId);
-      if (!actors.has(receipt.actorId) || receipt.tick < previousTick || receipt.tick > world.tick ||
-          durableReceipts.has(receiptKey) || roots < 0 || roots > VILLAGE_GRANARY_CAPACITY.roots)
+      const receiptKey=key(id,receipt.tick,receipt.actorId);
+      if (!actors.has(receipt.actorId) || receipt.tick<previousTick || receipt.tick>world.tick || durableReceipts.has(receiptKey))
         return fail('villageGranaries.receipts.source');
-      previousTick = receipt.tick;
-      if (receipt.kind === 'draw') {
-        if (receipt.tick - previousDraw < VILLAGE_GRANARY_RELIEF_COOLDOWN ||
-            receipt.tick > (granary.lastDrawTick ?? -1) ||
-            receipt.disasterTick > receipt.tick || receipt.tick - receipt.disasterTick > VILLAGE_GRANARY_DISASTER_WINDOW ||
-            receipt.disasterTick > (village.lastDisasterTick ?? -1) ||
-            receipt.stressBefore < VILLAGE_GRANARY_MIN_STRESS ||
-            receipt.stressBefore - VILLAGE_GRANARY_STRESS_REDUCTION !== receipt.stressAfter ||
-            (settlementHead !== undefined && receipt.disasterTick > settlementHead &&
-              !disasters.has(disasterKey(granary.settlementId, receipt.disasterTick))))
+      previousTick=receipt.tick;
+      if (receipt.kind==='draw') {
+        if (receipt.tick-previousDraw < VILLAGE_GRANARY_RELIEF_COOLDOWN ||
+            receipt.tick > (granary.lastDrawTick??-1) ||
+            receipt.disasterTick>receipt.tick || receipt.tick-receipt.disasterTick>VILLAGE_GRANARY_DISASTER_WINDOW ||
+            receipt.disasterTick>(village.lastDisasterTick??-1) || receipt.stressBefore<VILLAGE_GRANARY_MIN_STRESS ||
+            receipt.stressBefore-VILLAGE_GRANARY_STRESS_REDUCTION!==receipt.stressAfter ||
+            (settlementHead!==undefined && receipt.disasterTick>settlementHead && !disasters.has(disasterKey(id,receipt.disasterTick))))
           return fail('villageGranaries.receipts.draw');
-        previousDraw = receipt.tick;
-        retainedDraws++;
-        roots -= VILLAGE_GRANARY_DRAW.roots;
-      } else {
-        retainedDonations++;
-        roots += VILLAGE_GRANARY_DONATION.roots;
+        previousDraw=receipt.tick;
       }
-      durableReceipts.set(receiptKey, receipt);
+      kept[receipt.kind]++;
+      durableReceipts.set(receiptKey,receipt);
     }
-    if (roots !== granary.roots || retainedDonations > donationCount || retainedDraws > draws)
+    if (kept.donate>mixed || kept.donate_roots>rootsOnly || kept.donate_stones>stonesOnly || kept.draw>draws)
       return fail('villageGranaries.receipts.balance');
+
+    // Independently reconcile the dated native and external lanes. Same-tick order
+    // across lanes is not stored, so only a complete closing balance is provable there.
+    if (!external.length) {
+      let roots=granary.roots,stones=granary.stones;
+      for (const row of [...receipts].reverse()) {
+        const delta=signedAssets(row);
+        roots-=delta.roots;
+        stones-=delta.stones;
+        if (!withinVault(roots,stones)) return fail('villageGranaries.receipts.source');
+      }
+      if (lifetime===receipts.length && (roots!==0 || stones!==0)) return fail('villageGranaries.receipts.balance');
+    } else {
+      const start=(head<0?world.tick+1:head)+(lifetime>receipts.length?1:0);
+      const periods=new Map<number,{native:VillageGranaryReceipt[];roots:number;stones:number;external:boolean}>();
+      const period=(tick:number)=>{
+        const saved=periods.get(tick);
+        if (saved) return saved;
+        const value={native:[],roots:0,stones:0,external:false};
+        periods.set(tick,value);
+        return value;
+      };
+      for(const row of receipts) if(row.tick>=start) period(row.tick).native.push(row);
+      for(const item of external) if(item.tick>=start) {
+        const bucket=period(item.tick);
+        bucket.roots+=item.roots;
+        bucket.stones+=item.stones;
+        bucket.external=true;
+      }
+      let roots=granary.roots,stones=granary.stones;
+      for(const [,entry] of [...periods].sort((a,b)=>b[0]-a[0])) {
+        roots-=entry.roots;
+        stones-=entry.stones;
+        for(const row of [...entry.native].reverse()) {
+          const delta=signedAssets(row);
+          roots-=delta.roots;
+          stones-=delta.stones;
+          if(!entry.external && !withinVault(roots,stones)) return fail('villageGranaries.receipts.source');
+        }
+        if(!withinVault(roots,stones)) return fail('villageGranaries.receipts.balance');
+      }
+    }
   }
   const complete = new Set(world.resourceFlow.months.filter((month) => month.entries.length === month.totalEntries)
     .map(({tick}) => tick));
@@ -529,30 +579,30 @@ export function validateVillageGranaryRelationships(world: WorldState, actors: R
   for (const month of world.resourceFlow.months) for (const row of month.entries) {
     const from = 'from' in row ? row.from : undefined;
     const to = 'to' in row ? row.to : undefined;
+    if (row.mechanism === 'village_supply') continue; // Validated by the separate exact two-endpoint custody ledger.
     if (row.mechanism !== 'granary' && from?.kind !== 'granary' && to?.kind !== 'granary') continue;
-    const isDonation = row.reason === 'granary_donation';
-    const participant = row.visibility.kind === 'participants' && row.visibility.actorIds.length === 1
-      ? row.visibility.actorIds[0] : undefined;
-    const quantity = isDonation ? VILLAGE_GRANARY_DONATION : VILLAGE_GRANARY_DRAW;
-    if (row.mechanism !== 'granary' || !participant || !actors.has(participant) || !oldestReceipt.has(row.refId) ||
-        (row.good !== 'stone' && row.good !== 'earth_root') ||
-        row.amount !== (row.good === 'stone' ? quantity.stones : quantity.roots) ||
-        (isDonation ? row.kind !== 'transfer' || from?.kind !== 'actor' || from.id !== participant ||
-          to?.kind !== 'granary' || to.id !== row.refId :
-          row.reason !== 'granary_draw' || row.kind !== 'consumption' || from?.kind !== 'granary' || from.id !== row.refId))
+    const kind = row.reason==='granary_draw'?'draw':row.reason==='granary_donation'?'donate':
+      row.reason==='granary_donation_roots'?'donate_roots':row.reason==='granary_donation_stones'?'donate_stones':undefined;
+    const participant = row.visibility.kind==='participants' && row.visibility.actorIds.length===1?row.visibility.actorIds[0]:undefined;
+    const quantity = kind==='draw'?VILLAGE_GRANARY_DRAW:kind?villageGranaryDonationAssets(kind):undefined;
+    if (row.mechanism!=='granary' || !quantity || !participant || !actors.has(participant) || !oldestReceipt.has(row.refId) ||
+      (row.good!=='stone' && row.good!=='earth_root') ||
+      row.amount!==(row.good==='stone'?quantity.stones:quantity.roots) || row.amount<=0 ||
+      (kind==='draw'?row.kind!=='consumption'||from?.kind!=='granary'||from.id!==row.refId:
+        row.kind!=='transfer'||from?.kind!=='actor'||from.id!==participant||to?.kind!=='granary'||to.id!==row.refId))
       return fail('villageGranaries.journal.coordinates');
-    const receiptKey = key(row.refId, row.tick, participant);
-    const receipt = durableReceipts.get(receiptKey);
-    if ((receipt && receipt.kind !== (isDonation ? 'donate' : 'draw')) ||
-        (!receipt && row.tick > oldestReceipt.get(row.refId)!))
+    const receiptKey=key(row.refId,row.tick,participant);
+    const receipt=durableReceipts.get(receiptKey);
+    if (receipt && receipt.kind!==kind || !receipt && row.tick>oldestReceipt.get(row.refId)!)
       return fail('villageGranaries.journal.source');
-    const goods = journal.get(receiptKey) ?? new Set<string>();
-    if (goods.has(row.good)) return fail('villageGranaries.journal.duplicate');
+    const goods=journal.get(receiptKey)??new Set<string>();
+    if(goods.has(row.good)) return fail('villageGranaries.journal.duplicate');
     goods.add(row.good);
-    journal.set(receiptKey, goods);
+    journal.set(receiptKey,goods);
   }
-  for (const [receiptKey, {tick}] of durableReceipts) {
-    if (complete.has(tick) && journal.get(receiptKey)?.size !== 2) return fail('villageGranaries.journal.missing');
+  for (const [receiptKey, {tick,kind}] of durableReceipts) {
+    const expected=kind==='donate_roots'||kind==='donate_stones'?1:2;
+    if(complete.has(tick) && journal.get(receiptKey)?.size!==expected) return fail('villageGranaries.journal.missing');
   }
 }
 

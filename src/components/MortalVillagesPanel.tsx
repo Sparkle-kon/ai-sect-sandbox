@@ -8,6 +8,7 @@ import { createTerrainMapView } from './terrainMapView';
 import { VillageWorksPanel } from './VillageWorksPanel';
 import { HouseholdRegisterPanel } from './HouseholdRegisterPanel';
 import { CensusPanel } from './CensusPanel';
+import { VillageSupplyPanel } from './VillageSupplyPanel';
 
 type RecordEntry = WorldState['settlements']['records'][number];
 const KIND_LABELS: Record<RecordEntry['kind'], string> = {
@@ -69,6 +70,7 @@ export function MortalVillagesPanel({ world, cultivator }: { world: WorldState; 
                     </p>
                     {census && householdView && cultivator && <HouseholdRegisterPanel world={world} census={census} view={householdView} cultivator={cultivator} />}
                     {cultivator && <CensusPanel world={world} cultivator={cultivator} villageId={village.id} />}
+                    {cultivator && <VillageSupplyPanel world={world} cultivator={cultivator} settlementId={village.id} />}
                     {worksView.length > 0 && <VillageWorksPanel world={world} village={village} projects={worksView} />}
                     <div className="space-y-1 border-t border-slate-800 pt-2">
                       <h4 className="font-semibold text-emerald-100">自愿入门 · 当前可招募 {eligible.length} 人</h4>

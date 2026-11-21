@@ -38,7 +38,7 @@ describe('actual local granary reserves and draw receipts', () => {
     const { donor, distant, view } = fixture();
     const local = view();
     expect(local).toMatch(/<details class="[^"]+"><summary class="[^"]+">义仓库存与短缺支取/);
-    expect(local).toContain('单笔实捐 玄土根 2 株、灵石 8');
+    expect(local).toContain('单笔实捐可为 玄土根 2 株、灵石 8，也可只捐其中一项');
     expect(local).toContain('压力至少 35 且仍有幸存者');
     expect(local).toContain('相隔至少 2 回合');
     expect(local).toContain('不向个人发款、不增加人口或形成债务');

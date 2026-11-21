@@ -39,6 +39,8 @@ import { visiblePilgrimageCampMarks, visiblePilgrimageMapCheckpoint } from './pi
 import { visibleSanctuaryMapMarks } from './sanctuaryView';
 import { resolveChronicleFocus } from '../engine/chronicleFocusEngine';
 import { availableFurnaceSlotSummary } from '../engine/furnaceReservationEngine';
+import { visibleVillageSupplyCheckpoints } from '../engine/villageSupplyEngine';
+import { drawVillageSupplyCheckpoints } from './villageSupplyMapDraw';
 import { getCurrentBoundaryCoverage } from '../engine/boundaryReliefEngine';
 import { currentVisibleTileIds, terrainTileAt } from '../engine/terrainEngine';
 import { courierCheckpoint } from '../engine/sealedCourierEngine';
@@ -246,6 +248,9 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const sanctuaryMarks = useMemo(() => visibleSanctuaryMapMarks(world, mapView, selected), [world, mapView, selected]);
   const annotationPins = useMemo(() => annotationView?.mapAnnotationPins(world, mapView, selectedCultivatorId) ?? [], [annotationView, world, mapView, selectedCultivatorId]);
   const convoys = useMemo(() => visibleMapConvoys(world, mapView), [world, mapView]);
+  const villageSupplyCheckpoints = useMemo(() => world.villageSupply.agreements.length === 0 ? [] :
+    visibleVillageSupplyCheckpoints(world,mapView.current ??
+      (selected?.alive ? currentVisibleTileIds(world,selected) : new Set<string>())), [world,mapView.current,selected]);
   const pilgrimageMark = useMemo(() => visiblePilgrimageMapCheckpoint(world, mapView, selected), [world, mapView, selected]);
   const campMarks = useMemo(() => visiblePilgrimageCampMarks(world, selected), [world, selected]);
   const escortedCaravan = useMemo(() => visibleMapEscort(world, mapView, selected), [world, mapView, selected]);
@@ -270,7 +275,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   }, [followsSelection, followedActorId, followedX, followedY]);
   const presentation = useMemo(() => buildMapPresentation(world, mapView, actorPositions), [world, mapView, actorPositions]);
   const semanticMarks = useMemo(() => explorerOpen ? paintedMapMarks(world,mapView,territorySemantics.markers,hazards,convoys,
-    escortedCaravan,presentation) : [], [explorerOpen,world,mapView,territorySemantics,hazards,convoys,escortedCaravan,presentation]);
+    escortedCaravan,presentation,villageSupplyCheckpoints) : [],
+  [explorerOpen,world,mapView,territorySemantics,hazards,convoys,escortedCaravan,presentation,villageSupplyCheckpoints]);
   const paintedActors = useRef<{
     markers: ReturnType<typeof planActorMarkers>; positions: typeof actorPositions; camera: MapCamera; size: MarkerViewport; scope: string;
   }>();
@@ -389,6 +395,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       drawHazards(ctx, hazards);
       annotationView?.drawMapAnnotationPins(ctx, annotationPins, camera.zoom);
       drawMapConvoys(ctx, convoys, camera.zoom);
+      drawVillageSupplyCheckpoints(ctx, villageSupplyCheckpoints, camera.zoom);
       drawFormationMapLinks(ctx, formationLines, camera.zoom);
       if (escortedCaravan) drawMapConvoys(ctx, [escortedCaravan], camera.zoom, '#7dd3fc', 'escort');
       if (pilgrimageMark) {
@@ -773,7 +780,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener('change', stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, hazards, convoys, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, observedSalvageSites, localGranary, furnaceShift, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, hazards, convoys, villageSupplyCheckpoints, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, observedSalvageSites, localGranary, furnaceShift, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope]);
 
   useEffect(() => {
     const canvas = canvasRef.current;

@@ -20,6 +20,9 @@ import { createShortShiftState, SHORT_SHIFT_WAGE } from './shortShiftEngine';
 import { createBoundaryReliefState, BOUNDARY_RELIEF_MAX_PATH_STEPS } from './boundaryReliefEngine';
 import { createApprenticeCohortState, COHORT_MAX_INVITEES } from './apprenticeCohortEngine';
 import { createHouseholdNameState, HOUSEHOLD_NAME_ALIASES } from './householdNameEngine';
+import { createVillageSupplyState } from './villageSupplyEngine';
+import { VILLAGE_SUPPLY_MAX_ROUTE_TILES } from './villageSupplyAccounting';
+import { validateVillageSupplyHistory } from './storageVillageSupplyValidation';
 import { createVillageGranariesState, VILLAGE_GRANARY_CAPACITY, VILLAGE_GRANARY_RECEIPT_LIMIT } from './villageGranaryEngine';
 import { createCaravanRestitutionState } from './caravanRestitutionEngine';
 import { createTerrainSuccessionState, TERRAIN_QUIET_CAP, TERRAIN_RECOVERY_LIMIT } from './terrainSuccessionEngine';
@@ -127,21 +130,27 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT SALVAGE_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP FURNACE_RESERVATION FURNACE_SAFETY SPARRING EXPEDITION_RESCUE SHORT_SHIFT BOUNDARY_RELIEF APPRENTICE_COHORT HOUSEHOLD_NAME CARAVAN_RESTITUTION VILLAGE_GRANARY RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY SEASON_REVIEW REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT SALVAGE_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP FURNACE_RESERVATION FURNACE_SAFETY SPARRING EXPEDITION_RESCUE SHORT_SHIFT BOUNDARY_RELIEF APPRENTICE_COHORT HOUSEHOLD_NAME CARAVAN_RESTITUTION VILLAGE_GRANARY VILLAGE_SUPPLY RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY SEASON_REVIEW REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const flowGood = one('stone','jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const flowMeasure = num(0,Number.MAX_SAFE_INTEGER);
 const flowSerial = num(1,Number.MAX_SAFE_INTEGER,true);
-const flowAccount = structure({kind:one('actor','site','sect','order','shipment','oath','relocation','workshop','salvage','granary'),id,
+const flowAccount = structure({kind:one('actor','site','sect','order','shipment','oath','relocation','workshop','salvage','granary','village_supply'),id,
   pocket:optional(one('payment','collateral'))});
 const granaryReceipt: Validator = (value, path) => {
   const kind = (value as { kind?: unknown } | null)?.kind;
-  if (kind === 'donate') return structure({kind:one('donate'),tick,actorId:id})(value,path);
+  if (kind === 'donate' || kind === 'donate_roots' || kind === 'donate_stones') return structure({kind:one(kind),tick,actorId:id})(value,path);
   if (kind === 'draw') return structure({kind:one('draw'),tick,actorId:id,
     stressBefore:percentage,stressAfter:percentage,disasterTick:tick})(value,path);
   return fail(path);
 };
+const villageSupplySigner = structure({actorId:id,donationTick:tick,donationKind:one('donate','donate_roots','donate_stones')});
+const villageSupplyHazard = structure({id,kind:one('meteor','beast_tide','cursed_miasma'),tileId:id,createdTick:tick,expiresTick:tick,intensity:one(1,2,3)});
+const supplyCheckpoint = num(0,VILLAGE_SUPPLY_MAX_ROUTE_TILES-1,true);
+const villageSupplyLeg = structure({good:one('earth_root','stone'),phase:one('outbound','returning','delivered','returned','lost'),
+  checkpoint:supplyCheckpoint,lastAdvancedTick:tick,settledTick:otick,loss:optional(villageSupplyHazard),
+  turnback:optional(structure({tick,checkpoint:supplyCheckpoint,cause:one('destination_closed','unsafe_next'),hazard:optional(villageSupplyHazard)}))});
 const flowScope = structure({kind:one('observer','known_sites','participants'),siteIds:optional(arr(8,id)),actorIds:optional(arr(8,id))});
 const marketQty = num(1,12,true), marketPrice = num(1,500,true);
 const pills = structure({foundation:count,golden:count,barrier:count,heart_poison:count});
@@ -454,15 +463,21 @@ const shape = structure({
   }))}),
   villageGranaries:structure({granaries:arr(SAVE_COLLECTION_LIMIT,structure({
     settlementId:id,roots:num(0,VILLAGE_GRANARY_CAPACITY.roots,true),stones:num(0,VILLAGE_GRANARY_CAPACITY.stones,true),
+    rootOnlyDonations:optional(num(1,Number.MAX_SAFE_INTEGER,true)),stoneOnlyDonations:optional(num(1,Number.MAX_SAFE_INTEGER,true)),
     donatedRoots:num(0,Number.MAX_SAFE_INTEGER,true),donatedStones:num(0,Number.MAX_SAFE_INTEGER,true),
     spentRoots:num(0,Number.MAX_SAFE_INTEGER,true),spentStones:num(0,Number.MAX_SAFE_INTEGER,true),
     lastDrawTick:otick,receipts:arr(VILLAGE_GRANARY_RECEIPT_LIMIT,granaryReceipt),
+  }))}),
+  villageSupply:structure({nextId:num(1,Number.MAX_SAFE_INTEGER,true),agreements:arr(SAVE_COLLECTION_LIMIT,structure({
+    id,fromSettlementId:id,toSettlementId:id,proposer:villageSupplySigner,offeredTick:tick,expiresTick:tick,
+    status:one('offered','active','completed','declined','withdrawn','expired'),acceptor:optional(villageSupplySigner),
+    acceptedTick:otick,closedTick:otick,path:optional(arr(VILLAGE_SUPPLY_MAX_ROUTE_TILES,id)),legs:optional(arr(2,villageSupplyLeg)),
   }))}),
   resourceFlow:structure({nextId:flowSerial,months:arr(RESOURCE_FLOW_MONTH_LIMIT,structure({
     tick,year:tick,month,totalEntries:num(0,Number.MAX_SAFE_INTEGER,true),
     totals:arr(9,structure({good:flowGood,transfer:flowMeasure,production:flowMeasure,consumption:flowMeasure,loss:flowMeasure})),
     entries:arr(RESOURCE_FLOW_DETAIL_LIMIT,structure({
-      id:flowSerial,tick,mechanism:one('alchemy','market','sect_economy','oath','commons','relocation','terrain','workshop','road','observatory','pilgrimage','granary','furnace_safety','artifact_salvage'),
+      id:flowSerial,tick,mechanism:one('alchemy','market','sect_economy','oath','commons','relocation','terrain','workshop','road','observatory','pilgrimage','granary','furnace_safety','artifact_salvage','village_supply'),
       refId:id,reason:strings(40,1),good:flowGood,amount:flowMeasure,visibility:flowScope,
       kind:one('transfer','production','consumption','loss'),from:optional(flowAccount),to:optional(flowAccount)
     }))
@@ -732,6 +747,7 @@ function verifyWorld(value: unknown): WorldState {
       ...(!Object.hasOwn(value, 'apprenticeCohorts') ? { apprenticeCohorts: createApprenticeCohortState() } : {}),
       ...(!Object.hasOwn(value, 'householdNames') ? { householdNames: createHouseholdNameState() } : {}),
       ...(!Object.hasOwn(value, 'villageGranaries') ? { villageGranaries: createVillageGranariesState() } : {}),
+      ...(!Object.hasOwn(value, 'villageSupply') ? { villageSupply: createVillageSupplyState() } : {}),
       ...(!Object.hasOwn(value, 'caravanRestitution') ? { caravanRestitution: createCaravanRestitutionState() } : {}),
       ...(!Object.hasOwn(value, 'terrainSuccession') ? { terrainSuccession: createTerrainSuccessionState() } : {}),
       ...(!Object.hasOwn(value, 'resourceFlow') ? { resourceFlow: createResourceFlowState() } : {}),
@@ -1207,6 +1223,7 @@ function verifyWorld(value: unknown): WorldState {
   validateApprenticeCohortRelationships(w, actor, sector, locations, fail);
   validateHouseholdNameRelationships(w, actor, fail);
   validateCaravanRestitutionRelationships(w, actor, fail);
+  validateVillageSupplyHistory(w, actor, fail);
   validateVillageGranaryRelationships(w, actor, fail);
   validateFurnaceSafetyRelationships(w, actor, sector, fail);
   let previousFlowTick = -1;

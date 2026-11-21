@@ -1,11 +1,15 @@
 import {
   projectVillageGranary, VILLAGE_GRANARY_CAPACITY, VILLAGE_GRANARY_DISASTER_WINDOW, VILLAGE_GRANARY_DONATION, VILLAGE_GRANARY_DRAW,
-  VILLAGE_GRANARY_MIN_STRESS, VILLAGE_GRANARY_RELIEF_COOLDOWN,
+  VILLAGE_GRANARY_MIN_STRESS, VILLAGE_GRANARY_RELIEF_COOLDOWN, villageGranaryDonationAssets,
 } from '../engine/villageGranaryEngine';
-import type { Cultivator, WorldState } from '../types/world';
+import type { Cultivator, VillageGranaryDonation, WorldState } from '../types/world';
 
 type GranaryView = NonNullable<ReturnType<typeof projectVillageGranary>>;
 const stock = ({ roots, stones }: { roots: number; stones: number }) => `玄土根 ${roots} 株、灵石 ${stones}`;
+const donated = (kind: VillageGranaryDonation) => {
+  const goods = villageGranaryDonationAssets(kind);
+  return kind === 'donate_roots' ? `玄土根 ${goods.roots} 株` : kind === 'donate_stones' ? `灵石 ${goods.stones}` : stock(goods);
+};
 
 export function VillageGranaryPanel({ world, cultivator, settlementId }: { world: WorldState; cultivator?: Cultivator; settlementId: string }) {
   const viewer = world.cultivators.find(({ id }) => id === cultivator?.id);
@@ -15,7 +19,7 @@ export function VillageGranaryPanel({ world, cultivator, settlementId }: { world
   return <details className="min-w-0 rounded border border-emerald-400/20 bg-slate-950/55">
     <summary className="min-h-11 cursor-pointer break-words px-3 py-2.5 text-xs font-semibold text-emerald-200">义仓库存与短缺支取</summary>
     <div className="space-y-2 px-3 pb-3 text-xs leading-relaxed text-slate-300">
-      <p>只查看本人在场的义仓。单笔实捐 {stock(VILLAGE_GRANARY_DONATION)}，不从无到有产生物资。</p>
+      <p>只查看本人在场的义仓。单笔实捐可为 {stock(VILLAGE_GRANARY_DONATION)}，也可只捐其中一项。以实际记账为准。</p>
       <p>只有本村距实灾不超过 {VILLAGE_GRANARY_DISASTER_WINDOW} 回合、压力至少 {VILLAGE_GRANARY_MIN_STRESS} 且仍有幸存者，才可用足量库存支取 {stock(VILLAGE_GRANARY_DRAW)}；距上次本村赈济须相隔至少 {VILLAGE_GRANARY_RELIEF_COOLDOWN} 回合。用于赈济，不向个人发款、不增加人口或形成债务。</p>
       <GranaryBalance view={view} tick={world.tick} />
     </div>
@@ -41,7 +45,7 @@ function GranaryBalance({ view, tick }: { view: GranaryView; tick: number }) {
           {receipt.kind === 'draw' ? <>
             <p>Tick #{receipt.tick} · 实际支取 {stock(VILLAGE_GRANARY_DRAW)}</p>
             <p>本次实灾 Tick #{receipt.disasterTick} · 压力 {receipt.stressBefore} → {receipt.stressAfter}。</p>
-          </> : <p>Tick #{receipt.tick} · {receipt.own ? '本人实捐' : '实捐入仓'} {stock(VILLAGE_GRANARY_DONATION)}</p>}
+          </> : <p>Tick #{receipt.tick} · {receipt.own ? '本人实捐' : '实捐入仓'} {donated(receipt.kind)}</p>}
         </li>)}
       </ol>}
     </div>
