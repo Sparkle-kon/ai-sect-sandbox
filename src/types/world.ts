@@ -94,6 +94,7 @@ export type ActionType =
   | 'INFIRMARY'
   | 'FORMATION_NETWORK'
   | 'TERRITORIAL_LEASE'
+  | 'HOUSEHOLD_GUARDIAN'
   | 'GATHER_HERBS'
   | 'BREW_PILL'
   | 'USE_PILL'
@@ -389,6 +390,8 @@ export interface LLMDecisionPayload {
   targetHazardId?: string;
   ceasefireMove?: CeasefireMove;
   targetCeasefireId?: string;
+  guardianMove?: HouseholdGuardianMove;
+  targetGuardianshipId?: string;
   leaseMove?: TerritorialLeaseMove;
   targetTerritorialLeaseId?: string;
   formationMove?: FormationMove;
@@ -1623,7 +1626,54 @@ export interface TerritorialLease {
 }
 export interface TerritorialLeaseState { leases: TerritorialLease[]; nextId: number }
 
+export interface HouseholdPresence {
+  settlementId: string;
+  adults: number;
+  juvenileCohorts: Array<{ bornTick: number; count: number }>;
+  births: number;
+  matured: number;
+  migratedIn: number;
+  migratedOut: number;
+  deaths: number;
+}
+export interface MortalHousehold {
+  id: string;
+  originSettlementId: string;
+  branch: 'first' | 'second';
+  createdTick: number;
+  presences: HouseholdPresence[];
+}
+export interface HouseholdMember {
+  volunteerId: string;
+  householdId: string;
+  settlementId: string;
+  registeredTick: number;
+  status: 'resident' | 'recruited' | 'retired' | 'deceased';
+  recruitedId?: string;
+  settledTick?: number;
+}
+export type HouseholdGuardianMove = 'offer' | 'accept' | 'decline' | 'renounce';
+export interface HouseholdGuardianship {
+  id: string;
+  householdId: string;
+  guardianId: string;
+  wardId: string;
+  openedTick: number;
+  expiresTick: number;
+  status: 'offered' | 'active' | 'declined' | 'expired' | 'renounced' | 'ended';
+  acceptedTick?: number;
+  settledTick?: number;
+  endReason?: 'declined' | 'expiry' | 'renounced' | 'death';
+}
+export interface HouseholdState {
+  groups: MortalHousehold[];
+  members: HouseholdMember[];
+  guardianships: HouseholdGuardianship[];
+  nextId: number;
+}
+
 export interface WorldState {
+  households: HouseholdState;
   territorialLeases: TerritorialLeaseState;
   formations: FormationNetworkState;
   infirmaries: InfirmaryState;

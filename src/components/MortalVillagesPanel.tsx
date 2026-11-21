@@ -1,8 +1,10 @@
 import {
   availableSettlementActions, SETTLEMENT_RELIEF, SETTLEMENT_RECRUIT_STIPEND, visibleSettlements,
 } from '../engine/settlementEngine';
+import { visibleHouseholds } from '../engine/householdEngine';
 import type { Cultivator, WorldState } from '../types/world';
 import { createTerrainMapView } from './terrainMapView';
+import { HouseholdRegisterPanel } from './HouseholdRegisterPanel';
 
 type RecordEntry = WorldState['settlements']['records'][number];
 const KIND_LABELS: Record<RecordEntry['kind'], string> = {
@@ -18,6 +20,8 @@ export function MortalVillagesPanel({ world, cultivator }: { world: WorldState; 
   const villages = (world.settlements?.villages ?? []).filter(({ locationId }) => knownLocations.has(locationId));
   const visible = new Set(cultivator?.alive && world.settlements
     ? visibleSettlements(world, cultivator).filter(({ locationId }) => terrain.isCurrentLocation(locationId)).map(({ id }) => id) : []);
+  const householdView = cultivator && visible.size > 0 ? visibleHouseholds(world, cultivator) : undefined;
+  const householdCensuses = new Map(householdView?.censuses.map((census) => [census.settlementId, census]));
   const options = cultivator?.alive && world.settlements ? availableSettlementActions(cultivator, world) : [];
   const people = new Map(world.cultivators.map(({ id, name }) => [id, name]));
   const sects = new Map(world.sects.map(({ id, name }) => [id, name]));
@@ -38,6 +42,7 @@ export function MortalVillagesPanel({ world, cultivator }: { world: WorldState; 
         <div className="max-h-[28rem] space-y-1.5 overflow-y-auto">
           {villages.map((village) => {
             const observed = visible.has(village.id);
+            const census = observed && householdCensuses.get(village.id);
             const eligibleIds = new Set(observed ? options.flatMap((option) =>
               option.action === 'RECRUIT_SETTLER' && option.targetSettlementId === village.id && option.targetVolunteerId
                 ? [option.targetVolunteerId] : []) : []);
@@ -58,6 +63,7 @@ export function MortalVillagesPanel({ world, cultivator }: { world: WorldState; 
                       {village.lastDisasterTick !== undefined ? ` · 最近受灾 Tick #${village.lastDisasterTick}` : ''}
                       {village.lastReliefTick !== undefined ? ` · 最近赈济 Tick #${village.lastReliefTick}` : ''}
                     </p>
+                    {census && householdView && cultivator && <HouseholdRegisterPanel world={world} census={census} view={householdView} cultivator={cultivator} />}
                     <div className="space-y-1 border-t border-slate-800 pt-2">
                       <h4 className="font-semibold text-emerald-100">自愿入门 · 当前可招募 {eligible.length} 人</h4>
                       <p className="text-slate-400">宗门安家费：每位 {SETTLEMENT_RECRUIT_STIPEND} 灵石。</p>

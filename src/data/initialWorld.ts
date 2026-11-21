@@ -1,3 +1,4 @@
+import { createHouseholdState, initializeHouseholds } from '../engine/householdEngine';
 import { createTerritorialLeaseState } from '../engine/territorialLeaseEngine';
 import { createFormationNetworkState } from '../engine/formationNetworkEngine';
 import { createInfirmaryState } from '../engine/infirmaryEngine';
@@ -262,6 +263,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     infirmaries: createInfirmaryState(),
     formations: createFormationNetworkState(),
     territorialLeases: createTerritorialLeaseState(),
+    households: createHouseholdState(),
     witnesses: createWitnessState(),
     estates: createEstateState(),
     decisionTrace: createDecisionTraceState(),
@@ -798,6 +800,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     ],
   };
   initializeWorldProfile(world, profileId);
+  initializeHouseholds(world);
   for (const actor of world.cultivators) noteTerrainVisit(world, actor);
   archiveChronicleEvents(world, world.events);
   return world;

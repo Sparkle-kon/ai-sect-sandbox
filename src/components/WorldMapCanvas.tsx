@@ -1,3 +1,4 @@
+import { householdCensus } from '../engine/householdEngine';
 import { visibleLeaseMapSites } from './leaseMapView';
 import { drawFormationMapLinks, visibleFormationMapLinks } from './formationMapView';
 import { visibleInfirmaries } from '../engine/infirmaryEngine';
@@ -931,6 +932,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
             const habitatView = localHabitat.get(location.id);
             const leaseMark = localLeaseSites.get(location.id);
             const assessed = scenarioSiteProofs.get(location.id);
+            const villageRegister = localVillage ? householdCensus(world, localVillage.id) : undefined;
             const sanctuary = sanctuaryMarks.get(location.id);
             return (
               <li key={location.id} className="inline-flex items-center gap-1.5">
@@ -949,6 +951,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                   <span className="text-indigo-300">· 护山阵 {homeSect.arrayHp}/{homeSect.arrayMaxHp}</span>
                 )}
                 {localVillage && <span className="text-lime-200">· {localVillage.name} {localVillage.population} 人</span>}
+                {!!villageRegister?.groups.length && <span className="text-lime-200">· 家户坊籍 {villageRegister.groups.length} 组（非另计人口）</span>}
                 {localWeather && <span style={{ color: WEATHER_MARK[localWeather.kind].color }}>
                   · 已观测：{localWeather.kind} {Math.round(localWeather.intensity * 100)}%
                 </span>}

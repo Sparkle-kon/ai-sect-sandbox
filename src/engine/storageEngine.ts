@@ -1,3 +1,4 @@
+import { createHouseholdState, HOUSEHOLD_GUARDIAN_OFFER_TICKS, initializeHouseholds } from './householdEngine';
 import { normalizeScenarioObjectives, SCENARIO_AUDIT_VERSION, SCENARIO_MAX_OBJECTIVES, SCENARIO_MAX_POPULATION_TARGET,
   SCENARIO_MAX_SITE_QI_TARGET, SCENARIO_MAX_TREASURY_TARGET, scenarioObjectivePassed } from './scenarioObjectiveEngine';
 import { createTerritorialLeaseState, LEASE_DEPOSIT, LEASE_OFFER_TICKS, LEASE_QUOTA, LEASE_TERM_TICKS, LEASE_UNIT_RENT, territorialLeaseAvailability } from './territorialLeaseEngine';
@@ -91,7 +92,7 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY FORMATION_NETWORK TERRITORIAL_LEASE REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const marketQty = num(1,12,true), marketPrice = num(1,500,true);
@@ -223,6 +224,15 @@ const shape = structure({
       attestations:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,tick,verdict:one('supports','contradicts')})),
       appeal:optional(structure({tick,actorId:id,verdict:one('upheld','rejected'),reason:text})),settledTick:otick,
       reputationSectId:oid,reputationPenalty:percentage,reputationRestored:percentage,reason:otext}))}),
+  households:structure({nextId:num(1,100_000_000,true),
+    groups:arr(SAVE_COLLECTION_LIMIT,structure({id,originSettlementId:id,branch:one('first','second'),createdTick:tick,
+      presences:arr(SAVE_COLLECTION_LIMIT,structure({settlementId:id,adults:tick,juvenileCohorts:arr(200,structure({bornTick:tick,count:tick})),
+        births:tick,matured:tick,migratedIn:tick,migratedOut:tick,deaths:tick}))})),
+    members:arr(SAVE_COLLECTION_LIMIT,structure({volunteerId:id,householdId:id,settlementId:id,registeredTick:tick,
+      status:one('resident','recruited','retired','deceased'),recruitedId:oid,settledTick:otick})),
+    guardianships:arr(SAVE_COLLECTION_LIMIT,structure({id,householdId:id,guardianId:id,wardId:id,openedTick:tick,expiresTick:tick,
+      status:one('offered','active','declined','expired','renounced','ended'),acceptedTick:otick,settledTick:otick,
+      endReason:optional(one('declined','expiry','renounced','death'))}))}),
   territorialLeases:structure({nextId:num(1,100_000_000,true),leases:arr(SAVE_COLLECTION_LIMIT,structure({
     id,ownerSectId:id,lesseeSectId:id,siteId:id,ownerSignerId:id,lesseeSignerId:id,openedTick:tick,offerExpiresTick:tick,
     status:one('offered','active','closed','declined','expired'),startsTick:otick,endsTick:otick,settledTick:otick,
@@ -401,6 +411,7 @@ function verifyWorld(value: unknown): WorldState {
     ? { ...value,
       ...(!Object.hasOwn(value, 'mentorship') ? { mentorship: { offers: [], lineage: [], budgets: [] } } : {}),
       ...(!Object.hasOwn(value, 'decisionTrace') ? { decisionTrace: { records: [] } } : {}),
+      ...(!Object.hasOwn(value, 'households') ? { households: createHouseholdState() } : {}),
       ...(!Object.hasOwn(value, 'territorialLeases') ? { territorialLeases: createTerritorialLeaseState() } : {}),
       ...(!Object.hasOwn(value, 'formations') ? { formations: createFormationNetworkState() } : {}),
       ...(!Object.hasOwn(value, 'infirmaries') ? { infirmaries: createInfirmaryState() } : {}),
@@ -1256,6 +1267,97 @@ function verifyWorld(value: unknown): WorldState {
     if (!settlementIds.has(row.settlementId) || (row.targetSettlementId && !settlementIds.has(row.targetSettlementId)) ||
         (row.actorId && !actor.has(row.actorId)) || (row.sectId && !sector.has(row.sectId)) ||
         (row.volunteerId && !volunteerIds.has(row.volunteerId)) || (row.cultivatorId && !actor.has(row.cultivatorId))) fail('settlements.records.references');
+  }
+  if (value !== null && typeof value === 'object' && !Object.hasOwn(value, 'households')) initializeHouseholds(w);
+  const groups = new Map(w.households.groups.map((row) => [row.id, row]));
+  unique(w.households.groups, ({ id }) => id, 'households.groups.id');
+  const residentCount = new Map<string, number>(), trackedAdults = new Map<string, number>();
+  const canonicalCohorts = new Map<string, number>(), trackedCohorts = new Map<string, number>();
+  const settlers = new Map(w.settlements.villages.map((row) => [row.id, row]));
+  const actualPeople = new Map(w.cultivators.map((row) => [row.id, row]));
+  const villageVolunteers = new Map(w.settlements.villages.flatMap((village) =>
+    village.volunteers.map((person) => [person.id, { village, person }] as const)));
+  for (const village of w.settlements.villages) for (const row of village.juvenileCohorts) {
+    const key = JSON.stringify([village.id, row.bornTick]);
+    canonicalCohorts.set(key, (canonicalCohorts.get(key) ?? 0) + row.count);
+  }
+  for (const group of w.households.groups) {
+    if (!settlementIds.has(group.originSettlementId) || group.createdTick > w.tick ||
+        group.id !== 'household-' + group.originSettlementId + '-' + group.branch ||
+        !group.presences.some(({ settlementId }) => settlementId === group.originSettlementId)) fail('households.groups.references');
+    unique(group.presences, ({ settlementId }) => settlementId, 'households.groups.presence');
+    for (const row of group.presences) {
+      if (!settlementIds.has(row.settlementId)) fail('households.presences.references');
+      trackedAdults.set(row.settlementId, (trackedAdults.get(row.settlementId) ?? 0) + row.adults);
+      unique(row.juvenileCohorts, ({ bornTick }) => String(bornTick), 'households.presences.cohort');
+      for (const { bornTick, count } of row.juvenileCohorts) {
+        const key = JSON.stringify([row.settlementId, bornTick]);
+        const accounted = (trackedCohorts.get(key) ?? 0) + count;
+        if (count < 1 || bornTick > w.tick || accounted > (canonicalCohorts.get(key) ?? 0)) fail('households.presences.cohort_budget');
+        trackedCohorts.set(key, accounted);
+      }
+    }
+  }
+  unique(w.households.members, ({ volunteerId }) => volunteerId, 'households.members.volunteer');
+  const recruitedMembers = new Map<string, typeof w.households.members[number]>();
+  for (const row of w.households.members) {
+    const group = groups.get(row.householdId);
+    const actual = villageVolunteers.get(row.volunteerId);
+    const recruit = row.recruitedId && actualPeople.get(row.recruitedId);
+    const isRecruit = row.status === 'recruited' || row.status === 'deceased';
+    if (!group?.presences.some(({ settlementId }) => settlementId === row.settlementId) ||
+        row.registeredTick > w.tick || (row.status === 'resident') !== (row.settledTick === undefined) ||
+        (row.settledTick !== undefined && (row.settledTick < row.registeredTick || row.settledTick > w.tick)) ||
+        (isRecruit !== (row.recruitedId !== undefined)) ||
+        (isRecruit && (!recruit || row.recruitedId !== 'recruit-' + row.volunteerId)) ||
+        (row.status === 'resident' && (!actual || actual.village.id !== row.settlementId || actual.person.enlistedCultivatorId))) fail('households.members.references');
+    if (row.status === 'resident') residentCount.set(row.settlementId, (residentCount.get(row.settlementId) ?? 0) + 1);
+    if (row.recruitedId) {
+      if (recruitedMembers.has(row.recruitedId)) fail('households.members.recruit');
+      recruitedMembers.set(row.recruitedId, row);
+    }
+  }
+  for (const [siteId, village] of settlers) {
+    const currentYoung = village.juvenileCohorts.reduce((sum, cohort) => sum + cohort.count, 0);
+    const currentNamed = village.volunteers.filter(({ enlistedCultivatorId }) => !enlistedCultivatorId).length;
+    if ((trackedAdults.get(siteId) ?? 0) > Math.max(0, village.population - currentYoung - currentNamed) ||
+        (residentCount.get(siteId) ?? 0) > currentNamed) fail('households.population_budget');
+  }
+  unique(w.households.guardianships, ({ id }) => id, 'households.guardianships.id');
+  const guardianNext = new Map<string, string>();
+  const activeWards = new Set<string>();
+  for (const row of w.households.guardianships) {
+    const serial = Number(row.id.match(/^household-guardian-([1-9][0-9]*)$/)?.[1]);
+    const unsettled = row.status === 'offered' || row.status === 'active';
+    const member = recruitedMembers.get(row.wardId);
+    if (!Number.isSafeInteger(serial) || serial >= w.households.nextId || row.guardianId === row.wardId ||
+        !actor.has(row.guardianId) || !actor.has(row.wardId) || member?.householdId !== row.householdId ||
+        row.openedTick > w.tick || row.expiresTick !== row.openedTick + HOUSEHOLD_GUARDIAN_OFFER_TICKS ||
+        ((row.status === 'active' || row.status === 'offered') !== (row.settledTick === undefined)) ||
+        (row.status === 'active' && row.acceptedTick === undefined) ||
+        (['offered','declined','expired'].includes(row.status) && row.acceptedTick !== undefined) ||
+        (row.acceptedTick !== undefined && (row.acceptedTick < row.openedTick || row.acceptedTick >= row.expiresTick || row.acceptedTick > w.tick)) ||
+        (row.status === 'offered' && row.expiresTick <= w.tick) ||
+        (row.settledTick !== undefined && (row.settledTick < (row.acceptedTick ?? row.openedTick) || row.settledTick > w.tick)) ||
+        (row.status === 'ended' ? row.endReason !== 'death' :
+          row.status === 'expired' ? row.endReason !== 'expiry' || row.settledTick! < row.expiresTick :
+          row.status === 'declined' ? row.endReason !== 'declined' :
+          row.status === 'renounced' ? row.endReason !== 'renounced' : row.endReason !== undefined)) fail('households.guardianships.references');
+    if (unsettled) {
+      if (guardianNext.has(row.guardianId) || activeWards.has(row.wardId)) fail('households.guardianships.exclusivity');
+      guardianNext.set(row.guardianId, row.wardId); activeWards.add(row.wardId);
+    }
+  }
+  const verifiedGuardianPaths = new Set<string>();
+  for (const start of guardianNext.keys()) {
+    const path = new Set<string>();
+    let current: string | undefined = start;
+    while (current !== undefined && !verifiedGuardianPaths.has(current)) {
+      if (path.has(current)) fail('households.guardianships.cycle');
+      path.add(current);
+      current = guardianNext.get(current);
+    }
+    for (const person of path) verifiedGuardianPaths.add(person);
   }
   const deceasedActors = new Set(w.cultivators.filter(({ alive, hp }) => !alive && hp === 0).map(({ id }) => id));
   unique(w.reincarnation.cases, ({ id }) => id, 'reincarnation.cases.id');

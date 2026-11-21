@@ -1,3 +1,4 @@
+import { advanceHouseholds } from './householdEngine';
 import { advancePilgrimages, pilgrimageCheckpoint } from './pilgrimageEngine';
 import { advanceSanctuaries } from './sanctuaryEngine';
 import { advanceResearch } from './researchEngine';
@@ -116,7 +117,7 @@ export function applyMapBrush(prev: WorldState, kind: GodBrushKind, points: MapP
       actorIds: hits.map(({ cultivatorId }) => cultivatorId), locationId, ...(hits.length ? { damage: hits } : {}),
     });
   }
-  brushEvents.push(...advanceSanctuaries(world), ...advanceResearch(world), ...advancePilgrimages(world), ...advanceEstates(world));
+  brushEvents.push(...advanceSanctuaries(world), ...advanceResearch(world), ...advancePilgrimages(world), ...advanceHouseholds(world), ...advanceEstates(world));
   reconcileRelicCustody(world);
   recordNewDeathsForReincarnation(prev, world, brushEvents);
   archiveChronicleEvents(world, brushEvents);

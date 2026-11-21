@@ -49,11 +49,12 @@ describe('market and caravan integration', () => {
   });
 
   it('preserves existing map sites while migrating an older save to an empty trading ledger', () => {
-    const { markets: _markets, settlements: _settlements, worldgen: _worldgen, ...earlier } = createInitialWorld();
+    const { markets: _markets, settlements: _settlements, households: _households, worldgen: _worldgen, ...earlier } = createInitialWorld();
     earlier.locations = earlier.locations.filter(({ id }) => id !== 'loc-market-east');
     const restored = decodeWorldSave(JSON.stringify({ format: 'ai-sect-sandbox', version: 1, world: earlier }));
     expect(restored.markets).toEqual(createMarketState());
     expect(restored.worldgen).toBeUndefined();
     expect(restored.locations).toEqual(earlier.locations);
+    expect(restored.households.groups.every(({ originSettlementId }) => restored.settlements.villages.some(({ id }) => id === originSettlementId))).toBe(true);
   });
 });

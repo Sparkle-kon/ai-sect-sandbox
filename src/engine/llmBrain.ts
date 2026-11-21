@@ -1,3 +1,4 @@
+import { availableGuardianActions } from './householdEngine';
 import { availableTerritorialLeaseActions } from './territorialLeaseEngine';
 import { availableFormationActions } from './formationNetworkEngine';
 import { availableInfirmaryActions, infirmaryCapacity } from './infirmaryEngine';
@@ -110,6 +111,10 @@ export function computeHeuristicDecision(
       ? choices.find(({ infirmaryMove }) => infirmaryMove === 'refuse') : undefined;
     const move = offered ?? staff ?? request ?? refuse;
     if (move) return { ...move, chosenAction: 'INFIRMARY', innerMonologue: '是否入院由本人同意，须有当值人、空床和实物。' };
+  }
+  if (world.households.guardianships.some((row) => row.status === 'offered' && row.wardId === cultivator.id)) {
+    const consent = availableGuardianActions(cultivator, world, false).find(({ guardianMove }) => guardianMove === 'accept');
+    if (consent) return { ...consent, chosenAction: 'HOUSEHOLD_GUARDIAN', innerMonologue: '照应之约由我本人选择，不更动家户与宗籍。' };
   }
   const leaseSect = world.sects.find(({ id, leaderId }) => id === cultivator.sectId && leaderId === cultivator.id);
   const mayOfferLease = world.tick >= 22 && world.tick % 10 === 8;
@@ -514,6 +519,13 @@ export function computeHeuristicDecision(
     if (move) return { ...move, chosenAction: 'FORMATION_NETWORK', innerMonologue: '阵网只按实有灵气流转，守常规额，不自行超载。' };
   }
 
+  const mayInviteGuardian = world.tick >= 24 && world.tick % 10 === 6 &&
+    (cultivator.personality === '刚正' || cultivator.personality === '逍遥');
+  if (mayInviteGuardian) {
+    const move = availableGuardianActions(cultivator, world).find(({ guardianMove }) => guardianMove === 'offer');
+    if (move) return { ...move, chosenAction: 'HOUSEHOLD_GUARDIAN', innerMonologue: '监护须两人自愿，不能据姓氏推断血亲或改变宗籍。' };
+  }
+
   // 5. Socialize; trust in fellowship makes seeking a partner more attractive.
   const fellowship = cultivator.reflections.some(
     (entry) => entry.kind === 'belief' && entry.theme === 'community' && entry.intensity >= 6
@@ -614,6 +626,7 @@ export async function queryCultivatorLLMDecision(
   const estateOptions = availableEstateActions(cultivator, world);
   const doctrineOptions = availableDoctrineActions(cultivator, world);
   const relocationOptions = availableRelocationActions(cultivator, world);
+  const guardianOptions = availableGuardianActions(cultivator, world);
   const leaseOptions = availableTerritorialLeaseActions(cultivator, world);
   const formationOptions = availableFormationActions(cultivator, world);
   const infirmaryOptions = availableInfirmaryActions(cultivator, world);
@@ -652,6 +665,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 天机悬赏榜：${JSON.stringify(world.bounties.filter((item) => item.status === 'open').map(({id,targetCultivatorId,reward,reason}) => ({id,targetCultivatorId,reward,reason})))}；可接的追缉：${JSON.stringify(availableBountyHunts(cultivator, world))}
 - 天下公示的大会与秘境：${JSON.stringify(world.occasions.filter((item) => item.status === 'registration' || item.status === 'running').map(({id,title,kind,locationId,status,registrationClosesTick}) => ({id,title,kind,locationId,status,registrationClosesTick})))}；可报名项目：${JSON.stringify(availableOccasionJoins(cultivator, world))}
 - 本宗邦交：${JSON.stringify(world.diplomacy.filter((relation) => relation.sectAId === cultivator.sectId || relation.sectBId === cultivator.sectId))}；公示的外事权限：${JSON.stringify(availableDiplomacyActions(cultivator, world))}
+- 家户监护只允许双方自愿，不能自填亲缘或宗籍；照抄已见的选项：${JSON.stringify(guardianOptions)}
 - 地契只按本地印契和真实所有权办理，只出租限期采集许可，不转移疆域：${JSON.stringify(leaseOptions)}
 - 阵网只用实际签约、到场与灵气选项；overload 是主动超载且必会断链，不是默认调拨：${JSON.stringify(formationOptions)}
 - 静养院只允许本人依据所列排队、值守、接受或拒绝，不填别人的病况，不改药材与床位：${JSON.stringify(infirmaryOptions)}
@@ -689,7 +703,7 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
 请以第一人称进行内心独白思考，并决定本回合行动。只输出合法的 JSON 对象（不要 Markdown 代码块），字段如下：
 {
   "innerMonologue": "你的第一人称内心独白（40字以内，体现你的性格与秘密目标）",
-  "chosenAction": "CULTIVATE | BREAKTHROUGH | EXPLORE | SOCIALIZE | DUEL | SCHEMING | PURSUE_SCHEME | AUTHOR_TECHNIQUE | STUDY_TECHNIQUE | GATHER_HERBS | BREW_PILL | USE_PILL | FORGE_ARTIFACT | BIND_ARTIFACT | REPAIR_ARTIFACT | AWAKEN_ARTIFACT | FACE_TRIBULATION | AMBUSH_TRIBULATION | CHALLENGE_LEADERSHIP | PLOT_COUP | BUILD_FACILITY | DISPATCH_GUARD | GUARD_DUTY | OFFER_ALLIANCE | DECLARE_WAR | DEMAND_TRIBUTE | LAUNCH_SIEGE | JOIN_OCCASION | PURSUE_BOUNTY | TAME_BEAST | TRADE | DUAL_CULTIVATE | SECT_DIPLOMACY | TEACH | ACCEPT_TUITION | DECLINE_TUITION | OFFER_OATH | ACCEPT_OATH | DECLINE_OATH | FULFILL_OATH | APPEAL_OATH | PLACE_MARKET_BUY | PLACE_MARKET_SELL | CANCEL_MARKET_ORDER | RECRUIT_SETTLER | DELIVER_RELIEF | FILE_WITNESS_CLAIM | ATTEST_WITNESS | CHALLENGE_WITNESS | NAME_HEIR | CLAIM_ESTATE | HOLD_MEMORIAL | DOCTRINE | RELOCATE | RECOLLECT | RELIC | SCRIPTURE | RANK_SEASON | ESCORT | CEASEFIRE | RESEARCH | SANCTUARY | SECT_CREDIT | PILGRIMAGE | CHRONICLE_ERRATA | HABITAT | INFIRMARY | FORMATION_NETWORK | TERRITORIAL_LEASE | REST 之一",
+  "chosenAction": "CULTIVATE | BREAKTHROUGH | EXPLORE | SOCIALIZE | DUEL | SCHEMING | PURSUE_SCHEME | AUTHOR_TECHNIQUE | STUDY_TECHNIQUE | GATHER_HERBS | BREW_PILL | USE_PILL | FORGE_ARTIFACT | BIND_ARTIFACT | REPAIR_ARTIFACT | AWAKEN_ARTIFACT | FACE_TRIBULATION | AMBUSH_TRIBULATION | CHALLENGE_LEADERSHIP | PLOT_COUP | BUILD_FACILITY | DISPATCH_GUARD | GUARD_DUTY | OFFER_ALLIANCE | DECLARE_WAR | DEMAND_TRIBUTE | LAUNCH_SIEGE | JOIN_OCCASION | PURSUE_BOUNTY | TAME_BEAST | TRADE | DUAL_CULTIVATE | SECT_DIPLOMACY | TEACH | ACCEPT_TUITION | DECLINE_TUITION | OFFER_OATH | ACCEPT_OATH | DECLINE_OATH | FULFILL_OATH | APPEAL_OATH | PLACE_MARKET_BUY | PLACE_MARKET_SELL | CANCEL_MARKET_ORDER | RECRUIT_SETTLER | DELIVER_RELIEF | FILE_WITNESS_CLAIM | ATTEST_WITNESS | CHALLENGE_WITNESS | NAME_HEIR | CLAIM_ESTATE | HOLD_MEMORIAL | DOCTRINE | RELOCATE | RECOLLECT | RELIC | SCRIPTURE | RANK_SEASON | ESCORT | CEASEFIRE | RESEARCH | SANCTUARY | SECT_CREDIT | PILGRIMAGE | CHRONICLE_ERRATA | HABITAT | INFIRMARY | FORMATION_NETWORK | TERRITORIAL_LEASE | HOUSEHOLD_GUARDIAN | REST 之一",
   "targetLocationId": "EXPLORE 可填已知地点 id（探索未知时省略）；宗门经营、迁宗或新设避难所只能填所列地点 id",
   "targetCultivatorId": "如果 chosenAction 为 SOCIALIZE / DUEL / SCHEMING / AMBUSH_TRIBULATION / CHALLENGE_LEADERSHIP / PLOT_COUP / DISPATCH_GUARD / TRADE / DUAL_CULTIVATE / SECT_DIPLOMACY / TEACH / OFFER_OATH / FILE_WITNESS_CLAIM / NAME_HEIR 则填目标修士 id；DOCTRINE 仅在所选事务列出该字段时填写；其余省略",
   "spokenLine": "简短台词（可选）",
@@ -706,6 +720,8 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
   "targetMarketOrderId": "撤单时选择自己仍可撤的挂单 id",
   "targetOathId": "回应、履行或申诉契书时，指定可用契书 id",
   "oathTerm": "提出契书时选择给定条款 foundation_pill 或 jade_herb",
+  "guardianMove": "HOUSEHOLD_GUARDIAN 只照抄已有 offer、accept、decline 或 renounce 选项",
+  "targetGuardianshipId": "回应或终止仅使用本人现有监护事项 id；offer 必须使用该选项的 targetCultivatorId",
   "leaseMove": "TERRITORIAL_LEASE 只照抄实际 offer、accept、decline、surrender",
   "targetTerritorialLeaseId": "回应或交回时使用给定契约 id；offer 严格复制目标地和目标宗门",
   "formationMove": "FORMATION_NETWORK 只复制列出的 offer、accept、decline、dispatch、overload、draw 或 repair，不填写灵气数量",
@@ -865,11 +881,18 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
             'INFIRMARY',
             'FORMATION_NETWORK',
             'TERRITORIAL_LEASE',
+            'HOUSEHOLD_GUARDIAN',
           ];
           const chosenAction = parsed?.chosenAction;
           if (!chosenAction || !validActions.includes(chosenAction)) return undefined;
 
           if (activeVow && chosenAction !== 'PILGRIMAGE' && (chosenAction !== 'REST' || onPilgrimagePath)) return undefined;
+          const legalGuardianship = chosenAction === 'HOUSEHOLD_GUARDIAN' ? guardianOptions.find((item) =>
+            item.guardianMove === parsed.guardianMove && item.targetGuardianshipId === parsed.targetGuardianshipId &&
+            item.targetCultivatorId === parsed.targetCultivatorId) : undefined;
+          if (chosenAction === 'HOUSEHOLD_GUARDIAN' && (!legalGuardianship || parsed.targetLocationId !== undefined ||
+              parsed.targetSectId !== undefined)) return undefined;
+
           const legalLease = chosenAction === 'TERRITORIAL_LEASE' ? leaseOptions.find((item) =>
             item.leaseMove === parsed.leaseMove && item.targetSectId === parsed.targetSectId &&
             item.targetLocationId === parsed.targetLocationId && item.targetTerritorialLeaseId === parsed.targetTerritorialLeaseId) : undefined;
@@ -1073,6 +1096,8 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
             forgeTier: legalArtifact?.forgeTier,
             targetHerbId: legalAlchemy?.targetHerbId,
             targetPillId: legalAlchemy?.targetPillId,
+            guardianMove: legalGuardianship?.guardianMove,
+            targetGuardianshipId: legalGuardianship?.targetGuardianshipId,
             leaseMove: legalLease?.leaseMove,
             targetTerritorialLeaseId: legalLease?.targetTerritorialLeaseId,
             formationMove: legalFormation?.formationMove,
