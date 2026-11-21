@@ -6,6 +6,7 @@ import { isChronicleStoryFact, projectChronicleLead, publicChronicleSceneEvents,
 import type { ChronicleChapter, Cultivator, WorldEvent, WorldState } from '../types/world';
 import { DialogueTranscript } from './DialogueTranscript';
 import { ColdChronicleShelf } from './ColdChronicleShelf';
+import { ChronicleTopicDigest } from './ChronicleTopicDigest';
 import { ChronicleErrataPanel } from './ChronicleErrataPanel';
 
 const PAGES = ['chapter', 'biography'] as const;
@@ -104,7 +105,7 @@ export function ChapterBiographies({ chapter }: { chapter: ChronicleChapter }) {
   );
 }
 
-export function ChronicleLibraryPanel({ world, cultivator }: { world: WorldState; cultivator?: Cultivator }) {
+export function ChronicleLibraryPanel({ world, cultivator, scopeKey }: { world: WorldState; cultivator?: Cultivator; scopeKey?: string }) {
   const [page, setPage] = useState<Page>('chapter');
   const [requestedChapter, setRequestedChapter] = useState<string>();
   const paneId = useId();
@@ -183,6 +184,7 @@ export function ChronicleLibraryPanel({ world, cultivator }: { world: WorldState
             : kind === 'chapter' ? <ChapterArchive key={chapter.id} chapter={chapter} reading={reading} lead={lead} /> : <ChapterBiographies chapter={chapter} />)}
         </div>
       ))}
+      <ChronicleTopicDigest world={world} viewerId={cultivator?.id} scopeKey={scopeKey} />
       <ChronicleErrataPanel world={world} chapter={chapter} cultivator={cultivator} />
       <ColdChronicleShelf world={world} chapterTitle={(older) => projectChronicleReading(readable(older)).title}
         readChapter={(older) => {

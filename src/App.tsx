@@ -795,7 +795,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
             category={chronicleFilter} onCategoryChange={setChronicleFilter} focusOptions={resolver?.build}
             causality={(eventId) => chronicleCauses?.get(eventId)}
             onJump={followChronicle} returnPosition={chronicleReturn} onReturnHandled={clearChronicleReturn} focusNotice={focusNotice} /></React.Suspense> },
-          { id: 'library', label: '藏书阁与故事', content: <React.Suspense fallback={<p role="status">载入藏书阁…</p>}><ChronicleLibraryPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense> },
+          { id: 'library', label: '藏书阁与故事', content: <React.Suspense fallback={<p role="status">载入藏书阁…</p>}><ChronicleLibraryPanel world={visibleWorld} cultivator={selectedCultivator} scopeKey={viewScopeKey} /></React.Suspense> },
           { id: 'notebook', label: '书签与地图批注', content: <React.Suspense fallback={<p role="status">载入分支记录…</p>}>
             <ChronicleNotebookPanel key={`${timeline.activeBranchId}:${preview?.tick ?? 'live'}:${activeActorId ?? ''}`}
               world={visibleWorld} actorId={activeActorId} branchId={timeline.activeBranchId} readOnly={!!preview} busy={isStepping} onWrite={writeAnnotation} />
