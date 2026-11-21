@@ -19,6 +19,7 @@ import { centerCamera, clientToMapViewport, DEFAULT_CAMERA, MAP_HEIGHT, MAP_WIDT
 import type { CameraPoint, MapCamera } from './mapCamera';
 import { BRUSH_LABELS, brushPoint, drawHazards, getVisibleHazards } from './mapBrushView';
 import { BEAST_COLORS, visibleBeastsByLocation } from './spiritBeastView';
+import { activeAvatar } from '../engine/avatarEngine';
 
 interface WorldMapCanvasProps {
   world: WorldState;
@@ -60,6 +61,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const playback = useRef<{ source: WorldState['mapPresentation']; start: number } | undefined>();
   const selectedScheme = selected?.activeScheme;
   const selectedSect = selected && world.sects.find((sect) => sect.id === selected.sectId);
+  const avatarId = activeAvatar(world)?.id;
   const selectedArtifact = selected?.alive ? equippedArtifact(selected) : undefined;
   const selectedLocation = selected && seenLocations.find((loc) => loc.id === selected.locationId);
   const selectedTrial = selected?.tribulation;
@@ -327,6 +329,10 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           ctx.font = 'bold 11px sans-serif';
           ctx.textAlign = 'center';
           ctx.fillText(`${cultivator.name}`, cx, cy + 24);
+          if (cultivator.id === avatarId) {
+            ctx.fillStyle = '#fde68a';
+            ctx.fillText('临身', cx, cy - 20);
+          }
           ctx.fillStyle = '#cbd5e1';
           ctx.font = '10px sans-serif';
           ctx.fillText(
@@ -695,7 +701,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                 {tile && <span className="text-slate-400">· {tile.biome} · 地格灵气 {tile.spiritQi} · {world.sects.find(({ id }) => id === tile.ownerSectId)?.name ?? '无所属宗门'}</span>}
                 {fog && actorPositions.filter(({ actor }) => actor.locationId === location.id).map(({ actor }) => (
                   <button key={actor.id} type="button" onClick={() => onSelectCultivator(actor.id)} className="rounded border border-slate-700 px-1.5 py-0.5 text-slate-200">
-                    {actor.name}
+                    {actor.name}{actor.id === avatarId ? '（临身）' : ''}
                   </button>
                 ))}
                 {location.furnaceGrade > 0 && <span className="text-emerald-300">· {location.furnaceGrade} 阶丹炉</span>}

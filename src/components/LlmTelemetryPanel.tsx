@@ -20,7 +20,7 @@ export function telemetryHeadline(snapshot: LLMSchedulerSnapshot, configured: bo
 }
 
 const REQUEST_TYPES = {
-  decision: 'NPC 决策', reflection: '反思', dialogue: '对白', council: '议事', chronicle: '史书',
+  decision: 'NPC 决策', reflection: '反思', dialogue: '对白', council: '议事', chronicle: '史书', avatar: '临身对话',
 } as const;
 
 const OUTCOMES = {
@@ -117,7 +117,7 @@ export function LlmTelemetryView({ snapshot, configured, hasCredential, model, w
             </label>
             <p>预算：每 Tick {settings.maxCallsPerTick} · 每会话 {settings.maxCallsPerSession} · 队列 {settings.maxQueue}</p>
           </div>
-          <p className="text-xs text-slate-400">决策、反思、对白、议事和史书共用限额。</p>
+          <p className="text-xs text-slate-400">决策、反思、对白、议事、史书和临身对话共用限额。</p>
         </section>
         <details className="rounded border border-slate-800 bg-slate-950/60 px-2 py-1.5">
           <summary className="cursor-pointer text-xs font-semibold text-slate-200">按用途与结果</summary>

@@ -1,4 +1,4 @@
-export type LLMCallKind = 'decision' | 'reflection' | 'dialogue' | 'council' | 'chronicle';
+export type LLMCallKind = 'decision' | 'reflection' | 'dialogue' | 'council' | 'chronicle' | 'avatar';
 export type LLMRequestStatus = 'ok' | 'budget' | 'queue_full' | 'http_error' | 'invalid_json' | 'network_error' | 'aborted';
 export type LLMDecisionMetric = 'validated' | 'applied' | 'local_fallback' | 'stale' | 'simulation_rejected';
 export type LLMRequestResult<T> = { status: 'ok'; data: T } | { status: Exclude<LLMRequestStatus, 'ok'> };
@@ -71,7 +71,7 @@ export class LLMScheduler {
     ok: 0, budget: 0, queue_full: 0, http_error: 0, invalid_json: 0, network_error: 0, aborted: 0,
   };
   private readonly decisions: Record<LLMDecisionMetric, number> = { validated: 0, applied: 0, local_fallback: 0, stale: 0, simulation_rejected: 0 };
-  private readonly byKind: Record<LLMCallKind, number> = { decision: 0, reflection: 0, dialogue: 0, council: 0, chronicle: 0 };
+  private readonly byKind: Record<LLMCallKind, number> = { decision: 0, reflection: 0, dialogue: 0, council: 0, chronicle: 0, avatar: 0 };
   private active = 0;
   private admitted = 0;
   private callsStarted = 0;

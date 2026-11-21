@@ -26,7 +26,10 @@ import { llmScheduler } from './engine/llmScheduler';
 import { settleChronicleOnline } from './engine/chronicleRuntime';
 import { availableCouncilPlans } from './engine/councilEngine';
 import { commitCouncilSnapshot, settleAnnualCouncilOnline, settleCouncilSnapshot } from './engine/councilRuntime';
-import type { CouncilPlan } from './types/world';
+import type { AvatarInteractionRequest, CouncilPlan } from './types/world';
+import { PossessionPanel } from './components/PossessionPanel';
+import { activeAvatar, possessAvatar, queueAvatarOrder } from './engine/avatarEngine';
+import { resolveAvatarSnapshot } from './engine/avatarRuntime';
 
 export const App: React.FC = () => {
   const [world, setWorld] = useState<WorldState>(() => createInitialWorld());
@@ -44,6 +47,7 @@ export const App: React.FC = () => {
   const [isStepping, setIsStepping] = useState(false);
   const stepInFlight = useRef(false);
   const [councilOpen, setCouncilOpen] = useState(false);
+  const [avatarNotice, setAvatarNotice] = useState<string>();
   const [lastManualCouncilId, setLastManualCouncilId] = useState<string>();
   const [tickIntervalMs, setTickIntervalMs] = useState(1800);
   const [llmConfig, setLlmConfig] = useState<LLMConfig>({
@@ -61,7 +65,9 @@ export const App: React.FC = () => {
       const starting = authority.current;
       if (llmConfig.enabled && llmConfig.apiKey.trim()) {
         llmScheduler.beginTick(starting.tick + 1);
-        const alive = starting.cultivators.filter((c) => c.alive && !activeSiegeForActor(starting, c) && !activeOccasionForActor(starting, c));
+        const activeHost = activeAvatar(starting);
+        const orderedActorId = activeHost && starting.playerAvatar.pendingOrder?.actorId === activeHost.id ? activeHost.id : undefined;
+        const alive = starting.cultivators.filter((c) => c.alive && c.id !== orderedActorId && !activeSiegeForActor(starting, c) && !activeOccasionForActor(starting, c));
         const modelActors = new Set<string>();
         const results = await Promise.all(
           alive.map(async (c) => {
@@ -134,6 +140,45 @@ export const App: React.FC = () => {
     }
   }, [llmConfig, updateWorld]);
 
+  const handlePossess = (actorId: string | null) => {
+    if (stepInFlight.current) return;
+    setAvatarNotice(undefined);
+    updateWorld((current) => {
+      const next = structuredClone(current);
+      return possessAvatar(next, actorId) ? next : current;
+    });
+  };
+
+  const handleAvatarOrder = (action: 'REST' | 'CULTIVATE') => {
+    if (stepInFlight.current) return;
+    setAvatarNotice(undefined);
+    updateWorld((current) => {
+      const next = structuredClone(current);
+      return queueAvatarOrder(next, action) ? next : current;
+    });
+  };
+
+  const handleAvatarSpeak = async (request: AvatarInteractionRequest) => {
+    if (stepInFlight.current) return;
+    const current = authority.current;
+    stepInFlight.current = true;
+    setIsStepping(true);
+    setAvatarNotice(undefined);
+    try {
+      const proposed = await resolveAvatarSnapshot(current, request, llmConfig);
+      if (!proposed.entry) {
+        setAvatarNotice('这项交互已不适用，未消耗元神。');
+        return;
+      }
+      if (updateWorld((latest) => commitCouncilSnapshot(latest, current, proposed.world)) !== proposed.world) {
+        setAvatarNotice('世界已变化，对话和效果均未写入。');
+      }
+    } finally {
+      stepInFlight.current = false;
+      setIsStepping(false);
+    }
+  };
+
   const handleGodIntervene = (cmd: GodInterventionCommand) => {
     updateWorld((prev) => executeGodIntervention(prev, cmd));
   };
@@ -148,6 +193,7 @@ export const App: React.FC = () => {
     llmScheduler.resetTickBudget();
     setSelectedCultivatorId('npc-1');
     setLastManualCouncilId(undefined);
+    setAvatarNotice(undefined);
   };
 
   const selectedCultivator =
@@ -257,6 +303,9 @@ export const App: React.FC = () => {
           />
           <ChronicleFeed events={world.events} />
           <ChronicleLibraryPanel world={world} />
+          <PossessionPanel world={world} selectedCultivatorId={selectedCultivatorId} busy={isStepping}
+            modelReady={llmConfig.enabled && Boolean(llmConfig.apiKey.trim())} notice={avatarNotice}
+            onPossess={handlePossess} onOrder={handleAvatarOrder} onSpeak={(request) => void handleAvatarSpeak(request)} />
         </div>
 
         {/* Right 5 Cols: Agent Inspector + Relationship Graph */}

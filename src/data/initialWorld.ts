@@ -1,3 +1,4 @@
+import { createPlayerAvatarState } from '../engine/avatarEngine';
 import { archiveChronicleEvents, createChronicleArchive } from '../engine/novelGenerator';
 import { memoryDecayRate } from '../engine/memoryEngine';
 import { generateTerrain, noteTerrainVisit } from '../engine/terrainEngine';
@@ -284,6 +285,7 @@ export function createInitialWorld(seed = 2031): WorldState {
     occasions: [],
     bounties: [],
     councils: [],
+    playerAvatar: createPlayerAvatarState(),
     chronicleArchive: createChronicleArchive(),
     locations,
     terrain: generateTerrain(locations, seed),

@@ -1,3 +1,4 @@
+import { consumeAvatarOrder, maintainPlayerAvatar } from './avatarEngine';
 import { archiveChronicleEvents } from './novelGenerator';
 import { settleChronicleOffline } from './chronicleRuntime';
 import { settleAnnualCouncilOffline } from './councilRuntime';
@@ -533,6 +534,8 @@ export function advanceWorldTick(
     nextState.month += 1;
   }
 
+  maintainPlayerAvatar(nextState);
+  const avatarOrder = consumeAvatarOrder(nextState);
   maintainAlchemy(nextState);
   maintainSectEconomy(nextState);
   const newEvents: WorldEvent[] = [...advanceMapHazards(nextState), ...advanceSpiritBeasts(nextState, rng)];
@@ -579,6 +582,7 @@ export function advanceWorldTick(
     }
 
     const decision =
+      (avatarOrder?.actorId === cultivator.id ? avatarOrder.decision : undefined) ??
       precomputedDecisions?.[cultivator.id] ??
       computeHeuristicDecision(cultivator, nextState, rng);
 
@@ -613,6 +617,7 @@ export function advanceWorldTick(
     witnessEvent(nextState, event);
   }
   for (const actor of nextState.cultivators) if (actor.alive) noteTerrainVisit(nextState, actor);
+  maintainPlayerAvatar(nextState);
   spreadRumors(nextState);
   archiveChronicleEvents(nextState, newEvents);
   nextState.events = [...newEvents, ...nextState.events].slice(0, 120);

@@ -549,7 +549,37 @@ export interface ChronicleArchive {
   chapters: ChronicleChapter[];
 }
 
+export type AvatarInteractionMode = 'avatar' | 'ring';
+export type AvatarIntent = 'guide' | 'persuade' | 'deceive' | 'interrogate' | 'recruit';
+export interface AvatarInteractionOption {
+  mode: AvatarInteractionMode;
+  intent: AvatarIntent;
+  targetCultivatorId: string;
+}
+export interface AvatarInteractionRequest extends AvatarInteractionOption { message: string }
+export type AvatarInteractionCommand = AvatarInteractionRequest;
+export type AvatarOrder = 'REST' | 'CULTIVATE';
+export interface AvatarTranscriptEntry extends AvatarInteractionRequest {
+  id: string;
+  tick: number;
+  actorId?: string;
+  reply: string;
+  outcome: 'agreed' | 'resisted' | 'revealed' | 'recruited';
+  source: 'utility' | 'llm';
+  effect: string;
+}
+export interface PlayerAvatarState {
+  possessedId?: string;
+  possessionUntilTick?: number;
+  switchAvailableTick: number;
+  essence: number;
+  lastRefreshTick: number;
+  pendingOrder?: { actorId: string; action: AvatarOrder; queuedTick: number };
+  transcript: AvatarTranscriptEntry[];
+}
+
 export interface WorldState {
+  playerAvatar: PlayerAvatarState;
   chronicleArchive: ChronicleArchive;
   councils: CouncilRecord[];
   tick: number;
