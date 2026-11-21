@@ -3,6 +3,7 @@ import { householdCensus } from '../engine/householdEngine';
 import { visibleSharedCommonsMapSites } from './sharedCommonsMapView';
 import { visibleLeaseMapSites } from './leaseMapView';
 import { drawFormationMapLinks, visibleFormationMapLinks } from './formationMapView';
+import { projectLocalCareFollowupCapacity } from '../engine/careFollowupEngine';
 import { visibleInfirmaries } from '../engine/infirmaryEngine';
 import { visibleHabitats } from '../engine/habitatEngine';
 import { visibleChronicleErrata } from '../engine/chronicleErrataEngine';
@@ -248,6 +249,10 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const localClinic = useMemo(() => {
     const clinic = visibleInfirmaries(world, selected);
     return clinic?.capacity && isCurrentLocation(clinic.siteId) ? { siteId: clinic.siteId, capacity: clinic.capacity } : undefined;
+  }, [world, selected, isCurrentLocation]);
+  const localFollowup = useMemo(() => {
+    const summary = projectLocalCareFollowupCapacity(world, selected);
+    return summary && isCurrentLocation(summary.siteId) ? summary : undefined;
   }, [world, selected, isCurrentLocation]);
   const localHabitat = useMemo(() => new Map(visibleHabitats(world, selected)
     .filter((row) => row.capacity !== undefined && row.restoration && row.restoration.endedTick === undefined &&
@@ -1374,6 +1379,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                 {(localErrata.get(location.id) ?? 0) > 0 && <span className="text-amber-200">· 公开史料有待勘误 {localErrata.get(location.id)} 条</span>}
                 {habitatView && <span className="text-emerald-200">· 复育栖地 {habitatView.wildOccupancy ?? 0}/{habitatView.capacity} 野兽</span>}
                 {localClinic?.siteId === location.id && <span className="text-rose-200">· 静养床 {localClinic.capacity.available}/{localClinic.capacity.beds} 本轮可受理</span>}
+                {localFollowup?.siteId === location.id &&
+                  <span className="text-rose-200">· 急诊优先，本轮另有 {localFollowup.available} 个复诊席位，不代表已预约或施治</span>}
                 {localCommons.has(location.id) && <span className="text-teal-200">· 中立灵地共管中 · 外来者限采储备之外的余量</span>}
                 {leaseMark && <span className="text-amber-200">· {leaseMark.role === 'owner' ? '本宗授权' : '本宗采集许可'} · 余 {leaseMark.remaining} 株</span>}
                 {assessed && <span className="text-cyan-200">· 剧本末回合 #{assessed.tick} 凭证：灵气 {assessed.qi}（{assessed.passed ? '通过' : '未通过'}）</span>}

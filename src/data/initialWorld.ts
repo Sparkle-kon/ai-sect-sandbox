@@ -37,6 +37,7 @@ import { createVillageWorksState } from '../engine/villageWorksEngine';
 import { createHouseholdState, initializeHouseholds } from '../engine/householdEngine';
 import { createTerritorialLeaseState } from '../engine/territorialLeaseEngine';
 import { createFormationNetworkState } from '../engine/formationNetworkEngine';
+import { createCareFollowupsState } from '../engine/careFollowupEngine';
 import { createInfirmaryState } from '../engine/infirmaryEngine';
 import { createHabitatState } from '../engine/habitatEngine';
 import { createChronicleErrataState } from '../engine/chronicleErrataEngine';
@@ -298,6 +299,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     chronicleCausality: createCausalChronicleState(),
     habitats: createHabitatState(),
     infirmaries: createInfirmaryState(),
+    careFollowups: createCareFollowupsState(),
     formations: createFormationNetworkState(),
     territorialLeases: createTerritorialLeaseState(),
     households: createHouseholdState(),

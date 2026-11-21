@@ -5,7 +5,9 @@ import {
   INFIRMARY_TREATMENT_STONES,
   visibleInfirmaries,
 } from '../engine/infirmaryEngine';
+import { projectCareFollowups, projectLocalCareFollowupCapacity } from '../engine/careFollowupEngine';
 import type { Cultivator, InfirmaryCase, StaffedDutyKind, WorldState } from '../types/world';
+import { CareFollowupReceipts } from './CareFollowupReceipts';
 
 const STATUS: Record<InfirmaryCase['status'], string> = {
   waiting: '等待救治', treated: '已同意并接受救治', refused: '本人已拒绝', closed: '排队已结束',
@@ -19,10 +21,11 @@ const DUTY: Record<StaffedDutyKind, string> = { observatory: '观象实测', coh
 export function InfirmaryPanel({ world, cultivator }: { world: WorldState; cultivator: Cultivator }) {
   const viewer = world.cultivators.find(({ id }) => id === cultivator.id);
   const view = visibleInfirmaries(world, viewer);
-  if (!view) return null;
-  const { capacity, ownCases, ownShift, ownQueuePosition, ownDutyDisposition } = view;
-  if (!capacity && !ownCases.length && !ownShift) return null;
-  const sect = world.sects.find(({ id }) => id === view.sectId);
+  const followups = projectCareFollowups(world, viewer);
+  const { capacity, ownCases = [], ownShift, ownQueuePosition, ownDutyDisposition } = view ?? {};
+  const followupCapacity = capacity ? projectLocalCareFollowupCapacity(world, viewer) : undefined;
+  if (!capacity && !ownCases.length && !ownShift && !followups.length) return null;
+  const sect = world.sects.find(({ id }) => id === view?.sectId);
   const sites = new Map(world.locations.map(({ id, name }) => [id, name]));
 
   return (
@@ -38,6 +41,7 @@ export function InfirmaryPanel({ world, cultivator }: { world: WorldState; culti
             <div><dt className="text-slate-400">本轮可救治</dt><dd>{capacity.available} 人</dd></div>
           </dl>
         ) : <p className="text-slate-400">未在诊台现场，仅显示本人档案，不显示当前排队或耗材。</p>}
+        {followupCapacity && <p className="text-slate-400">诊台本轮剩余复诊名额 {followupCapacity.available}（普通救治优先；不是已预约或已就诊人数）。</p>}
         <p className="text-slate-400">实际救治须由本人同意。规则每次用本宗 {INFIRMARY_TREATMENT_STONES} 灵石和院中翡翠灵叶 {INFIRMARY_TREATMENT_HERBS} 株，至多恢复最大气血的 {Math.round(100 * INFIRMARY_HEAL_FRACTION)}%，最多消解 {INFIRMARY_DETOX_MAX} 点丹毒。等待和拒绝不算救治，也不扣耗材。</p>
         {ownShift && <p>本人值守记录：{sites.get(ownShift.siteId) ?? '旧院地点未详'} · Tick #{ownShift.startedTick} 至 #{ownShift.expiresTick} 前
           {ownShift.lastServedTick !== undefined && ownShift.lastServedTick <= world.tick && ` · 最近救治 Tick #${ownShift.lastServedTick}`}
@@ -74,6 +78,7 @@ export function InfirmaryPanel({ world, cultivator }: { world: WorldState; culti
             })}
           </ol>
         ) : <p className="text-slate-400">暂无本人救治记录。</p>}
+        <CareFollowupReceipts appointments={followups} tick={world.tick} />
       </div>
     </details>
   );

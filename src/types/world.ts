@@ -117,6 +117,7 @@ export type ActionType =
   | 'CHRONICLE_ERRATA'
   | 'HABITAT'
   | 'INFIRMARY'
+  | 'CARE_FOLLOWUP'
   | 'FORMATION_NETWORK'
   | 'TERRITORIAL_LEASE'
   | 'HOUSEHOLD_GUARDIAN'
@@ -503,6 +504,8 @@ export interface LLMDecisionPayload {
   formationMove?: FormationMove;
   targetFormationLinkId?: string;
   infirmaryMove?: InfirmaryMove;
+  careFollowupMove?: CareFollowupMove;
+  targetCareFollowupId?: string;
   targetInfirmaryCaseId?: string;
   habitatMove?: HabitatMove;
   targetBeastReleaseId?: string;
@@ -1995,6 +1998,7 @@ export type StaffedDutyKind = 'observatory' | 'cohort';
 export type InfirmaryMove = 'request' | 'staff' | 'accept' | 'accept_handoff' | 'refuse';
 export type InfirmaryClosureReason = 'expiry' | 'ineligible' | 'recovered' | 'refused';
 export interface InfirmaryReceipt {
+  maxHpAtVisit?: number;
   handoff?: { fromShiftId: string; duty: StaffedDutyKind };
   guardId: string;
   shiftId: string;
@@ -2031,6 +2035,28 @@ export interface InfirmaryState {
   shifts: InfirmaryShift[];
   nextId: number;
 }
+
+export type CareFollowupMove = 'schedule' | 'attend' | 'withdraw';
+export type CareFollowupClosure = 'patient_absent' | 'patient_ineligible' | 'no_need' | 'staff_unavailable' |
+  'supplies_unavailable' | 'bed_unavailable' | 'not_confirmed';
+export interface CareFollowup {
+  id: string;
+  sourceCaseId: string;
+  sourceShiftId: string;
+  sourceGuardId: string;
+  dischargedTick: number;
+  patientId: string;
+  sectId: string;
+  siteId: string;
+  scheduledTick: number;
+  dueTick: number;
+  expiresTick: number;
+  status: 'scheduled' | 'attended' | 'closed' | 'withdrawn';
+  settledTick?: number;
+  closure?: CareFollowupClosure;
+  receipt?: { tick: number; guardId: string; shiftId: string; stonesSpent: 6; herbsSpent: 1; maxHpAtVisit: number; hpRestored: number; toxicityRemoved: number };
+}
+export interface CareFollowupsState { appointments: CareFollowup[]; nextId: number }
 
 export type FormationMove = 'offer' | 'accept' | 'decline' | 'dispatch' | 'overload' | 'draw' | 'repair';
 export interface FormationReceipt {
@@ -2356,7 +2382,7 @@ export interface SharedCommonsPact {
 export interface SharedCommonsState { pacts: SharedCommonsPact[]; nextId: number }
 
 export type ResourceFlowGood = 'stone' | 'jade_seed' | MarketGood;
-export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation' | 'terrain' | 'workshop' | 'road' | 'observatory' | 'pilgrimage' | 'granary' | 'furnace_safety' | 'artifact_salvage' | 'village_supply' | 'civic_memorial' | 'village_fair' | 'sect_stipend' | 'seed_culture';
+export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation' | 'terrain' | 'workshop' | 'road' | 'observatory' | 'pilgrimage' | 'granary' | 'furnace_safety' | 'artifact_salvage' | 'village_supply' | 'civic_memorial' | 'village_fair' | 'sect_stipend' | 'seed_culture' | 'care_followup';
 export type ResourceFlowAccount =
   | { kind: 'actor' | 'site' | 'sect' | 'order' | 'shipment' | 'relocation' | 'workshop' | 'salvage' | 'granary' | 'village_supply' | 'village_fair' | 'seed_lot' | 'seed_plot'; id: string }
   | { kind: 'oath'; id: string; pocket: 'payment' | 'collateral' };
@@ -2939,6 +2965,7 @@ export interface WorldState {
   territorialLeases: TerritorialLeaseState;
   formations: FormationNetworkState;
   infirmaries: InfirmaryState;
+  careFollowups: CareFollowupsState;
   habitats: HabitatState;
   chronicleErrata: ChronicleErrataState;
   chronicleCausality: CausalChronicleState;

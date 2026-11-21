@@ -125,7 +125,8 @@ export function projectResourceFlowMonth(world: WorldState, tick: number,
   if (scope.kind === 'observer') {
     const omittedEntries = month.totalEntries - month.entries.length;
     return {
-      tick, year, month: calendarMonth, closed, rows: month.entries, totals: month.totals,
+      // Follow-up receipts are party records even when the observer is viewing world totals.
+      tick, year, month: calendarMonth, closed, rows: month.entries.filter(row => row.mechanism !== 'care_followup'), totals: month.totals,
       omittedEntries, partial: omittedEntries > 0,
     };
   }

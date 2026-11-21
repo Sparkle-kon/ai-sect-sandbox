@@ -44,6 +44,8 @@ import { availableCompetitionActions, competitionActorOptedOut } from './competi
 import { availableScriptureActions, scriptureEditionModifiers } from './scriptureEngine';
 import { availablePavilionLoanActions } from './pavilionLoanEngine';
 import { availableSectStipendActions } from './sectStipendEngine';
+import { availableCareFollowupActions, shouldVolunteerCareFollowup } from './careFollowupEngine';
+import { CARE_FOLLOWUP_NEED_THRESHOLD } from './careFollowupTerms';
 import { availableRelicActions } from './relicEngine';
 import { availableRecollectionActions, visibleRecollection } from './reincarnationEngine';
 import { activeRelocationForActor, availableRelocationActions } from './relocationEngine';
@@ -314,6 +316,21 @@ export function computeHeuristicDecision(
     const leave = !canTrain ? lessons.find(({ cohortMove }) => cohortMove === 'leave') : undefined;
     if (leave) return { ...leave, chosenAction: leave.action, innerMonologue: '伤势不宜练习，先按约自愿退出。' };
   }
+  const willingFollowup = !cultivator.guardAssignment &&
+    (cultivator.hp / Math.max(1, cultivator.maxHp) <= CARE_FOLLOWUP_NEED_THRESHOLD || cultivator.pillToxicity > 0);
+  if (willingFollowup && world.careFollowups.appointments.some(({ patientId, status }) => patientId === cultivator.id && status === 'scheduled')) {
+    const followup = availableCareFollowupActions(cultivator, world).filter(({ careFollowupMove }) => careFollowupMove === 'attend');
+    if (followup.length === 1) return { chosenAction: 'CARE_FOLLOWUP', careFollowupMove: 'attend',
+      targetCareFollowupId: followup[0].targetCareFollowupId,
+      innerMonologue: '实到原院按约复诊，先由当值人核实眼下所需。' };
+  }
+
+  if (shouldVolunteerCareFollowup(world, cultivator) &&
+      availableInfirmaryActions(cultivator, world).some(({ infirmaryMove }) => infirmaryMove === 'staff')) {
+    return { chosenAction: 'INFIRMARY', infirmaryMove: 'staff',
+      innerMonologue: '本院已有仍需复诊的约期。我自愿按常例值守，不保证具体经办。' };
+  }
+
   const hasLoanPavilion = world.sects.some(({ headquartersId, facilities }) =>
     headquartersId === cultivator.locationId && facilities.scripture_pavilion > 0);
   const openPersonalLoan = world.pavilionLoans.loans.some(({ borrowerId, returned }) => borrowerId === cultivator.id && !returned);
@@ -1126,6 +1143,14 @@ export function computeHeuristicDecision(
       targetLocationId: reserves[0].targetLocationId, innerMonologue: '从本人已有的翡翠灵叶中留种，单独计作种料。' };
   }
 
+  if (willingFollowup && world.infirmaries.cases.some(({ patientId, status }) =>
+      patientId === cultivator.id && status === 'treated')) {
+    const followup = availableCareFollowupActions(cultivator, world).filter(({ careFollowupMove }) => careFollowupMove === 'schedule');
+    if (followup.length === 1) return { chosenAction: 'CARE_FOLLOWUP', careFollowupMove: 'schedule',
+      targetInfirmaryCaseId: followup[0].targetInfirmaryCaseId,
+      innerMonologue: '按本人真实出诊回执预约复诊；并未占用本轮急诊。' };
+  }
+
   // Irreversible disposal is optional and never interrupts a scheduled duty.
   // Keep a usable alternative and leave even slightly repairable or distinctive gear alone.
   if (world.tick >= 16 && world.tick % 13 === 3 && !cultivator.guardAssignment &&
@@ -1332,8 +1357,13 @@ export async function requestCultivatorLLMDecision(
   const stipendOptions = availableSectStipendActions(cultivator, world, requestTick);
   const stipendPromptOptions = stipendOptions.map(({ stipendMove, targetInfirmaryCaseId, targetStipendId }) =>
     ({ stipendMove, targetInfirmaryCaseId, targetStipendId }));
+  const careFollowupOptions = availableCareFollowupActions(cultivator, world, requestTick);
+  const careFollowupPromptOptions = careFollowupOptions.map(({ careFollowupMove, targetInfirmaryCaseId, targetCareFollowupId }) =>
+    ({ careFollowupMove, targetInfirmaryCaseId, targetCareFollowupId }));
   const infirmaryOptions = availableInfirmaryActions(cultivator, world, requestTick)
     .map(({ action, infirmaryMove, targetInfirmaryCaseId }) => ({ action, infirmaryMove, targetInfirmaryCaseId }));
+  const mayStaffFollowup = infirmaryOptions.some(({ infirmaryMove }) => infirmaryMove === 'staff') &&
+    shouldVolunteerCareFollowup(world, cultivator, requestTick);
   const habitatOptions = availableHabitatActions(cultivator, world);
   const chronicleErrataOptions = availableChronicleErrataActions(cultivator, world);
   const creditOptions = availableSectCreditActions(cultivator, world);
@@ -1409,7 +1439,9 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 地契只按本地印契和真实所有权办理，只出租限期采集许可，不转移疆域：${JSON.stringify(leaseOptions)}
 - 阵网只用实际签约、到场与灵气选项；overload 是主动超载且必会断链，不是默认调拨：${JSON.stringify(formationOptions)}
 - 退居俸养只复制本人执行回合许可：offer 只填已有旧勤凭据的 targetInfirmaryCaseId；accept、adopt、decline、withdraw 只填 targetStipendId。不得填写姓名、病况、钱款、日期、继任依据、发放结果或复职：${JSON.stringify(stipendPromptOptions)}
-- 静养院只可复制本人执行回合的 request、staff、accept、accept_handoff 或 refuse。accept_handoff 是病患另行同意真实已值守的候补，只抄本人候诊编号；不填人员、班次、病况、地名、冲突细节、费用和奖励：${JSON.stringify(infirmaryOptions)}
+- 出院后复诊只复制本人实际许可：schedule 只填本人既有出诊的 targetInfirmaryCaseId；attend、withdraw 只填 targetCareFollowupId。不得填写当值人、日期、费用、症状、优先级或疗效：${JSON.stringify(careFollowupPromptOptions)}
+- 静养院只可复制本人执行回合的 request、staff、accept、accept_handoff 或 refuse。accept_handoff 是病患另行同意真实已值守的候补，只抄本人候诊编号；不填人员、班次、病况、地名、冲突细节、费用和奖励：${JSON.stringify(infirmaryOptions)}${mayStaffFollowup
+    ? '\n- 此地已有可由后来当值人处理的复诊约期；若自愿值守，只复制现有 INFIRMARY staff，不指定人。' : ''}
 - 栖息地复育与放归只用当地实际有资源的选择；记录复见必须亲眼核对同一野生灵兽：${JSON.stringify(habitatOptions)}
 - 纪事异闻只允在当地公示板提交列出的结构化说法或核证勘误，不许生成证据文字：${JSON.stringify(chronicleErrataOptions)}
 - 朝山巡礼只向在场同伴提议，两站必须是彼此知晓且可通行的地点。选择并原样复制当下巡礼选项：${JSON.stringify(pilgrimageOptions)}
@@ -1563,6 +1595,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'CHRONICLE_ERRATA',
             'HABITAT',
             'INFIRMARY',
+            'CARE_FOLLOWUP',
             'SECT_STIPEND',
             'FORMATION_NETWORK',
             'TERRITORIAL_LEASE',
@@ -1772,6 +1805,20 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             return legalStipend.stipendMove === 'offer'
               ? { chosenAction: 'SECT_STIPEND', stipendMove: 'offer', targetInfirmaryCaseId: legalStipend.targetInfirmaryCaseId, innerMonologue }
               : { chosenAction: 'SECT_STIPEND', stipendMove: legalStipend.stipendMove, targetStipendId: legalStipend.targetStipendId, innerMonologue };
+          }
+          const legalCareFollowup = chosenAction === 'CARE_FOLLOWUP' ? careFollowupOptions.find((item) =>
+            item.careFollowupMove === parsed.careFollowupMove && item.targetInfirmaryCaseId === parsed.targetInfirmaryCaseId &&
+            item.targetCareFollowupId === parsed.targetCareFollowupId) : undefined;
+          if (chosenAction === 'CARE_FOLLOWUP' && (!legalCareFollowup || Object.keys(parsed).some((field) =>
+            !['chosenAction', 'innerMonologue', 'careFollowupMove',
+              legalCareFollowup.careFollowupMove === 'schedule' ? 'targetInfirmaryCaseId' : 'targetCareFollowupId'].includes(field)))) return undefined;
+          if (legalCareFollowup) {
+            const innerMonologue = (typeof parsed.innerMonologue === 'string' && parsed.innerMonologue.trim().slice(0, 160)) ||
+              cultivator.innerMonologue || '按真实出院回执与现场核验复诊。';
+            return legalCareFollowup.careFollowupMove === 'schedule'
+              ? { chosenAction: 'CARE_FOLLOWUP', careFollowupMove: 'schedule', targetInfirmaryCaseId: legalCareFollowup.targetInfirmaryCaseId, innerMonologue }
+              : { chosenAction: 'CARE_FOLLOWUP', careFollowupMove: legalCareFollowup.careFollowupMove,
+                targetCareFollowupId: legalCareFollowup.targetCareFollowupId, innerMonologue };
           }
           const legalInfirmary = chosenAction === 'INFIRMARY' ? infirmaryOptions.find((item) =>
             item.infirmaryMove === parsed.infirmaryMove && item.targetInfirmaryCaseId === parsed.targetInfirmaryCaseId) : undefined;

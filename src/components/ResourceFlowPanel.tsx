@@ -31,6 +31,7 @@ const REASONS: Readonly<Record<string, string>> = {
   seed_crop_matured: '实熟仍存田圃', seed_harvest_delivered: '本人实收入袋',
   seed_plot_loss: '苗圃实际损失', seed_lot_loss: '实际余种损失',
   stipend_payment: '退居俸养本期实际兑付',
+  followup_public_stones: '复诊实际公库支出', followup_local_leaf: '复诊实际耗用地库灵叶',
   civic_memorial_supplies: '乡祠立册实际耗用',
   fair_reserve_fee: '乡集摊位预约资金保管', fair_local_service: '原地摆摊实际摊费', fair_refund_fee: '未摆摊实退原预约资金',
   granary_donation: '捐入村镇义仓', granary_draw: '灾后短缺实际支用',

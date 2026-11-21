@@ -4,6 +4,7 @@ import { isRetiredFromService } from './serviceRetirementEngine';
 import type { Cultivator, InfirmaryCase, InfirmaryClosureReason, InfirmaryMove, InfirmaryShift, InfirmaryState, LLMDecisionPayload,
   LocationNode, Sect, StaffedDutyKind, WorldEvent, WorldState } from '../types/world';
 import { pilgrimageCheckpoint } from './pilgrimageEngine';
+import { CARE_FOLLOWUP_JADE_LEAF,CARE_FOLLOWUP_STONES } from './careFollowupTerms';
 
 export const INFIRMARY_TREATMENT_STONES = 12;
 export const INFIRMARY_TREATMENT_HERBS = 2;
@@ -103,7 +104,8 @@ function clinicInputs(world: WorldState, sect: Sect, site: LocationNode, tick: n
     return shift.startedTick < tick && guardAvailable(world,guard,sect,site.id,tick)
       ? [{shift,duty:dutyFor(world,guard,site.id,tick)}] : [];
   }).sort((a,b) => a.shift.startedTick-b.shift.startedTick || ascii(a.shift.guardId,b.shift.guardId) || ascii(a.shift.id,b.shift.id));
-  const served = world.infirmaries.cases.filter(row => row.sectId === sect.id && row.siteId === site.id && row.receipt?.tick === tick).length;
+  const served = world.infirmaries.cases.filter(row => row.sectId === sect.id && row.siteId === site.id && row.receipt?.tick === tick).length +
+    world.careFollowups.appointments.filter(row => row.sectId === sect.id && row.siteId === site.id && row.receipt?.tick === tick).length;
   const stocked = Math.max(0, Math.min(beds, Math.floor(sect.spiritStones / INFIRMARY_TREATMENT_STONES),
     Math.floor(site.herbs.jade_leaf / INFIRMARY_TREATMENT_HERBS)));
   const patients = world.infirmaries.cases.flatMap(row => {
@@ -179,6 +181,52 @@ function planClinic(world: WorldState, sect: Sect, site: LocationNode, tick = wo
   const capacity: InfirmaryCapacity = {beds:inputs.beds,
     onDuty:inputs.signed.filter(({duty})=>duty===undefined).length,stocked:inputs.stocked,available:permits.size};
   return {...inputs,capacity,cases,permits};
+}
+
+/** Refers only to the current actual titled clinic; this is not a grant of care. */
+export function clinicAccessForFollowup(world:WorldState,actor:Cultivator,tick=world.tick) {
+  const sect = world.sects.find(row=>row.id===actor.sectId);
+  const site = sect && clinicSite(world,sect);
+  return sect&&site&&site.ownerSectId===sect.id&&present(world,actor,sect,site.id,tick) ? {sect,site}:undefined;
+}
+
+function spareFollowupClinic(world:WorldState,sect:Sect,site:LocationNode,tick:number) {
+  const ordinary=planClinic(world,sect,site,tick);
+  const occupiedShifts=new Set<string>();
+  const heldBeds=ordinary.permits.size;
+  const stillSigned=new Set(ordinary.signed.map(row=>row.shift.id));
+  // A genuine pending acute assignment keeps first rights, including its independently reserved replacement.
+  for (const [id,allocation] of ordinary.cases) {
+    if (!ordinary.patients.some(row=>row.row.id===id)) continue;
+    if(stillSigned.has(allocation.primaryId))occupiedShifts.add(allocation.primaryId);
+    if(allocation.replacementId&&stillSigned.has(allocation.replacementId))occupiedShifts.add(allocation.replacementId);
+  }
+  const beds=Math.max(0,ordinary.beds-ordinary.served-heldBeds);
+  const stocked=Math.max(0,Math.min(
+    Math.floor((sect.spiritStones-heldBeds*INFIRMARY_TREATMENT_STONES)/CARE_FOLLOWUP_STONES),
+    Math.floor((site.herbs.jade_leaf-heldBeds*INFIRMARY_TREATMENT_HERBS)/CARE_FOLLOWUP_JADE_LEAF)));
+  const shifts=ordinary.signed.filter(({shift,duty})=>!duty&&!occupiedShifts.has(shift.id)&&
+    shift.lastServedTick!==tick&&shift.lastWithheld?.tick!==tick).map(({shift})=>shift);
+  return {beds,stocked,shifts};
+}
+
+export function clinicFollowupSupport(world:WorldState,patient:Cultivator,excludedGuardId:string,tick=world.tick) {
+  const clinic=clinicAccessForFollowup(world,patient,tick);
+  if(!clinic)return {reason:'patient_absent' as const};
+  const {sect,site}=clinic;
+  const spare=spareFollowupClinic(world,sect,site,tick);
+  if(spare.stocked<=0)return {reason:'supplies_unavailable' as const};
+  if(spare.beds<=0)return {reason:'bed_unavailable' as const};
+  const shift=spare.shifts.find(row=>row.guardId!==patient.id&&row.guardId!==excludedGuardId);
+  return shift?{sect,site,shift}:{reason:'staff_unavailable' as const};
+}
+
+export function spareLocalClinicForFollowup(world:WorldState,viewer:Cultivator,tick=world.tick) {
+  const clinic=clinicAccessForFollowup(world,viewer,tick);
+  if(!clinic)return undefined;
+  const {sect,site}=clinic;
+  const spare=spareFollowupClinic(world,sect,site,tick);
+  return {siteId:site.id,beds:spare.beds,available:Math.min(spare.beds,spare.stocked,spare.shifts.length)};
 }
 
 export function infirmaryCapacity(world: WorldState, sectId: string): InfirmaryCapacity {
@@ -294,7 +342,7 @@ export function resolveInfirmaryAction(world: WorldState, actor: Cultivator, dec
   row.status = 'treated';
   row.settledTick = world.tick;
   row.receipt = { guardId: shift.guardId, shiftId: shift.id, tick: world.tick, stonesSpent: INFIRMARY_TREATMENT_STONES,
-    herbsSpent: INFIRMARY_TREATMENT_HERBS, hpRestored, toxicityRemoved, ...(handoff ? {handoff:{...handoff}} : {}) };
+    herbsSpent: INFIRMARY_TREATMENT_HERBS, maxHpAtVisit: actor.maxHp, hpRestored, toxicityRemoved, ...(handoff ? {handoff:{...handoff}} : {}) };
   return event(world, `${row.id}-treated`, handoff ? '本人明确接受替班护诊' : '本人同意接受静养救治', `实耗公库${INFIRMARY_TREATMENT_STONES}灵石及地库${INFIRMARY_TREATMENT_HERBS}翡翠灵叶，实际恢复${hpRestored}气血，清除${toxicityRemoved}点丹毒。`,
     [actor.id, shift.guardId], site.id);
 }
@@ -319,9 +367,11 @@ export function advanceInfirmaries(world: WorldState): WorldEvent[] {
   }
   const keepCases = new Set(state.cases.filter((row) => row.status !== 'waiting').sort((a, b) => (a.settledTick ?? 0) - (b.settledTick ?? 0))
     .slice(-CASE_HISTORY).map(({ id }) => id));
-  state.cases = state.cases.filter((row) => row.status === 'waiting' || keepCases.has(row.id) ||
+  const followupSources=new Set(world.careFollowups.appointments.map(row=>row.sourceCaseId));
+  state.cases = state.cases.filter((row) => row.status === 'waiting' || keepCases.has(row.id) ||followupSources.has(row.id)||
     (row.settledTick !== undefined && world.tick - row.settledTick < RETRY_WAIT));
   const protectedShifts = new Set(state.cases.flatMap(({ receipt }) => receipt ? [receipt.shiftId,...(receipt.handoff ? [receipt.handoff.fromShiftId] : [])] : []));
+  for(const row of world.careFollowups.appointments)if(row.receipt)protectedShifts.add(row.receipt.shiftId);
   const keepShifts = new Set(state.shifts.filter((row) => row.expiresTick <= world.tick).slice(-SHIFT_HISTORY).map(({ id }) => id));
   state.shifts = state.shifts.filter((row) => row.expiresTick > world.tick || protectedShifts.has(row.id) || keepShifts.has(row.id));
   return events;
