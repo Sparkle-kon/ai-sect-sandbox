@@ -1,3 +1,4 @@
+import { isRetiredFromService } from './serviceRetirementEngine';
 import { archiveChronicleEvents } from './novelGenerator';
 import type { CouncilBallot, CouncilBallotReplacement, CouncilPlan, CouncilProposal, CouncilRecord, CouncilVote, Cultivator, Sect, WorldEvent, WorldState } from '../types/world';
 import { activeSiegeForActor, availableDiplomacyActions, resolveDiplomacyAction, sectRelation } from './diplomacyEngine';
@@ -16,6 +17,7 @@ function members(world: WorldState, sect: Sect): Cultivator[] {
 }
 function votersFor(world: WorldState, sect: Sect, proposal: CouncilProposal): Cultivator[] {
   return members(world, sect).filter((actor) =>
+    !isRetiredFromService(actor) &&
     (proposal.kind === 'war' || proposal.targetCultivatorId !== actor.id) &&
     (actor.id === sect.leaderId || actor.sectRank === '长老' || actor.sectRank === '太上长老') &&
     actor.tribulation?.stage !== 'lightning' && actor.tribulation?.stage !== 'heart_demon' && !activeSiegeForActor(world, actor) &&

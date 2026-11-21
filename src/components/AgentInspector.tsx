@@ -4,6 +4,7 @@ import { Cultivator, WorldState } from '../types/world';
 import { MemoryPanel } from './MemoryPanel';
 import { RecollectionPanel } from './RecollectionPanel';
 import { ReflectionPanel } from './ReflectionPanel';
+import { ServiceRetirementPanel } from './ServiceRetirementPanel';
 import { SealedCourierPanel } from './SealedCourierPanel';
 import { RumorPanel } from './RumorPanel';
 import { SchemePanel } from './SchemePanel';
@@ -207,6 +208,7 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
         <span>恶行记录 {cultivator.transgressions}</span>
         {bounty && <span className={bounty.status === 'open' ? 'text-rose-300' : 'text-slate-400'}>悬赏：{BOUNTY_STATUS[bounty.status]}</span>}
       </p>}
+      {profile && <ServiceRetirementPanel world={world} cultivator={cultivator} />}
       {sectDetails && <>
       <SectHierarchyPanel cultivator={cultivator} sect={sect} cultivators={world.cultivators} />
       <SectEconomyPanel cultivator={cultivator} sect={sect} world={world} />

@@ -1,3 +1,4 @@
+import { isRetiredFromService } from './serviceRetirementEngine';
 import type { Cultivator, InfirmaryCase, InfirmaryClosureReason, InfirmaryMove, InfirmaryShift, InfirmaryState, LLMDecisionPayload,
   LocationNode, Sect, WorldEvent, WorldState } from '../types/world';
 import { pilgrimageCheckpoint } from './pilgrimageEngine';
@@ -52,7 +53,7 @@ function present(world: WorldState, actor: Cultivator | undefined, sect: Sect, l
 }
 
 function guardAvailable(world: WorldState, actor: Cultivator | undefined, sect: Sect, siteId: string): actor is Cultivator {
-  return present(world, actor, sect, siteId) && actor.id !== sect.leaderId && health(actor) >= INFIRMARY_GUARD_THRESHOLD &&
+  return present(world, actor, sect, siteId) && !isRetiredFromService(actor) && actor.id !== sect.leaderId && health(actor) >= INFIRMARY_GUARD_THRESHOLD &&
     !(actor.guardAssignment && actor.guardAssignment.locationId !== siteId && actor.guardAssignment.assignedTick <= world.tick &&
       actor.guardAssignment.expiresTick > world.tick);
 }

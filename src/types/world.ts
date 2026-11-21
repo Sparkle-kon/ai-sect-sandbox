@@ -97,6 +97,7 @@ export type ActionType =
   | 'HOUSEHOLD_GUARDIAN'
   | 'VILLAGE_WORKS'
   | 'SEALED_COURIER'
+  | 'SECT_SERVICE'
   | 'GATHER_HERBS'
   | 'BREW_PILL'
   | 'USE_PILL'
@@ -313,6 +314,7 @@ export interface Cultivator {
   activeScheme?: CultivatorScheme;
   tribulation?: TribulationTrial;
   guardAssignment?: GuardAssignment;
+  service?: SectServiceStatus;
   namedHeirId?: string;
   alive: boolean;
 }
@@ -392,6 +394,7 @@ export interface LLMDecisionPayload {
   targetHazardId?: string;
   ceasefireMove?: CeasefireMove;
   targetCeasefireId?: string;
+  serviceMove?: SectServiceMove;
   courierMove?: CourierMove;
   targetCourierId?: string;
   targetDispatchId?: string;
@@ -1759,7 +1762,31 @@ export interface ColdHistoryState {
   readonly droppedChapters: number;
 }
 
+export type SectServiceMove = 'retire' | 'return';
+export interface SectServiceStatus {
+  status: 'retired' | 'serving';
+  changedTick: number;
+  retiredTick: number;
+  formerSectId: string;
+  formerRank: SectRank;
+}
+export interface ServiceRetirementRecord {
+  id: string;
+  actorId: string;
+  sectId: string;
+  tick: number;
+  kind: SectServiceMove;
+  formerRank: SectRank;
+  forumReleased: boolean;
+  leaderReleased: boolean;
+  guardLocationId?: string;
+  stewardSchoolIds: string[];
+  infirmaryShiftIds: string[];
+}
+export interface ServiceRetirementState { history: ServiceRetirementRecord[]; nextId: number }
+
 export interface WorldState {
+  serviceRetirement: ServiceRetirementState;
   coldHistory: ColdHistoryState;
   couriers: SealedCourierState;
   watchlists: WatchlistState;

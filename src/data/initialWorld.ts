@@ -1,3 +1,4 @@
+import { createServiceRetirementState } from '../engine/serviceRetirementEngine';
 import { createColdHistoryState } from '../engine/coldHistoryEngine';
 import { createSealedCourierState } from '../engine/sealedCourierEngine';
 import { createWatchlistState } from '../engine/watchlistEngine';
@@ -272,6 +273,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     watchlists: createWatchlistState(),
     couriers: createSealedCourierState(),
     coldHistory: createColdHistoryState(),
+    serviceRetirement: createServiceRetirementState(),
     witnesses: createWitnessState(),
     estates: createEstateState(),
     decisionTrace: createDecisionTraceState(),

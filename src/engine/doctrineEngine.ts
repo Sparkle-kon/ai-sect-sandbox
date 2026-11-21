@@ -1,3 +1,4 @@
+import { isRetiredFromService } from './serviceRetirementEngine';
 import type { Cultivator, DoctrineEndorsement, DoctrineHistory, DoctrineMove, DoctrineProposal, DoctrineSchool, DoctrineState,
   LLMDecisionPayload, MemoryEntry, ReflectionTheme, Sect, WorldEvent, WorldState } from '../types/world';
 import { gainMastery } from './techniqueEngine';
@@ -77,9 +78,9 @@ function charterMember(world: WorldState, actorId: string): DoctrineSchool | und
 
 function stewardFor(world: WorldState, school: DoctrineSchool, sect: Sect): string | undefined {
   if (school.status !== 'autonomous') {
-    return supporters(world, school).find(({ actorId }) => actorId !== sect.leaderId && !charterMember(world, actorId))?.actorId;
+    return supporters(world, school).find(({ actorId }) => actorId !== sect.leaderId && !isRetiredFromService(livingActor(world, actorId)) && !charterMember(world, actorId))?.actorId;
   }
-  const eligible = school.memberIds.filter((id) => id !== sect.leaderId && livingActor(world, id)?.sectId === sect.id);
+  const eligible = school.memberIds.filter((id) => id !== sect.leaderId && livingActor(world, id)?.sectId === sect.id && !isRetiredFromService(livingActor(world, id)));
   return school.stewardId && eligible.includes(school.stewardId) ? school.stewardId : eligible.slice().sort()[0];
 }
 

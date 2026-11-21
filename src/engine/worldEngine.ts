@@ -1,3 +1,4 @@
+import { resolveServiceRetirementAction } from './serviceRetirementEngine';
 import { cloneWorldWithColdHistory, compactColdHistory } from './coldHistoryEngine';
 import { activeCourierForActor, advanceCouriers, courierActedThisTick, courierCheckpoint, reconcileCourierDeaths, resolveCourierAction } from './sealedCourierEngine';
 import { captureWatchDigests } from './watchlistEngine';
@@ -219,6 +220,13 @@ export function applyCultivatorBrainDecision(
     case 'ATTEST_WITNESS':
     case 'CHALLENGE_WITNESS':
       return resolveWitnessAction(world, cultivator, decision);
+    case 'SECT_SERVICE': {
+      const outcome = resolveServiceRetirementAction(world, cultivator, decision);
+      if (outcome && decision.serviceMove === 'retire' && !emit) {
+        for (const event of maintainSectPolitics(world)) recordAuxiliaryActionEvent(world, event);
+      }
+      return outcome;
+    }
     case 'SEALED_COURIER':
       return resolveCourierAction(world, cultivator, decision);
     case 'VILLAGE_WORKS':

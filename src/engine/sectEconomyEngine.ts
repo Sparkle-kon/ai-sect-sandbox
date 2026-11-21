@@ -1,3 +1,4 @@
+import { isRetiredFromService } from './serviceRetirementEngine';
 import { activeRelocationForSect } from './relocationEngine';
 import type { ActionType, Cultivator, FacilityKind, LLMDecisionPayload, LocationNode, Sect, WorldEvent, WorldState } from '../types/world';
 import { rewardContribution } from './sectPoliticsEngine';
@@ -34,14 +35,14 @@ function isResourceSite(site: LocationNode, sectId: string): boolean {
 export function isGuardAssignmentActive(actor: Cultivator, world: WorldState): boolean {
   const assignment = actor.guardAssignment;
   const site = world.locations.find(({ id }) => id === assignment?.locationId);
-  return Boolean(actor.alive && actor.hp > 0 && assignment && assignment.assignedTick <= world.tick &&
+  return Boolean(actor.alive && actor.hp > 0 && !isRetiredFromService(actor) && assignment && assignment.assignedTick <= world.tick &&
     world.tick < assignment.expiresTick && site && isResourceSite(site, actor.sectId) &&
     world.sects.some(({ id, leaderId }) => id === actor.sectId && actor.id !== leaderId));
 }
 
 export function availableSectEconomyActions(actor: Cultivator, world: WorldState): SectEconomyOption[] {
   const sect = world.sects.find(({ id }) => id === actor.sectId);
-  if (!sect || !actor.alive || actor.hp <= 0) return [];
+  if (!sect || !actor.alive || actor.hp <= 0 || isRetiredFromService(actor)) return [];
   const options: SectEconomyOption[] = [];
   if (isGuardAssignmentActive(actor, world)) options.push({ action: 'GUARD_DUTY', targetLocationId: actor.guardAssignment?.locationId });
   if (activeRelocationForSect(world, sect.id) || sect.leaderId !== actor.id || actor.locationId !== sect.headquartersId) return options;
@@ -53,7 +54,7 @@ export function availableSectEconomyActions(actor: Cultivator, world: WorldState
     }
   }
   for (const guard of world.cultivators) {
-    if (guard.id === actor.id || !guard.alive || guard.hp <= 0 || guard.sectId !== sect.id || guard.locationId !== hq.id ||
+    if (guard.id === actor.id || !guard.alive || guard.hp <= 0 || isRetiredFromService(guard) || guard.sectId !== sect.id || guard.locationId !== hq.id ||
         isGuardAssignmentActive(guard, world)) continue;
     for (const site of world.locations) {
       if (isResourceSite(site, sect.id) && !world.cultivators.some((member) => member.sectId === sect.id &&

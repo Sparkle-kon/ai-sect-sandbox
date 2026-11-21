@@ -1,3 +1,4 @@
+import { createServiceRetirementState, SERVICE_RETIREMENT_HISTORY_LIMIT, SERVICE_RETIREMENT_MIN_TICKS, isRetiredFromService } from './serviceRetirementEngine';
 import { COLD_HISTORY_MIN_AGE_TICKS, createColdHistoryState, freezeColdHistory } from './coldHistoryEngine';
 import { COURIER_OFFER_TICKS, COURIER_ROUTE_TICKS, COURIER_SERVICE_FEE, createSealedCourierState } from './sealedCourierEngine';
 import { createWatchlistState, WATCHLIST_BUCKET_MAX_COUNT, WATCHLIST_MAX_DIGESTS,
@@ -97,7 +98,7 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER SECT_SERVICE REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const marketQty = num(1,12,true), marketPrice = num(1,500,true);
@@ -192,6 +193,7 @@ const shape = structure({
       startedTick:tick,finishedTick:otick,stepIndex:count,steps:arr(32,structure({label:text,completedTick:otick})),targetCultivatorId:oid,targetLocationId:oid,artifactName:otext,outcome:otext})),
     tribulation:optional(structure({id,targetRealm:realm,startedTick:tick,stage:one('lightning','heart_demon','passed','failed'),nextWave:count,totalWaves:count,
       pressure:percentage,interruptions:count,resolvedTick:otick,lastOutcome:otext,lastActedTick:otick})),
+    service:optional(structure({status:one('retired','serving'),changedTick:tick,retiredTick:tick,formerSectId:id,formerRank:sectRank})),
     guardAssignment:optional(structure({locationId:id,assignedTick:tick,expiresTick:tick})),namedHeirId:oid,alive:bool})),
   relationships:arr(SAVE_COLLECTION_LIMIT,structure({fromId:id,toId:id,type:one('师徒','同门','道侣','血仇','挚友','竞争'),affinity,note:text})),
   events:arr(200,structure({...publicFact,witnessScope:optional(one('participants')),duelWinnerId:oid,damage:optional(arr(SAVE_COLLECTION_LIMIT,structure({cultivatorId:id,amount:wealth})))})),
@@ -237,6 +239,10 @@ const shape = structure({
       attestations:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,tick,verdict:one('supports','contradicts')})),
       appeal:optional(structure({tick,actorId:id,verdict:one('upheld','rejected'),reason:text})),settledTick:otick,
       reputationSectId:oid,reputationPenalty:percentage,reputationRestored:percentage,reason:otext}))}),
+  serviceRetirement:structure({nextId:num(1,100_000_000,true),history:arr(SERVICE_RETIREMENT_HISTORY_LIMIT,structure({
+    id,actorId:id,sectId:id,tick,kind:one('retire','return'),formerRank:sectRank,forumReleased:bool,leaderReleased:bool,
+    guardLocationId:oid,stewardSchoolIds:ids,infirmaryShiftIds:ids
+  }))}),
   couriers:structure({nextId:num(1,100_000_000,true),dispatches:arr(SAVE_COLLECTION_LIMIT,structure({
     id,senderId:id,recipientId:id,courierId:id,originId:id,destinationId:id,openedTick:tick,offerExpiresTick:tick,
     status:one('offered','in_transit','returning','delivered','returned','lost','declined','expired'),sealed:dispatchPayload,
@@ -442,6 +448,7 @@ function verifyWorld(value: unknown): WorldState {
       ...(!Object.hasOwn(value, 'mentorship') ? { mentorship: { offers: [], lineage: [], budgets: [] } } : {}),
       ...(!Object.hasOwn(value, 'decisionTrace') ? { decisionTrace: { records: [] } } : {}),
       ...(!Object.hasOwn(value, 'coldHistory') ? { coldHistory: createColdHistoryState() } : {}),
+      ...(!Object.hasOwn(value, 'serviceRetirement') ? { serviceRetirement: createServiceRetirementState() } : {}),
       ...(!Object.hasOwn(value, 'couriers') ? { couriers: createSealedCourierState() } : {}),
       ...(!Object.hasOwn(value, 'watchlists') ? { watchlists: createWatchlistState() } : {}),
       ...(!Object.hasOwn(value, 'villageWorks') ? { villageWorks: createVillageWorksState() } : {}),
@@ -486,6 +493,34 @@ function verifyWorld(value: unknown): WorldState {
   const sector = unique(w.sects, (item) => item.id, 'sects.id');
   const locations = unique(w.locations, (item) => item.id, 'locations.id');
   const map = unique(w.terrain.tiles, (item) => item.id, 'terrain.tiles.id');
+  unique(w.serviceRetirement.history, ({ id }) => id, 'serviceRetirement.history.id');
+  unique(w.serviceRetirement.history, ({ actorId, tick }) => JSON.stringify([actorId, tick]), 'serviceRetirement.history.action');
+  const lastService = new Map<string, typeof w.serviceRetirement.history[number]>();
+  for (const entry of w.serviceRetirement.history) {
+    const serial = Number(entry.id.match(/^service-record-([1-9][0-9]*)$/)?.[1]);
+    if (!Number.isSafeInteger(serial) || serial >= w.serviceRetirement.nextId || !actor.has(entry.actorId) ||
+        !sector.has(entry.sectId) || entry.tick > w.tick ||
+        (entry.kind === 'return' && (entry.leaderReleased || entry.forumReleased || entry.guardLocationId ||
+          entry.stewardSchoolIds.length || entry.infirmaryShiftIds.length))) fail('serviceRetirement.history.references');
+    unique(entry.stewardSchoolIds, (id) => id, 'serviceRetirement.history.school');
+    unique(entry.infirmaryShiftIds, (id) => id, 'serviceRetirement.history.shift');
+    const previous = lastService.get(entry.actorId);
+    if (!previous || entry.tick > previous.tick) lastService.set(entry.actorId, entry);
+  }
+  for (const person of w.cultivators) {
+    const stamp = person.service;
+    const latest = lastService.get(person.id);
+    if (!stamp) {
+      if (latest) fail('serviceRetirement.current.missing');
+      continue;
+    }
+    if (!sector.has(stamp.formerSectId) || stamp.changedTick > w.tick ||
+        (stamp.status === 'retired' ? stamp.changedTick !== stamp.retiredTick || !!person.guardAssignment ||
+          w.sects.some(({ leaderId }) => leaderId === person.id) :
+          stamp.changedTick < stamp.retiredTick + SERVICE_RETIREMENT_MIN_TICKS) ||
+        (latest && (latest.tick !== stamp.changedTick ||
+          latest.kind !== (isRetiredFromService(person) ? 'retire' : 'return') || latest.formerRank !== stamp.formerRank))) fail('serviceRetirement.current.references');
+  }
   unique(w.couriers.dispatches, ({ id }) => id, 'couriers.dispatches.id');
   unique(w.couriers.dispatches.filter(({ status }) => status === 'in_transit' || status === 'returning'),
     ({ courierId }) => courierId, 'couriers.dispatches.active_courier');

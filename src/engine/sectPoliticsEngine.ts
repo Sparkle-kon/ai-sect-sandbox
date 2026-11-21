@@ -1,3 +1,4 @@
+import { isRetiredFromService } from './serviceRetirementEngine';
 import { REALM_ORDER } from '../data/initialWorld';
 import type { Cultivator, LLMDecisionPayload, Sect, SectRank, SectSuccession, WorldEvent, WorldState } from '../types/world';
 import { artifactPowerMultiplier } from './artifactEngine';
@@ -30,7 +31,7 @@ export function rewardContribution(actor: Cultivator, world: WorldState, points:
   }
 }
 
-const liveMembers = (world: WorldState, sect: Sect) => world.cultivators.filter((person) => person.alive && person.hp > 0 && person.sectId === sect.id);
+const liveMembers = (world: WorldState, sect: Sect) => world.cultivators.filter((person) => person.alive && person.hp > 0 && person.sectId === sect.id && !isRetiredFromService(person));
 function affinity(world: WorldState, a: Cultivator, b: Cultivator): number {
   return world.relationships.find((edge) => (edge.fromId === a.id && edge.toId === b.id) ||
     (edge.fromId === b.id && edge.toId === a.id))?.affinity ?? 0;
@@ -39,7 +40,7 @@ function affinity(world: WorldState, a: Cultivator, b: Cultivator): number {
 function supporters(world: WorldState, sect: Sect, candidate: Cultivator, incumbent?: Cultivator, local = false): Cultivator[] {
   const eligible = local ? world.cultivators.filter((person) => person.alive && person.hp > 0 &&
     person.locationId === sect.headquartersId) : liveMembers(world, sect);
-  return eligible.filter((person) => person.id !== candidate.id && person.id !== incumbent?.id &&
+  return eligible.filter((person) => !isRetiredFromService(person) && person.id !== candidate.id && person.id !== incumbent?.id &&
     affinity(world, person, candidate) >= (person.sectId === sect.id ? 25 : 65) &&
     (!incumbent || affinity(world, person, candidate) - affinity(world, person, incumbent) >= 10))
     .sort((a, b) => a.id.localeCompare(b.id));
@@ -93,14 +94,14 @@ export function maintainSectPolitics(world: WorldState): WorldEvent[] {
     appoint(world, sect, winner.candidate, 'election', winner.voters, previousLeaderId);
     const description = `${sect.name}掌门出缺，${winner.candidate.name}${winner.voters.length ? `获${winner.voters.length}名同门推举` : '依辈分与贡献顺位'}继承掌门之位。`;
     recordMemory(winner.candidate, world.tick, description, 9, 'social', 4);
-    results.push(event(world, sect, 'vacancy', `${sect.name}推举新掌门`, description, [winner.candidate.id, ...winner.voters.map(({ id }) => id)], 'diplomacy'));
+    results.push(event(world, sect, `vacancy-${winner.candidate.id}`, `${sect.name}推举新掌门`, description, [winner.candidate.id, ...winner.voters.map(({ id }) => id)], 'diplomacy'));
   }
   return results;
 }
 
 export function availableLeadershipActions(actor: Cultivator, world: WorldState): LeadershipOption[] {
   const sect = world.sects.find((item) => item.id === actor.sectId);
-  if (!sect || !actor.alive || actor.hp <= 0 || actor.locationId !== sect.headquartersId || actor.id === sect.leaderId ||
+  if (!sect || !actor.alive || actor.hp <= 0 || isRetiredFromService(actor) || actor.locationId !== sect.headquartersId || actor.id === sect.leaderId ||
       (sect.succession && world.tick - sect.succession.tick < 3)) return [];
   const incumbent = liveMembers(world, sect).find((person) => person.id === sect.leaderId && person.locationId === actor.locationId);
   if (!incumbent) return [];
