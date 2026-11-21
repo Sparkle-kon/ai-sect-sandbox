@@ -10,10 +10,10 @@ import { isActiveTrial, TRIAL_STAGE } from './TribulationPanel';
 import { isGuardOnDuty } from './SectEconomyPanel';
 import { isActiveCampaign, SIEGE_LABELS } from './SectDiplomacyPanel';
 import { isOpenOccasion, OCCASION_KIND, OCCASION_STATUS } from './WorldOccasionsPanel';
-import { BOUNTY_STATUS, relevantBounty } from './BountyBoard';
+import { BOUNTY_STATUS, relevantBounty } from './bountyLabels';
 import { BIOME_PALETTE, createTerrainMapView, mapActorPositions } from './terrainMapView';
 import { drawTerrain } from './terrainMapDraw';
-import { drawMapConvoys, mapTransitActorIds, visibleMapConvoys } from './mapConvoyView';
+import { drawMapConvoys, mapTransitActorIds, visibleMapConvoys, visibleMapEscort } from './mapConvoyView';
 import { buildMapPresentation, MAP_EFFECT_LABELS, MOTION_MS } from './mapPresentationView';
 import { drawFlights, drawMapEffects } from './mapPresentationDraw';
 import { centerCamera, clientToMapViewport, closestViewportTarget, DEFAULT_CAMERA, MAP_HEIGHT, MAP_WIDTH, MAX_ZOOM, panCamera, screenToMap, viewportPixelDistance, zoomCamera } from './mapCamera';
@@ -88,6 +88,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     .filter(({ id }) => isCurrentLocation(id))
     .map((site) => [site.id, localQiWeather(world, site)])), [world, seenLocations, isCurrentLocation]);
   const convoys = useMemo(() => visibleMapConvoys(world, mapView), [world, mapView]);
+  const escortedCaravan = useMemo(() => visibleMapEscort(world, mapView, selected), [world, mapView, selected]);
   const hazards = useMemo(() => getVisibleHazards(world, mapView), [world, mapView]);
   const beastsByLocation = useMemo(() => visibleBeastsByLocation(world, mapView), [world, mapView]);
   const armedBrush = !fog && onBrushStroke && brush !== 'browse' ? brush : undefined;
@@ -200,6 +201,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       drawTerrain(ctx, world, mapView.tileState, heat, phase);
       drawHazards(ctx, hazards);
       drawMapConvoys(ctx, convoys, camera.zoom);
+      if (escortedCaravan) drawMapConvoys(ctx, [escortedCaravan], camera.zoom, '#7dd3fc');
 
       // 3. Draw Spirit Vein connection lines between locations
       ctx.strokeStyle = 'rgba(56, 189, 248, 0.12)';
@@ -461,7 +463,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener('change', stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, hazards, convoys, beastsByLocation, weatherAtVisibleSites, armedBrush, preview, compact]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, hazards, convoys, escortedCaravan, beastsByLocation, weatherAtVisibleSites, armedBrush, preview, compact]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -800,6 +802,11 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           </li>)}
         </ul>
       </details>}
+      {escortedCaravan && <div className="border-t border-slate-800/80 px-3 text-xs text-sky-200">
+        <button type="button" className="min-h-11 text-left" onClick={() => manualCamera(focusMapPoint(cameraRef.current, escortedCaravan.marker))}>
+          定位所选护镖车队 · 第 {escortedCaravan.row} 行，第 {escortedCaravan.col} 列
+        </button>
+      </div>}
       {hazards.length > 0 && (
         <details className="border-t border-slate-800/80 bg-slate-900/40 px-4 py-2 text-[11px] text-slate-300">
           <summary className="cursor-pointer">当前可见灾害 · {hazards.length} 处</summary>

@@ -9,7 +9,7 @@ const ACTION_LABELS: Record<ActionType, string> = {
   TEACH: '传法授业', ACCEPT_TUITION: '接受传法', DECLINE_TUITION: '婉拒传法', OFFER_OATH: '提出契约',
   ACCEPT_OATH: '接受契约', DECLINE_OATH: '拒绝契约', FULFILL_OATH: '履约', APPEAL_OATH: '契约申诉',
   PLACE_MARKET_BUY: '坊市求购', PLACE_MARKET_SELL: '坊市出售', CANCEL_MARKET_ORDER: '撤回挂单',
-  RANK_SEASON: '报名或退出赛季', SCRIPTURE: '批注、校勘或研习版本', RELIC: '采回碎片或重铸古器', RECOLLECT: '审视或搁置残响', RELOCATE: '议决或护送迁宗', DOCTRINE: '参与道统事务', RECRUIT_SETTLER: '招募自愿者', DELIVER_RELIEF: '赈济村镇', FILE_WITNESS_CLAIM: '提出指证',
+  ESCORT: '商路请镖、护送或报险', RANK_SEASON: '报名或退出赛季', SCRIPTURE: '批注、校勘或研习版本', RELIC: '采回碎片或重铸古器', RECOLLECT: '审视或搁置残响', RELOCATE: '议决或护送迁宗', DOCTRINE: '参与道统事务', RECRUIT_SETTLER: '招募自愿者', DELIVER_RELIEF: '赈济村镇', FILE_WITNESS_CLAIM: '提出指证',
   ATTEST_WITNESS: '提交亲历证词', CHALLENGE_WITNESS: '质疑指证', NAME_HEIR: '指定继承人',
   CLAIM_ESTATE: '申领遗产', HOLD_MEMORIAL: '主持祭礼', GATHER_HERBS: '采集灵草', BREW_PILL: '炼丹',
   USE_PILL: '服丹', FORGE_ARTIFACT: '铸器', BIND_ARTIFACT: '绑定法器', REPAIR_ARTIFACT: '修补法器',

@@ -1,5 +1,9 @@
 import { useState } from 'react';
 import { marketClosureReason, marketOrdersInPriority, MARKET_GOODS } from '../engine/marketEngine';
+import { visibleEscorts } from '../engine/escortEngine';
+import { createTerrainMapView } from './terrainMapView';
+import { visibleCheckpointRoute } from './mapConvoyView';
+import { ShipmentEscortDetails } from './ShipmentEscortDetails';
 import type { Cultivator, WorldState } from '../types/world';
 
 type Order = WorldState['markets']['orders'][number];
@@ -67,6 +71,12 @@ export function MarketCaravansPanel({ world, cultivator }: { world: WorldState; 
     .sort((a, b) => b.tick - a.tick || b.sequence - a.sequence).slice(0, 16);
   const closure = marketId ? marketClosureReason(world, marketId) : undefined;
   const selectedInvolved = (buyer: string, seller: string) => cultivator?.id === buyer || cultivator?.id === seller;
+  const terrain = createTerrainMapView(world, cultivator, true);
+  const escortsByShipment = new Map((world.escorts ? visibleEscorts(world, cultivator) : []).map((view) => {
+    const point = view.checkpoint;
+    return [view.contract.shipmentId, { ...view,
+      checkpoint: point && (view.contract.escortId === cultivator?.id || visibleCheckpointRoute(world, terrain, [point], 0)) ? point : undefined }];
+  }));
 
   return (
     <section aria-label="坊市与跨境商队" className="min-w-0 space-y-2 rounded-xl border border-amber-400/25 bg-slate-900/70 p-3 text-slate-100 sm:p-4">
@@ -113,15 +123,19 @@ export function MarketCaravansPanel({ world, cultivator }: { world: WorldState; 
             <summary className="cursor-pointer text-xs font-semibold text-amber-100">商队运输 · 最近 {shipments.length} 条</summary>
             {shipments.length === 0 ? <p className="mt-1 text-xs text-slate-400">暂无可见运输。</p> : (
               <ul className="mt-2 max-h-56 space-y-1.5 overflow-y-auto text-xs text-slate-300">
-                {shipments.map((shipment) => <li key={shipment.id} className="space-y-0.5 break-words rounded bg-slate-900/80 p-2">
+                {shipments.map((shipment) => {
+                  const escort = escortsByShipment.get(shipment.id);
+                  return <li key={shipment.id} className="space-y-0.5 break-words rounded bg-slate-900/80 p-2">
                   <p>{publicNames.get(shipment.originId)} → {publicNames.get(shipment.destinationId)} · {SHIPMENT_STATUS[shipment.status]}
-                    {selectedInvolved(shipment.buyerId, shipment.sellerId) ? ' · 所选修士相关' : ''}
+                    {selectedInvolved(shipment.buyerId, shipment.sellerId) || !!cultivator && escort?.contract.escortId === cultivator.id ? ' · 所选修士相关' : ''}
                   </p>
-                  <p>{goodName(shipment.good)} {shipment.quantity} 件 · 单价 {shipment.unitPrice} 灵石 · 离站 Tick #{shipment.departedTick}
+                  <p>委托货物：{goodName(shipment.good)} {shipment.quantity} 件 · 单价 {shipment.unitPrice} 灵石 · 离站 Tick #{shipment.departedTick}
                     {shipment.settledTick !== undefined ? ` · 结算 Tick #${shipment.settledTick}` : ` · 预计到达 Tick #${shipment.arrivalTick}`}
                   </p>
                   {shipment.reason && <p className="text-amber-100">{shipment.reason}</p>}
-                </li>)}
+                  {escort && <ShipmentEscortDetails view={escort} world={world} actorName={actorName} />}
+                </li>;
+                })}
               </ul>
             )}
           </details>

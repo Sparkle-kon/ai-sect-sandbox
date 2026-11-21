@@ -1,3 +1,4 @@
+import { activeEscortForActor } from './escortEngine';
 import { reconcileRelicCustody } from './relicEngine';
 import { recordNewDeathsForReincarnation } from './reincarnationRuntime';
 import { activeRelocationForActor } from './relocationEngine';
@@ -22,7 +23,7 @@ function peopleAtTile(world: WorldState, tileId: string): Cultivator[] {
   const matching = new Set(world.locations.filter((site) => terrainTileAt(world, site.x, site.y)?.id === tileId).map(({ id }) => id));
   return world.cultivators.filter((person) => {
     if (!person.alive || person.hp <= 0) return false;
-    const convoy = activeRelocationForActor(world, person);
+    const convoy = activeRelocationForActor(world, person) ?? activeEscortForActor(world, person);
     const checkpoint = convoy?.path[convoy.pathIndex];
     return checkpoint ? terrainTileAt(world, checkpoint.x, checkpoint.y)?.id === tileId : matching.has(person.locationId);
   });

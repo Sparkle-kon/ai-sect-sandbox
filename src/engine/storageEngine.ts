@@ -1,3 +1,4 @@
+import { createEscortState, ESCORT_FEE, ESCORT_RATIONS } from './escortEngine';
 import { COMPETITION_RULES, createCompetitionState } from './competitionEngine';
 import { createScriptureState } from './scriptureEngine';
 import { createRelicState } from './relicEngine';
@@ -69,7 +70,7 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const marketQty = num(1,12,true), marketPrice = num(1,500,true);
@@ -166,6 +167,14 @@ const shape = structure({
       attestations:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,tick,verdict:one('supports','contradicts')})),
       appeal:optional(structure({tick,actorId:id,verdict:one('upheld','rejected'),reason:text})),settledTick:otick,
       reputationSectId:oid,reputationPenalty:percentage,reputationRestored:percentage,reason:otext}))}),
+  escorts:structure({
+    contracts:arr(SAVE_COLLECTION_LIMIT,structure({id,shipmentId:id,clientId:id,escortId:oid,originId:id,destinationId:id,
+      status:one('offered','active','delivered','failed','expired'),offeredTick:tick,expiresTick:tick,acceptedTick:otick,holdAppliedTick:otick,
+      feeEscrow:doctrineAmount,feePaid:doctrineAmount,feeRefunded:doctrineAmount,rationsEscrow:count,rationsSpent:count,rationsReturned:count,
+      path:arr(6402,structure({x:num(0,1000),y:num(0,600)})),pathIndex:num(0,6402,true),stride:num(0,6402,true),lastAdvancedTick:otick,
+      lastCrossedTileIds:ids,arrivedTick:otick,usedReportIds:ids,detours:arr(2,structure({tick,reportId:id,extraSteps:count})),
+      settledTick:otick,reason:otext})),
+    reports:arr(SAVE_COLLECTION_LIMIT,structure({id,contractId:id,reporterId:id,observedTick:tick,hazardId:id,tileId:id,expiresTick:tick}))}),
   competitions:structure({
     optOutActorIds:ids,
     seasons:arr(8,structure({id,year:tick,openedTick:tick,closedTick:otick,status:one('open','settled')})),
@@ -257,6 +266,7 @@ function verifyWorld(value: unknown): WorldState {
     ? { ...value,
       ...(!Object.hasOwn(value, 'mentorship') ? { mentorship: { offers: [], lineage: [], budgets: [] } } : {}),
       ...(!Object.hasOwn(value, 'decisionTrace') ? { decisionTrace: { records: [] } } : {}),
+      ...(!Object.hasOwn(value, 'escorts') ? { escorts: createEscortState() } : {}),
       ...(!Object.hasOwn(value, 'competitions') ? { competitions: { seasons: [], entries: [], scores: [], honors: [], optOutActorIds: [] } } : {}),
       ...(!Object.hasOwn(value, 'scriptures') ? { scriptures: createScriptureState() } : {}),
       ...(!Object.hasOwn(value, 'relics') ? { relics: { fragments: [] } } : {}),
@@ -633,6 +643,47 @@ function verifyWorld(value: unknown): WorldState {
     if (!actor.has(shipment.buyerId) || !actor.has(shipment.sellerId) || shipment.buyerId === shipment.sellerId ||
         shipment.originId === shipment.destinationId || shipment.arrivalTick <= shipment.departedTick ||
         (shipment.status === 'in_transit' && (!marketOrders.has(shipment.buyOrderId) || !marketOrders.has(shipment.sellOrderId)))) fail('markets.shipments.references');
+  }
+  const escortContractById = new Map(w.escorts.contracts.map((contract) => [contract.id, contract]));
+  const shipmentById = new Map(w.markets.shipments.map((shipment) => [shipment.id, shipment]));
+  unique(w.escorts.contracts, ({ id }) => id, 'escorts.contracts.id');
+  unique(w.escorts.contracts, ({ shipmentId }) => shipmentId, 'escorts.contracts.shipment');
+  unique(w.escorts.contracts.filter(({ status }) => status === 'active'), ({ escortId }) => escortId ?? '', 'escorts.contracts.active_actor');
+  unique(w.escorts.reports, ({ id }) => id, 'escorts.reports.id');
+  for (const contract of w.escorts.contracts) {
+    const shipment = shipmentById.get(contract.shipmentId);
+    const activeContract = contract.status === 'offered' || contract.status === 'active';
+    unique(contract.usedReportIds, (id) => id, 'escorts.contracts.used_reports');
+    unique(contract.detours, ({ reportId }) => reportId, 'escorts.contracts.detours');
+    if (!actor.has(contract.clientId) || contract.originId === contract.destinationId ||
+        (contract.escortId !== undefined && (!actor.has(contract.escortId) || contract.escortId === contract.clientId)) ||
+        (shipment && (shipment.sellerId !== contract.clientId || shipment.originId !== contract.originId || shipment.destinationId !== contract.destinationId)) ||
+        (activeContract && (!shipment || shipment.status !== 'in_transit' || !locations.has(contract.originId) || !locations.has(contract.destinationId))) ||
+        contract.offeredTick > w.tick || contract.expiresTick <= contract.offeredTick ||
+        (contract.acceptedTick !== undefined && (contract.acceptedTick < contract.offeredTick || contract.acceptedTick > w.tick ||
+          contract.acceptedTick > contract.expiresTick)) ||
+        ((contract.escortId !== undefined) !== (contract.acceptedTick !== undefined)) ||
+        (contract.status === 'active' && (contract.acceptedTick === undefined || contract.path.length < 2 || contract.stride <= 0)) ||
+        (contract.pathIndex >= Math.max(1,contract.path.length)) ||
+        (contract.arrivedTick !== undefined && (contract.arrivedTick > w.tick || contract.pathIndex !== contract.path.length - 1)) ||
+        (contract.holdAppliedTick !== undefined && (contract.holdAppliedTick < contract.offeredTick || contract.holdAppliedTick > w.tick)) ||
+        (contract.lastAdvancedTick !== undefined && (contract.lastAdvancedTick < (contract.acceptedTick ?? contract.offeredTick) || contract.lastAdvancedTick > w.tick)) ||
+        (activeContract === (contract.settledTick !== undefined)) ||
+        (contract.settledTick !== undefined && (contract.settledTick < contract.offeredTick || contract.settledTick > w.tick)) ||
+        contract.lastCrossedTileIds.some((id) => !map.has(id)) ||
+        contract.detours.some((data) => !contract.usedReportIds.includes(data.reportId) || data.tick > w.tick || data.tick < (contract.acceptedTick ?? contract.offeredTick))) {
+      fail('escorts.contracts.references');
+    }
+    if (contract.feeEscrow + contract.feePaid + contract.feeRefunded !== ESCORT_FEE ||
+        contract.rationsEscrow + contract.rationsSpent + contract.rationsReturned !== (contract.acceptedTick !== undefined ? ESCORT_RATIONS : 0) ||
+        (activeContract ? (contract.feeEscrow !== ESCORT_FEE || contract.feePaid !== 0 || contract.feeRefunded !== 0)
+          : (contract.feeEscrow !== 0 || contract.rationsEscrow !== 0)) ||
+        (contract.status === 'delivered' && (contract.feePaid !== ESCORT_FEE || contract.acceptedTick === undefined)) ||
+        ((contract.status === 'failed' || contract.status === 'expired') && contract.feeRefunded !== ESCORT_FEE)) fail('escorts.contracts.escrow');
+  }
+  for (const report of w.escorts.reports) {
+    if (!escortContractById.has(report.contractId) || !actor.has(report.reporterId) || !map.has(report.tileId) ||
+        report.observedTick > w.tick || report.expiresTick <= report.observedTick) fail('escorts.reports.references');
   }
   for (const receipt of w.markets.receipts) {
     if (!actor.has(receipt.buyerId) || !actor.has(receipt.sellerId) || receipt.buyerId === receipt.sellerId) fail('markets.receipts.references');

@@ -1,3 +1,4 @@
+import { activeEscortForActor } from './escortEngine';
 import { activeRelocationForActor, activeRelocationForSect } from './relocationEngine';
 import type { ActionType, Cultivator, LLMDecisionPayload, Sect, SectDiplomaticRelation, SectSiege, WorldEvent, WorldState } from '../types/world';
 
@@ -40,7 +41,7 @@ const isAlly = (world: WorldState, a: string, b: string) => a === b || sectRelat
 
 function forceCandidates(world: WorldState, attacker: Sect, defender: Sect, actor: Cultivator): Cultivator[] {
   const candidates = world.cultivators.filter((person) => live(person) && isAlly(world, attacker.id, person.sectId) &&
-    person.sectId !== defender.id && !isAlly(world, defender.id, person.sectId) && !activeRelocationForActor(world, person) && !activeSiegeForActor(world, person) &&
+    person.sectId !== defender.id && !isAlly(world, defender.id, person.sectId) && !activeRelocationForActor(world, person) && !activeEscortForActor(world, person) && !activeSiegeForActor(world, person) &&
     !world.occasions.some((item) => (item.status === 'registration' || item.status === 'running') && item.participantIds.includes(person.id)) &&
     person.tribulation?.stage !== 'lightning' && person.tribulation?.stage !== 'heart_demon')
     .sort((a, b) => Number(b.id === actor.id) - Number(a.id === actor.id) || Number(b.sectId === attacker.id) - Number(a.sectId === attacker.id) ||

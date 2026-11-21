@@ -1,3 +1,4 @@
+import { createEscortState } from '../engine/escortEngine';
 import { createCompetitionState } from '../engine/competitionEngine';
 import { createScriptureState } from '../engine/scriptureEngine';
 import { createRelicState } from '../engine/relicEngine';
@@ -238,6 +239,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     relics: createRelicState(locations, seed),
     scriptures: createScriptureState(),
     competitions: createCompetitionState(),
+    escorts: createEscortState(),
     witnesses: createWitnessState(),
     estates: createEstateState(),
     decisionTrace: createDecisionTraceState(),

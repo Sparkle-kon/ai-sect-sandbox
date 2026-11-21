@@ -65,7 +65,7 @@ describe('public bounty board UI', () => {
   });
 
   it('keeps the board in the application outside the selected-character inspector', async () => {
-    const html = renderToStaticMarkup(<App initialWorkspace="world" initialSection="bounties" />);
+    const html = await renderReady(<App initialWorkspace="world" initialSection="bounties" />);
     expect(html).toContain('aria-label="天机悬赏榜"');
     expect(html).toContain('当前没有公开悬赏。');
     expect(html).not.toContain('aria-label="业力与悬赏摘要"');

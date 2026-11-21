@@ -17,7 +17,6 @@ import { SandboxWorkspace, WorkspaceSections } from './components/SandboxWorkspa
 import type { WorkspaceId } from './components/SandboxWorkspace';
 import { WorldOccasionsPanel } from './components/WorldOccasionsPanel';
 import { WorldMapCanvas } from './components/WorldMapCanvas';
-import { BountyBoard } from './components/BountyBoard';
 import { llmScheduler } from './engine/llmScheduler';
 import { settleChronicleOnline } from './engine/chronicleRuntime';
 import { availableCouncilPlans } from './engine/councilEngine';
@@ -43,6 +42,7 @@ const GodConsole = React.lazy(async () => ({ default: (await import('./component
 const SectRelocationPanel = React.lazy(async () => ({ default: (await import('./components/SectRelocationPanel')).SectRelocationPanel }));
 const SectDoctrinePanel = React.lazy(async () => ({ default: (await import('./components/SectDoctrinePanel')).SectDoctrinePanel }));
 const LlmTelemetryPanel = React.lazy(async () => ({ default: (await import('./components/LlmTelemetryPanel')).LlmTelemetryPanel }));
+const BountyBoard = React.lazy(async () => ({ default: (await import('./components/BountyBoard')).BountyBoard }));
 const RankSeasonPanel = React.lazy(async () => ({ default: (await import('./components/RankSeasonPanel')).RankSeasonPanel }));
 const ChronicleFeed = React.lazy(async () => ({ default: (await import('./components/ChronicleFeed')).ChronicleFeed }));
 const ChronicleLibraryPanel = React.lazy(async () => ({ default: (await import('./components/ChronicleLibraryPanel')).ChronicleLibraryPanel }));
@@ -450,7 +450,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
           { id: 'markets', label: '坊市与商队', content: <React.Suspense fallback={<p role="status">载入世界记录…</p>}><MarketCaravansPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense> },
           { id: 'villages', label: '凡人村镇与赈济', content: <React.Suspense fallback={<p role="status">载入世界记录…</p>}><MortalVillagesPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense> },
           { id: 'occasions', label: '比武与秘境盛会', content: <WorldOccasionsPanel world={visibleWorld} cultivator={selectedCultivator} /> },
-          { id: 'bounties', label: '天机悬赏榜', content: <BountyBoard world={visibleWorld} /> },
+          { id: 'bounties', label: '天机悬赏榜', content: <React.Suspense fallback={<p role="status">载入悬赏榜…</p>}><BountyBoard world={visibleWorld} /></React.Suspense> },
           { id: 'analytics', label: '天道观测与演化统计', content: <button type="button" onClick={() => setAnalyticsOpen(true)}
             className={`${action} bg-sky-900/60 text-sky-100 hover:bg-sky-800`}><BarChart3 aria-hidden="true" className="h-4 w-4" />打开天道观测</button> },
           ...(preview ? [] : [

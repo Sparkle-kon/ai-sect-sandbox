@@ -83,6 +83,7 @@ export type ActionType =
   | 'RELIC'
   | 'SCRIPTURE'
   | 'RANK_SEASON'
+  | 'ESCORT'
   | 'GATHER_HERBS'
   | 'BREW_PILL'
   | 'USE_PILL'
@@ -372,6 +373,10 @@ export interface LLMDecisionPayload {
   targetScriptureOriginalId?: string;
   targetScriptureEditionId?: string;
   seasonMove?: CompetitionMove;
+  escortMove?: EscortMove;
+  targetShipmentId?: string;
+  targetEscortId?: string;
+  targetHazardId?: string;
   targetTechniqueId?: string;
   targetHerbId?: HerbId;
   targetPillId?: PillId;
@@ -1132,7 +1137,52 @@ export interface CompetitionState {
   optOutActorIds: string[];
 }
 
+export type EscortMove = 'offer' | 'accept' | 'decline' | 'report';
+export interface EscortContract {
+  id: string;
+  shipmentId: string;
+  clientId: string;
+  escortId?: string;
+  originId: string;
+  destinationId: string;
+  status: 'offered' | 'active' | 'delivered' | 'failed' | 'expired';
+  offeredTick: number;
+  expiresTick: number;
+  acceptedTick?: number;
+  holdAppliedTick?: number;
+  feeEscrow: number;
+  feePaid: number;
+  feeRefunded: number;
+  rationsEscrow: number;
+  rationsSpent: number;
+  rationsReturned: number;
+  path: MapPoint[];
+  pathIndex: number;
+  stride: number;
+  lastAdvancedTick?: number;
+  lastCrossedTileIds: string[];
+  arrivedTick?: number;
+  usedReportIds: string[];
+  detours: Array<{ tick: number; reportId: string; extraSteps: number }>;
+  settledTick?: number;
+  reason?: string;
+}
+export interface EscortReport {
+  id: string;
+  contractId: string;
+  reporterId: string;
+  observedTick: number;
+  hazardId: string;
+  tileId: string;
+  expiresTick: number;
+}
+export interface EscortState {
+  contracts: EscortContract[];
+  reports: EscortReport[];
+}
+
 export interface WorldState {
+  escorts: EscortState;
   competitions: CompetitionState;
   scriptures: ScriptureState;
   relics: RelicState;

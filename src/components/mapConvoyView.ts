@@ -1,16 +1,19 @@
+import { activeEscortForActor } from '../engine/escortEngine';
 import { terrainTileAt } from '../engine/terrainEngine';
-import type { MapPoint, WorldState } from '../types/world';
+import type { Cultivator, MapPoint, WorldState } from '../types/world';
 import { MAP_WIDTH, MAP_HEIGHT } from './mapCamera';
 import type { createTerrainMapView } from './terrainMapView';
 
 type TerrainView = ReturnType<typeof createTerrainMapView>;
-export interface VisibleConvoy {
-  id: string;
-  sectName: string;
+export interface VisibleCheckpoint {
   marker: MapPoint;
   route: MapPoint[];
   row: number;
   col: number;
+}
+export interface VisibleConvoy extends VisibleCheckpoint {
+  id: string;
+  sectName: string;
 }
 
 function visibleSegment(start: MapPoint, end: MapPoint, world: WorldState, visible: (point: MapPoint) => boolean) {
@@ -40,38 +43,53 @@ function mapTransitPlans(world: WorldState) {
 
 /** Travellers keep their source node until arrival; do not paint a second marker at the origin. */
 export function mapTransitActorIds(world: WorldState): Set<string> {
-  return new Set(mapTransitPlans(world).flatMap(({ garrisonIds }) => garrisonIds));
+  const actors = mapTransitPlans(world).flatMap(({ garrisonIds }) => garrisonIds);
+  for (const escort of world.escorts?.contracts ?? []) {
+    if (escort.status === 'active' && escort.arrivedTick === undefined && escort.escortId) actors.push(escort.escortId);
+  }
+  return new Set(actors);
 }
 
-/** Only a visible convoy marker may expose the connected, currently visible portion of its route. */
+/** Only a visible checkpoint may expose the connected, currently visible portion of its route. */
+export function visibleCheckpointRoute(world: WorldState, view: TerrainView, path: MapPoint[], index: number): VisibleCheckpoint | undefined {
+  const visible = (point: MapPoint) => !view.current || view.current.has(terrainTileAt(world, point.x, point.y)?.id ?? '');
+  const marker = path[index];
+  const tile = marker && terrainTileAt(world, marker.x, marker.y);
+  if (!marker || !tile || !visible(marker)) return undefined;
+  const arc = (direction: number) => {
+    const out: MapPoint[] = [];
+    for (let i = index + direction; i >= 0 && i < path.length; i += direction) {
+      const start = path[i - direction];
+      const edge = visibleSegment(start, path[i], world, visible);
+      if (edge.last.x !== start.x || edge.last.y !== start.y) out.push(edge.last);
+      if (!edge.complete) break;
+    }
+    return out;
+  };
+  return { marker, route: view.current ? [...arc(-1).reverse(), marker, ...arc(1)] : path, row: tile.row + 1, col: tile.col + 1 };
+}
+
 export function visibleMapConvoys(world: WorldState, view: TerrainView): VisibleConvoy[] {
   const names = new Map(world.sects.map(({ id, name }) => [id, name]));
-  const visible = (point: MapPoint) => !view.current || view.current.has(terrainTileAt(world, point.x, point.y)?.id ?? '');
   return mapTransitPlans(world).flatMap((plan) => {
-    const marker = plan.path[plan.pathIndex];
-    const tile = marker && terrainTileAt(world, marker.x, marker.y);
-    if (!marker || !tile || !visible(marker)) return [];
-    const arc = (direction: number) => {
-      const out: MapPoint[] = [];
-      for (let i = plan.pathIndex + direction; i >= 0 && i < plan.path.length; i += direction) {
-        const start = plan.path[i - direction];
-        const edge = visibleSegment(start, plan.path[i], world, visible);
-        if (edge.last.x !== start.x || edge.last.y !== start.y) out.push(edge.last);
-        if (!edge.complete) break;
-      }
-      return out;
-    };
-    return [{ id: plan.id, sectName: names.get(plan.sectId) ?? '宗门未详', marker,
-      route: view.current ? [...arc(-1).reverse(), marker, ...arc(1)] : plan.path, row: tile.row + 1, col: tile.col + 1 }];
+    const visible = visibleCheckpointRoute(world, view, plan.path, plan.pathIndex);
+    return visible ? [{ ...visible, id: plan.id, sectName: names.get(plan.sectId) ?? '宗门未详' }] : [];
   });
 }
 
+/** Only the selected escort's own route is available, and never past visible terrain. */
+export function visibleMapEscort(world: WorldState, view: TerrainView, actor?: Cultivator): VisibleCheckpoint | undefined {
+  const plan = world.escorts && actor?.alive && actor.hp > 0 ? activeEscortForActor(world, actor) : undefined;
+  if (!plan || plan.arrivedTick !== undefined || plan.acceptedTick === undefined || plan.acceptedTick > world.tick) return undefined;
+  return visibleCheckpointRoute(world, view, plan.path, plan.pathIndex);
+}
+
 /** Static convoy overlay; it neither animates nor advances simulation. */
-export function drawMapConvoys(ctx: CanvasRenderingContext2D, convoys: VisibleConvoy[], zoom: number): void {
+export function drawMapConvoys(ctx: CanvasRenderingContext2D, convoys: readonly VisibleCheckpoint[], zoom: number, color?: string): void {
   if (!convoys.length) return;
   ctx.save();
-  ctx.strokeStyle = '#fcd34d';
-  ctx.fillStyle = '#fbbf24';
+  ctx.strokeStyle = color ?? '#fcd34d';
+  ctx.fillStyle = color ?? '#fbbf24';
   ctx.lineWidth = 2 / zoom;
   for (const { marker, route } of convoys) {
     ctx.setLineDash([7 / zoom, 4 / zoom]);

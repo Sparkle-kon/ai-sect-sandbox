@@ -1,4 +1,4 @@
-import type { MapEffect, MapPoint, MapPresentation, TerrainBiome, WorldEvent, WorldState } from '../types/world';
+import type { MapEffect, MapPoint, MapPresentation, MapTile, TerrainBiome, WorldEvent, WorldState } from '../types/world';
 import { terrainTileAt } from './terrainEngine';
 
 const WIDTH = 1000;
@@ -8,10 +8,10 @@ const same = (a: MapPoint, b: MapPoint) => a.x === b.x && a.y === b.y;
 const pointCopy = ({ x, y }: MapPoint): MapPoint => ({ x, y });
 
 /** A* with terrain-weighted orthogonal travel and a minimum-cost Manhattan heuristic. */
-export function findMapPath(world: WorldState, from: MapPoint, to: MapPoint): MapPoint[] {
+export function findMapPath(world: WorldState, from: MapPoint, to: MapPoint, allows?: (tile: MapTile) => boolean): MapPoint[] {
   const source = terrainTileAt(world, from.x, from.y);
   const destination = terrainTileAt(world, to.x, to.y);
-  if (!source || !destination) return [];
+  if (!source || !destination || (allows && (!allows(source) || !allows(destination)))) return [];
   if (same(from, to)) return [pointCopy(from)];
   if (source.id === destination.id) return [pointCopy(from), pointCopy(to)];
   const { columns, rows, tiles } = world.terrain;
@@ -45,7 +45,7 @@ export function findMapPath(world: WorldState, from: MapPoint, to: MapPoint): Ma
       const c = col + dc; const r = row + dr;
       if (c < 0 || c >= columns || r < 0 || r >= rows) continue;
       const n = index(c, r);
-      if (firm.has(n) || !tiles[n]) continue;
+      if (firm.has(n) || !tiles[n] || (allows && !allows(tiles[n]))) continue;
       const candidate = g.get(current)! + (COST[biome] + COST[tiles[n].biome]) / 2;
       if (candidate < (g.get(n) ?? Infinity)) { g.set(n, candidate); through.set(n, current); open.add(n); }
     }

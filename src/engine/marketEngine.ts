@@ -1,3 +1,4 @@
+import { escortDirective, settleEscortWithShipment } from './escortEngine';
 import type { Cultivator, HerbId, LLMDecisionPayload, MarketGood, MarketOrder, MarketReceipt, MarketShipment, MarketState, LocationNode, WorldEvent, WorldState } from '../types/world';
 import { terrainTileAt } from './terrainEngine';
 import { weatherTravelFriction } from './weatherEngine';
@@ -172,13 +173,14 @@ function match(world: WorldState, bid: MarketOrder, ask: MarketOrder, buyer: Cul
     [buyer.id, seller.id], origin.id);
 }
 
-function routeDanger(world: WorldState, shipment: MarketShipment, origin: LocationNode, destination: LocationNode): boolean {
+function routeDanger(world: WorldState, shipment: MarketShipment, origin: LocationNode, destination: LocationNode,
+  directive?: ReturnType<typeof escortDirective>): boolean {
   const duration = shipment.arrivalTick - shipment.departedTick;
-  const end = Math.min(1, (world.tick - shipment.departedTick) / duration);
+  const end = Math.min(1, (world.tick - shipment.departedTick - (directive?.baselineDelay ?? 0)) / duration);
   const start = Math.max(0, end - 1 / duration);
-  const ids = new Set<string>();
+  const ids = new Set<string>(directive?.managed ? directive.crossedTileIds : []);
   // Only test the actual segment crossed this tick; a distant disaster cannot hit the caravan.
-  for (let i = 0; i <= 12; i++) {
+  for (let i = 0; !directive?.managed && i <= 12; i++) {
     const progress = start + (end - start) * i / 12;
     const id = tileId(world, origin.x + (destination.x - origin.x) * progress, origin.y + (destination.y - origin.y) * progress);
     if (id) ids.add(id);
@@ -189,7 +191,7 @@ function routeDanger(world: WorldState, shipment: MarketShipment, origin: Locati
   let value = world.terrain.seed ^ Math.imul(shipment.sequence, 0x9e3779b1) ^ Math.imul(world.tick, 0x7feb352d);
   value = Math.imul(value ^ (value >>> 16), 0x846ca68b);
   const roll = ((value ^ (value >>> 16)) >>> 0) / 0x100000000;
-  return roll < Math.min(.55, .14 + intensity * .10);
+  return roll < Math.min(.55, .14 + intensity * .10) * (directive?.riskMultiplier ?? 1);
 }
 
 function settleShipment(world: WorldState, shipment: MarketShipment): WorldEvent | undefined {
@@ -201,17 +203,25 @@ function settleShipment(world: WorldState, shipment: MarketShipment): WorldEvent
   // Dead cultivators retain their settlements on the actor ledger for future estate proceedings.
   if (!buyer || !seller) return undefined;
   const price = shipment.unitPrice * shipment.quantity;
+  const route = origin && destination ? escortDirective(world, shipment) : undefined;
+  const effectiveArrival = route?.managed ? (route.arrivedTick ?? world.tick) : shipment.arrivalTick + (route?.baselineDelay ?? 0);
+  const isOnRoute = route?.managed ? route.crossedTileIds.length > 0 :
+    world.tick > shipment.departedTick + (route?.baselineDelay ?? 0) && world.tick <= effectiveArrival;
   let status: Exclude<MarketShipment['status'], 'in_transit'>;
   let reason: string;
   if (!origin || !destination) {
     status = 'returned';
     reason = `商路已撤销，退买方${price}灵石、卖方${shipment.quantity}份货`;
-  } else if (world.tick <= shipment.arrivalTick && routeDanger(world, shipment, origin, destination)) {
+  } else if (route?.forceReturn) {
+    status = 'returned';
+    reason = `护送无法继续，按原货账退买方${price}灵石、卖方${shipment.quantity}份货`;
+  } else if (route?.hold) return undefined;
+  else if (isOnRoute && routeDanger(world, shipment, origin, destination, route)) {
     status = 'lost';
     reason = `商队途经当回合灾区，遗失${shipment.quantity}份货并退买方${price}灵石`;
-  } else if (world.tick < shipment.arrivalTick) return undefined;
+  } else if (route?.managed ? !route.arrived : world.tick < effectiveArrival) return undefined;
   else if (marketClosureReason(world, destination.id)) {
-    if (world.tick < shipment.arrivalTick + 3) return undefined;
+    if (world.tick < effectiveArrival + 3) return undefined;
     status = 'returned';
     reason = `目的坊市持续关闭，退买方${price}灵石、卖方${shipment.quantity}份货`;
   } else {
@@ -237,7 +247,11 @@ export function advanceMarkets(world: WorldState): WorldEvent[] {
   const result: WorldEvent[] = [];
   for (const shipment of world.markets.shipments) {
     const settled = settleShipment(world, shipment);
-    if (settled) result.push(settled);
+    if (settled) {
+      result.push(settled);
+      const escrowSettlement = settleEscortWithShipment(world, shipment);
+      if (escrowSettlement) result.push(escrowSettlement);
+    }
   }
   for (const order of world.markets.orders) {
     if (order.status !== 'open') continue;

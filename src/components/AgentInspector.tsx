@@ -17,7 +17,7 @@ import { SectHierarchyPanel } from './SectHierarchyPanel';
 import { SectEconomyPanel } from './SectEconomyPanel';
 import { SectDiplomacyPanel } from './SectDiplomacyPanel';
 import { WorldOccasionsPanel } from './WorldOccasionsPanel';
-import { BOUNTY_STATUS, relevantBounty } from './BountyBoard';
+import { BOUNTY_STATUS, relevantBounty } from './bountyLabels';
 import { SpiritBeastPanel } from './SpiritBeastPanel';
 
 const ScriptureEditionPanel = React.lazy(async () => ({ default: (await import('./ScriptureEditionPanel')).ScriptureEditionPanel }));
