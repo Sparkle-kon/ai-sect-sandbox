@@ -1,3 +1,4 @@
+import { createRelicExhibitState } from '../engine/relicExhibitEngine';
 import { createWorkshopState } from '../engine/workshopEngine';
 import { createTerrainSuccessionState } from '../engine/terrainSuccessionEngine';
 import { createResourceFlowState } from '../engine/resourceFlowEngine';
@@ -282,6 +283,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     resourceFlow: createResourceFlowState(),
     terrainSuccession: createTerrainSuccessionState(),
     workshops: createWorkshopState(),
+    relicExhibits: createRelicExhibitState(),
     witnesses: createWitnessState(),
     estates: createEstateState(),
     decisionTrace: createDecisionTraceState(),

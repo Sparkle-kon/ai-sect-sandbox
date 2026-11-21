@@ -13,6 +13,7 @@ export default defineConfig({
           'resource-journal': ['./src/engine/resourceFlowEngine.ts'],
           'cognitive-response-guide': ['./src/engine/llmCognitiveResponseGuide.ts'],
           'institution-rules': ['./src/engine/estateEngine.ts', './src/engine/sectCreditEngine.ts', './src/engine/serviceRetirementEngine.ts'],
+          'provenance-rules': ['./src/engine/relicEngine.ts', './src/engine/witnessEngine.ts', './src/engine/competitionEngine.ts'],
         },
       },
     },

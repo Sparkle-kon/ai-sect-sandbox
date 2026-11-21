@@ -100,6 +100,7 @@ export type ActionType =
   | 'SECT_SERVICE'
   | 'SHARED_COMMONS'
   | 'TERRAIN_RECOVERY'
+  | 'RELIC_EXHIBIT'
   | 'GATHER_HERBS'
   | 'BREW_PILL'
   | 'USE_PILL'
@@ -385,6 +386,8 @@ export interface LLMDecisionPayload {
   targetRelocationId?: string;
   recollectionMove?: RecollectionMove;
   relicMove?: RelicMove;
+  exhibitMove?: RelicExhibitMove;
+  targetRelicExhibitId?: string;
   targetRelicFragmentId?: string;
   targetRelicSetId?: RelicSetId;
   editionMove?: ScriptureMove;
@@ -1146,6 +1149,31 @@ export interface RelicFragment {
 }
 export interface RelicState {
   fragments: RelicFragment[];
+}
+
+export type RelicExhibitMove = 'offer' | 'accept' | 'decline' | 'recall' | 'close';
+export type RelicExhibitCloseReason = 'declined' | 'withdrawn' | 'offer_expired' | 'item_unavailable' |
+  'owner_died' | 'recalled' | 'host_closed' | 'term_complete' | 'host_breach';
+export interface RelicExhibit {
+  id: string;
+  artifactId: string;
+  setId: RelicSetId;
+  ownerId: string;
+  hostSectId: string;
+  hostLeaderId: string;
+  siteId: string;
+  offeredTick: number;
+  offerExpiresTick: number;
+  status: 'offered' | 'on_display' | 'closed';
+  acceptedTick?: number;
+  expiresTick?: number;
+  closedTick?: number;
+  closeReason?: RelicExhibitCloseReason;
+  custody?: Artifact;
+}
+export interface RelicExhibitState {
+  entries: RelicExhibit[];
+  nextId: number;
 }
 
 export type ScriptureMove = 'annotate' | 'compare' | 'adopt' | 'revert';
@@ -1961,6 +1989,7 @@ export interface WorldState {
   competitions: CompetitionState;
   scriptures: ScriptureState;
   relics: RelicState;
+  relicExhibits: RelicExhibitState;
   reincarnation: ReincarnationState;
   relocations: RelocationState;
   worldgen?: WorldGeneration;

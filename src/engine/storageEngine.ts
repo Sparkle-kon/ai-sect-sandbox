@@ -1,3 +1,4 @@
+import { createRelicExhibitState, RELIC_EXHIBIT_DURATION, RELIC_EXHIBIT_OFFER_TICKS } from './relicExhibitEngine';
 import { WORKSHOP_ACTIVE_TICKS, WORKSHOP_MAX_WORK_RECEIPTS, WORKSHOP_OFFER_TICKS, createWorkshopState, workshopGradeForScore, workshopTerms } from './workshopEngine';
 import { createTerrainSuccessionState, TERRAIN_QUIET_CAP, TERRAIN_RECOVERY_LIMIT } from './terrainSuccessionEngine';
 import { createResourceFlowState, RESOURCE_FLOW_DETAIL_LIMIT, RESOURCE_FLOW_MONTH_LIMIT, RESOURCE_FLOW_REASON, sameFlowAccount } from './resourceFlowEngine';
@@ -102,7 +103,7 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP RELIC_EXHIBIT REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const flowGood = one('stone','jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
@@ -255,6 +256,12 @@ const shape = structure({
       attestations:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,tick,verdict:one('supports','contradicts')})),
       appeal:optional(structure({tick,actorId:id,verdict:one('upheld','rejected'),reason:text})),settledTick:otick,
       reputationSectId:oid,reputationPenalty:percentage,reputationRestored:percentage,reason:otext}))}),
+  relicExhibits:structure({nextId:num(1,100_000_000,true),entries:arr(SAVE_COLLECTION_LIMIT,structure({
+    id,artifactId:id,setId:relicSet,ownerId:id,hostSectId:id,hostLeaderId:id,siteId:id,offeredTick:tick,offerExpiresTick:tick,
+    status:one('offered','on_display','closed'),acceptedTick:otick,expiresTick:otick,closedTick:otick,
+    closeReason:optional(one('declined','withdrawn','offer_expired','item_unavailable','owner_died',
+      'recalled','host_closed','term_complete','host_breach')),custody:optional(artifact)
+  }))}),
   workshops:structure({nextId:num(1,100_000_000,true),orders:arr(SAVE_COLLECTION_LIMIT,structure({
     id,patronId:id,makerId:id,siteId:id,tier:one('法器','灵器'),quantity:one(1,2),qualityFloor:one('standard','fine'),
     status:one('offered','active','completed','cancelled','declined','expired'),
@@ -496,6 +503,7 @@ function verifyWorld(value: unknown): WorldState {
       ...(!Object.hasOwn(value, 'mentorship') ? { mentorship: { offers: [], lineage: [], budgets: [] } } : {}),
       ...(!Object.hasOwn(value, 'decisionTrace') ? { decisionTrace: { records: [] } } : {}),
       ...(!Object.hasOwn(value, 'coldHistory') ? { coldHistory: createColdHistoryState() } : {}),
+      ...(!Object.hasOwn(value, 'relicExhibits') ? { relicExhibits: createRelicExhibitState() } : {}),
       ...(!Object.hasOwn(value, 'workshops') ? { workshops: createWorkshopState() } : {}),
       ...(!Object.hasOwn(value, 'terrainSuccession') ? { terrainSuccession: createTerrainSuccessionState() } : {}),
       ...(!Object.hasOwn(value, 'resourceFlow') ? { resourceFlow: createResourceFlowState() } : {}),
@@ -1535,10 +1543,40 @@ function verifyWorld(value: unknown): WorldState {
   const fragmentById = new Map(w.relics.fragments.map((fragment) => [fragment.id, fragment]));
   unique(w.relics.fragments, ({ id }) => id, 'relics.fragments.id');
   const estateIds = new Set(w.estates.entries.map(({ id }) => id));
+  unique(w.relicExhibits.entries, ({ id }) => id, 'relicExhibits.entries.id');
+  unique(w.relicExhibits.entries.filter(({ status }) => status !== 'closed'),
+    ({ artifactId }) => artifactId, 'relicExhibits.entries.openArtifact');
+  const displays = w.relicExhibits.entries.filter(({ status }) => status === 'on_display');
+  unique(displays, ({ siteId }) => siteId, 'relicExhibits.entries.activeSite');
+  for (const entry of w.relicExhibits.entries) {
+    const serial = Number(entry.id.match(/^exhibit-([1-9][0-9]*)$/)?.[1]);
+    const accepted = entry.acceptedTick, closed = entry.closedTick;
+    if (!Number.isSafeInteger(serial) || serial >= w.relicExhibits.nextId ||
+        !actor.has(entry.ownerId) || !actor.has(entry.hostLeaderId) || entry.ownerId === entry.hostLeaderId ||
+        !sector.has(entry.hostSectId) || entry.offeredTick > w.tick ||
+        entry.offerExpiresTick !== entry.offeredTick + RELIC_EXHIBIT_OFFER_TICKS ||
+        (entry.status !== 'closed' && (closed !== undefined || entry.closeReason !== undefined || !locations.has(entry.siteId))) ||
+        (entry.status === 'closed' && (closed === undefined || !entry.closeReason || closed > w.tick || closed < (accepted ?? entry.offeredTick))) ||
+        (entry.status === 'offered' && accepted !== undefined) ||
+        (accepted === undefined ? entry.expiresTick !== undefined :
+          accepted < entry.offeredTick || accepted >= entry.offerExpiresTick || accepted > w.tick ||
+          entry.expiresTick !== accepted + RELIC_EXHIBIT_DURATION) ||
+        (entry.status === 'on_display' ? (accepted === undefined || !entry.custody || entry.custody.id !== entry.artifactId ||
+          entry.custody.relicSetId !== entry.setId || (entry.custody.boundTo && entry.custody.boundTo !== entry.ownerId)) :
+          entry.custody !== undefined) ||
+        (entry.closeReason === 'offer_expired' && (accepted !== undefined || (closed ?? 0) < entry.offerExpiresTick)) ||
+        (entry.closeReason === 'term_complete' && (accepted === undefined || (closed ?? 0) < (entry.expiresTick ?? Infinity))) ||
+        ((entry.closeReason === 'declined' || entry.closeReason === 'withdrawn' || entry.closeReason === 'item_unavailable') && accepted !== undefined) ||
+        ((entry.closeReason === 'recalled' || entry.closeReason === 'host_closed') && accepted === undefined)) fail('relicExhibits.entries.references');
+  }
+  const exhibitItems = displays.flatMap(({ custody }) => custody ? [custody] : []);
+  const canonicalArtifacts = [...w.cultivators.flatMap((person) => person.artifacts),
+    ...w.estates.entries.flatMap((estate) => estate.holdings.artifacts), ...exhibitItems];
+  const displayIds = new Set(displays.map(({ artifactId }) => artifactId));
+  unique(canonicalArtifacts.filter((item) => item.id && displayIds.has(item.id)), (item) => item.id!, 'relicExhibits.custody.unique');
   const relicArtifacts = new Set<string>();
   const usedFragments = new Set<string>();
-  for (const item of [...w.cultivators.flatMap((person) => person.artifacts),
-      ...w.estates.entries.flatMap((estate) => estate.holdings.artifacts)]) {
+  for (const item of canonicalArtifacts) {
     if (item.relicSetId === undefined && item.relicFragmentIds === undefined) continue;
     const [frame, core] = item.relicFragmentIds ?? [];
     if (!item.relicSetId || !item.id || !frame || !core || frame === core || relicArtifacts.has(item.id) ||
