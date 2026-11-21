@@ -1,3 +1,4 @@
+import { CHRONICLE_ERRATA_MAX_RETELLINGS, CHRONICLE_ERRATA_WINDOW, createChronicleErrataState } from './chronicleErrataEngine';
 import { terrainTileAt } from './terrainEngine';
 import { createPilgrimageState, PILGRIMAGE_ACTIVE_TICKS, PILGRIMAGE_LEG_COST, PILGRIMAGE_OFFER_TICKS, PILGRIMAGE_RELIEF_HP } from './pilgrimageEngine';
 import { createSectCreditState, SECT_CREDIT_COLLECTION_TICKS, SECT_CREDIT_OFFER_TICKS,
@@ -16,7 +17,7 @@ import { createReincarnationState, MORTAL_MATURITY_TICKS } from './reincarnation
 import { createRelocationState } from './relocationEngine';
 import { isWorldgenProfileId } from './worldgenProfiles';
 import { createDoctrineState } from './doctrineEngine';
-import { createSettlementState } from './settlementEngine';
+import { createSettlementState, SETTLEMENT_RELIEF } from './settlementEngine';
 import { OATH_TERMS } from './oathEngine';
 import type { WorldgenProfileId, WorldState } from '../types/world';
 
@@ -80,7 +81,7 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const marketQty = num(1,12,true), marketPrice = num(1,500,true);
@@ -97,6 +98,18 @@ const dialogue = structure({kind:one('combat','trade','dual_cultivation','sect_d
   turns:arr(24,structure({speakerId:id,speakerName:id,text}))});
 const publicFact = {id,tick,year:tick,month,title:text,description:text,category:eventCategory,actorIds:ids,locationId:oid,dialogue:optional(dialogue)};
 const anchor = structure(publicFact);
+const chronicleReading: Validator = (value, path) => {
+  if ((value as {kind?:unknown} | null)?.kind === 'duel') return structure({kind:one('duel'),winnerId:id})(value,path);
+  return structure({kind:one('relief'),delivery:one('full_supplies','unfunded')})(value,path);
+};
+const errataSourceFact: Validator = (value, path) => {
+  const common = { sourceEventId:id,tick,locationId:id };
+  if ((value as {kind?:unknown} | null)?.kind === 'duel') {
+    return structure({...common,kind:one('duel'),participantIds:arr(2,id),winnerId:id})(value,path);
+  }
+  return structure({...common,kind:one('relief'),actorId:id,settlementId:id,stones:count,herbs:count})(value,path);
+};
+
 const proposal: Validator = (value, path) => {
   const kind = (value as {kind?:unknown} | null)?.kind;
   if (kind === 'war') return structure({kind:one('war'),targetSectId:id})(value,path);
@@ -183,6 +196,11 @@ const shape = structure({
       attestations:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,tick,verdict:one('supports','contradicts')})),
       appeal:optional(structure({tick,actorId:id,verdict:one('upheld','rejected'),reason:text})),settledTick:otick,
       reputationSectId:oid,reputationPenalty:percentage,reputationRestored:percentage,reason:otext}))}),
+  chronicleErrata:structure({nextId:num(1,100_000_000,true),
+    sources:arr(SAVE_COLLECTION_LIMIT,errataSourceFact),
+    retellings:arr(SAVE_COLLECTION_LIMIT,structure({id,sourceEventId:id,authorId:id,tick,reading:chronicleReading})),
+    corrections:arr(SAVE_COLLECTION_LIMIT,structure({id,sourceEventId:id,editorId:id,tick,reading:chronicleReading,
+      contestedRetellingIds:arr(CHRONICLE_ERRATA_MAX_RETELLINGS,id)}))}),
   pilgrimages:structure({nextId:num(1,100_000_000,true),journeys:arr(SAVE_COLLECTION_LIMIT,structure({
     id,organizerId:id,companionId:id,stopIds:arr(3,id),stopsVisited:arr(3,structure({locationId:id,tick})),
     status:one('proposed','active','completed','declined','expired','withdrawn','interrupted'),
@@ -323,6 +341,7 @@ function verifyWorld(value: unknown): WorldState {
     ? { ...value,
       ...(!Object.hasOwn(value, 'mentorship') ? { mentorship: { offers: [], lineage: [], budgets: [] } } : {}),
       ...(!Object.hasOwn(value, 'decisionTrace') ? { decisionTrace: { records: [] } } : {}),
+      ...(!Object.hasOwn(value, 'chronicleErrata') ? { chronicleErrata: createChronicleErrataState() } : {}),
       ...(!Object.hasOwn(value, 'pilgrimages') ? { pilgrimages: createPilgrimageState() } : {}),
       ...(!Object.hasOwn(value, 'credit') ? { credit: createSectCreditState() } : {}),
       ...(!Object.hasOwn(value, 'sanctuary') ? { sanctuary: createSanctuaryState() } : {}),
@@ -358,6 +377,67 @@ function verifyWorld(value: unknown): WorldState {
   const sector = unique(w.sects, (item) => item.id, 'sects.id');
   const locations = unique(w.locations, (item) => item.id, 'locations.id');
   const map = unique(w.terrain.tiles, (item) => item.id, 'terrain.tiles.id');
+  unique(w.chronicleErrata.sources, ({ sourceEventId }) => sourceEventId, 'chronicleErrata.sources.id');
+  const errataSources = new Map(w.chronicleErrata.sources.map((row) => [row.sourceEventId, row]));
+  const errataVenues = new Map(w.locations.map(({ id, type }) => [id, type]));
+  const errataPrivate = new Set(w.events.filter(({ witnessScope, tick }) => witnessScope === 'participants' || tick > w.tick).map(({ id }) => id));
+  for (const fact of errataSources.values()) {
+    const type = errataVenues.get(fact.locationId);
+    if (fact.tick > w.tick || errataPrivate.has(fact.sourceEventId) || type === 'secret_realm') {
+      fail('chronicleErrata.sources.public_time');
+    }
+    if (fact.kind === 'duel') {
+      const liveFact = w.witnesses.facts.find(({ eventId }) => eventId === fact.sourceEventId);
+      const publicEvent = w.events.find(({ id }) => id === fact.sourceEventId);
+      if (fact.participantIds.length !== 2 || new Set(fact.participantIds).size !== 2 ||
+          fact.participantIds.some((id) => !actor.has(id)) || !fact.participantIds.includes(fact.winnerId) ||
+          !['duel', 'kill'].some((suffix) => fact.sourceEventId === 'evt-' + fact.tick + '-' + fact.participantIds[0] + '-' + suffix) ||
+          (liveFact && (liveFact.tick !== fact.tick || liveFact.locationId !== fact.locationId || liveFact.winnerId !== fact.winnerId ||
+            fact.participantIds.some((id) => !liveFact.participantIds.includes(id)))) ||
+          (publicEvent && (publicEvent.tick !== fact.tick || publicEvent.locationId !== fact.locationId || publicEvent.duelWinnerId !== fact.winnerId ||
+            fact.participantIds.some((id) => !publicEvent.actorIds.includes(id))))) fail('chronicleErrata.sources.duel_proof');
+    } else {
+      const recordId = 'settlement-' + fact.tick + '-relief-' + fact.settlementId + '-' + fact.actorId;
+      const receipt = w.settlements.records.find(({ id }) => id === recordId);
+      if ((type && type !== 'market') || !actor.has(fact.actorId) || fact.sourceEventId !== 'evt-' + recordId ||
+          fact.stones !== SETTLEMENT_RELIEF.stones || fact.herbs !== SETTLEMENT_RELIEF.jade_leaf ||
+          (receipt && (receipt.kind !== 'relief' || receipt.tick !== fact.tick || receipt.actorId !== fact.actorId ||
+            receipt.settlementId !== fact.settlementId || receipt.stones !== fact.stones || receipt.herbs !== fact.herbs))) fail('chronicleErrata.sources.relief_proof');
+    }
+  }
+  const errataSerials = new Set<number>();
+  const validateErrataSerial = (id: string, kind: 'retelling' | 'correction') => {
+    const serial = Number(id.match(new RegExp('^chronicle-' + kind + '-([1-9][0-9]*)$'))?.[1]);
+    if (!Number.isSafeInteger(serial) || serial >= w.chronicleErrata.nextId || errataSerials.has(serial)) fail('chronicleErrata.nextId');
+    errataSerials.add(serial);
+  };
+  const errataClaims = new Map<string, typeof w.chronicleErrata.retellings>();
+  unique(w.chronicleErrata.retellings, ({ sourceEventId, authorId }) => JSON.stringify([sourceEventId, authorId]), 'chronicleErrata.retellings.once');
+  const errataKey = (reading: typeof w.chronicleErrata.retellings[number]['reading']) =>
+    reading.kind === 'duel' ? reading.winnerId : reading.delivery;
+  for (const row of w.chronicleErrata.retellings) {
+    validateErrataSerial(row.id, 'retelling');
+    const fact = errataSources.get(row.sourceEventId);
+    if (!fact || !actor.has(row.authorId) || row.tick < fact.tick || row.tick > w.tick ||
+        row.tick >= fact.tick + CHRONICLE_ERRATA_WINDOW || row.reading.kind !== fact.kind ||
+        (fact.kind === 'duel' && row.reading.kind === 'duel' && !fact.participantIds.includes(row.reading.winnerId))) fail('chronicleErrata.retellings.provenance');
+    const claims = errataClaims.get(row.sourceEventId) ?? [];
+    if (claims.length >= CHRONICLE_ERRATA_MAX_RETELLINGS) fail('chronicleErrata.retellings.count');
+    claims.push(row); errataClaims.set(row.sourceEventId, claims);
+  }
+  unique(w.chronicleErrata.corrections, ({ sourceEventId }) => sourceEventId, 'chronicleErrata.corrections.once');
+  for (const row of w.chronicleErrata.corrections) {
+    validateErrataSerial(row.id, 'correction');
+    const fact = errataSources.get(row.sourceEventId);
+    const claims = errataClaims.get(row.sourceEventId) ?? [];
+    const ids = new Set(row.contestedRetellingIds);
+    if (!fact || !actor.has(row.editorId) || row.tick < fact.tick || row.tick > w.tick || row.tick >= fact.tick + CHRONICLE_ERRATA_WINDOW ||
+        (fact.kind === 'duel' ? fact.participantIds.includes(row.editorId) : fact.actorId === row.editorId) ||
+        row.reading.kind !== fact.kind || errataKey(row.reading) !== (fact.kind === 'duel' ? fact.winnerId : 'full_supplies') ||
+        ids.size !== claims.length || ids.size !== row.contestedRetellingIds.length ||
+        new Set(claims.map(({ reading }) => errataKey(reading))).size < 2 ||
+        claims.some((claim) => claim.authorId === row.editorId || claim.tick >= row.tick || !ids.has(claim.id))) fail('chronicleErrata.corrections.provenance');
+  }
   unique(w.pilgrimages.journeys, ({ id }) => id, 'pilgrimages.journeys.id');
   const reservedPilgrims = new Set<string>();
   const pilgrimageSites = new Map(w.locations.map((site) => [site.id, site]));

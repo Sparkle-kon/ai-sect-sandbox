@@ -1,3 +1,4 @@
+import { visibleChronicleErrata } from '../engine/chronicleErrataEngine';
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { GodBrushKind, LocationNode, MapPoint, WorldEvent, WorldState } from '../types/world';
 import { memoryStrength } from '../engine/memoryEngine';
@@ -94,6 +95,15 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const weatherAtVisibleSites = useMemo(() => new Map(seenLocations
     .filter(({ id }) => isCurrentLocation(id))
     .map((site) => [site.id, localQiWeather(world, site)])), [world, seenLocations, isCurrentLocation]);
+  const localErrata = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const entry of visibleChronicleErrata(world, selected)) {
+      if (entry.conflict && !entry.correction && isCurrentLocation(entry.source.locationId)) {
+        counts.set(entry.source.locationId, (counts.get(entry.source.locationId) ?? 0) + 1);
+      }
+    }
+    return counts;
+  }, [world, selected, isCurrentLocation]);
   const sanctuaryMarks = useMemo(() => visibleSanctuaryMapMarks(world, mapView, selected), [world, mapView, selected]);
   const annotationPins = useMemo(() => annotationView?.mapAnnotationPins(world, mapView, selectedCultivatorId) ?? [], [annotationView, world, mapView, selectedCultivatorId]);
   const convoys = useMemo(() => visibleMapConvoys(world, mapView), [world, mapView]);
@@ -905,6 +915,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                   · 已观测：{localWeather.kind} {Math.round(localWeather.intensity * 100)}%
                 </span>}
                 {sanctuary !== undefined && <span className="text-cyan-200">· 本人通行权有效 · {sanctuary > 0 ? `护阵可挡 ${sanctuary} 次决斗` : '护阵已耗尽'}</span>}
+                {(localErrata.get(location.id) ?? 0) > 0 && <span className="text-amber-200">· 公开史料有待勘误 {localErrata.get(location.id)} 条</span>}
                 {localCouncil && <span className="text-violet-300">· 本月议决：{localCouncil.title}</span>}
                 {besiegedLocationIds.has(location.id) && <span className="text-rose-300">· 围攻中</span>}
                 {localOccasions.map((occasion) => (

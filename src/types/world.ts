@@ -89,6 +89,7 @@ export type ActionType =
   | 'SANCTUARY'
   | 'SECT_CREDIT'
   | 'PILGRIMAGE'
+  | 'CHRONICLE_ERRATA'
   | 'GATHER_HERBS'
   | 'BREW_PILL'
   | 'USE_PILL'
@@ -384,6 +385,9 @@ export interface LLMDecisionPayload {
   targetHazardId?: string;
   ceasefireMove?: CeasefireMove;
   targetCeasefireId?: string;
+  chronicleErrataMove?: ChronicleErrataMove;
+  targetChronicleSourceId?: string;
+  chronicleReliefReading?: ChronicleReliefReading;
   pilgrimageMove?: PilgrimageMove;
   targetPilgrimageId?: string;
   targetPilgrimageNextStopId?: string;
@@ -1403,7 +1407,38 @@ export interface PilgrimageState {
   nextId: number;
 }
 
+export type ChronicleErrataMove = 'retell' | 'correct';
+export type ChronicleReliefReading = 'full_supplies' | 'unfunded';
+export type ChronicleReading = { kind: 'duel'; winnerId: string } | { kind: 'relief'; delivery: ChronicleReliefReading };
+interface ChronicleSourceReference { sourceEventId: string; tick: number; locationId: string }
+export type ChronicleSourceFact = ChronicleSourceReference & (
+  { kind: 'duel'; participantIds: [string, string]; winnerId: string } |
+  { kind: 'relief'; actorId: string; settlementId: string; stones: number; herbs: number }
+);
+export interface ChronicleRetelling {
+  id: string;
+  sourceEventId: string;
+  authorId: string;
+  tick: number;
+  reading: ChronicleReading;
+}
+export interface ChronicleCorrection {
+  id: string;
+  sourceEventId: string;
+  editorId: string;
+  tick: number;
+  reading: ChronicleReading;
+  contestedRetellingIds: string[];
+}
+export interface ChronicleErrataState {
+  sources: ChronicleSourceFact[];
+  retellings: ChronicleRetelling[];
+  corrections: ChronicleCorrection[];
+  nextId: number;
+}
+
 export interface WorldState {
+  chronicleErrata: ChronicleErrataState;
   pilgrimages: PilgrimageState;
   credit: SectCreditState;
   sanctuary: SanctuaryState;

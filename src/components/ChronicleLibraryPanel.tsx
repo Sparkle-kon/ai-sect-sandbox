@@ -1,7 +1,8 @@
 import { useId, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
-import type { ChronicleChapter, WorldState } from '../types/world';
+import type { ChronicleChapter, Cultivator, WorldState } from '../types/world';
 import { DialogueTranscript } from './DialogueTranscript';
+import { ChronicleErrataPanel } from './ChronicleErrataPanel';
 
 const PAGES = ['chapter', 'biography'] as const;
 type Page = typeof PAGES[number];
@@ -57,7 +58,7 @@ export function ChapterBiographies({ chapter }: { chapter: ChronicleChapter }) {
   );
 }
 
-export function ChronicleLibraryPanel({ world }: { world: WorldState }) {
+export function ChronicleLibraryPanel({ world, cultivator }: { world: WorldState; cultivator?: Cultivator }) {
   const [page, setPage] = useState<Page>('chapter');
   const [requestedChapter, setRequestedChapter] = useState<string>();
   const paneId = useId();
@@ -135,6 +136,7 @@ export function ChronicleLibraryPanel({ world }: { world: WorldState }) {
             : kind === 'chapter' ? <ChapterArchive chapter={chapter} /> : <ChapterBiographies chapter={chapter} />)}
         </div>
       ))}
+      <ChronicleErrataPanel world={world} chapter={chapter} cultivator={cultivator} />
     </section>
   );
 }

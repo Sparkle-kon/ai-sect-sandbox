@@ -1,3 +1,4 @@
+import { advanceChronicleErrata, resolveChronicleErrataAction } from './chronicleErrataEngine';
 import { activePilgrimageForActor, advancePilgrimages, pilgrimageActedThisTick, pilgrimageCheckpoint, resolvePilgrimageAction } from './pilgrimageEngine';
 import { advanceSectCredit, resolveSectCreditAction } from './sectCreditEngine';
 import { advanceSanctuaries, interceptSanctuaryDuel, resolveSanctuaryAction } from './sanctuaryEngine';
@@ -204,6 +205,8 @@ export function applyCultivatorBrainDecision(
     case 'ATTEST_WITNESS':
     case 'CHALLENGE_WITNESS':
       return resolveWitnessAction(world, cultivator, decision);
+    case 'CHRONICLE_ERRATA':
+      return resolveChronicleErrataAction(world, cultivator, decision);
     case 'PILGRIMAGE':
       return resolvePilgrimageAction(world, cultivator, decision);
     case 'SECT_CREDIT':
@@ -775,6 +778,7 @@ export function advanceWorldTick(
     newEvents.push(event);
     witnessEvent(nextState, event);
   }
+  advanceChronicleErrata(nextState);
   for (const actor of nextState.cultivators) if (actor.alive) noteTerrainVisit(nextState, actor);
   maintainPlayerAvatar(nextState);
   spreadRumors(nextState);

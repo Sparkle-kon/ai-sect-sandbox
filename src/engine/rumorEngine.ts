@@ -1,3 +1,4 @@
+import { captureChronicleErrataSource } from './chronicleErrataEngine';
 import { capturePublicWitnessFact } from './witnessEngine';
 import type { Cultivator, LLMDecisionPayload, Rumor, WorldEvent, WorldState } from '../types/world';
 
@@ -19,6 +20,7 @@ function learn(cultivator: Cultivator, rumor: Rumor, tick: number): void {
 
 export function witnessEvent(world: WorldState, event: WorldEvent): void {
   capturePublicWitnessFact(world, event);
+  if (event.duelWinnerId || event.id.startsWith('evt-settlement-')) captureChronicleErrataSource(world, event);
   const involved = new Set(event.actorIds);
   for (const actor of world.cultivators) {
     const present = event.locationId !== undefined && actor.locationId === event.locationId;

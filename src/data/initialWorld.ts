@@ -1,3 +1,4 @@
+import { createChronicleErrataState } from '../engine/chronicleErrataEngine';
 import { createPilgrimageState } from '../engine/pilgrimageEngine';
 import { createSectCreditState } from '../engine/sectCreditEngine';
 import { createSanctuaryState } from '../engine/sanctuaryEngine';
@@ -252,6 +253,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     sanctuary: createSanctuaryState(),
     credit: createSectCreditState(),
     pilgrimages: createPilgrimageState(),
+    chronicleErrata: createChronicleErrataState(),
     witnesses: createWitnessState(),
     estates: createEstateState(),
     decisionTrace: createDecisionTraceState(),
