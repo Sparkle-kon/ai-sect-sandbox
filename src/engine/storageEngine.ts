@@ -1,3 +1,4 @@
+import { sameGeneratedWorld } from './worldIdentity';
 import { createAlignedWeatherState } from './alignedWeatherEngine';
 import { alignedWeatherPinnedRuns } from './alignedWeatherTerms';
 import { observatoryStationValid } from './observatoryStation';
@@ -2889,6 +2890,25 @@ export interface SaveSlotInspection {
   currentDamaged: boolean;
   previousDamaged: boolean;
 }
+export interface SaveResumeAddress { readonly slotId: string; readonly point: SavePointKind }
+export type SaveResumeSide = 'left' | 'right';
+export type SaveResumeRelation = 'same_branch' | 'same_timeline_other_branch' | 'separate_timelines' |
+  'same_generation_unverified_lineage' | 'different_origins' | 'unavailable';
+export interface SaveResumeAncestry {
+  readonly seed: number;
+  readonly profileId?: WorldgenProfileId;
+  readonly algorithm?: number;
+  readonly birthTick?: number;
+  readonly scenarioOrigin?: Readonly<Pick<NonNullable<WorldState['scenarioOrigin']>,'id'|'version'|'ruleset'|'endTick'>>;
+}
+export type SaveResumeCandidate =
+  | { readonly address: SaveResumeAddress; readonly status: 'available'; readonly info: SavePointInfo; readonly ancestry: SaveResumeAncestry }
+  | { readonly address: SaveResumeAddress; readonly status: 'absent' | 'damaged' | 'unsupported' };
+export interface SaveResumePairReview {
+  readonly left: SaveResumeCandidate;
+  readonly right: SaveResumeCandidate;
+  readonly relation: SaveResumeRelation;
+}
 export interface SaveCapabilities { backend: 'indexeddb' | 'localstorage' | 'memory'; writable: boolean; recovery: boolean; crossTab: boolean }
 
 interface SaveJournal { revision: SaveSlotRevision; formatVersion: typeof VERSION; sourceBranch?: SaveBranchSource; seal: string }
@@ -2902,6 +2922,8 @@ export interface SaveBackend {
   capabilities: SaveCapabilities;
   list(): Promise<unknown[]>;
   read(id: string): Promise<RawSlotSnapshot>;
+  /** Optional only when both snapshots come from one atomic read operation. */
+  readPair?(leftId: string, rightId: string): Promise<readonly [RawSlotSnapshot, RawSlotSnapshot]>;
   commit(change: SaveCommit): Promise<void>;
 }
 
@@ -3034,6 +3056,10 @@ export function createMemorySaveBackend(): SaveBackend {
     capabilities: { backend: 'memory', writable: true, recovery: true, crossTab: false },
     list: async () => [...rows.values()].map(row => structuredClone(row.index)).filter(index => index !== undefined),
     read: async (id) => structuredClone(lookup(id)),
+    readPair: async (left,right) => {
+      const first = structuredClone(lookup(left));
+      return [first, left === right ? first : structuredClone(lookup(right))] as const;
+    },
     commit: async (change) => {
       const current = lookup(change.id);
       if (!sameRawSnapshot(current, change.inspected)) throw conflictError();
@@ -3093,6 +3119,14 @@ function indexedBackend(db: IDBDatabase): SaveBackend {
       let result: RawSlotSnapshot;
       readIndexedSlot(tx, id, row => { result = row; });
       tx.oncomplete = () => resolve(result);
+      tx.onabort = () => reject(storageError());
+    }),
+    readPair: (left,right) => new Promise((resolve,reject) => {
+      const tx = db.transaction(SAVE_TABLES,'readonly');
+      let first: RawSlotSnapshot | undefined, second: RawSlotSnapshot | undefined;
+      readIndexedSlot(tx,left,row=>{ first=row; if (left===right) second=row; });
+      if (left!==right) readIndexedSlot(tx,right,row=>{ second=row; });
+      tx.oncomplete = () => first && second ? resolve([first,second]) : reject(storageError());
       tx.onabort = () => reject(storageError());
     }),
     commit: (change) => new Promise((resolve, reject) => {
@@ -3182,7 +3216,81 @@ async function pointOrDamage(raw: RawSlotSnapshot, id: string, kind: SavePointKi
 const headFor = (raw: RawSlotSnapshot, id: string, current?: ValidPoint): SaveSlotExpected =>
   indexRevision(raw.index, id) ?? current?.revision ?? null;
 
+const freezeResumePoint = (selection: SavePointSelection): SavePointSelection => Object.freeze({
+  ...selection, ...(selection.sourceBranch ? { sourceBranch: Object.freeze({ ...selection.sourceBranch }) } : {}),
+});
+const freezeResumeAddress = (address: SaveResumeAddress): SaveResumeAddress => Object.freeze({ ...address });
+function checkedResumeAddress(address: SaveResumeAddress): SaveResumeAddress {
+  checkId(address?.slotId);
+  if (address.point !== 'current' && address.point !== 'previous') throw integrityError();
+  return freezeResumeAddress({ slotId: address.slotId, point: address.point });
+}
+type ResumeEvidence = { raw:readonly [RawSlotSnapshot,RawSlotSnapshot]; points:{left:SaveResumeCandidate;right:SaveResumeCandidate} };
+type VerifiedResumeCandidate = { view: SaveResumeCandidate; verified?: ValidPoint };
+
+async function previewResumeCandidate(raw: RawSlotSnapshot, address: SaveResumeAddress, recovery: boolean): Promise<VerifiedResumeCandidate> {
+  const { slotId, point } = address;
+  const state = (status: 'absent' | 'damaged' | 'unsupported') => ({ view: Object.freeze({ address, status }) });
+  if (point === 'previous' && !recovery) return state('unsupported');
+  try {
+    const valid = await readPoint(raw[point], slotId, point);
+    if (!valid) return state(point === 'current' && raw.index !== undefined ? 'damaged' : 'absent');
+    if (point === 'current') requireCurrentIndex(raw, valid, slotId);
+    const head = headFor(raw, slotId, point === 'current' ? valid :
+      !indexRevision(raw.index,slotId) ? (await pointOrDamage(raw,slotId,'current')).validated : undefined);
+    const info = infoFor(slotId, head, point, valid);
+    const world = valid.world;
+    const ancestry: SaveResumeAncestry = Object.freeze({
+      seed: world.random.seed,
+      ...(world.worldgen ? { profileId: world.worldgen.profileId, algorithm: world.worldgen.algorithm, birthTick: world.worldgen.birthTick } :
+        { profileId: undefined, algorithm: undefined, birthTick: undefined }),
+      ...(world.scenarioOrigin ? { scenarioOrigin: Object.freeze({
+        id: world.scenarioOrigin.id, version: world.scenarioOrigin.version,
+        ruleset: world.scenarioOrigin.ruleset, endTick: world.scenarioOrigin.endTick,
+      }) } : {}),
+    });
+    return { verified: valid, view: Object.freeze({ address, status: 'available', info: Object.freeze({
+      summary: Object.freeze({ ...info.summary }), selection: freezeResumePoint(info.selection),
+    }), ancestry }) };
+  } catch(error) {
+    return state(error instanceof WorldSaveError && (error.code === 'version' || error.code === 'storage') ? 'unsupported' : 'damaged');
+  }
+}
+
+function resumeRelation(a?: ValidPoint, b?: ValidPoint): SaveResumeRelation {
+  if (!a || !b) return 'unavailable';
+  const leftBirth = a.world.worldgen?.birthTick, rightBirth = b.world.worldgen?.birthTick;
+  if (!sameGeneratedWorld(a.world,b.world) || (leftBirth !== undefined && rightBirth !== undefined && leftBirth !== rightBirth))
+    return 'different_origins';
+  const left = a.sourceBranch, right = b.sourceBranch;
+  if (leftBirth === undefined || rightBirth === undefined || !left?.timelineId || !right?.timelineId)
+    return 'same_generation_unverified_lineage';
+  if (left.timelineId !== right.timelineId) return 'separate_timelines';
+  return left.branchId === right.branchId ? 'same_branch' : 'same_timeline_other_branch';
+}
+
+/** Native slot rows are plain records with opaque content strings. Corrupt exotic records fail closed, never alias JSON encodings. */
+function equalResumeValue(left: unknown, right: unknown, depth = 0): boolean {
+  if (Object.is(left,right)) return true;
+  if (!left || !right || typeof left !== 'object' || typeof right !== 'object' || depth >= 16) return false;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false;
+  } else {
+    const ordinary = (value: object) => Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null;
+    if (!ordinary(left) || !ordinary(right) || Object.getPrototypeOf(left) !== Object.getPrototypeOf(right)) return false;
+  }
+  const leftRecord = left as Record<string, unknown>, rightRecord = right as Record<string, unknown>;
+  const keys = Object.keys(leftRecord), other = Object.keys(rightRecord);
+  return keys.length === other.length && keys.every((key, index) =>
+    key === other[index] && equalResumeValue(leftRecord[key],rightRecord[key],depth + 1));
+}
+function sameResumeSnapshot(left: RawSlotSnapshot, right: RawSlotSnapshot) {
+  return equalResumeValue(left.index,right.index) && equalResumeValue(left.current,right.current) &&
+    equalResumeValue(left.previous,right.previous);
+}
+
 export function createSaveStore(backend?: SaveBackend, now: () => number = Date.now) {
+  const privateResumeReviews = new WeakMap<SaveResumePairReview,ResumeEvidence>();
   let opened: Promise<SaveBackend> | undefined;
   const pick = () => backend ? Promise.resolve(backend) : (opened ??= browserBackend().catch((error) => { opened = undefined; throw error; }));
   let tail: Promise<unknown> = Promise.resolve();
@@ -3206,6 +3314,47 @@ export function createSaveStore(backend?: SaveBackend, now: () => number = Date.
         ...(current.validated ? { current: infoFor(id,headRevision,'current',current.validated) } : {}),
         ...(previous.validated ? { previous: infoFor(id,headRevision,'previous',previous.validated) } : {}) };
     }),
+    reviewResumePair: (left: SaveResumeAddress, right: SaveResumeAddress): Promise<SaveResumePairReview> => {
+      let first: SaveResumeAddress, second: SaveResumeAddress;
+      try {
+        first = checkedResumeAddress(left); second = checkedResumeAddress(right);
+        if (first.slotId === second.slotId && first.point === second.point)
+          throw new WorldSaveError('invalid_slot','请分别选择两个不同的存档位置。');
+      } catch(error) { return Promise.reject(error); }
+      return operations(async store => {
+        if (!store.readPair)
+          return Object.freeze({ left:Object.freeze({address:first,status:'unsupported' as const}),
+            right:Object.freeze({address:second,status:'unsupported' as const}),relation:'unavailable' as const });
+        const raw = structuredClone(await store.readPair(first.slotId,second.slotId));
+        const [a,b] = await Promise.all([
+          previewResumeCandidate(raw[0],first,store.capabilities.recovery),
+          previewResumeCandidate(raw[1],second,store.capabilities.recovery),
+        ]);
+        const result: SaveResumePairReview = Object.freeze({left:a.view,right:b.view,relation:resumeRelation(a.verified,b.verified)});
+        privateResumeReviews.set(result,{raw,points:structuredClone({left:a.view,right:b.view})});
+        return result;
+      });
+    },
+    loadReviewedResume: (review:SaveResumePairReview,side:SaveResumeSide):Promise<{world:WorldState;selection:SavePointSelection}> => {
+      const before = typeof review === 'object' && review ? privateResumeReviews.get(review) : undefined;
+      if (!before || side!=='left'&&side!=='right') return Promise.reject(conflictError());
+      const choice = before.points[side];
+      if (choice.status !== 'available') return Promise.reject(choice.status==='absent' ?
+        new WorldSaveError('not_found','这个存档位置确实没有副本。') : choice.status==='unsupported' ?
+          new WorldSaveError('version','这个存档位置无法用于安全比较。') : integrityError());
+      return operations(async store => {
+        if(!store.readPair || privateResumeReviews.get(review)!==before)throw conflictError();
+        const fresh=await store.readPair(before.points.left.address.slotId,before.points.right.address.slotId);
+        if(!sameResumeSnapshot(before.raw[0],fresh[0])||!sameResumeSnapshot(before.raw[1],fresh[1]))throw conflictError();
+        const row=fresh[side==='left'?0:1][choice.address.point];
+        if(!isRecord(row)||typeof row.content!=='string')throw integrityError();
+        // Both raw slots and their selected metadata matched in one transaction. No await
+        // goes between the fresh exact comparison, strict decode of the chosen bytes, and returning the world.
+        const result={world:decodeWorldSave(row.content),selection:structuredClone(choice.info.selection)};
+        privateResumeReviews.delete(review);
+        return result;
+      });
+    },
     load: (id: string) => operations(async (store) => {
       checkId(id);
       const raw = await store.read(id);

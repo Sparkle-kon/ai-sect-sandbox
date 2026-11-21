@@ -3,7 +3,10 @@ import type { WorldgenProfileId, WorldState } from '../types/world';
 import {
   decodeWorldSave, encodeWorldSave, WORLD_SAVE_MAX_BYTES, WORLD_SAVE_MAX_SLOTS, worldSaveStore,
 } from '../engine/storageEngine';
-import type { SaveBranchSource, SavePointInfo, SaveSlotInspection, SaveSlotSummary } from '../engine/storageEngine';
+import type {
+  SaveBranchSource, SavePointInfo, SaveResumeAddress, SaveResumePairReview, SaveSlotInspection, SaveSlotSummary,
+} from '../engine/storageEngine';
+import { SaveResumeComparison } from './SaveResumeComparison';
 import { measureSaveCapacity, prepareArchiveOptimization, type NarrativeArchivePlan, type SaveCapacityReport } from '../engine/saveCapacityEngine';
 import {
   buildConfirmedShareSave, inspectShareSavePrivacy, prepareShareSavePrivacy,
@@ -12,13 +15,16 @@ import {
 import type { WorldTimeline } from '../engine/timelineEngine';
 import { isWorldgenProfileId, WORLDGEN_PROFILES } from '../engine/worldgenProfiles';
 
-type Storage = Pick<typeof worldSaveStore, 'list' | 'inspect' | 'loadSelected' | 'save' | 'delete' | 'capabilities'>;
+type Storage = Pick<typeof worldSaveStore, 'list' | 'inspect' | 'loadSelected' | 'save' | 'delete' | 'capabilities'> &
+  Partial<Pick<typeof worldSaveStore, 'reviewResumePair' | 'loadReviewedResume'>>;
+type ResumeSide = 'left' | 'right';
 type Capabilities = Awaited<ReturnType<Storage['capabilities']>>;
 type ContextStamp = { world: WorldState; version: number; branchId?: string; timelineId?: string };
 type Confirmation =
   | { kind: 'overwrite'; review: SaveSlotInspection; label: string }
   | { kind: 'delete'; review: SaveSlotInspection }
   | { kind: 'restore'; info: SavePointInfo }
+  | { kind: 'restore_compare'; review: SaveResumePairReview; side: ResumeSide }
   | { kind: 'import'; world: WorldState }
   | { kind: 'new'; seed: number; profileId: WorldgenProfileId; expected: WorldState };
 type Staged = { action: Confirmation; stamp: ContextStamp; store: Storage };
@@ -86,6 +92,13 @@ export function describeConfirmation(action: Confirmation): string {
       const { summary, selection } = action.info;
       return `载入「${summary.label}」的${pointLabel(selection.point)} · ${branchName(selection.sourceBranch)} · ${profileName(summary.profileId)} · Tick #${summary.tick}？未保存的当前进度会被替换；不会自动更改槽内副本。`;
     }
+    case 'restore_compare': {
+      const candidate = action.review[action.side];
+      if (candidate.status !== 'available') return '所选候选尚不可载入。';
+      const { summary, selection } = candidate.info;
+      const slot = defaultSlots.find(({ id }) => id === selection.slotId)?.label ?? selection.slotId;
+      return `续起 ${slot} 的${pointLabel(selection.point)}「${summary.label}」 · ${branchName(selection.sourceBranch)} · Tick #${summary.tick}？会重新核验两处。未保存的当前进度将被替换，两处原候选不改动。`;
+    }
     case 'import': return `载入已校验文件中的种子 ${action.world.random.seed}、${profileName(action.world.worldgen?.profileId)}、Tick #${action.world.tick}？未保存的当前进度将被替换。`;
     case 'new': return `建立种子 ${action.seed} 的${profileName(action.profileId)}世界？未保存的当前进度将被替换。`;
   }
@@ -97,6 +110,9 @@ export function WorldStoragePanel({ world, busy, readOnly = false, sourceBranch,
   const [loaded, setLoaded] = useState(false);
   const [capabilities, setCapabilities] = useState<Capabilities>();
   const [inspection, setInspection] = useState<{ review: SaveSlotInspection; stamp: ContextStamp; store: Storage }>();
+  const [resumeAddresses, setResumeAddresses] = useState<Partial<Record<ResumeSide, Partial<SaveResumeAddress>>>>({});
+  const [resumeReview, setResumeReview] = useState<{ result: SaveResumePairReview; stamp: ContextStamp; store: Storage; revision: number }>();
+  const resumeRevision = useRef(0);
   const [slotId, setSlotId] = useState(defaultSlots[0].id);
   const [label, setLabel] = useState('');
   const [seedText, setSeedText] = useState<string>();
@@ -124,6 +140,8 @@ export function WorldStoragePanel({ world, busy, readOnly = false, sourceBranch,
   const observed = useRef({ ...context, store, slotId, busy, readOnly, timeline });
   observed.current = { ...context, store, slotId, busy, readOnly, timeline };
   const confirmation = staged && staged.store === store && sameStorageContext(staged.stamp, context) ? staged : undefined;
+  const paired = resumeReview && resumeReview.store === store && resumeReview.revision === resumeRevision.current &&
+    sameStorageContext(resumeReview.stamp, context) ? resumeReview.result : undefined;
   const reviewed = inspection && inspection.store === store && inspection.review.id === slotId &&
     sameStorageContext(inspection.stamp, context) ? inspection.review : undefined;
   const blocked = busy || working || confirmation !== undefined;
@@ -222,6 +240,33 @@ export function WorldStoragePanel({ world, busy, readOnly = false, sourceBranch,
     });
   };
 
+  const changeResumeAddress = (side: ResumeSide, address: Partial<SaveResumeAddress>) => {
+    resumeRevision.current += 1;
+    setResumeReview(undefined);
+    setResumeAddresses((previous) => ({ ...previous, [side]: address }));
+  };
+  const verifyResumePair = () => {
+    const complete = (value?: Partial<SaveResumeAddress>): SaveResumeAddress | undefined =>
+      value?.slotId && value.point ? { slotId: value.slotId, point: value.point } : undefined;
+    const left = complete(resumeAddresses.left), right = complete(resumeAddresses.right);
+    if (blocked || !store.reviewResumePair || !left || !right || !stillHere(context) ||
+        left.slotId === right.slotId && left.point === right.point) return;
+    const revision = ++resumeRevision.current;
+    setResumeReview(undefined);
+    void work(async () => {
+      const result = await store.reviewResumePair?.(left, right);
+      if (!result || !stillHere(context) || resumeRevision.current !== revision) return;
+      setResumeReview({ result, stamp: context, store, revision });
+      setStatus(result.left.status === 'unsupported' && result.right.status === 'unsupported'
+        ? '此存储不支持同时核验两处；没有载入或更改任何存档。'
+        : '已检查两处；没有自动选档。请从可用候选中明确选择。');
+    });
+  };
+  const chooseResume = (side: ResumeSide) => {
+    if (paired?.[side].status === 'available' && store.loadReviewedResume && !blocked)
+      stage({ kind: 'restore_compare', review: paired, side });
+  };
+
   const confirm = () => {
     if (!confirmation || busy || inFlight.current) return;
     const { action, stamp } = confirmation;
@@ -240,7 +285,22 @@ export function WorldStoragePanel({ world, busy, readOnly = false, sourceBranch,
         }
         return;
       }
-      const incoming = action.kind === 'restore' ? await store.loadSelected(action.info.selection) : action.kind === 'import' ? action.world : undefined;
+      let incoming: WorldState | undefined;
+      if (action.kind === 'restore') incoming = await store.loadSelected(action.info.selection);
+      else if (action.kind === 'import') incoming = action.world;
+      else if (action.kind === 'restore_compare') {
+        setResumeReview(undefined);
+        const candidate = action.review[action.side];
+        if (candidate.status !== 'available' || !store.loadReviewedResume) return;
+        const compared = await store.loadReviewedResume(action.review, action.side);
+        if (compared.selection.seal !== candidate.info.selection.seal ||
+            compared.selection.headRevision !== candidate.info.selection.headRevision ||
+            compared.selection.slotId !== candidate.info.selection.slotId || compared.selection.point !== candidate.info.selection.point) {
+          setStatus('档位校验凭据已变化，未载入。请重新对照。');
+          return;
+        }
+        incoming = compared.world;
+      }
       if (!authority(stamp)) { setStatus('世界或分支在读取期间变化，当前进度未覆盖。请重新核验。'); return; }
       const accepted = action.kind === 'new'
         ? onNewWorld(action.seed, action.profileId, stamp.world, stamp.version)
@@ -252,8 +312,19 @@ export function WorldStoragePanel({ world, busy, readOnly = false, sourceBranch,
       setSeedText(undefined);
       setProfileDraft(undefined);
       setInspection(undefined);
+      setResumeReview(undefined);
+      if (action.kind === 'restore_compare') {
+        const candidate = action.review[action.side];
+        if (candidate.status === 'available') {
+          const { summary, selection } = candidate.info;
+          const slot = defaultSlots.find(({ id }) => id === selection.slotId)?.label ?? selection.slotId;
+          setStatus(`已从 ${slot} 的${pointLabel(selection.point)}第 ${summary.tick} 轮续起。两处原候选均未更改。`);
+        }
+        return;
+      }
       setStatus(action.kind === 'new' ? `已创建种子 ${action.seed}、${profileName(action.profileId)}谱系的世界。`
-        : action.kind === 'restore' ? `已载入${pointLabel(action.info.selection.point)}。存档槽未更改。` : '已从 JSON 文件载入世界。');
+        : action.kind === 'restore' ? `已载入${pointLabel(action.info.selection.point)}。存档槽未更改。`
+        : '已从 JSON 文件载入世界。');
     });
   };
 
@@ -432,6 +503,9 @@ export function WorldStoragePanel({ world, busy, readOnly = false, sourceBranch,
         {reviewed && <SavePointRows review={reviewed} recoverySupported={capabilities?.recovery === true}
           readOnly={readOnly} onLoad={(info) => stage({ kind: 'restore', info })} onExport={exportPoint} />}
       </fieldset>
+      {store.reviewResumePair && store.loadReviewedResume && <SaveResumeComparison slots={choices} left={resumeAddresses.left}
+        right={resumeAddresses.right} review={paired} disabled={blocked || !loaded}
+        readOnly={readOnly} onAddress={changeResumeAddress} onReview={verifyResumePair} onChoose={chooseResume} />}
       <fieldset disabled={blocked} className="min-w-0 space-y-2 rounded border border-slate-800 p-2">
         <legend className="px-1 text-xs font-semibold text-slate-200">JSON 文件</legend>
         <p className="text-xs leading-relaxed text-amber-200">存档与完整导出的 JSON 可能包含私密游戏对话。不会导出应用中的模型服务凭证或配置，但完整副本保留聊天原文，请勿在对话中写入密钥；分享前请检查。</p>
