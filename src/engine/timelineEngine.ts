@@ -4,6 +4,7 @@ import type { WorldState } from '../types/world';
 import { executeGodIntervention } from './worldEngine';
 import type { GodInterventionCommand } from './worldEngine';
 import { validFastForwardCount } from './fastForwardEngine';
+import { addFastForwardCalendarMonths } from './fastForwardCalendar';
 import type { FastForwardCheckpoint } from './fastForwardEngine';
 
 export const TIMELINE_MAX_TICKS = 50;
@@ -133,6 +134,8 @@ export function forkTimelineCheckpoint(timeline: WorldTimeline, sourceBranchId: 
       checkpoint.world.tick !== sourceTick + checkpoint.completedTicks || checkpoint.baseRandomState !== base.random.state ||
       checkpoint.baseInterventionSequence !== base.interventionSequence || checkpoint.world.interventionSequence !== base.interventionSequence ||
       checkpoint.world.random.algorithm !== base.random.algorithm || !sameGeneratedWorld(checkpoint.world, base)) throw invalid();
+  const calendar = addFastForwardCalendarMonths(base,checkpoint.completedTicks);
+  if (!calendar || checkpoint.world.year !== calendar.year || checkpoint.world.month !== calendar.month) throw invalid();
   const candidates = new Set(checkpoint.world.cultivators.map(({ id }) => id));
   if (candidates.size !== checkpoint.world.cultivators.length || base.cultivators.some(({ id }) => !candidates.has(id))) throw invalid();
   const number = timeline.nextBranchNumber;

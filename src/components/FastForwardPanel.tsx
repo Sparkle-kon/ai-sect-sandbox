@@ -4,6 +4,7 @@ import type { WorldState } from '../types/world';
 import { FAST_FORWARD_MAX_TICKS } from '../engine/fastForwardEngine';
 import { measureSaveCapacity } from '../engine/saveCapacityEngine';
 import type { FastForwardProgress } from '../engine/fastForwardEngine';
+import { addFastForwardCalendarMonths, planFastForwardCalendar } from '../engine/fastForwardCalendar';
 
 export interface FastForwardCapacitySource { world: WorldState; contextVersion: number; scopeKey: string }
 export interface FastForwardPreflightBinding {
@@ -12,6 +13,7 @@ export interface FastForwardPreflightBinding {
   branchId: string;
   head: TimelineSnapshot;
   count: number;
+  target?: { year: number; month: number };
   contextVersion?: number;
   scopeKey?: string;
 }
@@ -29,7 +31,8 @@ type Prepare = { phase: 'measuring'; binding: FastForwardPreflightBinding } |
 
 export function sameFastForwardBinding(a: FastForwardPreflightBinding, b?: FastForwardPreflightBinding): boolean {
   return !!b && a.world === b.world && a.timeline === b.timeline && a.branchId === b.branchId &&
-    a.head === b.head && a.count === b.count && a.contextVersion === b.contextVersion && a.scopeKey === b.scopeKey;
+    a.head === b.head && a.count === b.count && a.target?.year === b.target?.year &&
+    a.target?.month === b.target?.month && a.contextVersion === b.contextVersion && a.scopeKey === b.scopeKey;
 }
 
 export interface FastForwardControls {
@@ -50,8 +53,14 @@ const phaseLabel: Record<FastForwardControls['phase'], string> = {
   idle: '未开始', running: '正在独立推演', pausing: '等待当前一批回合完整结束后暂停', paused: '已暂停',
   staging: '正在核验检查点', ready: '检查点已核验，等待确认', error: '本次快进未能完成',
 };
-const choices = () => [...new Set([1, 3, 6, 12, 24, 60, FAST_FORWARD_MAX_TICKS])].filter((count) => count <= FAST_FORWARD_MAX_TICKS);
-const action = 'min-h-11 min-w-0 rounded border border-violet-500/50 bg-violet-950/55 px-2.5 text-xs text-violet-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-300 disabled:opacity-40';
+const dateLabel = ({ year, month }: { year: number; month: number }) => `仙历 ${year} 年 ${month} 月`;
+const dateError = {
+  invalid_date: '请输入有效的目标年和月份（1 至 12 月）。',
+  not_future: '目标必须晚于当前分支的仙历。',
+  out_of_range: `目标超出单批 ${FAST_FORWARD_MAX_TICKS} 个月的范围。`,
+} as const;
+const actionBase = 'min-h-11 min-w-0 rounded border border-violet-500/50 bg-violet-950/55 px-2.5 text-violet-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-300 disabled:opacity-40';
+const action = `${actionBase} text-xs`;
 
 export function FastForwardPanel({ controls, timeline, branchLimit, blocked }: {
   controls: FastForwardControls;
@@ -59,7 +68,7 @@ export function FastForwardPanel({ controls, timeline, branchLimit, blocked }: {
   branchLimit: boolean;
   blocked: boolean;
 }) {
-  const [count, setCount] = useState(12);
+  const [dateDraft, setDateDraft] = useState<{ scope: string; year: string; month: string }>();
   const [approval, setApproval] = useState<FastForwardProgress>();
   const [preflight, setPreflight] = useState<Prepare>();
   const { available, phase, progress } = controls;
@@ -67,12 +76,27 @@ export function FastForwardPanel({ controls, timeline, branchLimit, blocked }: {
   const branch = timeline.branches.find(({ id }) => id === timeline.activeBranchId);
   const head = branch?.snapshots.at(-1);
   const source = controls.capacitySource;
-  const mayPreview = available && !branchLimit && !blocked && !isActive && !!head && choices().includes(count) &&
-    (!source || source.world.tick === head.tick);
-  const binding = mayPreview && branch && head ? {
-    world: source?.world ?? head.world, timeline, branchId: branch.id, head, count,
+  const dateScope = JSON.stringify([branch?.id, source?.scopeKey]);
+  const defaultDate = head && addFastForwardCalendarMonths(head.world, Math.min(12, FAST_FORWARD_MAX_TICKS));
+  const date = dateDraft?.scope === dateScope ? dateDraft :
+    { year: defaultDate ? String(defaultDate.year) : '', month: defaultDate ? String(defaultDate.month) : '' };
+  const datePlan = head && planFastForwardCalendar(head.world, date.year, date.month);
+  const sourceMismatch = !!source && !!head &&
+    (source.world.tick !== head.tick || source.world.year !== head.world.year || source.world.month !== head.world.month);
+  const mayChoose = available && !branchLimit && !blocked && !isActive && !!head && !sourceMismatch;
+  const mayPreview = mayChoose && !!datePlan?.ok;
+  const binding = mayPreview && branch && head && datePlan?.ok ? {
+    world: source?.world ?? head.world, timeline, branchId: branch.id, head, count: datePlan.months, target: datePlan.target,
     contextVersion: source?.contextVersion, scopeKey: source?.scopeKey,
   } : undefined;
+  const changeDate = (field: 'year' | 'month', value: string) => {
+    serial.current++;
+    setPreflight(undefined);
+    setDateDraft({ scope: dateScope, year: date.year, month: date.month, [field]: value });
+  };
+  const progressBase = !sourceMismatch && progress && head?.tick === progress.startTick ? head.world : undefined;
+  const progressDate = progressBase && progress && addFastForwardCalendarMonths(progressBase, progress.completedTicks);
+  const progressTarget = progressBase && progress && addFastForwardCalendarMonths(progressBase, progress.requestedTicks);
   const activeBinding = useRef(binding);
   activeBinding.current = binding;
   const serial = useRef(0);
@@ -91,7 +115,7 @@ export function FastForwardPanel({ controls, timeline, branchLimit, blocked }: {
       serial.current++;
       setPreflight(undefined);
     }
-  }, [timeline, head, source?.world, source?.contextVersion, source?.scopeKey, available, count, blocked, branchLimit, isActive]);
+  }, [timeline, head, source?.world, source?.contextVersion, source?.scopeKey, available, date.year, date.month, blocked, branchLimit, isActive]);
   const measure = async () => {
     const start = activeBinding.current;
     if (!start) return;
@@ -124,6 +148,7 @@ export function FastForwardPanel({ controls, timeline, branchLimit, blocked }: {
       {!available && <p className="text-amber-200">当前无法启动独立快进（此上下文不可用或浏览器不支持独立推演所需的工作线程）。</p>}
       {branchLimit && <p className="text-amber-200">分支上限已到，暂不能应用新检查点。</p>}
       {blocked && !isActive && <p className="text-amber-200">先返回实时状态并结束其他待确认操作，再开始快进。</p>}
+      {sourceMismatch && !blocked && !isActive && <p className="text-amber-200">实时状态与分支最新记录的轮次或日期不一致，暂不能预检。</p>}
       {!isActive && <form className="space-y-1.5" onSubmit={(event) => {
         event.preventDefault();
         if (validPreflight?.phase !== 'measured' || alreadyStarted.current === validPreflight ||
@@ -134,12 +159,25 @@ export function FastForwardPanel({ controls, timeline, branchLimit, blocked }: {
         controls.onStart(checked.count,checked);
       }}>
         <div className="flex min-w-0 flex-wrap items-end gap-1.5">
-        <label className="grid min-w-0 gap-1">推演月数
-          <select className={action} value={count} disabled={!mayPreview}
-            onChange={(event) => { serial.current++; setPreflight(undefined); setCount(Number(event.currentTarget.value)); }}>
-            {choices().map((value) => <option key={value} value={value}>{value} 个月</option>)}
-          </select>
-        </label>
+        <fieldset className="min-w-0 basis-full">
+          <legend className="font-semibold text-slate-100">目标仙历</legend>
+          <div className="flex min-w-0 flex-wrap gap-1.5">
+            <label className="grid min-w-0 flex-1 basis-32 gap-1">目标年
+              <input type="text" inputMode="numeric" maxLength={32} className={`${actionBase} w-full text-base`}
+                value={date.year} disabled={!mayChoose}
+                onChange={(event) => changeDate('year', event.currentTarget.value)} />
+            </label>
+            <label className="grid min-w-0 flex-1 basis-24 gap-1">目标月
+              <input type="text" inputMode="numeric" maxLength={32} className={`${actionBase} w-full text-base`}
+                value={date.month} disabled={!mayChoose}
+                onChange={(event) => changeDate('month', event.currentTarget.value)} />
+            </label>
+          </div>
+          {head && <p className="mt-1">当前分支：{dateLabel(head.world)}。</p>}
+          {datePlan && <p role="status" className={datePlan.ok ? 'text-violet-100' : 'text-amber-200'}>
+            {datePlan.ok ? `预计推演 ${datePlan.months} 个月，抵达${dateLabel(datePlan.target)}。` : dateError[datePlan.reason]}
+          </p>}
+        </fieldset>
         <button type="button" className={action} disabled={!mayPreview || validPreflight?.phase==='measuring'}
           onClick={() => void measure()}>预检文件与快照</button>
         <button type="submit" className={action} disabled={!mayStart}>开始独立快进</button>
@@ -147,7 +185,8 @@ export function FastForwardPanel({ controls, timeline, branchLimit, blocked }: {
         {validPreflight?.phase==='measuring' && <p role="status">正在本机读取当前世界的存档大小，尚未开始推演。</p>}
         {validPreflight?.phase==='unavailable' && <p role="status" className="text-amber-200">本次未能测出当前存档大小；可以重新预检，未开始推演。</p>}
         {validPreflight?.phase==='measured' && <div aria-label="本次快进容量预检" className="space-y-1 rounded border border-slate-800 p-2">
-          <p>预检来源：当前分支 Tick #{validPreflight.binding.head.tick}，拟推演 {validPreflight.binding.count} 个月。</p>
+          <p>预检来源：当前分支 Tick #{validPreflight.binding.head.tick}，拟推演 {validPreflight.binding.count} 个月
+            {validPreflight.binding.target && `，目标${dateLabel(validPreflight.binding.target)}`}。</p>
           <p>单个世界 JSON 导出：{validPreflight.report.bytes} 字节（UTF-8）。文件上限 {validPreflight.report.limit} 字节（8 MiB）。</p>
           <p>当前时间线：{validPreflight.report.branches} 条分支合计 {validPreflight.report.snapshots} 个快照引用（{validPreflight.report.uniqueSnapshots} 份不同快照），当前分支 {validPreflight.report.branchSnapshots} 份。</p>
           <p>快照份数不是内存用量，也不是人口上限；文件上限本身不阻止独立快进。</p>
@@ -158,6 +197,7 @@ export function FastForwardPanel({ controls, timeline, branchLimit, blocked }: {
       {phase === 'idle' && controls.notice && <p role="status" className="text-violet-200">{controls.notice}</p>}
       {progress && <div className="min-w-0 space-y-1 rounded border border-slate-800 p-2">
         <p>已完成 {progress.completedTicks} / {progress.requestedTicks} 个月 · Tick #{progress.startTick} → #{progress.currentTick}</p>
+        {progressDate && progressTarget && <p>副本已到{dateLabel(progressDate)} · 本批目标{dateLabel(progressTarget)}。</p>}
         <progress className="h-2 w-full accent-violet-400" aria-label="已经完成的独立推演月份" max={progress.requestedTicks} value={progress.completedTicks} />
         <p>当前副本：在世 {progress.living} 人 · 全部角色记录 {progress.totalActors} 人</p>
       </div>}

@@ -1,6 +1,7 @@
 import { StoryFirstHome } from './components/StoryFirstHome';
 import { projectStoryHomepage } from './engine/storyHomepage';
 import { FAST_FORWARD_MAX_TICKS } from './engine/fastForwardEngine';
+import { addFastForwardCalendarMonths, planFastForwardCalendar } from './engine/fastForwardCalendar';
 import { projectWitnessedPersonalStory } from './engine/witnessedPersonalStory';
 import { WitnessedPersonalStory, WitnessedStoryScopeToggle } from './components/WitnessedPersonalStory';
 import { createPublicDialogueResolver } from './engine/publicDialogueProvenance';
@@ -120,6 +121,7 @@ interface ActiveFastForward {
   readonly timeline: WorldTimeline;
   readonly branchId: string;
   readonly context: number;
+  readonly requestedTicks: number;
   worker?: Worker;
   progress?: FastForwardProgress;
   checkpoint?: FastForwardCheckpoint;
@@ -561,6 +563,12 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
       setFastForwardView({ phase: 'error', notice: '快进预检已与当前分支不符，请重新预检。当前世界未推进。' });
       return;
     }
+    const plan = binding.target && head && planFastForwardCalendar(head.world,String(binding.target.year),String(binding.target.month));
+    if (!head || !plan || !plan.ok || plan.months !== requestedTicks || binding.world.year !== head.world.year ||
+        binding.world.month !== head.world.month) {
+      setFastForwardView({phase:'error',notice:'目标仙历与当前分支年月不符，请重新预检。当前世界未改变。'});
+      return;
+    }
     if (at.branches.length >= TIMELINE_MAX_BRANCHES) {
       setFastForwardView({ phase: 'error', notice: '分支位已满，未开始快进，也没有删除任何分支。' });
       return;
@@ -570,7 +578,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
     catch { setFastForwardView({ phase: 'error', notice: '浏览器未能启动隔离推演，当前世界未改变。' }); return; }
     const run: ActiveFastForward = {
       id: `fast-forward-${++fastForwardSerial.current}`, base: authority.current, timeline: at,
-      branchId: at.activeBranchId, context: saveContextVersion.current, worker,
+      branchId: at.activeBranchId, context: saveContextVersion.current, requestedTicks, worker,
     };
     fastForwardRun.current = run;
     setIsRunning(false);
@@ -585,7 +593,18 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
       if (!isFastForwardSourceCurrent(run)) { fail('原分支已经变化，隔离结果未提交。'); return; }
       if (data.type === 'error') { fail(data.message); return; }
       if (data.type === 'cancelled') { stopFastForward('已取消，当前世界不变。'); return; }
-      run.progress = data.progress;
+      const progress = data.progress;
+      const reached = addFastForwardCalendarMonths(run.base,progress.completedTicks);
+      if(!reached||progress.startTick!==run.base.tick||progress.requestedTicks!==run.requestedTicks||
+          progress.completedTicks>run.requestedTicks||progress.currentTick!==run.base.tick+progress.completedTicks||
+          run.progress&&progress.completedTicks<run.progress.completedTicks||
+          data.type==='staged'&&(data.checkpoint.completedTicks!==progress.completedTicks||
+            data.checkpoint.requestedTicks!==run.requestedTicks||data.checkpoint.world.year!==reached.year||
+            data.checkpoint.world.month!==reached.month)){
+        fail('快进回报与原分支年月不符，当前世界未改变。');
+        return;
+      }
+      run.progress = progress;
       if (data.type === 'staged') {
         run.checkpoint = data.checkpoint;
         run.worker?.terminate();
