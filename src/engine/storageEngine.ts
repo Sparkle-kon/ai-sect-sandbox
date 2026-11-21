@@ -1,3 +1,4 @@
+import { validateEraHistory, validateEraHistoryShape } from './storageEraHistoryValidation';
 import { validateSeasonalHousing } from './storageSeasonalHousingValidation';
 import { validateMentorTransfers } from './storageMentorTransferValidation';
 import { sameGeneratedWorld } from './worldIdentity';
@@ -354,6 +355,7 @@ const shape = structure({
     ballots:arr(5,structure({voterId:id,vote,reason:text,source})),tally:structure({support:count,oppose:count,abstain:count,required:count}),
     status:one('passed','rejected','stale'),outcome:text})),
   chronicleArchive:structure({anchors:arr(384,anchor),chapters:arr(SAVE_COLLECTION_LIMIT,chronicleChapter)}),
+  eraHistory:(value,path)=>validateEraHistoryShape(value,path,fail),
   witnessedPersonalStory:structure({scenes:arr(SAVE_COLLECTION_LIMIT,structure({
     eventId:id,tick,year:tick,month,siteId:id,kind:one('duel','socialize','breakthrough'),actorIds:arr(2,id),witnessIds:ids,
   }))}),
@@ -898,6 +900,7 @@ function verifyWorld(value: unknown): WorldState {
       ...(!Object.hasOwn(value, 'mentorship') ? { mentorship: { offers: [], lineage: [], budgets: [] } } : {}),
       ...(!Object.hasOwn(value, 'decisionTrace') ? { decisionTrace: { records: [] } } : {}),
       ...(!Object.hasOwn(value, 'coldHistory') ? { coldHistory: createColdHistoryState() } : {}),
+      ...(!Object.hasOwn(value, 'eraHistory') ? { eraHistory:{receipts:[]} } : {}),
       ...(!Object.hasOwn(value, 'competitionReviews') ? { competitionReviews: createCompetitionReviewState() } : {}),
       ...(!Object.hasOwn(value, 'fieldObservatories') ? { fieldObservatories: createFieldObservatoriesState() } : {}),
       ...(!Object.hasOwn(value, 'alignedWeather') ? { alignedWeather: createAlignedWeatherState() } : {}),
@@ -2869,6 +2872,7 @@ function verifyWorld(value: unknown): WorldState {
   }
   validateProtagonistHistory(w,chapters,actor,fail);
   validateWitnessedPersonalStory(w,actor,fail);
+  validateEraHistory(w,fail);
   w.coldHistory = freezeColdHistory(w.coldHistory);
   return w;
 }

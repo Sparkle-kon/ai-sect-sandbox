@@ -1,3 +1,4 @@
+import {recordEraHistoryTurn} from './eraHistoryIndex';
 import { advanceSeasonalHousing, recordSeasonalHousingMovement, resolveSeasonalHousingAction } from './seasonalHousingEngine';
 import { advanceMentorTransfers, resolveMentorTransferAction } from './mentorTransferEngine';
 import { advanceSeasonReviews, resolveSeasonReviewAction } from './seasonReviewEngine';
@@ -1039,7 +1040,10 @@ export function advanceWorldTick(
       captureWatchDigests(nextState, [...newEvents, ...endingCouncil]);
     }
   }
-  traceOptions?.onCompletedEvents?.(newEvents);
+  const mainEventIds=new Set(newEvents.map(({id})=>id));
+  const completedEvents=[...newEvents,...nextState.events.filter(({id,tick})=>tick===nextState.tick&&!mainEventIds.has(id))];
+  recordEraHistoryTurn(prevState,nextState,completedEvents);
+  traceOptions?.onCompletedEvents?.(completedEvents);
   nextState.mapPresentation = traceOptions?.capturePresentation === false
     ? { tick: nextState.tick, trails: [], effects: [] }
     : deriveMapPresentation(prevState, nextState, newEvents);

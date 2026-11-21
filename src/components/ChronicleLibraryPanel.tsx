@@ -12,6 +12,10 @@ import { PublicDialogueTranscript } from './PublicDialogueTranscript';
 import { createPublicDialogueResolver, type PublicDialogueProvenance } from '../engine/publicDialogueProvenance';
 import { canShowOriginalChronicleManuscript, publicChronicleExcerpt } from '../engine/chroniclePublicProse';
 import { ColdChronicleShelf } from './ColdChronicleShelf';
+import { EraHistoryPanel,type EraHistoryOption } from './EraHistoryPanel';
+import { projectEraHistory } from '../engine/eraHistoryIndex';
+import { createTerrainMapView } from './terrainMapView';
+
 import { ChronicleTopicDigest } from './ChronicleTopicDigest';
 import { ChronicleErrataPanel } from './ChronicleErrataPanel';
 
@@ -127,6 +131,25 @@ export function ChronicleLibraryPanel({ world, cultivator, scopeKey }: { world: 
   const paneId = useId();
   const tabs = useRef<Partial<Record<Page, HTMLButtonElement | null>>>({});
   const publicDialogues = useMemo(() => createPublicDialogueResolver(world), [world]);
+  const eraOptions=useMemo<EraHistoryOption[]>(()=>{
+    if(!cultivator||!world.cultivators.includes(cultivator))return [];
+    const terrain=createTerrainMapView(world,cultivator,true);
+    const known=new Set(terrain.seenLocations.filter(({type})=>type!=='secret_realm'&&type!=='abyss').map(({id})=>id));
+    const rows:EraHistoryOption[]=[{query:{kind:'actor',id:cultivator.id},label:cultivator.name},
+      ...world.sects.filter(sect=>sect.id===cultivator.sectId||known.has(sect.headquartersId))
+        .map(sect=>({query:{kind:'sect' as const,id:sect.id},label:sect.name})),
+      ...world.settlements.villages.filter(site=>known.has(site.locationId))
+        .map(site=>({query:{kind:'settlement' as const,id:site.id},label:site.name}))];
+    const counts=new Map<string,number>(),seen=new Map<string,number>();
+    const key=(row:EraHistoryOption)=>JSON.stringify([row.query.kind,row.label]);
+    for(const row of rows)counts.set(key(row),(counts.get(key(row))??0)+1);
+    return rows.map(row=>{
+      if((counts.get(key(row))??0)<2)return row;
+      const ordinal=(seen.get(key(row))??0)+1;seen.set(key(row),ordinal);
+      return {...row,label:`${row.label}（同名 ${ordinal}）`};
+    });
+  },[world,cultivator]);
+
   const recentIds = new Set((world.chronicleArchive?.chapters ?? []).map(({ id }) => id));
   const liveIds = new Set(world.events.map(({ id }) => id));
   const publicById = new Map(publicChronicleSceneEvents(world).map((entry) => [entry.id, entry]));
@@ -217,6 +240,8 @@ export function ChronicleLibraryPanel({ world, cultivator, scopeKey }: { world: 
             turningPoints={projectChapterTurningPoints(world,safe.id,cultivator?.id).arcs}
             resolveDialogue={(id)=>publicDialogues.chapter(safe.id,id)} />;
         }} />
+      <EraHistoryPanel scopeKey={`${scopeKey??''}:${cultivator?.id??''}`} options={eraOptions}
+        read={(query,before,limit)=>projectEraHistory(world,query,cultivator?.id,world.tick,{before,limit})} />
     </section>
   );
 }

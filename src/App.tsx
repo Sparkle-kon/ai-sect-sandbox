@@ -43,6 +43,7 @@ import { annotationWriteIsCurrent } from './components/annotationUi';
 import type { NotebookStamp, NoteCommand, NoteStatus } from './components/annotationUi';
 import { llmScheduler } from './engine/llmScheduler';
 import { settleChronicleOnline } from './engine/chronicleRuntime';
+import { recordEraHistoryTurn } from './engine/eraHistoryIndex';
 import { availableCouncilPlans } from './engine/councilEngine';
 import { commitCouncilSnapshot, settleAnnualCouncilOnline, settleCouncilSnapshot } from './engine/councilRuntime';
 import type { AvatarInteractionRequest, CouncilPlan, WorldgenProfileId } from './types/world';
@@ -269,9 +270,11 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
         const applied = new Set<string>();
         const tape = createDecisionReplayTape(starting, 'deferred');
         let canonicalWatchBatch: readonly WorldEvent[] = [];
+        let canonicalEraBatch:readonly WorldEvent[]=[];
         const tick = advanceWorldTick(starting, decisions, undefined, 'deferred', (id, effective) => {
           if (effective && modelActors.has(id)) applied.add(id);
-        }, { tape, modelActors, onWatchBatch: (events) => { canonicalWatchBatch = events; } });
+        }, { tape, modelActors, onWatchBatch: (events) => { canonicalWatchBatch = events; },
+          onCompletedEvents:events=>{canonicalEraBatch=events;} });
         const [reflected, dramatized] = await Promise.all([
           enrichAnnualReflections(tick, llmConfig), enrichTickDialogues(tick, llmConfig),
         ]);
@@ -289,6 +292,8 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
           llmScheduler.markDecision('stale', modelActors.size);
           return;
         }
+        const nativeEraIds=new Set(canonicalEraBatch.map(({id})=>id));
+        recordEraHistoryTurn(starting,next,[...canonicalEraBatch,...next.events.filter(({tick,id})=>tick===next.tick&&!nativeEraIds.has(id))]);
         if (next.watchlists.watches.length) {
           const beforeCouncil = new Set(dramatized.events.map(({ id }) => id));
           const endingCouncil = withCouncil.events.filter(({ id, tick: at }) => at === next.tick && !beforeCouncil.has(id));

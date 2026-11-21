@@ -1,3 +1,4 @@
+import {recordEraWorkshopSettlement} from './eraHistoryIndex';
 import type {
   CultivationRealm, Cultivator, LLMDecisionPayload, LocationNode, WorkshopCloseReason, WorkshopCapacityMove, WorkshopMove, WorkshopOrder,
   WorkshopInstitutionClosure, WorkshopOutputGrade, WorkshopQualityFloor, WorkshopState, WorkshopTier, WorkshopWorkReceipt, ToolLoan, WorldEvent, WorldState,
@@ -161,11 +162,12 @@ export function availableWorkshopActions(actor: Cultivator, world: WorldState, i
 }
 
 function event(world: WorldState, order: WorkshopOrder, phase: string, title: string, description: string): WorldEvent {
-  return {
-    id: `evt-workshop-${order.id}-${world.tick}-${phase}`,
-    tick: world.tick, year: world.year, month: world.month, category: 'diplomacy', title, description,
-    actorIds: [order.patronId, order.makerId], locationId: order.siteId, witnessScope: 'participants',
+  const receipt:WorldEvent={
+    id:`evt-workshop-${order.id}-${world.tick}-${phase}`,tick:world.tick,year:world.year,month:world.month,
+    category:'diplomacy',title,description,actorIds:[order.patronId,order.makerId],locationId:order.siteId,witnessScope:'participants',
   };
+  recordEraWorkshopSettlement(world,order,receipt);
+  return receipt;
 }
 
 const visibility = (order: WorkshopOrder) => ({ kind: 'participants' as const, actorIds: [order.patronId, order.makerId] });

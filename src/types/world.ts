@@ -394,6 +394,17 @@ export interface DialogueExchange {
   turns: DialogueTurn[];
 }
 
+interface EraHistoryIdentity {
+  eventId:string; tick:number; year:number; month:number; locationId?:string;
+}
+export type EraHistoryReceipt = EraHistoryIdentity & (
+  | {kind:'death';actorId:string}
+  | {kind:'succession';sectId:string;previousLeaderId?:string;leaderId:string;method:'election'|'challenge'|'coup'}
+  | {kind:'migration';recordId:string;fromSettlementId:string;toSettlementId:string;people:number}
+  | {kind:'workshop';orderId:string;patronId:string;makerId:string;status:'completed'|'expired'|'cancelled';delivered:number}
+);
+export interface EraHistoryState {receipts:EraHistoryReceipt[]}
+
 export interface WorldEvent {
   id: string;
   tick: number;
@@ -3140,6 +3151,7 @@ export interface WorldState {
   villageWorks: VillageWorksState;
   households: HouseholdState;
   seasonalHousing: SeasonalHousingState;
+  eraHistory:EraHistoryState;
   territorialLeases: TerritorialLeaseState;
   formations: FormationNetworkState;
   infirmaries: InfirmaryState;

@@ -1,3 +1,4 @@
+import {recordEraMigration} from './eraHistoryIndex';
 import { captureCivicReliefDeed } from './civicMemorialEngine';
 import { closeVillageCensusPeriod, openVillageCensusPeriod, recordVillageCensusMaturation, recordVillageCensusSettlement } from './villageCensusEngine';
 import { recordProbationRelief } from './probationEngine';
@@ -109,9 +110,10 @@ function log(world: WorldState, village: MortalSettlement, row: Omit<SettlementR
     captureCivicReliefDeed(world, actual);
   }
   else recordVillageCensusSettlement(world, actual);
-  return { id: `evt-${rowId}`, tick: world.tick, year: world.year, month: world.month,
-    title, description: row.description, actorIds: [row.actorId, row.cultivatorId].filter((id): id is string => Boolean(id)),
-    locationId: village.locationId, category: 'diplomacy' };
+  const event:WorldEvent={id:`evt-${rowId}`,tick:world.tick,year:world.year,month:world.month,title,description:row.description,
+    actorIds:[row.actorId,row.cultivatorId].filter((id):id is string=>Boolean(id)),locationId:village.locationId,category:'diplomacy'};
+  recordEraMigration(world,actual,event);
+  return event;
 }
 
 function enlist(person: MortalVolunteer, actor: Cultivator, village: MortalSettlement): Cultivator {
