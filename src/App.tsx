@@ -5,6 +5,7 @@ import { addFastForwardCalendarMonths } from './engine/fastForwardCalendar';
 import { FAST_FORWARD_CAMPAIGN_MAX_TICKS, planFastForwardCampaign } from './engine/fastForwardCampaignEngine';
 import { useFastForwardCampaign } from './components/useFastForwardCampaign';
 import { CampaignResumeNotice } from './components/CampaignResumeNotice';
+import {findVisibleCampaignStopOption,visibleCampaignStopOptions} from './components/campaignStopOptions';
 import { projectWitnessedPersonalStory } from './engine/witnessedPersonalStory';
 import { WitnessedPersonalStory, WitnessedStoryScopeToggle } from './components/WitnessedPersonalStory';
 import { createPublicDialogueResolver } from './engine/publicDialogueProvenance';
@@ -577,7 +578,11 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
       setFastForwardView({ phase: 'error', notice: '分支位已满，未开始快进，也没有删除任何分支。' });
       return;
     }
-    if(requestedTicks>FAST_FORWARD_MAX_TICKS){campaign.start(binding);return;}
+    if(binding.stopCondition&&!findVisibleCampaignStopOption(campaignStopOptions,binding.stopCondition)){
+      setFastForwardView({phase:'error',notice:'停止对象已与当前分支或视角不符，请重新预检。'});
+      return;
+    }
+    if(requestedTicks>FAST_FORWARD_MAX_TICKS||binding.stopCondition){campaign.start(binding);return;}
     let worker: Worker;
     try { worker = new Worker(new URL('./engine/fastForward.worker.ts', import.meta.url), { type: 'module' }); }
     catch { setFastForwardView({ phase: 'error', notice: '浏览器未能启动隔离推演，当前世界未改变。' }); return; }
@@ -709,6 +714,11 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
       projectEarnedChronicleLead(visibleWorld,chronicleScenes,visibleWorld.tick) : undefined,
     [readingChronicle,visibleWorld,chronicleScenes]);
   const selectedCultivator = resolveWorkspaceActor(visibleWorld, selectedCultivatorId);
+  const campaignStopOptions=useMemo(()=>readingChronicle&&campaign.available&&!preview?
+    visibleCampaignStopOptions(visibleWorld,selectedCultivator):[],[readingChronicle,campaign.available,preview,visibleWorld,selectedCultivator]);
+  const campaignSelectedStop=campaign.active&&campaign.record?.stopCondition?{
+    condition:campaign.record.stopCondition,label:findVisibleCampaignStopOption(campaignStopOptions,campaign.record.stopCondition)?.label,
+  }:undefined;
   const aliveCount = visibleWorld.cultivators.filter((c) => c.alive).length;
   const activeActorId = selectedCultivator?.id ?? null;
   const mayReadPersonal = Boolean(selectedCultivator?.alive && selectedCultivator.hp > 0);
@@ -1016,7 +1026,8 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
                 available: typeof Worker === 'function' && !preview && !isStepping && timeline.branches.length < TIMELINE_MAX_BRANCHES,
                 capacitySource: {world,contextVersion:saveContextVersion.current,scopeKey:viewScopeKey},
                 campaignAvailable:campaign.available,campaignState:campaign.state,campaignPreparing:campaign.working,
-                pendingCampaign,campaignNotice:campaign.notice,
+                pendingCampaign,campaignNotice:campaign.notice,campaignStopOptions:campaign.available?campaignStopOptions:undefined,
+                campaignSelectedStop,
                 onStart: startFastForward, onPause: campaign.active?campaign.pause:() => commandFastForward('pause'),
                 onResume: campaign.active?campaign.resume:() => commandFastForward('resume'),
                 onStage: () => commandFastForward('stage'),

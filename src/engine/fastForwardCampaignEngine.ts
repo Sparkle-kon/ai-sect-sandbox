@@ -5,11 +5,14 @@ import {addCampaignCalendarMonths,planCampaignCalendar,FAST_FORWARD_CAMPAIGN_MAX
 export {addCampaignCalendarMonths};
 export const planFastForwardCampaign=planCampaignCalendar;
 import {sameGeneratedWorld} from './worldIdentity';
+import {campaignStopReceiptMatchesResult,validCampaignStopCondition,type CampaignStopCondition,type CampaignStopReceipt}
+  from './campaignStopCondition';
 
 export const FAST_FORWARD_CAMPAIGN_MAX_TICKS=FAST_FORWARD_CAMPAIGN_MAX_MONTHS;
 export interface CampaignCheckpoint {
   readonly startTick:number;readonly requestedTicks:number;readonly completedTicks:number;
   readonly baseRandomState:number;readonly baseInterventionSequence:number;readonly world:WorldState;
+  readonly stopReceipt?:CampaignStopReceipt;
 }
 export type CampaignPlan=FastForwardCalendarPlan;
 const nat=(n:number)=>Number.isSafeInteger(n)&&n>=0;
@@ -21,8 +24,9 @@ const includesActualOriginalActors=(current:WorldState,base:WorldState)=>{
   return ids.size===current.cultivators.length&&base.cultivators.every(row=>ids.has(row.id));
 };
 /** Structural native continuity; user confirmation must separately prove the committed CAS/source capability. */
-export function validCampaignCheckpoint(source:WorldState,checkpoint:CampaignCheckpoint):boolean{
-  if(!checkpoint?.world||!countValid(checkpoint.requestedTicks)||!nat(checkpoint.completedTicks)||
+export function validCampaignCheckpoint(source:WorldState,checkpoint:CampaignCheckpoint,condition?:CampaignStopCondition):boolean{
+  if(condition&&!validCampaignStopCondition(source,condition)||
+      !checkpoint?.world||!countValid(checkpoint.requestedTicks)||!nat(checkpoint.completedTicks)||
       checkpoint.completedTicks>checkpoint.requestedTicks||checkpoint.startTick!==source.tick||
       checkpoint.baseRandomState!==source.random.state||checkpoint.baseInterventionSequence!==source.interventionSequence||
       !addCampaignCalendarMonths(source,checkpoint.requestedTicks))return false;
@@ -30,7 +34,9 @@ export function validCampaignCheckpoint(source:WorldState,checkpoint:CampaignChe
   return world.tick===source.tick+checkpoint.completedTicks&&world.random.algorithm===source.random.algorithm&&
     (checkpoint.completedTicks!==0||world.random.state===source.random.state)&&world.interventionSequence===source.interventionSequence&&
     sameGeneratedWorld(world,source)&&includesActualOriginalActors(world,source)&&
-    asCalendar(world,addCampaignCalendarMonths(source,checkpoint.completedTicks));
+    asCalendar(world,addCampaignCalendarMonths(source,checkpoint.completedTicks))&&
+    (checkpoint.stopReceipt===undefined||checkpoint.completedTicks>0&&!!condition&&
+      campaignStopReceiptMatchesResult(condition,checkpoint.stopReceipt,world));
 }
 export function createCampaignCheckpoint(source:WorldState,requestedTicks:number):CampaignCheckpoint{
   const checkpoint={startTick:source.tick,requestedTicks,completedTicks:0,baseRandomState:source.random.state,
@@ -52,11 +58,13 @@ export interface CampaignControllerState {
   readonly currentDate:FastForwardCalendarDate;
   readonly durableDate:FastForwardCalendarDate;
   readonly notice?:string;
+  readonly stopReceipt?:CampaignStopReceipt;
 }
 export interface FastForwardCampaignControllerOptions {
   /** Unique within this document/backend attempt (never a user-entered branch label). */
   readonly runId:string;
   readonly source:WorldState;
+  readonly stopCondition?:CampaignStopCondition;
   readonly initial:CampaignCheckpoint;
   readonly createWorker:(receive:(message:FastForwardWorkerResponse)=>void,failed:()=>void)=>CampaignWorker;
   readonly commit:(previous:CampaignCheckpoint,next:CampaignCheckpoint)=>Promise<boolean>;
@@ -67,17 +75,18 @@ interface Batch {
   id:string;base:CampaignCheckpoint;requested:number;progress:number;pausedAt?:number;port?:CampaignWorker;
 }
 export function createFastForwardCampaignController(options:FastForwardCampaignControllerOptions){
-  if(!validCampaignCheckpoint(options.source,options.initial)||!/^[A-Za-z0-9_-]{1,64}(?![\s\S])/.test(options.runId))
+  const condition=options.stopCondition&&{...options.stopCondition};
+  if(!validCampaignCheckpoint(options.source,options.initial,condition)||!/^[A-Za-z0-9_-]{1,64}(?![\s\S])/.test(options.runId))
     throw RangeError('隔离候选的起点、时间或标识无效。');
   const {source}=options;
   let durable=options.initial,completed=durable.completedTicks,batch:Batch|undefined,serial=0,generation=0;
   let pauseWanted=false,notice:string|undefined;
-  let phase:CampaignPhase=completed===durable.requestedTicks?'ready':'paused';
+  let phase:CampaignPhase=completed===durable.requestedTicks||durable.stopReceipt?'ready':'paused';
   let pendingCommit:Promise<void>|undefined,pendingCancel:Promise<boolean>|undefined;
   function read():CampaignControllerState{
     return {phase,completedTicks:completed,durableTicks:durable.completedTicks,requestedTicks:durable.requestedTicks,
       currentDate:addCampaignCalendarMonths(source,completed)!,durableDate:addCampaignCalendarMonths(source,durable.completedTicks)!,
-      ...(notice?{notice}:{})};
+      ...(notice?{notice}:{}),...(durable.stopReceipt?{stopReceipt:{...durable.stopReceipt}}:{})};
   }
   function announce(){try{options.onState?.(read());}catch{/* A presentation observer cannot interrupt native custody. */}}
   function stopWorker(){
@@ -94,10 +103,13 @@ export function createFastForwardCampaignController(options:FastForwardCampaignC
     if(!next||step.startTick!==base.tick||step.baseRandomState!==base.random.state||
       step.baseInterventionSequence!==base.interventionSequence||step.requestedTicks!==local.requested||
       step.completedTicks!==local.progress||step.completedTicks<1||
-      Math.min(local.pausedAt??local.requested,local.requested)!==step.completedTicks||
+      (step.stopReceipt===undefined?
+        Math.min(local.pausedAt??local.requested,local.requested)!==step.completedTicks:
+        local.pausedAt!==undefined&&local.pausedAt!==step.completedTicks)||
       !includesActualOriginalActors(next,base))return undefined;
-    const checkpoint={...local.base,completedTicks:local.base.completedTicks+step.completedTicks,world:next};
-    return validCampaignCheckpoint(source,checkpoint)?checkpoint:undefined;
+    const checkpoint={...local.base,completedTicks:local.base.completedTicks+step.completedTicks,world:next,
+      ...(step.stopReceipt?{stopReceipt:{...step.stopReceipt}}:{})};
+    return validCampaignCheckpoint(source,checkpoint,condition)?checkpoint:undefined;
   }
   function receive(local:Batch,token:number,message:FastForwardWorkerResponse){
     if(batch!==local||token!==generation||!message||message.runId!==local.id)return;
@@ -131,7 +143,7 @@ export function createFastForwardCampaignController(options:FastForwardCampaignC
         if(token!==generation)return;
         if(!written){fail('检查点未能持久保存，未启动下一批。');return;}
         durable=next;completed=next.completedTicks;
-        if(completed===next.requestedTicks){phase='ready';announce();}
+        if(completed===next.requestedTicks||next.stopReceipt){phase='ready';announce();}
         else if(pauseWanted){phase='paused';announce();}
         else startBatch();
       });
@@ -143,7 +155,7 @@ export function createFastForwardCampaignController(options:FastForwardCampaignC
     announce();
   }
   function startBatch(){
-    if(pauseWanted||durable.completedTicks===durable.requestedTicks)return;
+    if(pauseWanted||durable.stopReceipt||durable.completedTicks===durable.requestedTicks)return;
     const token=generation;
     const local:Batch={id:`${options.runId}-${++serial}`,base:durable,requested:Math.min(FAST_FORWARD_MAX_TICKS,
       durable.requestedTicks-durable.completedTicks),progress:0};
@@ -154,7 +166,7 @@ export function createFastForwardCampaignController(options:FastForwardCampaignC
         if(batch===local&&token===generation)fail('隔离 Worker 不可用，保留最后已验证节点。');
       });
       if(token!==generation||batch!==local){local.port.terminate();return;}
-      local.port.post({type:'start',runId:local.id,base:durable.world,requestedTicks:local.requested});
+      local.port.post({type:'start',runId:local.id,base:durable.world,requestedTicks:local.requested,...(condition?{stopCondition:condition}:{})});
     }catch{fail('隔离 Worker 无法开始批次，当前世界未改变。');}
   }
   function start():boolean{

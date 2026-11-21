@@ -816,6 +816,7 @@ export function advanceWorldTick(
     captureTrace?: boolean;
     capturePresentation?: boolean;
     onWatchBatch?: (events: readonly WorldEvent[]) => void;
+    onCompletedEvents?: (events: readonly WorldEvent[]) => void;
     replayDraws?: Readonly<Record<string, number>>;
     onActor?: (actorId: string, candidates: DecisionTraceCandidate[], applied: boolean) => void;
   }
@@ -1038,6 +1039,7 @@ export function advanceWorldTick(
       captureWatchDigests(nextState, [...newEvents, ...endingCouncil]);
     }
   }
+  traceOptions?.onCompletedEvents?.(newEvents);
   nextState.mapPresentation = traceOptions?.capturePresentation === false
     ? { tick: nextState.tick, trails: [], effects: [] }
     : deriveMapPresentation(prevState, nextState, newEvents);

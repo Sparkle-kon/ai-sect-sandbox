@@ -7,6 +7,9 @@ import type { FastForwardProgress } from '../engine/fastForwardEngine';
 import { addFastForwardCalendarMonths, planFastForwardCalendar } from '../engine/fastForwardCalendar';
 import { FAST_FORWARD_CAMPAIGN_MAX_TICKS, planFastForwardCampaign, type CampaignControllerState } from '../engine/fastForwardCampaignEngine';
 import type { ReactNode } from 'react';
+import {sameCampaignStopCondition,type CampaignStopCondition} from '../engine/campaignStopCondition';
+import {CampaignStopPicker,CampaignStopProgress,findCampaignStopOption,type CampaignStopDraft,type CampaignStopOption} from './CampaignStopPicker';
+
 
 
 export interface FastForwardCapacitySource { world: WorldState; contextVersion: number; scopeKey: string }
@@ -17,6 +20,7 @@ export interface FastForwardPreflightBinding {
   head: TimelineSnapshot;
   count: number;
   target?: { year: number; month: number };
+  stopCondition?:CampaignStopCondition;
   contextVersion?: number;
   scopeKey?: string;
 }
@@ -35,7 +39,7 @@ type Prepare = { phase: 'measuring'; binding: FastForwardPreflightBinding } |
 export function sameFastForwardBinding(a: FastForwardPreflightBinding, b?: FastForwardPreflightBinding): boolean {
   return !!b && a.world === b.world && a.timeline === b.timeline && a.branchId === b.branchId &&
     a.head === b.head && a.count === b.count && a.target?.year === b.target?.year &&
-    a.target?.month === b.target?.month && a.contextVersion === b.contextVersion && a.scopeKey === b.scopeKey;
+    a.target?.month === b.target?.month && sameCampaignStopCondition(a.stopCondition,b.stopCondition) && a.contextVersion === b.contextVersion && a.scopeKey === b.scopeKey;
 }
 
 export interface FastForwardControls {
@@ -49,6 +53,8 @@ export interface FastForwardControls {
   campaignPreparing?:boolean;
   pendingCampaign?:ReactNode;
   campaignNotice?:string;
+  campaignStopOptions?:readonly CampaignStopOption[];
+  campaignSelectedStop?:{condition:CampaignStopCondition;label?:string};
 
   onStart: (count: number, binding: FastForwardPreflightBinding) => void;
   onPause: () => void;
@@ -77,6 +83,7 @@ export function FastForwardPanel({ controls, timeline, branchLimit, blocked }: {
   branchLimit: boolean;
   blocked: boolean;
 }) {
+  const [stopDraft,setStopDraft]=useState<{scope:string;value?:CampaignStopDraft}>();
   const [dateDraft, setDateDraft] = useState<{ scope: string; year: string; month: string }>();
   const [approval, setApproval] = useState<FastForwardProgress | CampaignControllerState>();
   const [preflight, setPreflight] = useState<Prepare>();
@@ -88,6 +95,9 @@ export function FastForwardPanel({ controls, timeline, branchLimit, blocked }: {
   const head = branch?.snapshots.at(-1);
   const source = controls.capacitySource;
   const dateScope = JSON.stringify([branch?.id, source?.scopeKey]);
+  const selectedStop=stopDraft?.scope===dateScope?stopDraft.value:undefined;
+  const stopOptions=controls.campaignStopOptions;
+  const stop=findCampaignStopOption(stopOptions??[],selectedStop);
   const defaultDate = head && addFastForwardCalendarMonths(head.world, Math.min(12, FAST_FORWARD_MAX_TICKS));
   const date = dateDraft?.scope === dateScope ? dateDraft :
     { year: defaultDate ? String(defaultDate.year) : '', month: defaultDate ? String(defaultDate.month) : '' };
@@ -95,9 +105,10 @@ export function FastForwardPanel({ controls, timeline, branchLimit, blocked }: {
   const sourceMismatch = !!source && !!head &&
     (source.world.tick !== head.tick || source.world.year !== head.world.year || source.world.month !== head.world.month);
   const mayChoose = available && !branchLimit && !blocked && !isActive && !!head && !sourceMismatch;
-  const mayPreview = mayChoose && !!datePlan?.ok && (!pendingCampaign || datePlan.months<=FAST_FORWARD_MAX_TICKS);
+  const mayPreview = mayChoose&&!!datePlan?.ok&&(!selectedStop||!!stop&&!!controls.campaignAvailable)&&
+    (!pendingCampaign||datePlan.months<=FAST_FORWARD_MAX_TICKS&&!stop);
   const binding = mayPreview && branch && head && datePlan?.ok ? {
-    world: source?.world ?? head.world, timeline, branchId: branch.id, head, count: datePlan.months, target: datePlan.target,
+    world: source?.world ?? head.world, timeline, branchId: branch.id, head, count: datePlan.months, target: datePlan.target,stopCondition:stop?.condition,
     contextVersion: source?.contextVersion, scopeKey: source?.scopeKey,
   } : undefined;
   const changeDate = (field: 'year' | 'month', value: string) => {
@@ -126,7 +137,7 @@ export function FastForwardPanel({ controls, timeline, branchLimit, blocked }: {
       serial.current++;
       setPreflight(undefined);
     }
-  }, [timeline, head, source?.world, source?.contextVersion, source?.scopeKey, available, date.year, date.month, blocked, branchLimit, isActive, controls.campaignAvailable, pendingCampaign!==undefined]);
+  }, [timeline, head, source?.world, source?.contextVersion, source?.scopeKey, available, date.year, date.month, blocked, branchLimit, isActive, controls.campaignAvailable, pendingCampaign!==undefined, selectedStop?.kind,selectedStop?.targetId,stop?.condition]);
   const measure = async () => {
     const start = activeBinding.current;
     if (!start) return;
@@ -193,7 +204,9 @@ export function FastForwardPanel({ controls, timeline, branchLimit, blocked }: {
               datePlan.reason==='out_of_range' && controls.campaignAvailable ? `目标超出 ${max} 个月的长局范围。` : dateError[datePlan.reason]}
           </p>}
         </fieldset>
-        {pendingCampaign && datePlan?.ok && datePlan.months>FAST_FORWARD_MAX_TICKS &&
+        {stopOptions && controls.campaignAvailable && <CampaignStopPicker options={stopOptions} value={selectedStop} disabled={!mayChoose}
+          onChange={value=>{serial.current++;setPreflight(undefined);setStopDraft({scope:dateScope,value});}} />}
+        {pendingCampaign && datePlan?.ok && (datePlan.months>FAST_FORWARD_MAX_TICKS||stop) &&
           <p className="text-amber-200">先续跑或丢弃现有的本地长局候选，再开启另一个。</p>}
         <button type="button" className={action} disabled={!mayPreview || validPreflight?.phase==='measuring'}
           onClick={() => void measure()}>预检文件与快照</button>
@@ -221,6 +234,9 @@ export function FastForwardPanel({ controls, timeline, branchLimit, blocked }: {
       {campaignState && <div className="min-w-0 space-y-1 rounded border border-slate-800 p-2">
         <p>候选已推进到{dateLabel(campaignState.currentDate)} · {campaignState.completedTicks}/{campaignState.requestedTicks} 月。</p>
         <p>已核验并落档：{dateLabel(campaignState.durableDate)} · {campaignState.durableTicks} 月。关页后从此处续跑。</p>
+        <CampaignStopProgress chosen={controls.campaignSelectedStop} outcome={campaignState.stopReceipt?
+          {status:'stopped',receipt:campaignState.stopReceipt}:
+          campaignState.phase==='ready'&&controls.campaignSelectedStop?{status:'reached_target'}:undefined} />
         <progress className="h-2 w-full accent-violet-400" aria-label="长局候选已持久保存的月份"
           max={campaignState.requestedTicks} value={campaignState.durableTicks} />
       </div>}

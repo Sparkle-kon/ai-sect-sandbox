@@ -1,7 +1,8 @@
-import type { WorldState } from '../types/world';
+import type { WorldEvent, WorldState } from '../types/world';
 import { cloneWorldWithColdHistory } from './coldHistoryEngine';
 import { advanceWorldTick } from './worldEngine';
 import { sameGeneratedWorld } from './worldIdentity';
+import { detectCampaignStop,isCampaignStopCondition,type CampaignStopCondition,type CampaignStopReceipt } from './campaignStopCondition';
 
 export const FAST_FORWARD_MAX_TICKS = 120;
 export const FAST_FORWARD_CHUNK_TICKS = 2;
@@ -25,9 +26,10 @@ export interface FastForwardCheckpoint {
   baseRandomState: number;
   baseInterventionSequence: number;
   world: WorldState;
+  stopReceipt?: CampaignStopReceipt;
 }
 export type FastForwardWorkerRequest =
-  | { type: 'start'; runId: string; base: WorldState; requestedTicks: number }
+  | { type: 'start'; runId: string; base: WorldState; requestedTicks: number; stopCondition?: CampaignStopCondition }
   | { type: 'pause' | 'resume' | 'stage' | 'cancel'; runId: string };
 export type FastForwardWorkerResponse =
   | { type: 'progress' | 'paused'; runId: string; progress: FastForwardProgress }
@@ -45,6 +47,7 @@ export interface FastForwardRunner {
   readProgress(): FastForwardProgress;
   advanceChunk(): FastForwardProgress;
   checkpoint(): FastForwardCheckpoint | undefined;
+  hasTriggeredStop(): boolean;
 }
 
 export const validFastForwardCount = (requestedTicks: number): boolean =>
@@ -52,10 +55,13 @@ export const validFastForwardCount = (requestedTicks: number): boolean =>
 
 /** No branch, App callback, provider configuration, or caller-owned RNG ever enters this runner. */
 export function createFastForwardRunner(base: WorldState, requestedTicks: number,
-  { now = () => performance.now() }: { now?: () => number } = {}): FastForwardRunner {
+  { now = () => performance.now(), stopCondition }: { now?: () => number; stopCondition?: CampaignStopCondition } = {}): FastForwardRunner {
   if (!validFastForwardCount(requestedTicks) || !Number.isSafeInteger(base.tick + requestedTicks)) {
     throw new FastForwardError('invalid_count', `快进轮数须为 1 至 ${FAST_FORWARD_MAX_TICKS} 的整数。`);
   }
+  if(stopCondition!==undefined&&!isCampaignStopCondition(stopCondition))throw new FastForwardError('execution','停止条件格式无效。');
+  const condition=stopCondition&&{...stopCondition};
+  let stopReceipt:CampaignStopReceipt|undefined;
   let world = cloneWorldWithColdHistory(base);
   const startTick = base.tick;
   const baseRandomState = base.random.state;
@@ -68,22 +74,29 @@ export function createFastForwardRunner(base: WorldState, requestedTicks: number
   });
   return {
     readProgress,
+    hasTriggeredStop:()=>stopReceipt!==undefined,
     advanceChunk() {
-      if (world.tick - startTick >= requestedTicks) return readProgress();
+      if (stopReceipt||world.tick - startTick >= requestedTicks) return readProgress();
       const chunkStart = now();
       for (let turns = 0; turns < FAST_FORWARD_CHUNK_TICKS && world.tick - startTick < requestedTicks; turns++) {
         const tickStart = now();
         let next: WorldState;
-        try { next = advanceWorldTick(world, undefined, undefined, 'utility'); }
+        let events:readonly WorldEvent[]|undefined;
+        try { next = advanceWorldTick(world, undefined, undefined, 'utility', undefined,
+          condition?{onCompletedEvents:completed=>{events=completed;}}:undefined); }
         catch { throw new FastForwardError('execution', '规则脑未完成本轮，当前时间线未改变。'); }
         if (next.tick !== world.tick + 1 || next.cultivators.length < world.cultivators.length ||
             next.interventionSequence !== baseInterventionSequence || !sameGeneratedWorld(world, next)) {
           throw new FastForwardError('execution', '演算结果未能通过连续轮次校验，当前时间线未改变。');
         }
+        if(condition){
+          if(!events)throw new FastForwardError('execution','无法核验完整月份的停止条件。');
+          stopReceipt=detectCampaignStop(condition,world,next,events);
+        }
         world = next;
         const tickEnd = now();
         maxTickMs = Math.max(maxTickMs, tickEnd - tickStart);
-        if (tickEnd - chunkStart >= FAST_FORWARD_CHUNK_MS) break;
+        if (stopReceipt||tickEnd - chunkStart >= FAST_FORWARD_CHUNK_MS) break;
       }
       const elapsed = Math.max(0, now() - chunkStart);
       processingMs += elapsed;
@@ -93,7 +106,7 @@ export function createFastForwardRunner(base: WorldState, requestedTicks: number
     checkpoint() {
       const completedTicks = world.tick - startTick;
       return completedTicks > 0 ? { startTick, requestedTicks, completedTicks, baseRandomState,
-        baseInterventionSequence, world: cloneWorldWithColdHistory(world) } : undefined;
+        baseInterventionSequence, world: cloneWorldWithColdHistory(world),...(stopReceipt?{stopReceipt:{...stopReceipt}}:{}) } : undefined;
     },
   };
 }
@@ -132,7 +145,7 @@ export function createFastForwardWorkerController(options: {
       current.scheduled = false;
       try {
         const progress = current.runner.advanceChunk();
-        if (progress.completedTicks === progress.requestedTicks) { stage(current); return; }
+        if (progress.completedTicks === progress.requestedTicks||current.runner.hasTriggeredStop()) { stage(current); return; }
         post({ type: 'progress', runId: current.runId, progress });
         queue();
       } catch (error) { fail(current.runId, error); }
@@ -143,7 +156,7 @@ export function createFastForwardWorkerController(options: {
     if (request.type === 'start') {
       if (job) return;
       try {
-        const runner = createFastForwardRunner(request.base, request.requestedTicks, { now: options.now });
+        const runner = createFastForwardRunner(request.base, request.requestedTicks, { now: options.now, stopCondition:request.stopCondition });
         job = { runId: request.runId, runner, paused: false, scheduled: false, ticket: 0 };
         post({ type: 'progress', runId: request.runId, progress: runner.readProgress() });
         queue();

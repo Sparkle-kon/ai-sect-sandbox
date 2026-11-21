@@ -6,7 +6,7 @@ import type {CampaignJournalRecord,LoadedCampaignJournal} from '../engine/campai
 import type {ReadCampaignSource} from '../engine/campaignMemento';
 import {
   addCampaignCalendarMonths, createCampaignCheckpoint, createFastForwardCampaignController,
-  type CampaignControllerState,
+  type CampaignControllerState,type CampaignCheckpoint,
 } from '../engine/fastForwardCampaignEngine';
 import type {FastForwardWorkerResponse} from '../engine/fastForwardEngine';
 
@@ -39,6 +39,11 @@ interface OwnedSource extends SourceContext {id:string}
 const tokenMatches=(a:CampaignJournalRecord,b:CampaignJournalRecord)=>
   a.id===b.id&&a.generation===b.generation&&a.revision===b.revision;
 const reason=(error:unknown)=>error instanceof Error?error.message:'无法核验本地推演；当前世界未改变。';
+function forkable(checkpoint:CampaignCheckpoint):CampaignCheckpoint {
+  // The journal still holds the original horizon; the separate ordinary fork
+  // validator receives exactly the completed, independently proven final date.
+  return checkpoint.stopReceipt?{...checkpoint,requestedTicks:checkpoint.completedTicks}:checkpoint;
+}
 const supported=()=>typeof Worker==='function'&&typeof indexedDB!=='undefined'&&
   typeof globalThis.crypto?.subtle?.digest==='function'&&typeof globalThis.crypto.randomUUID==='function'&&!!ruleVersion;
 
@@ -109,7 +114,7 @@ export function useFastForwardCampaign(props:CampaignOptions) {
     let current:Run;
     const driver=createFastForwardCampaignController({
       runId:record.generation,
-      source:base.world,initial,
+      source:base.world,initial,stopCondition:record.stopCondition,
       createWorker:(receive,failed)=>{
         const worker=new Worker(new URL('../engine/fastForward.worker.ts',import.meta.url),{type:'module'});
         worker.onmessage=({data}:MessageEvent<FastForwardWorkerResponse>)=>receive(data);
@@ -153,7 +158,7 @@ export function useFastForwardCampaign(props:CampaignOptions) {
       const {sealCampaignSource}=await import('../engine/campaignMemento');
       const memento=await sealCampaignSource(base.timeline,timelineId,base.world,{signal});
       if(signal.aborted||!sameLive(base))return;
-      const next=await (await browserCampaignJournal()).begin(memento,binding.count,ruleVersion!,{signal});
+      const next=await (await browserCampaignJournal()).begin(memento,binding.count,ruleVersion!,{signal,stopCondition:binding.stopCondition});
       retain(next);
       if(!signal.aborted&&sameLive(base))attach(next,base,createCampaignCheckpoint(base.world,binding.count));
     });
@@ -173,7 +178,7 @@ export function useFastForwardCampaign(props:CampaignOptions) {
       if(value.record.status==='cancelled')throw Error('这份候选已结束，不再继续。');
       if(value.record.status==='finalized') {
         if(!restoreOriginal)throw Error('恢复已确认结果前，请先确认替换当前运行中的世界。');
-        const next=forkTimelineCampaignCheckpoint(source.timeline,source.timeline.activeBranchId,source.world.tick,checkpoint);
+        const next=forkTimelineCampaignCheckpoint(source.timeline,source.timeline.activeBranchId,source.world.tick,forkable(checkpoint));
         if(next.activeBranchId!==value.record.committedBranchId)throw Error('已确认分支编号不符。');
         const incoming=readTimelineHead(next)!;
         if(!sameLive(guard)||signal.aborted)return;
@@ -237,7 +242,7 @@ export function useFastForwardCampaign(props:CampaignOptions) {
     const current=run.current,checkpoint=current?.driver.readReadyCheckpoint();
     if(!current||!checkpoint||!sameLive(current)||current.record.ruleVersion!==ruleVersion)return;
     withOperation(async signal=>{
-      const next=forkTimelineCampaignCheckpoint(current.timeline,current.timeline.activeBranchId,current.world.tick,checkpoint);
+      const next=forkTimelineCampaignCheckpoint(current.timeline,current.timeline.activeBranchId,current.world.tick,forkable(checkpoint));
       const incoming=readTimelineHead(next);
       if(!incoming||!sameLive(current))return;
       const confirmed=await (await browserCampaignJournal()).finalize(current.record,next.activeBranchId,{signal});
