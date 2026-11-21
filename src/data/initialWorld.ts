@@ -1,3 +1,4 @@
+import { createAnnotationState } from '../engine/annotationState';
 import { createEscortState } from '../engine/escortEngine';
 import { createCompetitionState } from '../engine/competitionEngine';
 import { createScriptureState } from '../engine/scriptureEngine';
@@ -240,6 +241,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     scriptures: createScriptureState(),
     competitions: createCompetitionState(),
     escorts: createEscortState(),
+    annotations: createAnnotationState(),
     witnesses: createWitnessState(),
     estates: createEstateState(),
     decisionTrace: createDecisionTraceState(),

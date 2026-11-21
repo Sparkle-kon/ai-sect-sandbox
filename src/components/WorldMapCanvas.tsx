@@ -9,7 +9,7 @@ import { durabilityOf, equippedArtifact, maxDurabilityOf } from '../engine/artif
 import { isActiveTrial, TRIAL_STAGE } from './TribulationPanel';
 import { isGuardOnDuty } from './SectEconomyPanel';
 import { isActiveCampaign, SIEGE_LABELS } from './SectDiplomacyPanel';
-import { isOpenOccasion, OCCASION_KIND, OCCASION_STATUS } from './WorldOccasionsPanel';
+import { isOpenOccasion, OCCASION_KIND, OCCASION_STATUS } from './occasionLabels';
 import { BOUNTY_STATUS, relevantBounty } from './bountyLabels';
 import { BIOME_PALETTE, createTerrainMapView, mapActorPositions } from './terrainMapView';
 import { drawTerrain } from './terrainMapDraw';
@@ -53,6 +53,14 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [camera, setCamera] = useState(DEFAULT_CAMERA);
+  const [annotationView, setAnnotationView] = useState<typeof import('./mapAnnotationView')>();
+  const hasNotes = Boolean(world.annotations?.notes.length);
+  useEffect(() => {
+    if (!hasNotes || annotationView) return;
+    let obsolete = false;
+    void import('./mapAnnotationView').then((module) => { if (!obsolete) setAnnotationView(module); }).catch(() => undefined);
+    return () => { obsolete = true; };
+  }, [hasNotes, annotationView]);
   const [touchPan, setTouchPan] = useState(false);
   const [followsSelection, setFollowsSelection] = useState(false);
   const [explorerOpen, setExplorerOpen] = useState(false);
@@ -87,6 +95,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const weatherAtVisibleSites = useMemo(() => new Map(seenLocations
     .filter(({ id }) => isCurrentLocation(id))
     .map((site) => [site.id, localQiWeather(world, site)])), [world, seenLocations, isCurrentLocation]);
+  const annotationPins = useMemo(() => annotationView?.mapAnnotationPins(world, mapView, selectedCultivatorId) ?? [], [annotationView, world, mapView, selectedCultivatorId]);
   const convoys = useMemo(() => visibleMapConvoys(world, mapView), [world, mapView]);
   const escortedCaravan = useMemo(() => visibleMapEscort(world, mapView, selected), [world, mapView, selected]);
   const hazards = useMemo(() => getVisibleHazards(world, mapView), [world, mapView]);
@@ -200,6 +209,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       // 2. Terrain, spirit qi overlay and sect boundaries.
       drawTerrain(ctx, world, mapView.tileState, heat, phase);
       drawHazards(ctx, hazards);
+      annotationView?.drawMapAnnotationPins(ctx, annotationPins, camera.zoom);
       drawMapConvoys(ctx, convoys, camera.zoom);
       if (escortedCaravan) drawMapConvoys(ctx, [escortedCaravan], camera.zoom, '#7dd3fc');
 
@@ -463,7 +473,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener('change', stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, hazards, convoys, escortedCaravan, beastsByLocation, weatherAtVisibleSites, armedBrush, preview, compact]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, hazards, convoys, escortedCaravan, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, armedBrush, preview, compact]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -807,6 +817,14 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           定位所选护镖车队 · 第 {escortedCaravan.row} 行，第 {escortedCaravan.col} 列
         </button>
       </div>}
+      {annotationPins.length > 0 && <details className="border-t border-slate-800/80 px-3 text-xs text-fuchsia-200">
+        <summary className="flex min-h-11 cursor-pointer items-center">可见地图批注 · {annotationPins.length} 条</summary>
+        <ul className="max-h-44 space-y-1 overflow-y-auto pb-2">
+          {annotationPins.map(({ note, point }) => <li key={note.id}>
+            <button type="button" className="min-h-11 break-words text-left" onClick={() => manualCamera(focusMapPoint(cameraRef.current, point))}>{note.text}</button>
+          </li>)}
+        </ul>
+      </details>}
       {hazards.length > 0 && (
         <details className="border-t border-slate-800/80 bg-slate-900/40 px-4 py-2 text-[11px] text-slate-300">
           <summary className="cursor-pointer">当前可见灾害 · {hazards.length} 处</summary>

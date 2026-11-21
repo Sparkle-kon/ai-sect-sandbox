@@ -1,18 +1,8 @@
 import type { Cultivator, WorldState } from '../types/world';
+import { isOpenOccasion, OCCASION_KIND, OCCASION_STATUS } from './occasionLabels';
+export { isOpenOccasion, OCCASION_KIND, OCCASION_STATUS } from './occasionLabels';
 
 type Occasion = WorldState['occasions'][number];
-
-export const OCCASION_KIND: Record<Occasion['kind'], string> = {
-  tournament: '宗门大比',
-  expedition: '秘境远征',
-};
-
-export const OCCASION_STATUS: Record<Occasion['status'], string> = {
-  registration: '报名中',
-  running: '进行中',
-  completed: '已结束',
-  cancelled: '已取消',
-};
 
 const EXPEDITION_OUTCOMES: Record<Occasion['expeditions'][number]['outcome'], string> = {
   loot: '获得机缘',
@@ -21,9 +11,6 @@ const EXPEDITION_OUTCOMES: Record<Occasion['expeditions'][number]['outcome'], st
   escaped: '撤离',
 };
 
-export function isOpenOccasion(occasion: Occasion): boolean {
-  return occasion.status === 'registration' || occasion.status === 'running';
-}
 
 export function WorldOccasionsPanel({ world, cultivator }: { world: WorldState; cultivator: Cultivator }) {
   const names = new Map(world.cultivators.map(({ id, name }) => [id, name]));

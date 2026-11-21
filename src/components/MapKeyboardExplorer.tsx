@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { Cultivator, LocationNode, WorldState } from '../types/world';
-import { isOpenOccasion, OCCASION_KIND } from './WorldOccasionsPanel';
+import { isOpenOccasion, OCCASION_KIND } from './occasionLabels';
 import { isActiveCampaign } from './SectDiplomacyPanel';
 import { isActiveTrial } from './TribulationPanel';
 import { MAP_EFFECT_LABELS } from './mapPresentationView';

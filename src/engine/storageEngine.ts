@@ -1,3 +1,4 @@
+import { ANNOTATION_MAX_BOOKMARKS, ANNOTATION_MAX_NOTES, ANNOTATION_MAX_NOTE_CHARS, ANNOTATION_MAX_TITLE_CHARS, createAnnotationState } from './annotationState';
 import { createEscortState, ESCORT_FEE, ESCORT_RATIONS } from './escortEngine';
 import { COMPETITION_RULES, createCompetitionState } from './competitionEngine';
 import { createScriptureState } from './scriptureEngine';
@@ -95,6 +96,12 @@ const proposal: Validator = (value, path) => {
   fail(path);
 };
 
+const noteTarget: Validator = (value, path) => {
+  const kind = (value as {kind?:unknown} | null)?.kind;
+  if (kind === 'tile') return structure({ kind:one('tile'),tileId:id })(value,path);
+  if (kind === 'site') return structure({ kind:one('site'),locationId:id,tileId:id,siteName:strings(ANNOTATION_MAX_TITLE_CHARS,1) })(value,path);
+  fail(path);
+};
 const facilityLevels = structure({qi_array:num(0,3,true),alchemy_hall:num(0,3,true),scripture_pavilion:num(0,3,true),defense_array:num(0,3,true),spirit_mine:num(0,3,true)});
 const locationKind = one('sect_hq','spirit_vein','secret_realm','market','abyss');
 
@@ -167,6 +174,9 @@ const shape = structure({
       attestations:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,tick,verdict:one('supports','contradicts')})),
       appeal:optional(structure({tick,actorId:id,verdict:one('upheld','rejected'),reason:text})),settledTick:otick,
       reputationSectId:oid,reputationPenalty:percentage,reputationRestored:percentage,reason:otext}))}),
+  annotations:structure({nextId:num(1,100_000_000,true),
+    bookmarks:arr(ANNOTATION_MAX_BOOKMARKS,structure({id,eventId:id,eventTick:tick,createdTick:tick,title:strings(ANNOTATION_MAX_TITLE_CHARS,1),category:eventCategory,locationId:oid})),
+    notes:arr(ANNOTATION_MAX_NOTES,structure({id,createdTick:tick,updatedTick:tick,text:strings(ANNOTATION_MAX_NOTE_CHARS,1),target:noteTarget}))}),
   escorts:structure({
     contracts:arr(SAVE_COLLECTION_LIMIT,structure({id,shipmentId:id,clientId:id,escortId:oid,originId:id,destinationId:id,
       status:one('offered','active','delivered','failed','expired'),offeredTick:tick,expiresTick:tick,acceptedTick:otick,holdAppliedTick:otick,
@@ -267,6 +277,7 @@ function verifyWorld(value: unknown): WorldState {
     ? { ...value,
       ...(!Object.hasOwn(value, 'mentorship') ? { mentorship: { offers: [], lineage: [], budgets: [] } } : {}),
       ...(!Object.hasOwn(value, 'decisionTrace') ? { decisionTrace: { records: [] } } : {}),
+      ...(!Object.hasOwn(value, 'annotations') ? { annotations: createAnnotationState() } : {}),
       ...(!Object.hasOwn(value, 'escorts') ? { escorts: createEscortState() } : {}),
       ...(!Object.hasOwn(value, 'competitions') ? { competitions: { seasons: [], entries: [], scores: [], honors: [], optOutActorIds: [] } } : {}),
       ...(!Object.hasOwn(value, 'scriptures') ? { scriptures: createScriptureState() } : {}),
@@ -296,6 +307,23 @@ function verifyWorld(value: unknown): WorldState {
   const sector = unique(w.sects, (item) => item.id, 'sects.id');
   const locations = unique(w.locations, (item) => item.id, 'locations.id');
   const map = unique(w.terrain.tiles, (item) => item.id, 'terrain.tiles.id');
+  const bookmarkRows = w.annotations.bookmarks;
+  const noteRows = w.annotations.notes;
+  unique([...bookmarkRows,...noteRows], ({ id }) => id, 'annotations.id');
+  unique(bookmarkRows, ({ eventId }) => eventId, 'annotations.bookmarks.eventId');
+  const annotationSerials = new Set<number>();
+  for (const item of [...bookmarkRows, ...noteRows]) {
+    const prefix = 'eventId' in item ? 'bookmark' : 'annotation';
+    const serial = Number(item.id.match(new RegExp(`^${prefix}-([1-9][0-9]*)$`))?.[1]);
+    if (!Number.isSafeInteger(serial) || serial >= w.annotations.nextId || annotationSerials.has(serial)) fail('annotations.nextId');
+    annotationSerials.add(serial);
+  }
+  const privateEvents = new Set(w.events.filter(({ witnessScope }) => witnessScope === 'participants').map(({ id }) => id));
+  for (const row of bookmarkRows) if (row.eventTick > row.createdTick || row.createdTick > w.tick ||
+      privateEvents.has(row.eventId) || /[\u0000-\u001f\u007f]/.test(row.title)) fail('annotations.bookmarks.references');
+  for (const row of noteRows) if (!map.has(row.target.tileId) || row.createdTick > row.updatedTick ||
+      row.updatedTick > w.tick || !row.text.trim() || /[\u0000-\u001f\u007f]/.test(row.text) ||
+      (row.target.kind === 'site' && /[\u0000-\u001f\u007f]/.test(row.target.siteName))) fail('annotations.notes.references');
   if (w.scenarioOrigin && (w.scenarioOrigin.endTick > w.tick || !w.worldgen ||
       !/^scenario-[0-9a-f]{32}$/.test(w.scenarioOrigin.id))) fail('scenarioOrigin.references');
   if (w.worldgen) {

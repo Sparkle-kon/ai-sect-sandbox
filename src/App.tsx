@@ -15,7 +15,8 @@ import { applyMapBrush } from './engine/mapBrushEngine';
 import { GodBrushKind, LLMConfig, LLMDecisionPayload, MapPoint, WorldState } from './types/world';
 import { SandboxWorkspace, WorkspaceSections } from './components/SandboxWorkspace';
 import type { WorkspaceId } from './components/SandboxWorkspace';
-import { WorldOccasionsPanel } from './components/WorldOccasionsPanel';
+import { annotationWriteIsCurrent } from './components/annotationUi';
+import type { NotebookStamp, NoteCommand, NoteStatus } from './components/annotationUi';
 import { WorldMapCanvas } from './components/WorldMapCanvas';
 import { llmScheduler } from './engine/llmScheduler';
 import { settleChronicleOnline } from './engine/chronicleRuntime';
@@ -43,9 +44,11 @@ const SectRelocationPanel = React.lazy(async () => ({ default: (await import('./
 const SectDoctrinePanel = React.lazy(async () => ({ default: (await import('./components/SectDoctrinePanel')).SectDoctrinePanel }));
 const LlmTelemetryPanel = React.lazy(async () => ({ default: (await import('./components/LlmTelemetryPanel')).LlmTelemetryPanel }));
 const BountyBoard = React.lazy(async () => ({ default: (await import('./components/BountyBoard')).BountyBoard }));
+const ChronicleNotebookPanel = React.lazy(async () => ({ default: (await import('./components/ChronicleNotebookPanel')).ChronicleNotebookPanel }));
 const RankSeasonPanel = React.lazy(async () => ({ default: (await import('./components/RankSeasonPanel')).RankSeasonPanel }));
 const ChronicleFeed = React.lazy(async () => ({ default: (await import('./components/ChronicleFeed')).ChronicleFeed }));
 const ChronicleLibraryPanel = React.lazy(async () => ({ default: (await import('./components/ChronicleLibraryPanel')).ChronicleLibraryPanel }));
+const WorldOccasionsPanel = React.lazy(async () => ({ default: (await import('./components/WorldOccasionsPanel')).WorldOccasionsPanel }));
 const WeatherAtlasPanel = React.lazy(async () => ({ default: (await import('./components/WeatherAtlasPanel')).WeatherAtlasPanel }));
 const MarketCaravansPanel = React.lazy(async () => ({ default: (await import('./components/MarketCaravansPanel')).MarketCaravansPanel }));
 const MortalVillagesPanel = React.lazy(async () => ({ default: (await import('./components/MortalVillagesPanel')).MortalVillagesPanel }));
@@ -268,6 +271,19 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
     setAvatarNotice(undefined);
   };
 
+  const writeAnnotation = async (command: NoteCommand, stamp: NotebookStamp, signal: AbortSignal): Promise<NoteStatus> => {
+    const review = () => signal.aborted ? 'interrupted' : browsing.current || stepInFlight.current ? 'readonly' :
+      annotationWriteIsCurrent(stamp, authority.current, history.current.activeBranchId, false) ? undefined : 'stale';
+    const first = review();
+    if (first) return first;
+    const { applyAnnotation } = await import('./engine/annotationsEngine');
+    const recheck = review();
+    if (recheck) return recheck;
+    const proposed = applyAnnotation(stamp.world, stamp.actorId, command);
+    if (!proposed.ok) return proposed.code;
+    return updateWorld((current) => current === stamp.world && !review() ? proposed.world : current) === proposed.world ? 'saved' : 'stale';
+  };
+
   const replaceWorld = (next: WorldState, expected: WorldState): boolean => {
     if (stepInFlight.current || browsing.current || authority.current !== expected) return false;
     replayTapes.current.clear();
@@ -422,6 +438,10 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
         chronicle: <WorkspaceSections label="纪事与历史" initialOpen={opened('chronicle', 'feed')} sections={[
           { id: 'feed', label: '当世纪事', content: <React.Suspense fallback={<p role="status">载入当世纪事…</p>}><ChronicleFeed events={visibleWorld.events} /></React.Suspense> },
           { id: 'library', label: '藏书阁与史书', content: <React.Suspense fallback={<p role="status">载入藏书阁…</p>}><ChronicleLibraryPanel world={visibleWorld} /></React.Suspense> },
+          { id: 'notebook', label: '书签与地图批注', content: <React.Suspense fallback={<p role="status">载入分支记录…</p>}>
+            <ChronicleNotebookPanel key={`${timeline.activeBranchId}:${preview?.tick ?? 'live'}:${activeActorId ?? ''}`}
+              world={visibleWorld} actorId={activeActorId} branchId={timeline.activeBranchId} readOnly={!!preview} busy={isStepping} onWrite={writeAnnotation} />
+          </React.Suspense> },
           { id: 'rank-season', label: '赛季榜与荣誉', content: <React.Suspense fallback={<p role="status">载入赛季榜…</p>}>
             <RankSeasonPanel world={visibleWorld} cultivator={selectedCultivator} />
           </React.Suspense> },
@@ -450,7 +470,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
           { id: 'weather', label: '灵候图与观测', content: <React.Suspense fallback={<p role="status">载入世界记录…</p>}><WeatherAtlasPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense> },
           { id: 'markets', label: '坊市与商队', content: <React.Suspense fallback={<p role="status">载入世界记录…</p>}><MarketCaravansPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense> },
           { id: 'villages', label: '凡人村镇与赈济', content: <React.Suspense fallback={<p role="status">载入世界记录…</p>}><MortalVillagesPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense> },
-          { id: 'occasions', label: '比武与秘境盛会', content: <WorldOccasionsPanel world={visibleWorld} cultivator={selectedCultivator} /> },
+          { id: 'occasions', label: '比武与秘境盛会', content: <React.Suspense fallback={<p role="status">载入盛会记录…</p>}><WorldOccasionsPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense> },
           { id: 'bounties', label: '天机悬赏榜', content: <React.Suspense fallback={<p role="status">载入悬赏榜…</p>}><BountyBoard world={visibleWorld} /></React.Suspense> },
           { id: 'analytics', label: '天道观测与演化统计', content: <button type="button" onClick={() => setAnalyticsOpen(true)}
             className={`${action} bg-sky-900/60 text-sky-100 hover:bg-sky-800`}><BarChart3 aria-hidden="true" className="h-4 w-4" />打开天道观测</button> },

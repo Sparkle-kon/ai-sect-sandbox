@@ -1188,7 +1188,33 @@ export interface ScenarioOrigin {
   endTick: number;
 }
 
+export interface AnnotationBookmark {
+  id: string;
+  eventId: string;
+  eventTick: number;
+  createdTick: number;
+  title: string;
+  category: WorldEvent['category'];
+  locationId?: string;
+}
+export type MapAnnotationTarget =
+  | { kind: 'site'; locationId: string; tileId: string; siteName: string }
+  | { kind: 'tile'; tileId: string };
+export interface MapAnnotation {
+  id: string;
+  createdTick: number;
+  updatedTick: number;
+  text: string;
+  target: MapAnnotationTarget;
+}
+export interface AnnotationState {
+  bookmarks: AnnotationBookmark[];
+  notes: MapAnnotation[];
+  nextId: number;
+}
+
 export interface WorldState {
+  annotations: AnnotationState;
   scenarioOrigin?: ScenarioOrigin;
   escorts: EscortState;
   competitions: CompetitionState;
