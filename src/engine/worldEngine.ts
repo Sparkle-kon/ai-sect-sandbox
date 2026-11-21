@@ -1,3 +1,4 @@
+import { advanceSectCredit, resolveSectCreditAction } from './sectCreditEngine';
 import { advanceSanctuaries, interceptSanctuaryDuel, resolveSanctuaryAction } from './sanctuaryEngine';
 import { advanceResearch, resolveResearchAction } from './researchEngine';
 import { advanceCeasefires, availableCeasefireActions, recordCeasefireHostility, resolveCeasefireAction } from './ceasefireEngine';
@@ -196,6 +197,8 @@ export function applyCultivatorBrainDecision(
     case 'ATTEST_WITNESS':
     case 'CHALLENGE_WITNESS':
       return resolveWitnessAction(world, cultivator, decision);
+    case 'SECT_CREDIT':
+      return resolveSectCreditAction(world, cultivator, decision);
     case 'SANCTUARY':
       return resolveSanctuaryAction(world, cultivator, decision);
     case 'RESEARCH':
@@ -759,7 +762,7 @@ export function advanceWorldTick(
     if (yearly) cultivator.reflections = synthesizeReflections(cultivator, nextState.tick);
   }
 
-  for (const event of [...advanceDiplomacy(nextState, rng), ...advanceOccasions(nextState, rng), ...advanceOaths(nextState), ...advanceMarkets(nextState), ...advanceWitnesses(nextState), ...maintainSectPolitics(nextState), ...advanceBounties(nextState), ...advanceResearch(nextState), ...advanceEstates(nextState), ...advanceDoctrines(nextState), ...advanceSanctuaries(nextState)]) {
+  for (const event of [...advanceDiplomacy(nextState, rng), ...advanceOccasions(nextState, rng), ...advanceOaths(nextState), ...advanceMarkets(nextState), ...advanceWitnesses(nextState), ...maintainSectPolitics(nextState), ...advanceBounties(nextState), ...advanceResearch(nextState), ...advanceEstates(nextState), ...advanceDoctrines(nextState), ...advanceSectCredit(nextState), ...advanceSanctuaries(nextState)]) {
     newEvents.push(event);
     witnessEvent(nextState, event);
   }

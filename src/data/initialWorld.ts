@@ -1,3 +1,4 @@
+import { createSectCreditState } from '../engine/sectCreditEngine';
 import { createSanctuaryState } from '../engine/sanctuaryEngine';
 import { createResearchState } from '../engine/researchEngine';
 import { createCeasefireState } from '../engine/ceasefireEngine';
@@ -248,6 +249,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     ceasefires: createCeasefireState(),
     research: createResearchState(),
     sanctuary: createSanctuaryState(),
+    credit: createSectCreditState(),
     witnesses: createWitnessState(),
     estates: createEstateState(),
     decisionTrace: createDecisionTraceState(),

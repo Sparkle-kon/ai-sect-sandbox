@@ -87,6 +87,7 @@ export type ActionType =
   | 'CEASEFIRE'
   | 'RESEARCH'
   | 'SANCTUARY'
+  | 'SECT_CREDIT'
   | 'GATHER_HERBS'
   | 'BREW_PILL'
   | 'USE_PILL'
@@ -382,6 +383,8 @@ export interface LLMDecisionPayload {
   targetHazardId?: string;
   ceasefireMove?: CeasefireMove;
   targetCeasefireId?: string;
+  creditMove?: SectCreditMove;
+  targetCreditId?: string;
   sanctuaryMove?: SanctuaryMove;
   targetSanctuaryId?: string;
   researchMove?: ResearchMove;
@@ -1327,7 +1330,43 @@ export interface SanctuaryState {
   nextId: number;
 }
 
+export type SectCreditMove = 'offer' | 'accept' | 'decline' | 'repay';
+export interface SectCreditReceipt {
+  tick: number;
+  kind: 'voluntary' | 'collection';
+  amount: number;
+}
+export interface SectLoan {
+  id: string;
+  lenderSectId: string;
+  borrowerSectId: string;
+  lenderSignerId: string;
+  borrowerSignerId: string;
+  openedTick: number;
+  offerExpiresTick: number;
+  status: 'offered' | 'active' | 'paid' | 'defaulted' | 'declined' | 'expired';
+  principal: number;
+  fundedTick?: number;
+  dueTick?: number;
+  collectionUntilTick?: number;
+  settledTick?: number;
+  paidTotal: number;
+  writtenOff: number;
+  receipts: SectCreditReceipt[];
+  lastCollectionTick?: number;
+}
+export interface SectCreditRestriction {
+  sectId: string;
+  untilTick: number;
+}
+export interface SectCreditState {
+  loans: SectLoan[];
+  restrictions: SectCreditRestriction[];
+  nextId: number;
+}
+
 export interface WorldState {
+  credit: SectCreditState;
   sanctuary: SanctuaryState;
   research: ResearchState;
   ceasefires: CeasefireState;

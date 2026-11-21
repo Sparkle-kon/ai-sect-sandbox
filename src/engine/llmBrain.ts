@@ -1,3 +1,4 @@
+import { availableSectCreditActions } from './sectCreditEngine';
 import { activeSanctuaryPass, availableSanctuaryActions, sanctuaryCanShield } from './sanctuaryEngine';
 import { availableResearchActions } from './researchEngine';
 import { activeCeasefireBetween, availableCeasefireActions } from './ceasefireEngine';
@@ -422,6 +423,16 @@ export function computeHeuristicDecision(
     if (research) return { ...research, chosenAction: 'RESEARCH', innerMonologue: '共研要用自己的实物和本月研习，先按章核证。' };
   }
 
+  const mayOfferCredit = world.tick >= 26 && world.tick % 8 === 5;
+  if (!cultivator.guardAssignment && world.sects.some(({ leaderId }) => leaderId === cultivator.id) &&
+      (mayOfferCredit || world.credit.loans.some((loan) => loan.status === 'offered' || loan.status === 'active'))) {
+    const options = availableSectCreditActions(cultivator, world);
+    const move = options.find(({ creditMove }) => creditMove === 'repay') ??
+      options.find(({ creditMove }) => creditMove === 'accept') ??
+      (mayOfferCredit ? options.find(({ creditMove }) => creditMove === 'offer') : undefined);
+    if (move) return { ...move, chosenAction: 'SECT_CREDIT', innerMonologue: '按实有宗库借还，不得将另项托管当作余额。' };
+  }
+
   // 5. Socialize; trust in fellowship makes seeking a partner more attractive.
   const fellowship = cultivator.reflections.some(
     (entry) => entry.kind === 'belief' && entry.theme === 'community' && entry.intensity >= 6
@@ -517,6 +528,7 @@ export async function queryCultivatorLLMDecision(
   const estateOptions = availableEstateActions(cultivator, world);
   const doctrineOptions = availableDoctrineActions(cultivator, world);
   const relocationOptions = availableRelocationActions(cultivator, world);
+  const creditOptions = availableSectCreditActions(cultivator, world);
   const sanctuaryOptions = availableSanctuaryActions(cultivator, world);
   const researchOptions = availableResearchActions(cultivator, world);
   const ceasefireOptions = availableCeasefireActions(cultivator, world);
@@ -546,6 +558,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 天机悬赏榜：${JSON.stringify(world.bounties.filter((item) => item.status === 'open').map(({id,targetCultivatorId,reward,reason}) => ({id,targetCultivatorId,reward,reason})))}；可接的追缉：${JSON.stringify(availableBountyHunts(cultivator, world))}
 - 天下公示的大会与秘境：${JSON.stringify(world.occasions.filter((item) => item.status === 'registration' || item.status === 'running').map(({id,title,kind,locationId,status,registrationClosesTick}) => ({id,title,kind,locationId,status,registrationClosesTick})))}；可报名项目：${JSON.stringify(availableOccasionJoins(cultivator, world))}
 - 本宗邦交：${JSON.stringify(world.diplomacy.filter((relation) => relation.sectAId === cultivator.sectId || relation.sectBId === cultivator.sectId))}；公示的外事权限：${JSON.stringify(availableDiplomacyActions(cultivator, world))}
+- 宗门信贷为规则固定的零息本金，仅能选实际库账有据的选项：${JSON.stringify(creditOptions)}
 - 避难敕令只在指定站点保护持票人的直接斗法，且护盾有限。可执行事务：${JSON.stringify(sanctuaryOptions)}
 - 共研只可使用本宗的实际议案、实有投入与已核实退出理由：${JSON.stringify(researchOptions)}
 - 停战议约只可使用双方现行授权和账款所列选项：${JSON.stringify(ceasefireOptions)}
@@ -576,7 +589,7 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
 请以第一人称进行内心独白思考，并决定本回合行动。只输出合法的 JSON 对象（不要 Markdown 代码块），字段如下：
 {
   "innerMonologue": "你的第一人称内心独白（40字以内，体现你的性格与秘密目标）",
-  "chosenAction": "CULTIVATE | BREAKTHROUGH | EXPLORE | SOCIALIZE | DUEL | SCHEMING | PURSUE_SCHEME | AUTHOR_TECHNIQUE | STUDY_TECHNIQUE | GATHER_HERBS | BREW_PILL | USE_PILL | FORGE_ARTIFACT | BIND_ARTIFACT | REPAIR_ARTIFACT | AWAKEN_ARTIFACT | FACE_TRIBULATION | AMBUSH_TRIBULATION | CHALLENGE_LEADERSHIP | PLOT_COUP | BUILD_FACILITY | DISPATCH_GUARD | GUARD_DUTY | OFFER_ALLIANCE | DECLARE_WAR | DEMAND_TRIBUTE | LAUNCH_SIEGE | JOIN_OCCASION | PURSUE_BOUNTY | TAME_BEAST | TRADE | DUAL_CULTIVATE | SECT_DIPLOMACY | TEACH | ACCEPT_TUITION | DECLINE_TUITION | OFFER_OATH | ACCEPT_OATH | DECLINE_OATH | FULFILL_OATH | APPEAL_OATH | PLACE_MARKET_BUY | PLACE_MARKET_SELL | CANCEL_MARKET_ORDER | RECRUIT_SETTLER | DELIVER_RELIEF | FILE_WITNESS_CLAIM | ATTEST_WITNESS | CHALLENGE_WITNESS | NAME_HEIR | CLAIM_ESTATE | HOLD_MEMORIAL | DOCTRINE | RELOCATE | RECOLLECT | RELIC | SCRIPTURE | RANK_SEASON | ESCORT | CEASEFIRE | RESEARCH | SANCTUARY | REST 之一",
+  "chosenAction": "CULTIVATE | BREAKTHROUGH | EXPLORE | SOCIALIZE | DUEL | SCHEMING | PURSUE_SCHEME | AUTHOR_TECHNIQUE | STUDY_TECHNIQUE | GATHER_HERBS | BREW_PILL | USE_PILL | FORGE_ARTIFACT | BIND_ARTIFACT | REPAIR_ARTIFACT | AWAKEN_ARTIFACT | FACE_TRIBULATION | AMBUSH_TRIBULATION | CHALLENGE_LEADERSHIP | PLOT_COUP | BUILD_FACILITY | DISPATCH_GUARD | GUARD_DUTY | OFFER_ALLIANCE | DECLARE_WAR | DEMAND_TRIBUTE | LAUNCH_SIEGE | JOIN_OCCASION | PURSUE_BOUNTY | TAME_BEAST | TRADE | DUAL_CULTIVATE | SECT_DIPLOMACY | TEACH | ACCEPT_TUITION | DECLINE_TUITION | OFFER_OATH | ACCEPT_OATH | DECLINE_OATH | FULFILL_OATH | APPEAL_OATH | PLACE_MARKET_BUY | PLACE_MARKET_SELL | CANCEL_MARKET_ORDER | RECRUIT_SETTLER | DELIVER_RELIEF | FILE_WITNESS_CLAIM | ATTEST_WITNESS | CHALLENGE_WITNESS | NAME_HEIR | CLAIM_ESTATE | HOLD_MEMORIAL | DOCTRINE | RELOCATE | RECOLLECT | RELIC | SCRIPTURE | RANK_SEASON | ESCORT | CEASEFIRE | RESEARCH | SANCTUARY | SECT_CREDIT | REST 之一",
   "targetLocationId": "EXPLORE 可填已知地点 id（探索未知时省略）；宗门经营、迁宗或新设避难所只能填所列地点 id",
   "targetCultivatorId": "如果 chosenAction 为 SOCIALIZE / DUEL / SCHEMING / AMBUSH_TRIBULATION / CHALLENGE_LEADERSHIP / PLOT_COUP / DISPATCH_GUARD / TRADE / DUAL_CULTIVATE / SECT_DIPLOMACY / TEACH / OFFER_OATH / FILE_WITNESS_CLAIM / NAME_HEIR 则填目标修士 id；DOCTRINE 仅在所选事务列出该字段时填写；其余省略",
   "spokenLine": "简短台词（可选）",
@@ -593,6 +606,8 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
   "targetMarketOrderId": "撤单时选择自己仍可撤的挂单 id",
   "targetOathId": "回应、履行或申诉契书时，指定可用契书 id",
   "oathTerm": "提出契书时选择给定条款 foundation_pill 或 jade_herb",
+  "creditMove": "SECT_CREDIT 只选所列 offer、accept、decline 或 repay，不许自行填写金额",
+  "targetCreditId": "只复制信贷选项列出的议约 id",
   "sanctuaryMove": "SANCTUARY 只复制所列 found、take_pass、repair 或 surrender",
   "targetSanctuaryId": "只复制所选敕令或站点事务列出的章程 id",
   "researchMove": "RESEARCH 仅复制列出的 propose、join、work 或 withdraw",
@@ -627,7 +642,7 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
   "forgeTier": "炼器时选择准许的品阶",
   "tribulationStance": "FACE_TRIBULATION 时填写 guard（护体）、focus（守心）或 defy（冒险硬抗）",
   "facilityKind": "BUILD_FACILITY 时使用宗门经营许可中给定的 facilityKind",
-  "targetSectId": "外交行动从公示权限选目标；CEASEFIRE 发起时只复制停战选项列出的宗门 id",
+  "targetSectId": "外交、停战或信贷邀约只能复制对应选项列出的宗门 id",
   "targetOccasionId": "JOIN_OCCASION 时从可报名项目选择 id",
   "targetBountyId": "PURSUE_BOUNTY 时从可接的追缉中选择 id",
   "targetBeastId": "TAME_BEAST 时从可尝试驯服的列表选择 id"
@@ -729,9 +744,16 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
             'CEASEFIRE',
             'RESEARCH',
             'SANCTUARY',
+            'SECT_CREDIT',
           ];
           const chosenAction = parsed?.chosenAction;
           if (!chosenAction || !validActions.includes(chosenAction)) return undefined;
+
+          const legalCredit = chosenAction === 'SECT_CREDIT' ? creditOptions.find((item) =>
+            item.creditMove === parsed.creditMove && item.targetSectId === parsed.targetSectId &&
+            item.targetCreditId === parsed.targetCreditId) : undefined;
+          if (chosenAction === 'SECT_CREDIT' && (!legalCredit ||
+              parsed.targetCultivatorId !== undefined || parsed.targetLocationId !== undefined)) return undefined;
 
           const legalSanctuary = chosenAction === 'SANCTUARY' ? sanctuaryOptions.find((item) =>
             item.sanctuaryMove === parsed.sanctuaryMove && item.targetLocationId === parsed.targetLocationId &&
@@ -887,7 +909,7 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
               : typeof parsed.targetCultivatorId === 'string' ? parsed.targetCultivatorId : undefined,
             spokenLine: typeof parsed.spokenLine === 'string' ? parsed.spokenLine.trim().slice(0, 90) : undefined,
             facilityKind: legalInfrastructure?.facilityKind,
-            targetSectId: legalCeasefire?.targetSectId ?? legalForeign?.targetSectId,
+            targetSectId: legalCredit?.targetSectId ?? legalCeasefire?.targetSectId ?? legalForeign?.targetSectId,
             targetOccasionId: legalOccasion?.targetOccasionId,
             targetBountyId: legalHunt?.targetBountyId,
             targetBeastId: legalBeast?.targetBeastId,
@@ -896,6 +918,8 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
             forgeTier: legalArtifact?.forgeTier,
             targetHerbId: legalAlchemy?.targetHerbId,
             targetPillId: legalAlchemy?.targetPillId,
+            creditMove: legalCredit?.creditMove,
+            targetCreditId: legalCredit?.targetCreditId,
             sanctuaryMove: legalSanctuary?.sanctuaryMove,
             targetSanctuaryId: legalSanctuary?.targetSanctuaryId,
             researchMove: legalResearch?.researchMove,

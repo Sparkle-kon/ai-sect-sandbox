@@ -1,3 +1,5 @@
+import { createSectCreditState, SECT_CREDIT_COLLECTION_TICKS, SECT_CREDIT_OFFER_TICKS,
+  SECT_CREDIT_PAYMENT_MAX, SECT_CREDIT_PRINCIPAL, SECT_CREDIT_TERM_TICKS } from './sectCreditEngine';
 import { createSanctuaryState, SANCTUARY_BLOCK_HP, SANCTUARY_CHARTER_TICKS, SANCTUARY_FOUND_COST,
   SANCTUARY_KARMA_PENALTY, SANCTUARY_MAX_SHIELD, SANCTUARY_PASS_TICKS, SANCTUARY_REPAIR_COST } from './sanctuaryEngine';
 import { createResearchState, researchTechniqueId, RESEARCH_DEPOSIT, RESEARCH_PROJECT_TICKS,
@@ -76,7 +78,7 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const marketQty = num(1,12,true), marketPrice = num(1,500,true);
@@ -179,6 +181,13 @@ const shape = structure({
       attestations:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,tick,verdict:one('supports','contradicts')})),
       appeal:optional(structure({tick,actorId:id,verdict:one('upheld','rejected'),reason:text})),settledTick:otick,
       reputationSectId:oid,reputationPenalty:percentage,reputationRestored:percentage,reason:otext}))}),
+  credit:structure({nextId:num(1,100_000_000,true),
+    loans:arr(SAVE_COLLECTION_LIMIT,structure({id,lenderSectId:id,borrowerSectId:id,lenderSignerId:id,borrowerSignerId:id,
+      openedTick:tick,offerExpiresTick:tick,status:one('offered','active','paid','defaulted','declined','expired'),
+      principal:doctrineAmount,fundedTick:otick,dueTick:otick,collectionUntilTick:otick,settledTick:otick,
+      paidTotal:doctrineAmount,writtenOff:doctrineAmount,lastCollectionTick:otick,
+      receipts:arr(SAVE_COLLECTION_LIMIT,structure({tick,kind:one('voluntary','collection'),amount:num(1,SECT_CREDIT_PAYMENT_MAX,true)}))})),
+    restrictions:arr(SAVE_COLLECTION_LIMIT,structure({sectId:id,untilTick:tick}))}),
   sanctuary:structure({nextId:num(1,100_000_000,true),
     charters:arr(SAVE_COLLECTION_LIMIT,structure({id,siteId:id,sponsorSectId:id,founderId:id,openedTick:tick,
       expiresTick:tick,status:one('active','ended'),shieldHp:doctrineAmount,maxShieldHp:doctrineAmount,
@@ -303,6 +312,7 @@ function verifyWorld(value: unknown): WorldState {
     ? { ...value,
       ...(!Object.hasOwn(value, 'mentorship') ? { mentorship: { offers: [], lineage: [], budgets: [] } } : {}),
       ...(!Object.hasOwn(value, 'decisionTrace') ? { decisionTrace: { records: [] } } : {}),
+      ...(!Object.hasOwn(value, 'credit') ? { credit: createSectCreditState() } : {}),
       ...(!Object.hasOwn(value, 'sanctuary') ? { sanctuary: createSanctuaryState() } : {}),
       ...(!Object.hasOwn(value, 'research') ? { research: createResearchState() } : {}),
       ...(!Object.hasOwn(value, 'ceasefires') ? { ceasefires: createCeasefireState() } : {}),
@@ -336,6 +346,42 @@ function verifyWorld(value: unknown): WorldState {
   const sector = unique(w.sects, (item) => item.id, 'sects.id');
   const locations = unique(w.locations, (item) => item.id, 'locations.id');
   const map = unique(w.terrain.tiles, (item) => item.id, 'terrain.tiles.id');
+  unique(w.credit.loans, ({ id }) => id, 'credit.loans.id');
+  unique(w.credit.loans.filter(({ status }) => status === 'offered' || status === 'active'),
+    ({ borrowerSectId }) => borrowerSectId, 'credit.loans.active_borrower');
+  unique(w.credit.restrictions, ({ sectId }) => sectId, 'credit.restrictions.sect');
+  if (w.credit.restrictions.some(({ sectId }) => !sector.has(sectId))) fail('credit.restrictions.references');
+  for (const loan of w.credit.loans) {
+    const funded = loan.status === 'active' || loan.status === 'paid' || loan.status === 'defaulted';
+    const closed = loan.status !== 'offered' && loan.status !== 'active';
+    const serial = Number(loan.id.match(/^sect-credit-([1-9][0-9]*)$/)?.[1]);
+    const paidByTick = new Map<number,number>();
+    for (const row of loan.receipts) paidByTick.set(row.tick, (paidByTick.get(row.tick) ?? 0) + row.amount);
+    if ([...paidByTick.values()].some((amount) => amount > SECT_CREDIT_PAYMENT_MAX)) fail('credit.loans.payment_tick');
+    if (!Number.isSafeInteger(serial) || serial >= w.credit.nextId || loan.lenderSectId === loan.borrowerSectId ||
+        !sector.has(loan.lenderSectId) || !sector.has(loan.borrowerSectId) || !actor.has(loan.lenderSignerId) ||
+        !actor.has(loan.borrowerSignerId) || loan.lenderSignerId === loan.borrowerSignerId ||
+        loan.openedTick > w.tick || loan.offerExpiresTick !== loan.openedTick + SECT_CREDIT_OFFER_TICKS ||
+        funded !== (loan.fundedTick !== undefined) || funded !== (loan.dueTick !== undefined) ||
+        funded !== (loan.collectionUntilTick !== undefined) || closed !== (loan.settledTick !== undefined) ||
+        (loan.fundedTick !== undefined && (loan.fundedTick < loan.openedTick || loan.fundedTick > w.tick ||
+          loan.fundedTick >= loan.offerExpiresTick || loan.dueTick !== loan.fundedTick + SECT_CREDIT_TERM_TICKS ||
+          loan.collectionUntilTick !== loan.dueTick + SECT_CREDIT_COLLECTION_TICKS)) ||
+        (loan.settledTick !== undefined && (loan.settledTick < (loan.fundedTick ?? loan.openedTick) || loan.settledTick > w.tick)) ||
+        (loan.lastCollectionTick !== undefined && (loan.dueTick === undefined || loan.collectionUntilTick === undefined ||
+          loan.lastCollectionTick < loan.dueTick || loan.lastCollectionTick >= loan.collectionUntilTick || loan.lastCollectionTick > w.tick)) ||
+        loan.receipts.some((row) => loan.fundedTick === undefined || row.tick < loan.fundedTick || row.tick > w.tick ||
+          (loan.settledTick !== undefined && row.tick > loan.settledTick) ||
+          (row.kind === 'collection' && (loan.dueTick === undefined || loan.collectionUntilTick === undefined ||
+            row.tick < loan.dueTick || row.tick >= loan.collectionUntilTick)))) fail('credit.loans.references');
+    const paid = loan.receipts.reduce((sum,row) => sum + row.amount, 0);
+    if (loan.principal !== SECT_CREDIT_PRINCIPAL || loan.paidTotal !== paid || loan.paidTotal + loan.writtenOff > loan.principal ||
+        (!funded && (paid !== 0 || loan.writtenOff !== 0)) ||
+        (loan.status === 'active' && paid >= loan.principal) ||
+        (loan.status === 'paid' && paid !== loan.principal) ||
+        (loan.status === 'defaulted' ? (loan.writtenOff <= 0 || loan.paidTotal + loan.writtenOff !== loan.principal)
+          : loan.writtenOff !== 0)) fail('credit.loans.principal');
+  }
   const sanctuaryIds = new Set<number>();
   const sanctuaryIndex = new Map(w.sanctuary.charters.map((charter) => [charter.id, charter]));
   const validSanctuarySerial = (id: string, kind: 'charter' | 'pass' | 'incident') => {
