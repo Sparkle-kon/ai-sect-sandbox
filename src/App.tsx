@@ -30,18 +30,34 @@ import type { AvatarInteractionRequest, CouncilPlan } from './types/world';
 import { PossessionPanel } from './components/PossessionPanel';
 import { WorldStoragePanel } from './components/WorldStoragePanel';
 import { isWorldSeed } from './engine/worldRandom';
+import { TimelinePanel } from './components/TimelinePanel';
+import { createTimeline, forkTimeline, readTimelineHead, readTimelineSnapshot, recordTimelineWorld, selectTimelineBranch } from './engine/timelineEngine';
+import type { WorldTimeline } from './engine/timelineEngine';
 import { activeAvatar, possessAvatar, queueAvatarOrder } from './engine/avatarEngine';
 import { resolveAvatarSnapshot } from './engine/avatarRuntime';
 
 export const App: React.FC = () => {
   const [world, setWorld] = useState<WorldState>(() => createInitialWorld());
   const authority = useRef(world);
-  const updateWorld = useCallback((change: (current: WorldState) => WorldState) => {
-    const next = change(authority.current);
-    authority.current = next;
-    setWorld(next);
-    return next;
+  const [timeline, setTimeline] = useState(() => createTimeline(world));
+  const history = useRef(timeline);
+  const [preview, setPreview] = useState<{ tick: number; world: WorldState }>();
+  const browsing = useRef(false);
+  const [timelineNotice, setTimelineNotice] = useState<string>();
+  const updateTimeline = useCallback((next: WorldTimeline) => {
+    history.current = next;
+    setTimeline(next);
   }, []);
+  const updateWorld = useCallback((change: (current: WorldState) => WorldState, record = true) => {
+    const current = authority.current;
+    const next = change(current);
+    if (next !== current) {
+      authority.current = next;
+      if (record) updateTimeline(recordTimelineWorld(history.current, next));
+      setWorld(next);
+    }
+    return next;
+  }, [updateTimeline]);
   const [selectedCultivatorId, setSelectedCultivatorId] = useState<
     string | null
   >('npc-1');
@@ -60,7 +76,7 @@ export const App: React.FC = () => {
   });
 
   const handleStepTick = useCallback(async () => {
-    if (stepInFlight.current) return;
+    if (stepInFlight.current || browsing.current) return;
     stepInFlight.current = true;
     setIsStepping(true);
     try {
@@ -128,7 +144,7 @@ export const App: React.FC = () => {
 
   const handleConveneCouncil = useCallback(async (plan: CouncilPlan) => {
     const starting = authority.current;
-    if (stepInFlight.current || !availableCouncilPlans(starting, plan.sectId).some((item) => item.id === plan.id)) return;
+    if (stepInFlight.current || browsing.current || !availableCouncilPlans(starting, plan.sectId).some((item) => item.id === plan.id)) return;
     stepInFlight.current = true;
     setIsStepping(true);
     setLastManualCouncilId(plan.id);
@@ -143,7 +159,7 @@ export const App: React.FC = () => {
   }, [llmConfig, updateWorld]);
 
   const handlePossess = (actorId: string | null) => {
-    if (stepInFlight.current) return;
+    if (stepInFlight.current || browsing.current) return;
     setAvatarNotice(undefined);
     updateWorld((current) => {
       const next = structuredClone(current);
@@ -152,7 +168,7 @@ export const App: React.FC = () => {
   };
 
   const handleAvatarOrder = (action: 'REST' | 'CULTIVATE') => {
-    if (stepInFlight.current) return;
+    if (stepInFlight.current || browsing.current) return;
     setAvatarNotice(undefined);
     updateWorld((current) => {
       const next = structuredClone(current);
@@ -161,7 +177,7 @@ export const App: React.FC = () => {
   };
 
   const handleAvatarSpeak = async (request: AvatarInteractionRequest) => {
-    if (stepInFlight.current) return;
+    if (stepInFlight.current || browsing.current) return;
     const current = authority.current;
     stepInFlight.current = true;
     setIsStepping(true);
@@ -182,21 +198,35 @@ export const App: React.FC = () => {
   };
 
   const handleGodIntervene = (cmd: GodInterventionCommand) => {
+    if (browsing.current) return;
     updateWorld((prev) => executeGodIntervention(prev, cmd));
   };
 
   const handleBrushStroke = (kind: GodBrushKind, points: MapPoint[]) => {
+    if (browsing.current) return;
     updateWorld((previous) => applyMapBrush(previous, kind, points));
   };
 
-  const replaceWorld = (next: WorldState, expected: WorldState): boolean => {
-    if (stepInFlight.current || authority.current !== expected) return false;
+  const clearPreview = () => {
+    browsing.current = false;
+    setPreview(undefined);
+  };
+
+  const activateTimeline = (next: WorldTimeline, incoming: WorldState) => {
     setIsRunning(false);
-    updateWorld(() => next);
+    clearPreview();
+    updateTimeline(next);
+    updateWorld(() => incoming, false);
     llmScheduler.resetTickBudget();
-    setSelectedCultivatorId(next.cultivators.find(({ alive }) => alive)?.id ?? next.cultivators[0]?.id ?? null);
+    setSelectedCultivatorId(incoming.cultivators.find(({ alive }) => alive)?.id ?? incoming.cultivators[0]?.id ?? null);
     setLastManualCouncilId(undefined);
+    setCouncilOpen(false);
     setAvatarNotice(undefined);
+  };
+
+  const replaceWorld = (next: WorldState, expected: WorldState): boolean => {
+    if (stepInFlight.current || browsing.current || authority.current !== expected) return false;
+    activateTimeline(createTimeline(next), next);
     return true;
   };
 
@@ -204,24 +234,55 @@ export const App: React.FC = () => {
     isWorldSeed(seed) && replaceWorld(createInitialWorld(seed), expected);
 
   const handleReset = () => {
-    const previous = authority.current;
-    if (!replaceWorld(createInitialWorld(previous.random.seed), previous)) {
-      // Emergency reset can still invalidate an in-flight model tick, which cannot commit afterward.
-      setIsRunning(false);
-      const reset = createInitialWorld(previous.random.seed);
-      updateWorld(() => reset);
-      llmScheduler.resetTickBudget();
-      setSelectedCultivatorId(reset.cultivators[0]?.id ?? null);
-      setLastManualCouncilId(undefined);
-      setAvatarNotice(undefined);
+    if (browsing.current) return;
+    const next = createInitialWorld(authority.current.random.seed);
+    // Emergency reset invalidates an in-flight model tick, which cannot commit afterward.
+    activateTimeline(createTimeline(next), next);
+  };
+
+  const handleTimelinePreview = (tick: number | null) => {
+    if (stepInFlight.current) return;
+    setTimelineNotice(undefined);
+    if (tick === null) { clearPreview(); return; }
+    const snapshot = readTimelineSnapshot(history.current, tick);
+    if (!snapshot) { setTimelineNotice('此快照不在当前分支保留的范围内。'); return; }
+    setIsRunning(false);
+    setCouncilOpen(false);
+    browsing.current = true;
+    setPreview({ tick, world: snapshot });
+  };
+
+  const handleTimelineSelectBranch = (branchId: string) => {
+    if (stepInFlight.current) return;
+    setTimelineNotice(undefined);
+    try {
+      const next = selectTimelineBranch(history.current, branchId);
+      const incoming = next.activeBranchId === branchId ? readTimelineHead(next) : undefined;
+      if (incoming) activateTimeline(next, incoming);
+      else setTimelineNotice('未找到这个分支，当前世界不变。');
+    } catch {
+      setTimelineNotice('未找到这个分支，当前世界不变。');
     }
   };
 
-  const selectedCultivator =
-    world.cultivators.find((c) => c.id === selectedCultivatorId) ??
-    world.cultivators[0];
+  const handleTimelineFork = (sourceBranchId: string, tick: number, command: GodInterventionCommand) => {
+    if (stepInFlight.current || !browsing.current || preview?.tick !== tick || sourceBranchId !== history.current.activeBranchId) return;
+    try {
+      const next = forkTimeline(history.current, tick, command);
+      const incoming = readTimelineSnapshot(next, tick);
+      if (!incoming) throw new Error('无法读取分支首个快照。');
+      activateTimeline(next, incoming);
+      setTimelineNotice('已开启新分支并施加所选干预，原时间线完整保留。');
+    } catch (error) {
+      setTimelineNotice(error instanceof Error ? error.message : '分支未建立，当前世界不变。');
+    }
+  };
 
-  const aliveCount = world.cultivators.filter((c) => c.alive).length;
+  const visibleWorld = preview?.world ?? world;
+  const selectedCultivator =
+    visibleWorld.cultivators.find((c) => c.id === selectedCultivatorId) ??
+    visibleWorld.cultivators[0];
+  const aliveCount = visibleWorld.cultivators.filter((c) => c.alive).length;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
@@ -236,8 +297,8 @@ export const App: React.FC = () => {
               天道沙盒：AI修仙宗门与群像模拟器
             </h1>
             <p className="text-xs text-slate-400">
-              仙历 {world.year}年{world.month}月 (Tick #{world.tick}) · 存活修士{' '}
-              {aliveCount}/{world.cultivators.length}
+              仙历 {visibleWorld.year}年{visibleWorld.month}月 (Tick #{visibleWorld.tick}) · 存活修士{' '}
+              {aliveCount}/{visibleWorld.cultivators.length}{preview && ' · 历史只读'}
             </p>
           </div>
         </div>
@@ -248,6 +309,7 @@ export const App: React.FC = () => {
             hasCredential={Boolean(llmConfig.apiKey.trim())} model={llmConfig.model || 'gpt-4o-mini'} />
           <button
             type="button"
+            disabled={!!preview}
             onClick={() => setCouncilOpen(true)}
             className="px-3 py-1.5 rounded-lg bg-violet-900/60 hover:bg-violet-800 text-violet-100 text-xs font-medium"
           >
@@ -255,6 +317,7 @@ export const App: React.FC = () => {
           </button>
           <button
             type="button"
+            disabled={!!preview}
             onClick={() => setIsRunning(!isRunning)}
             className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition ${
               isRunning
@@ -275,7 +338,7 @@ export const App: React.FC = () => {
 
           <button
             type="button"
-            disabled={isStepping}
+            disabled={isStepping || !!preview}
             onClick={() => void handleStepTick()}
             className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium flex items-center gap-1.5 disabled:opacity-50"
           >
@@ -295,6 +358,7 @@ export const App: React.FC = () => {
 
           <button
             type="button"
+            disabled={!!preview}
             onClick={handleReset}
             className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200"
             title="重置修仙纪元"
@@ -309,36 +373,38 @@ export const App: React.FC = () => {
         {/* Left 7 Cols: 2D Map + God Console + Chronicle */}
         <div className="lg:col-span-7 space-y-4">
           <WorldMapCanvas
-            world={world}
+            world={visibleWorld}
             selectedCultivatorId={selectedCultivatorId}
             onSelectCultivator={setSelectedCultivatorId}
-            onBrushStroke={handleBrushStroke}
+            onBrushStroke={preview ? undefined : handleBrushStroke}
           />
-          <BountyBoard world={world} />
-          <GodConsole
+          <BountyBoard world={visibleWorld} />
+          {!preview && <GodConsole
             world={world}
             selectedCultivatorId={selectedCultivatorId}
             llmConfig={llmConfig}
             onUpdateLLMConfig={setLlmConfig}
             onIntervene={handleGodIntervene}
-          />
-          <ChronicleFeed events={world.events} />
-          <ChronicleLibraryPanel world={world} />
-          <PossessionPanel world={world} selectedCultivatorId={selectedCultivatorId} busy={isStepping}
+          />}
+          <ChronicleFeed events={visibleWorld.events} />
+          <ChronicleLibraryPanel world={visibleWorld} />
+          {!preview && <PossessionPanel world={world} selectedCultivatorId={selectedCultivatorId} busy={isStepping}
             modelReady={llmConfig.enabled && Boolean(llmConfig.apiKey.trim())} notice={avatarNotice}
-            onPossess={handlePossess} onOrder={handleAvatarOrder} onSpeak={(request) => void handleAvatarSpeak(request)} />
+            onPossess={handlePossess} onOrder={handleAvatarOrder} onSpeak={(request) => void handleAvatarSpeak(request)} />}
         </div>
 
         {/* Right 5 Cols: Agent Inspector + Relationship Graph */}
         <div className="lg:col-span-5 space-y-4">
+          <TimelinePanel timeline={timeline} previewTick={preview?.tick ?? null} busy={isStepping}
+            onPreview={handleTimelinePreview} onSelectBranch={handleTimelineSelectBranch} onFork={handleTimelineFork} notice={timelineNotice} />
           <AgentInspector
-            world={world}
+            world={visibleWorld}
             cultivator={selectedCultivator}
             onSelectCultivator={setSelectedCultivatorId}
           />
-          <WorldStoragePanel world={world} busy={isStepping} onRestore={replaceWorld} onNewWorld={newWorldFromSeed} />
+          {!preview && <WorldStoragePanel world={world} busy={isStepping} onRestore={replaceWorld} onNewWorld={newWorldFromSeed} />}
           <RelationshipGraph
-            world={world}
+            world={visibleWorld}
             selectedCultivatorId={selectedCultivatorId}
             onSelectCultivator={setSelectedCultivatorId}
           />
@@ -346,7 +412,7 @@ export const App: React.FC = () => {
       </main>
       <SectCouncilModal
         world={world}
-        open={councilOpen}
+        open={councilOpen && !preview}
         busy={isStepping}
         onClose={() => setCouncilOpen(false)}
         onConvene={(plan) => void handleConveneCouncil(plan)}
