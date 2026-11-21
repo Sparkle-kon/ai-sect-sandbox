@@ -1,6 +1,8 @@
 import { useId, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { publicChronicleChapters } from '../engine/coldHistoryEngine';
+import { projectChapterTurningPoints, type ChapterTurningPoint } from '../engine/chronicleTurningPoints';
+import { ChapterTurningPoints } from './ChapterTurningPoints';
 import { projectChronicleReading, stampedChronicleLead } from '../engine/novelGenerator';
 import { isChronicleStoryFact, projectChronicleLead, publicChronicleSceneEvents, type ChronicleLead } from '../engine/chronicleLead';
 import type { ChronicleChapter, Cultivator, WorldEvent, WorldState } from '../types/world';
@@ -35,8 +37,9 @@ function chapterForReading(chapter: ChronicleChapter, liveIds: ReadonlySet<strin
   return anchors.length === chapter.anchors.length ? chapter : { ...chapter, anchors, body: '' };
 }
 
-function ChapterArchive({ chapter, reading, lead }: {
+function ChapterArchive({ chapter, reading, lead, turningPoints }: {
   chapter: ChronicleChapter; reading: ReturnType<typeof projectChronicleReading>; lead?: ChronicleLead;
+  turningPoints: readonly ChapterTurningPoint[];
 }) {
   const [readOriginal, setReadOriginal] = useState(false);
   const scenes = new Map(reading.sections.map((entry) => [entry.eventId, entry]));
@@ -52,6 +55,7 @@ function ChapterArchive({ chapter, reading, lead }: {
             <p className="whitespace-pre-wrap break-words font-serif text-sm leading-7 text-slate-100">{section.paragraph}</p>}
         </section>
       )) : <p className="text-sm text-slate-400">本章没有可写成场景的公开史料。</p>}
+      <ChapterTurningPoints arcs={turningPoints} />
       <details className="rounded border border-slate-800 bg-slate-950/70 p-2">
         <summary className="min-h-11 cursor-pointer py-2 text-xs font-medium text-amber-200">本章公开史料 · {anchors.length} 条</summary>
         <p className="text-xs text-slate-400">记载时段：Tick #{chapter.startTick} 至 #{chapter.endTick}</p>
@@ -185,7 +189,8 @@ export function ChronicleLibraryPanel({ world, cultivator, scopeKey }: { world: 
         >
           {page === kind && (!chapter || !reading
             ? <p className="text-sm text-slate-400">尚无已编成的章节。公开史料累积到结集时会出现新篇。</p>
-            : kind === 'chapter' ? <ChapterArchive key={chapter.id} chapter={chapter} reading={reading} lead={lead} /> : <ChapterBiographies chapter={chapter} />)}
+            : kind === 'chapter' ? <ChapterArchive key={chapter.id} chapter={chapter} reading={reading} lead={lead}
+              turningPoints={projectChapterTurningPoints(world,chapter.id,cultivator?.id).arcs} /> : <ChapterBiographies chapter={chapter} />)}
         </div>
       ))}
       <ChronicleTopicDigest world={world} viewerId={cultivator?.id} scopeKey={scopeKey} />
@@ -197,7 +202,8 @@ export function ChronicleLibraryPanel({ world, cultivator, scopeKey }: { world: 
         readChapter={(older) => {
           const safe = readable(older);
           const olderLead = safe.storyFocal ? stampedChronicleLead(safe) : projectChronicleLead(world, safe.anchors, safe.endTick);
-          return <ChapterArchive key={safe.id} chapter={safe} reading={projectChronicleReading(safe, olderLead)} lead={olderLead} />;
+          return <ChapterArchive key={safe.id} chapter={safe} reading={projectChronicleReading(safe, olderLead)} lead={olderLead}
+            turningPoints={projectChapterTurningPoints(world,safe.id,cultivator?.id).arcs} />;
         }} />
     </section>
   );
