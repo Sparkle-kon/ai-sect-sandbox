@@ -1,3 +1,5 @@
+import { applyWatchMutation, captureWatchDigests } from './engine/watchlistEngine';
+import type { WatchlistCommand, WatchlistMutationResult } from './engine/watchlistEngine';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Play, Pause, FastForward, RotateCcw, Sparkles, BarChart3 } from 'lucide-react';
 import { createInitialWorld } from './data/initialWorld';
@@ -13,7 +15,7 @@ import { activeSiegeForActor } from './engine/diplomacyEngine';
 import { activeOccasionForActor } from './engine/occasionEngine';
 import { visiblePilgrimages } from './engine/pilgrimageEngine';
 import { applyMapBrush } from './engine/mapBrushEngine';
-import { GodBrushKind, LLMConfig, LLMDecisionPayload, MapPoint, WorldState } from './types/world';
+import { GodBrushKind, LLMConfig, LLMDecisionPayload, MapPoint, WorldEvent, WorldState } from './types/world';
 import { SandboxWorkspace, WorkspaceSections } from './components/SandboxWorkspace';
 import type { WorkspaceId } from './components/SandboxWorkspace';
 import { annotationWriteIsCurrent } from './components/annotationUi';
@@ -37,6 +39,7 @@ const AgentInspector = React.lazy(async () => ({ default: (await import('./compo
 const AttestationPanel = React.lazy(async () => ({ default: (await import('./components/AttestationPanel')).AttestationPanel }));
 const OathContractsPanel = React.lazy(async () => ({ default: (await import('./components/OathContractsPanel')).OathContractsPanel }));
 const MentorshipPanel = React.lazy(async () => ({ default: (await import('./components/MentorshipPanel')).MentorshipPanel }));
+const WatchlistsPanel = React.lazy(async () => ({ default: (await import('./components/WatchlistsPanel')).WatchlistsPanel }));
 const TimelinePanel = React.lazy(async () => ({ default: (await import('./components/TimelinePanel')).TimelinePanel }));
 const ActorRoster = React.lazy(async () => ({ default: (await import('./components/ActorRoster')).ActorRoster }));
 const RelationshipGraph = React.lazy(async () => ({ default: (await import('./components/RelationshipGraph')).RelationshipGraph }));
@@ -154,9 +157,10 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
         const decisions: Record<string, LLMDecisionPayload> = Object.fromEntries(results);
         const applied = new Set<string>();
         const tape = createDecisionReplayTape(starting, 'deferred');
+        let canonicalWatchBatch: readonly WorldEvent[] = [];
         const tick = advanceWorldTick(starting, decisions, undefined, 'deferred', (id, effective) => {
           if (effective && modelActors.has(id)) applied.add(id);
-        }, { tape, modelActors });
+        }, { tape, modelActors, onWatchBatch: (events) => { canonicalWatchBatch = events; } });
         const [reflected, dramatized] = await Promise.all([
           enrichAnnualReflections(tick, llmConfig), enrichTickDialogues(tick, llmConfig),
         ]);
@@ -170,6 +174,11 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
           return;
         }
         const next = await settleChronicleOnline(withCouncil, llmConfig);
+        if (next.watchlists.watches.length && authority.current === starting) {
+          const beforeCouncil = new Set(dramatized.events.map(({ id }) => id));
+          const endingCouncil = withCouncil.events.filter(({ id, tick: at }) => at === next.tick && !beforeCouncil.has(id));
+          captureWatchDigests(next, [...canonicalWatchBatch, ...endingCouncil]);
+        }
         if (updateWorld((current) => commitCouncilSnapshot(current, starting, next)) === next) {
           retainReplay(branchId, tape, next);
           llmScheduler.markDecision('applied', applied.size);
@@ -289,6 +298,19 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
     const proposed = applyAnnotation(stamp.world, stamp.actorId, command);
     if (!proposed.ok) return proposed.code;
     return updateWorld((current) => current === stamp.world && !review() ? proposed.world : current) === proposed.world ? 'saved' : 'stale';
+  };
+
+  const writeWatchlist = async (command: WatchlistCommand, stamp: NotebookStamp, signal: AbortSignal): Promise<
+    'saved' | 'stale' | 'readonly' | 'interrupted' | Extract<WatchlistMutationResult, { ok: false }>['code']> => {
+    const review = () => signal.aborted ? 'interrupted' : browsing.current || stepInFlight.current ? 'readonly' :
+      annotationWriteIsCurrent(stamp, authority.current, history.current.activeBranchId, false) ? undefined : 'stale';
+    const first = review();
+    if (first) return first;
+    if (!stamp.actorId) return 'unknown_target';
+    const proposed = applyWatchMutation(stamp.world, stamp.actorId, command);
+    if (!proposed.ok) return proposed.code;
+    const applied = updateWorld((current) => current === stamp.world && !review() ? proposed.world : current);
+    return applied === proposed.world ? 'saved' : 'stale';
   };
 
   const replaceWorld = (next: WorldState, expected: WorldState): boolean => {
@@ -456,6 +478,8 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
           { id: 'notebook', label: '书签与地图批注', content: <React.Suspense fallback={<p role="status">载入分支记录…</p>}>
             <ChronicleNotebookPanel key={`${timeline.activeBranchId}:${preview?.tick ?? 'live'}:${activeActorId ?? ''}`}
               world={visibleWorld} actorId={activeActorId} branchId={timeline.activeBranchId} readOnly={!!preview} busy={isStepping} onWrite={writeAnnotation} />
+            <WatchlistsPanel key={`${viewScopeKey}:${activeActorId ?? ''}`}
+              world={visibleWorld} actorId={activeActorId} branchId={timeline.activeBranchId} readOnly={!!preview} busy={isStepping} onWrite={writeWatchlist} />
           </React.Suspense> },
           { id: 'rank-season', label: '赛季榜与荣誉', content: <React.Suspense fallback={<p role="status">载入赛季榜…</p>}>
             <RankSeasonPanel world={visibleWorld} cultivator={selectedCultivator} />

@@ -1698,7 +1698,29 @@ export interface VillageWorkProject {
 }
 export interface VillageWorksState { projects: VillageWorkProject[]; nextId: number }
 
+export type WatchTarget = { kind: 'actor' | 'site' | 'sect'; id: string };
+export interface PlayerWatch {
+  id: string;
+  observerId: string;
+  target: WatchTarget;
+  label: string;
+  createdTick: number;
+  readThroughTick: number;
+}
+export interface WatchDigest {
+  watchId: string;
+  tick: number;
+  buckets: Array<{ category: WorldEvent['category']; count: number }>;
+}
+export interface WatchlistState {
+  watches: PlayerWatch[];
+  digests: WatchDigest[];
+  nextId: number;
+  lastCapturedTick?: number;
+}
+
 export interface WorldState {
+  watchlists: WatchlistState;
   villageWorks: VillageWorksState;
   households: HouseholdState;
   territorialLeases: TerritorialLeaseState;

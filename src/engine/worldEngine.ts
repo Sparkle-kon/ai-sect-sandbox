@@ -1,3 +1,4 @@
+import { captureWatchDigests } from './watchlistEngine';
 import { advanceVillageWorks, resolveVillageWorksAction } from './villageWorksEngine';
 import { advanceHouseholds, resolveGuardianAction } from './householdEngine';
 import { advanceTerritorialLeases, resolveTerritorialLeaseAction } from './territorialLeaseEngine';
@@ -655,6 +656,7 @@ export function advanceWorldTick(
     modelActors?: ReadonlySet<string>;
     captureTrace?: boolean;
     capturePresentation?: boolean;
+    onWatchBatch?: (events: readonly WorldEvent[]) => void;
     replayDraws?: Readonly<Record<string, number>>;
     onActor?: (actorId: string, candidates: DecisionTraceCandidate[], applied: boolean) => void;
   }
@@ -808,6 +810,15 @@ export function advanceWorldTick(
   if (councilMode === 'utility') {
     settleAnnualCouncilOffline(nextState);
     settleChronicleOffline(nextState);
+  }
+  if (nextState.watchlists.watches.length) {
+    if (traceOptions?.onWatchBatch) traceOptions.onWatchBatch(newEvents);
+    else {
+      const ids = new Set(newEvents.map(({ id }) => id));
+      const endingCouncil = councilMode === 'utility'
+        ? nextState.events.filter(({ id, tick }) => tick === nextState.tick && !ids.has(id)) : [];
+      captureWatchDigests(nextState, [...newEvents, ...endingCouncil]);
+    }
   }
   nextState.mapPresentation = traceOptions?.capturePresentation === false
     ? { tick: nextState.tick, trails: [], effects: [] }

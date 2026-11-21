@@ -1,3 +1,5 @@
+import { createWatchlistState, WATCHLIST_BUCKET_MAX_COUNT, WATCHLIST_MAX_DIGESTS,
+  WATCHLIST_MAX_LABEL_CHARS, WATCHLIST_MAX_WATCHES } from './watchlistEngine';
 import { createVillageWorksState, VILLAGE_WORK_ADULTS_PER_LABOR, VILLAGE_WORK_MAX_LABOR_PER_TICK, VILLAGE_WORK_RULES } from './villageWorksEngine';
 import { createHouseholdState, HOUSEHOLD_GUARDIAN_OFFER_TICKS, initializeHouseholds } from './householdEngine';
 import { normalizeScenarioObjectives, SCENARIO_AUDIT_VERSION, SCENARIO_MAX_OBJECTIVES, SCENARIO_MAX_POPULATION_TARGET,
@@ -225,6 +227,10 @@ const shape = structure({
       attestations:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,tick,verdict:one('supports','contradicts')})),
       appeal:optional(structure({tick,actorId:id,verdict:one('upheld','rejected'),reason:text})),settledTick:otick,
       reputationSectId:oid,reputationPenalty:percentage,reputationRestored:percentage,reason:otext}))}),
+  watchlists:structure({nextId:num(1,100_000_000,true),lastCapturedTick:otick,
+    watches:arr(WATCHLIST_MAX_WATCHES,structure({id,observerId:id,target:structure({kind:one('actor','site','sect'),id}),label:strings(WATCHLIST_MAX_LABEL_CHARS,1),
+      createdTick:tick,readThroughTick:tick})),
+    digests:arr(WATCHLIST_MAX_DIGESTS,structure({watchId:id,tick,buckets:arr(6,structure({category:eventCategory,count:num(1,WATCHLIST_BUCKET_MAX_COUNT,true)}))}))}),
   villageWorks:structure({nextId:num(1,100_000_000,true),projects:arr(SAVE_COLLECTION_LIMIT,structure({
     id,settlementId:id,sponsorSectId:id,sponsorId:id,kind:one('well','field','shelter'),startedTick:tick,deadlineTick:tick,
     status:one('building','completed','abandoned'),laborTotal:count,stonesSpent:count,rootsSpent:count,
@@ -418,6 +424,7 @@ function verifyWorld(value: unknown): WorldState {
     ? { ...value,
       ...(!Object.hasOwn(value, 'mentorship') ? { mentorship: { offers: [], lineage: [], budgets: [] } } : {}),
       ...(!Object.hasOwn(value, 'decisionTrace') ? { decisionTrace: { records: [] } } : {}),
+      ...(!Object.hasOwn(value, 'watchlists') ? { watchlists: createWatchlistState() } : {}),
       ...(!Object.hasOwn(value, 'villageWorks') ? { villageWorks: createVillageWorksState() } : {}),
       ...(!Object.hasOwn(value, 'households') ? { households: createHouseholdState() } : {}),
       ...(!Object.hasOwn(value, 'territorialLeases') ? { territorialLeases: createTerritorialLeaseState() } : {}),
@@ -460,6 +467,22 @@ function verifyWorld(value: unknown): WorldState {
   const sector = unique(w.sects, (item) => item.id, 'sects.id');
   const locations = unique(w.locations, (item) => item.id, 'locations.id');
   const map = unique(w.terrain.tiles, (item) => item.id, 'terrain.tiles.id');
+  unique(w.watchlists.watches, ({ id }) => id, 'watchlists.watches.id');
+  unique(w.watchlists.watches, ({ observerId, target }) => JSON.stringify([observerId, target.kind, target.id]), 'watchlists.watches.target');
+  const watchById = new Map(w.watchlists.watches.map((row) => [row.id, row]));
+  if (w.watchlists.lastCapturedTick !== undefined && w.watchlists.lastCapturedTick > w.tick) fail('watchlists.lastCapturedTick');
+  for (const watch of w.watchlists.watches) {
+    const serial = Number(watch.id.match(/^watch-([1-9][0-9]*)$/)?.[1]);
+    if (!Number.isSafeInteger(serial) || serial >= w.watchlists.nextId || !actor.has(watch.observerId) ||
+        watch.createdTick > w.tick || watch.readThroughTick < watch.createdTick || watch.readThroughTick > w.tick ||
+        !watch.label.trim() || /[\u0000-\u001f\u007f]/.test(watch.label)) fail('watchlists.watches.references');
+  }
+  unique(w.watchlists.digests, ({ watchId, tick }) => JSON.stringify([watchId, tick]), 'watchlists.digests.tick');
+  for (const row of w.watchlists.digests) {
+    const watch = watchById.get(row.watchId);
+    if (!watch || row.tick <= watch.createdTick || row.tick > (w.watchlists.lastCapturedTick ?? -1) || !row.buckets.length) fail('watchlists.digests.references');
+    unique(row.buckets, ({ category }) => category, 'watchlists.digests.category');
+  }
   unique(w.territorialLeases.leases, ({ id }) => id, 'territorialLeases.leases.id');
   unique(w.territorialLeases.leases.filter(({ status }) => status === 'active'), ({ siteId }) => siteId,
     'territorialLeases.leases.active_site');
