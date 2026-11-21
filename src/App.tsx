@@ -19,6 +19,10 @@ import { GodConsole } from './components/GodConsole';
 import { AgentInspector } from './components/AgentInspector';
 import { ChronicleFeed } from './components/ChronicleFeed';
 import { BountyBoard } from './components/BountyBoard';
+import { SectCouncilModal } from './components/SectCouncilModal';
+import { availableCouncilPlans } from './engine/councilEngine';
+import { commitCouncilSnapshot, settleAnnualCouncilOnline, settleCouncilSnapshot } from './engine/councilRuntime';
+import type { CouncilPlan } from './types/world';
 
 export const App: React.FC = () => {
   const [world, setWorld] = useState<WorldState>(() => createInitialWorld());
@@ -28,6 +32,8 @@ export const App: React.FC = () => {
   const [isRunning, setIsRunning] = useState(false);
   const [isStepping, setIsStepping] = useState(false);
   const stepInFlight = useRef(false);
+  const [councilOpen, setCouncilOpen] = useState(false);
+  const [lastManualCouncilId, setLastManualCouncilId] = useState<string>();
   const [tickIntervalMs, setTickIntervalMs] = useState(1800);
   const [llmConfig, setLlmConfig] = useState<LLMConfig>({
     enabled: false,
@@ -50,13 +56,13 @@ export const App: React.FC = () => {
           })
         );
         const decisions: Record<string, LLMDecisionPayload> = Object.fromEntries(results);
-        const tick = advanceWorldTick(world, decisions);
+        const tick = advanceWorldTick(world, decisions, undefined, 'deferred');
         const [reflected, dramatized] = await Promise.all([
           enrichAnnualReflections(tick, llmConfig), enrichTickDialogues(tick, llmConfig),
         ]);
-        const next = { ...reflected, events: dramatized.events };
+        const next = await settleAnnualCouncilOnline({ ...reflected, events: dramatized.events }, llmConfig);
         // A reset or divine intervention during the request invalidates its snapshot.
-        setWorld((prev) => prev === world ? next : prev);
+        setWorld((prev) => commitCouncilSnapshot(prev, world, next));
       } else {
         setWorld((prev) => advanceWorldTick(prev));
       }
@@ -74,6 +80,20 @@ export const App: React.FC = () => {
     return () => clearInterval(timer);
   }, [isRunning, tickIntervalMs, handleStepTick]);
 
+  const handleConveneCouncil = useCallback(async (plan: CouncilPlan) => {
+    if (stepInFlight.current || !availableCouncilPlans(world, plan.sectId).some((item) => item.id === plan.id)) return;
+    stepInFlight.current = true;
+    setIsStepping(true);
+    setLastManualCouncilId(plan.id);
+    try {
+      const next = await settleCouncilSnapshot(world, plan, llmConfig);
+      setWorld((previous) => commitCouncilSnapshot(previous, world, next));
+    } finally {
+      stepInFlight.current = false;
+      setIsStepping(false);
+    }
+  }, [world, llmConfig]);
+
   const handleGodIntervene = (cmd: GodInterventionCommand) => {
     setWorld((prev) => executeGodIntervention(prev, cmd));
   };
@@ -86,6 +106,7 @@ export const App: React.FC = () => {
     setIsRunning(false);
     setWorld(createInitialWorld());
     setSelectedCultivatorId('npc-1');
+    setLastManualCouncilId(undefined);
   };
 
   const selectedCultivator =
@@ -115,7 +136,14 @@ export const App: React.FC = () => {
         </div>
 
         {/* Simulation Controls */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setCouncilOpen(true)}
+            className="px-3 py-1.5 rounded-lg bg-violet-900/60 hover:bg-violet-800 text-violet-100 text-xs font-medium"
+          >
+            长老议事厅
+          </button>
           <button
             type="button"
             onClick={() => setIsRunning(!isRunning)}
@@ -202,6 +230,15 @@ export const App: React.FC = () => {
           />
         </div>
       </main>
+      <SectCouncilModal
+        world={world}
+        open={councilOpen}
+        busy={isStepping}
+        onClose={() => setCouncilOpen(false)}
+        onConvene={(plan) => void handleConveneCouncil(plan)}
+        notice={!isStepping && lastManualCouncilId && !world.councils.some((record) => record.id === lastManualCouncilId)
+          ? '世界已发生变化，本次议事未结算。' : undefined}
+      />
     </div>
   );
 };

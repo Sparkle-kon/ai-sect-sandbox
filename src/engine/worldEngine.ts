@@ -1,3 +1,4 @@
+import { settleAnnualCouncilOffline } from './councilRuntime';
 import {
   REALM_BASE_POWER,
   REALM_LIFESPAN,
@@ -517,7 +518,8 @@ function creditSectService(world: WorldState, actor: Cultivator, event: WorldEve
 export function advanceWorldTick(
   prevState: WorldState,
   precomputedDecisions?: Record<string, LLMDecisionPayload>,
-  rng: () => number = Math.random
+  rng: () => number = Math.random,
+  councilMode: 'utility' | 'deferred' = 'utility'
 ): WorldState {
   const nextState: WorldState = structuredClone(prevState);
   nextState.tick += 1;
@@ -603,6 +605,7 @@ export function advanceWorldTick(
   for (const actor of nextState.cultivators) if (actor.alive) noteTerrainVisit(nextState, actor);
   spreadRumors(nextState);
   nextState.events = [...newEvents, ...nextState.events].slice(0, 120);
+  if (councilMode === 'utility') settleAnnualCouncilOffline(nextState);
   nextState.mapPresentation = deriveMapPresentation(prevState, nextState, newEvents);
   return nextState;
 }

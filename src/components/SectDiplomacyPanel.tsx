@@ -1,4 +1,5 @@
 import type { Sect, WorldState } from '../types/world';
+import { COUNCIL_STATUS_LABELS } from './councilLabels';
 
 type Relation = WorldState['diplomacy'][number];
 type Siege = WorldState['sieges'][number];
@@ -17,6 +18,10 @@ export function isActiveCampaign(siege: Siege): boolean {
 export function SectDiplomacyPanel({ sect, world }: { sect: Sect | undefined; world: WorldState }) {
   const sectName = (id: string) => world.sects.find((entry) => entry.id === id)?.name ?? '宗门未详';
   const locationName = (id: string) => world.locations.find((entry) => entry.id === id)?.name ?? '地点未详';
+  const latestCouncil = sect ? (world.councils ?? []).reduce<WorldState['councils'][number] | undefined>(
+    (last, council) => council.sectId === sect.id && (!last || council.tick >= last.tick) ? council : last,
+    undefined
+  ) : undefined;
   const rivals = sect ? world.sects.filter(({ id }) => id !== sect.id) : [];
   const sieges = sect ? world.sieges.filter(({ attackerSectId, defenderSectId }) => attackerSectId === sect.id || defenderSectId === sect.id)
     .sort((a, b) => Number(isActiveCampaign(b)) - Number(isActiveCampaign(a)) || b.startedTick - a.startedTick) : [];
@@ -26,6 +31,11 @@ export function SectDiplomacyPanel({ sect, world }: { sect: Sect | undefined; wo
   return (
     <section className="space-y-2 pt-2 border-t border-slate-800" aria-label="宗门外交与战事">
       <h4 className="text-xs font-semibold text-slate-200">宗门外交与战事</h4>
+      {latestCouncil && (
+        <p className="text-[11px] text-violet-200">
+          最近议事：{latestCouncil.title} · {COUNCIL_STATUS_LABELS[latestCouncil.status]}
+        </p>
+      )}
       {!sect ? <p className="text-[11px] text-slate-400">散修，无本宗外交记录。</p> : (
         <details className="rounded border border-slate-800/80 bg-slate-950/50 px-2 py-1.5">
           <summary className="cursor-pointer text-xs text-slate-200">

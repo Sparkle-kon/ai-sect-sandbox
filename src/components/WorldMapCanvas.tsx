@@ -77,6 +77,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const trialsByLocation = new Map<string, number>();
   const guardsByLocation = new Map<string, number>();
   const headquarters = new Map(world.sects.map((sect) => [sect.headquartersId, sect]));
+  const currentCouncils = new Map(world.councils.filter((record) => record.tick === world.tick).map((record) => [record.sectId, record]));
   for (const actor of liveActors) {
     if (isGuardOnDuty(actor, world)) {
       guardsByLocation.set(actor.locationId, (guardsByLocation.get(actor.locationId) ?? 0) + 1);
@@ -251,6 +252,13 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           ctx.textAlign = 'center';
           ctx.fillStyle = '#67e8f9';
           ctx.fillText('会', loc.x + 28, loc.y - 4);
+        }
+        const localCouncil = currentCouncils.get(headquarters.get(loc.id)?.id ?? '');
+        if (localCouncil && isCurrentLocation(loc.id)) {
+          ctx.font = 'bold 11px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillStyle = '#c4b5fd';
+          ctx.fillText('议', loc.x + 28, loc.y + 11);
         }
         const localBeasts = beastsByLocation.get(loc.id);
         if (localBeasts?.length) {
@@ -677,6 +685,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
             const guardCount = guardsByLocation.get(location.id) ?? 0;
             const homeSect = headquarters.get(location.id);
             const localOccasions = occasionsByLocation.get(location.id) ?? [];
+            const localCouncil = currentCouncils.get(homeSect?.id ?? '');
             const localBeasts = beastsByLocation.get(location.id) ?? [];
             return (
               <li key={location.id} className="inline-flex items-center gap-1.5">
@@ -694,6 +703,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                 {homeSect && homeSect.arrayMaxHp > 0 && (
                   <span className="text-indigo-300">· 护山阵 {homeSect.arrayHp}/{homeSect.arrayMaxHp}</span>
                 )}
+                {localCouncil && <span className="text-violet-300">· 本月议决：{localCouncil.title}</span>}
                 {besiegedLocationIds.has(location.id) && <span className="text-rose-300">· 围攻中</span>}
                 {localOccasions.map((occasion) => (
                   <span key={occasion.id} className="text-cyan-300">

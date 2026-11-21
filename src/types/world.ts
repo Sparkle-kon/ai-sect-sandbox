@@ -476,7 +476,44 @@ export interface SpiritBeast {
   nextActionTick: number;
 }
 
+export type CouncilProposal =
+  | { kind: 'war'; targetSectId: string }
+  | { kind: 'expel'; targetCultivatorId: string }
+  | { kind: 'allocate_pill'; donorId: string; targetCultivatorId: string };
+export type CouncilVote = 'support' | 'oppose' | 'abstain';
+export type CouncilSource = 'utility' | 'llm';
+export interface CouncilPlan {
+  id: string;
+  tick: number;
+  sectId: string;
+  proposal: CouncilProposal;
+  voterIds: string[];
+  title: string;
+  summary: string;
+}
+export interface CouncilBallotReplacement {
+  voterId: string;
+  vote: CouncilVote;
+  reason: string;
+  opening?: string;
+}
+export interface CouncilBallot extends Omit<CouncilBallotReplacement, 'opening'> {
+  source: CouncilSource;
+}
+export interface CouncilRound {
+  round: 1 | 2;
+  turns: Array<{ voterId: string; text: string; source: CouncilSource }>;
+}
+export interface CouncilRecord extends CouncilPlan {
+  rounds: CouncilRound[];
+  ballots: CouncilBallot[];
+  tally: { support: number; oppose: number; abstain: number; required: number };
+  status: 'passed' | 'rejected' | 'stale';
+  outcome: string;
+}
+
 export interface WorldState {
+  councils: CouncilRecord[];
   tick: number;
   interventionSequence: number;
   year: number;

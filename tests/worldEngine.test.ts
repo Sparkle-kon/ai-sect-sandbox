@@ -10,7 +10,7 @@ describe('WorldEngine core simulation loop', () => {
     const world = createInitialWorld();
     expect(world.sects).toHaveLength(4);
     expect(world.locations.length).toBeGreaterThanOrEqual(7);
-    expect(world.cultivators).toHaveLength(8);
+    expect(world.cultivators).toHaveLength(16);
     expect(world.cultivators.every((c) => c.alive)).toBe(true);
   });
 

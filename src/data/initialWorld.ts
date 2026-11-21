@@ -1,7 +1,7 @@
 import { memoryDecayRate } from '../engine/memoryEngine';
 import { generateTerrain, noteTerrainVisit } from '../engine/terrainEngine';
 import { spawnInitialBeasts } from '../engine/spiritBeastEngine';
-import { CultivationRealm, HerbId, LocationNode, PillId, WorldState } from '../types/world';
+import { CultivationRealm, Cultivator, HerbId, LocationNode, PillId, WorldState } from '../types/world';
 
 export const REALM_ORDER: CultivationRealm[] = [
   '练气',
@@ -42,6 +42,61 @@ export const REALM_LIFESPAN: Record<CultivationRealm, number> = {
 const herbs = (jade_leaf = 0, earth_root = 0, star_bloom = 0, shadow_moss = 0): Record<HerbId, number> =>
   ({ jade_leaf, earth_root, star_bloom, shadow_moss });
 const noPills = (): Record<PillId, number> => ({ foundation: 0, golden: 0, barrier: 0, heart_poison: 0 });
+
+const COUNCIL_ELDERS: ReadonlyArray<{
+  id: string; name: string; sectId: string; locationId: string;
+  root: Cultivator['spiritRoot']; personality: Cultivator['personality']; age: number;
+}> = [
+  { id: 'elder-taixu-1', name: '顾行舟', sectId: 'sect-qingyun', locationId: 'loc-taixu', root: '金', personality: '刚正', age: 168 },
+  { id: 'elder-taixu-2', name: '薛照雪', sectId: 'sect-qingyun', locationId: 'loc-taixu', root: '水', personality: '逍遥', age: 142 },
+  { id: 'elder-blood-1', name: '乌无寂', sectId: 'sect-bloodmoon', locationId: 'loc-blood', root: '暗', personality: '嗜血', age: 185 },
+  { id: 'elder-blood-2', name: '殷晚池', sectId: 'sect-bloodmoon', locationId: 'loc-blood', root: '火', personality: '阴险', age: 156 },
+  { id: 'elder-danxia-1', name: '闻春岚', sectId: 'sect-danxia', locationId: 'loc-danxia', root: '木', personality: '苟道', age: 165 },
+  { id: 'elder-danxia-2', name: '叶连翘', sectId: 'sect-danxia', locationId: 'loc-danxia', root: '火', personality: '刚正', age: 136 },
+  { id: 'elder-tianji-1', name: '蒋观星', sectId: 'sect-tianji', locationId: 'loc-tianji', root: '雷', personality: '诡诈', age: 174 },
+  { id: 'elder-tianji-2', name: '白若璇', sectId: 'sect-tianji', locationId: 'loc-tianji', root: '土', personality: '苟道', age: 149 },
+];
+
+function initialElders(): Cultivator[] {
+  return COUNCIL_ELDERS.map((elder, index) => ({
+    id: elder.id,
+    name: elder.name,
+    title: '议事长老',
+    sectId: elder.sectId,
+    sectRank: '长老',
+    contribution: 150 - index % 2 * 14,
+    transgressions: 0,
+    realm: '金丹',
+    realmStage: 3 + index % 2,
+    qiProgress: 33 + index * 3,
+    hp: 700 + index * 9,
+    maxHp: 700 + index * 9,
+    combatPower: 650 + index * 14,
+    age: elder.age,
+    lifespan: REALM_LIFESPAN.金丹,
+    personality: elder.personality,
+    locationId: elder.locationId,
+    spiritStones: 420 + index * 17,
+    karma: elder.sectId === 'sect-bloodmoon' ? -25 : 28,
+    currentAction: 'REST',
+    innerMonologue: '先检点宗门账册，再议本月之事。',
+    secretGoal: '在下一次长老议事中维护本门根基',
+    spiritRoot: elder.root,
+    technique: { name: '宗门护脉诀', spiritRoot: elder.root },
+    techniqueMastery: 15 + index,
+    herbs: herbs(),
+    pills: { ...noPills(), foundation: elder.id === 'elder-danxia-1' ? 1 : 0 },
+    pillToxicity: 0,
+    exploredTileIds: [],
+    artifacts: [],
+    memories: [],
+    coreMemories: [],
+    memorySequence: 0,
+    reflections: [],
+    rumors: [],
+    alive: true,
+  }));
+}
 
 export function createInitialWorld(seed = 2031): WorldState {
   const locations: LocationNode[] = [
@@ -227,6 +282,7 @@ export function createInitialWorld(seed = 2031): WorldState {
     tributeDemands: [],
     occasions: [],
     bounties: [],
+    councils: [],
     locations,
     terrain: generateTerrain(locations, seed),
     mapPresentation: { tick: 1, trails: [], effects: [] },
@@ -617,6 +673,7 @@ export function createInitialWorld(seed = 2031): WorldState {
         rumors: [],
         alive: true,
       },
+      ...initialElders(),
     ],
     relationships: [
       {

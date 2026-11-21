@@ -1,10 +1,9 @@
 # BACKLOG.md — Infinite Evolution Task Queue (天道沙盒开发任务队列)
 
-> **Instructions for Autonomous Agent (Dots / GPT / Codex):**
-> 1. Always work on the top-most unchecked `- [ ]` task (or a coherent batch of 1-2 closely related tasks).
-> 2. Every task requires **full implementation + UI integration + Vitest tests + `npm run verify` + Git commit**.
-> 3. **Self-Proliferation**: Whenever unchecked tasks drop below 20, append a new Phase at the bottom with at least 10 new deep mechanics tasks.
-> 4. **Never stop after one task**—immediately move to the next `- [ ]` item!
+> **接续方法：** 从顶部第一个未勾选项开始，每项独立实现、测试、验证和发布；完成后接下一项，不等人为确认。
+> **完成标准：** 双引擎、相关 UI/Canvas、确定性测试、`npm run verify`、更新 CHANGELOG、单独提交并核对远端。
+> **补队列：** 完成后若剩少于 20 项，追加一个包含 10 项具体可验收机制的新阶段。
+> **跨运行：** 到系统上限时保存可恢复检查点，由已配置的外部调度在下一轮接续；未验证的工作不勾选。完整规则见 [AGENTS.md](AGENTS.md)。
 
 ---
 
@@ -55,7 +54,7 @@
 ---
 
 ## Phase 5: Advanced LLM Multi-Agent Orchestration & Token Burners (高阶多智能体博弈与深度烧Token引擎)
-- [ ] **[P5-1] Sect Elder Council Multi-Agent Debate (宗门长老议事厅多Agent圆桌辩论)**: Create `src/engine/councilEngine.ts` and `src/components/SectCouncilModal.tsx`. Allow the user (or periodic annual trigger) to convene a Sect Council where 3-5 top elders of a sect conduct a multi-turn LLM debate on sect strategy (declare war, expel a traitor, allocate the last Foundation Pill) and vote on a binding policy.
+- [x] **[P5-1] Sect Elder Council Multi-Agent Debate (宗门长老议事厅多Agent圆桌辩论)**: Create `src/engine/councilEngine.ts` and `src/components/SectCouncilModal.tsx`. Allow the user (or periodic annual trigger) to convene a Sect Council where 3-5 top elders of a sect conduct a multi-turn LLM debate on sect strategy (declare war, expel a traitor, allocate the last Foundation Pill) and vote on a binding policy.
 - [ ] **[P5-2] Heavenly Dao Chronicler & Chapter Novel Generator (天道史官：自动生成连载修仙小说章节)**: Create `src/engine/novelGenerator.ts` and a "藏书阁 / 纪传体史书" UI tab. Accumulate every 12-24 ticks of world events, dialogues, and character arcs and synthesize them into a rich, literary Chinese Xianxia novel chapter (`第X章：...`) with character biographies!
 - [ ] **[P5-3] Batch Concurrent LLM Agent Scheduler & Token Telemetry Dashboard (并发Agent推理调度器与Token消耗仪表盘)**: Track real-time prompt tokens, completion tokens, latency, requests per minute, and estimated cost across all NPC brain calls. Add a sleek Telemetry Panel in the header/drawer and support configurable batch concurrency (e.g., running 5 NPC LLM calls in parallel per tick).
 - [ ] **[P5-4] Player Avatar Possession & Interactive Chat/Torture/Recruitment (夺舍降临模式：玩家亲自对话、审问或收徒)**: Allow the user to "Possess (夺舍)" any cultivator or speak as an Ancient Ring Grandpa (随身老爷爷) directly via a real-time chat box with that NPC, persuading, deceiving, guiding, or interrogating them in natural language.

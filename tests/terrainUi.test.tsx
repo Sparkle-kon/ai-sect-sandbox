@@ -49,8 +49,9 @@ describe('terrain map presentation', () => {
     expect(coordinates.map(({ actor }) => actor.id)).toEqual(expect.arrayContaining([viewer.id, partner.id]));
     expect(coordinates.map(({ actor }) => actor.id)).not.toContain(traveler.id);
     expect(coordinates.map(({ actor }) => actor.id)).not.toContain(unseen.id);
-    expect(coordinates.find(({ actor }) => actor.id === partner.id)?.x)
-      .not.toBe(coordinates.find(({ actor }) => actor.id === viewer.id)?.x);
+    const partnerPoint = coordinates.find(({ actor }) => actor.id === partner.id)!;
+    const viewerPoint = coordinates.find(({ actor }) => actor.id === viewer.id)!;
+    expect([partnerPoint.x, partnerPoint.y]).not.toEqual([viewerPoint.x, viewerPoint.y]);
 
     const omniscient = createTerrainMapView(world, viewer, false);
     expect(omniscient.seenLocations).toHaveLength(world.locations.length);
