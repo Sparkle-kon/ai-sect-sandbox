@@ -1,3 +1,4 @@
+import { createInfirmaryState } from '../engine/infirmaryEngine';
 import { createHabitatState } from '../engine/habitatEngine';
 import { createChronicleErrataState } from '../engine/chronicleErrataEngine';
 import { createPilgrimageState } from '../engine/pilgrimageEngine';
@@ -256,6 +257,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     pilgrimages: createPilgrimageState(),
     chronicleErrata: createChronicleErrataState(),
     habitats: createHabitatState(),
+    infirmaries: createInfirmaryState(),
     witnesses: createWitnessState(),
     estates: createEstateState(),
     decisionTrace: createDecisionTraceState(),

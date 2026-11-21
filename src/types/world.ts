@@ -91,6 +91,7 @@ export type ActionType =
   | 'PILGRIMAGE'
   | 'CHRONICLE_ERRATA'
   | 'HABITAT'
+  | 'INFIRMARY'
   | 'GATHER_HERBS'
   | 'BREW_PILL'
   | 'USE_PILL'
@@ -386,6 +387,8 @@ export interface LLMDecisionPayload {
   targetHazardId?: string;
   ceasefireMove?: CeasefireMove;
   targetCeasefireId?: string;
+  infirmaryMove?: InfirmaryMove;
+  targetInfirmaryCaseId?: string;
   habitatMove?: HabitatMove;
   targetBeastReleaseId?: string;
   chronicleErrataMove?: ChronicleErrataMove;
@@ -1469,7 +1472,46 @@ export interface HabitatState {
   nextId: number;
 }
 
+export type InfirmaryMove = 'request' | 'staff' | 'accept' | 'refuse';
+export type InfirmaryClosureReason = 'expiry' | 'ineligible' | 'recovered' | 'refused';
+export interface InfirmaryReceipt {
+  guardId: string;
+  shiftId: string;
+  tick: number;
+  stonesSpent: number;
+  herbsSpent: number;
+  hpRestored: number;
+  toxicityRemoved: number;
+}
+export interface InfirmaryCase {
+  id: string;
+  patientId: string;
+  sectId: string;
+  siteId: string;
+  queuedTick: number;
+  expiresTick: number;
+  status: 'waiting' | 'treated' | 'refused' | 'closed';
+  settledTick?: number;
+  reason?: InfirmaryClosureReason;
+  receipt?: InfirmaryReceipt;
+}
+export interface InfirmaryShift {
+  id: string;
+  guardId: string;
+  sectId: string;
+  siteId: string;
+  startedTick: number;
+  expiresTick: number;
+  lastServedTick?: number;
+}
+export interface InfirmaryState {
+  cases: InfirmaryCase[];
+  shifts: InfirmaryShift[];
+  nextId: number;
+}
+
 export interface WorldState {
+  infirmaries: InfirmaryState;
   habitats: HabitatState;
   chronicleErrata: ChronicleErrataState;
   pilgrimages: PilgrimageState;

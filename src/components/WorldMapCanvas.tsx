@@ -1,3 +1,4 @@
+import { visibleInfirmaries } from '../engine/infirmaryEngine';
 import { visibleHabitats } from '../engine/habitatEngine';
 import { visibleChronicleErrata } from '../engine/chronicleErrataEngine';
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
@@ -96,6 +97,10 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const weatherAtVisibleSites = useMemo(() => new Map(seenLocations
     .filter(({ id }) => isCurrentLocation(id))
     .map((site) => [site.id, localQiWeather(world, site)])), [world, seenLocations, isCurrentLocation]);
+  const localClinic = useMemo(() => {
+    const clinic = visibleInfirmaries(world, selected);
+    return clinic?.capacity && isCurrentLocation(clinic.siteId) ? { siteId: clinic.siteId, capacity: clinic.capacity } : undefined;
+  }, [world, selected, isCurrentLocation]);
   const localHabitat = useMemo(() => new Map(visibleHabitats(world, selected)
     .filter((row) => row.capacity !== undefined && row.restoration && row.restoration.endedTick === undefined &&
       row.restoration.expiresTick > world.tick && isCurrentLocation(row.siteId))
@@ -923,6 +928,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                 {sanctuary !== undefined && <span className="text-cyan-200">· 本人通行权有效 · {sanctuary > 0 ? `护阵可挡 ${sanctuary} 次决斗` : '护阵已耗尽'}</span>}
                 {(localErrata.get(location.id) ?? 0) > 0 && <span className="text-amber-200">· 公开史料有待勘误 {localErrata.get(location.id)} 条</span>}
                 {habitatView && <span className="text-emerald-200">· 复育栖地 {habitatView.wildOccupancy ?? 0}/{habitatView.capacity} 野兽</span>}
+                {localClinic?.siteId === location.id && <span className="text-rose-200">· 静养床 {localClinic.capacity.available}/{localClinic.capacity.beds} 可用</span>}
                 {localCouncil && <span className="text-violet-300">· 本月议决：{localCouncil.title}</span>}
                 {besiegedLocationIds.has(location.id) && <span className="text-rose-300">· 围攻中</span>}
                 {localOccasions.map((occasion) => (

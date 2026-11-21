@@ -1,3 +1,5 @@
+import { createInfirmaryState, INFIRMARY_DETOX_MAX, INFIRMARY_HEAL_FRACTION, INFIRMARY_MAX_BEDS, INFIRMARY_QUEUE_TICKS,
+  INFIRMARY_SHIFT_TICKS, INFIRMARY_TREATMENT_HERBS, INFIRMARY_TREATMENT_STONES } from './infirmaryEngine';
 import { createHabitatState, HABITAT_MIN_HEALTH, HABITAT_RESTORATION_TICKS,
   HABITAT_SURVEY_DELAY, HABITAT_SURVEY_WINDOW } from './habitatEngine';
 import { CHRONICLE_ERRATA_MAX_RETELLINGS, CHRONICLE_ERRATA_WINDOW, createChronicleErrataState } from './chronicleErrataEngine';
@@ -83,7 +85,7 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const marketQty = num(1,12,true), marketPrice = num(1,500,true);
@@ -198,6 +200,12 @@ const shape = structure({
       attestations:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,tick,verdict:one('supports','contradicts')})),
       appeal:optional(structure({tick,actorId:id,verdict:one('upheld','rejected'),reason:text})),settledTick:otick,
       reputationSectId:oid,reputationPenalty:percentage,reputationRestored:percentage,reason:otext}))}),
+  infirmaries:structure({nextId:num(1,100_000_000,true),
+    shifts:arr(SAVE_COLLECTION_LIMIT,structure({id,guardId:id,sectId:id,siteId:id,startedTick:tick,expiresTick:tick,lastServedTick:otick})),
+    cases:arr(SAVE_COLLECTION_LIMIT,structure({id,patientId:id,sectId:id,siteId:id,queuedTick:tick,expiresTick:tick,
+      status:one('waiting','treated','refused','closed'),settledTick:otick,reason:optional(one('expiry','ineligible','recovered','refused')),
+      receipt:optional(structure({guardId:id,shiftId:id,tick,stonesSpent:count,herbsSpent:count,
+        hpRestored:num(Number.MIN_VALUE,1_000_000_000),toxicityRemoved:num(0,INFIRMARY_DETOX_MAX)}))}))}),
   habitats:structure({nextId:num(1,100_000_000,true),
     stewardships:arr(SAVE_COLLECTION_LIMIT,structure({id,siteId:id,sponsorSectId:id,stewardId:id,restoredTick:tick,expiresTick:tick,
       endedTick:otick,endReason:optional(one('expiry','site_lost'))})),
@@ -349,6 +357,7 @@ function verifyWorld(value: unknown): WorldState {
     ? { ...value,
       ...(!Object.hasOwn(value, 'mentorship') ? { mentorship: { offers: [], lineage: [], budgets: [] } } : {}),
       ...(!Object.hasOwn(value, 'decisionTrace') ? { decisionTrace: { records: [] } } : {}),
+      ...(!Object.hasOwn(value, 'infirmaries') ? { infirmaries: createInfirmaryState() } : {}),
       ...(!Object.hasOwn(value, 'habitats') ? { habitats: createHabitatState() } : {}),
       ...(!Object.hasOwn(value, 'chronicleErrata') ? { chronicleErrata: createChronicleErrataState() } : {}),
       ...(!Object.hasOwn(value, 'pilgrimages') ? { pilgrimages: createPilgrimageState() } : {}),
@@ -386,6 +395,52 @@ function verifyWorld(value: unknown): WorldState {
   const sector = unique(w.sects, (item) => item.id, 'sects.id');
   const locations = unique(w.locations, (item) => item.id, 'locations.id');
   const map = unique(w.terrain.tiles, (item) => item.id, 'terrain.tiles.id');
+  const infirmarySerials = new Set<number>();
+  const infirmaryShifts = new Map(w.infirmaries.shifts.map((shift) => [shift.id, shift]));
+  const infirmaryPatientMax = new Map(w.cultivators.map(({ id, maxHp }) => [id, maxHp]));
+  const validInfirmarySerial = (id: string, kind: 'shift' | 'case') => {
+    const serial = Number(id.match(new RegExp('^infirmary-' + kind + '-([1-9][0-9]*)$'))?.[1]);
+    if (!Number.isSafeInteger(serial) || serial >= w.infirmaries.nextId || infirmarySerials.has(serial)) fail('infirmaries.nextId');
+    infirmarySerials.add(serial);
+  };
+  unique(w.infirmaries.shifts.filter(({ expiresTick }) => expiresTick > w.tick), ({ guardId }) => guardId, 'infirmaries.shifts.active_guard');
+  for (const shift of w.infirmaries.shifts) {
+    validInfirmarySerial(shift.id, 'shift');
+    if (!actor.has(shift.guardId) || !sector.has(shift.sectId) || shift.startedTick > w.tick ||
+        shift.expiresTick !== shift.startedTick + INFIRMARY_SHIFT_TICKS ||
+        (shift.lastServedTick !== undefined && (shift.lastServedTick <= shift.startedTick || shift.lastServedTick >= shift.expiresTick ||
+          shift.lastServedTick > w.tick))) fail('infirmaries.shifts.references');
+  }
+  unique(w.infirmaries.cases.filter(({ status }) => status === 'waiting'), ({ patientId }) => patientId, 'infirmaries.cases.active_patient');
+  const serviceUses = new Set<string>(), bedUses = new Map<string, number>();
+  for (const row of w.infirmaries.cases) {
+    validInfirmarySerial(row.id, 'case');
+    const waiting = row.status === 'waiting';
+    const treated = row.status === 'treated';
+    if (!actor.has(row.patientId) || !sector.has(row.sectId) || row.queuedTick > w.tick ||
+        row.expiresTick !== row.queuedTick + INFIRMARY_QUEUE_TICKS ||
+        (waiting !== (row.settledTick === undefined)) || (treated !== (row.receipt !== undefined)) ||
+        (waiting && (row.expiresTick <= w.tick || !locations.has(row.siteId))) ||
+        (row.settledTick !== undefined && (row.settledTick < row.queuedTick || row.settledTick > w.tick)) ||
+        (row.status === 'refused' ? row.reason !== 'refused' || row.settledTick! >= row.expiresTick :
+          row.status === 'closed' ? !row.reason || row.reason === 'refused' ||
+            (row.reason === 'expiry' ? row.settledTick! < row.expiresTick : row.settledTick! >= row.expiresTick) :
+            row.reason !== undefined)) fail('infirmaries.cases.references');
+    const receipt = row.receipt;
+    if (!receipt) continue;
+    const shift = infirmaryShifts.get(receipt.shiftId);
+    const serviceKey = JSON.stringify([receipt.shiftId, receipt.tick]);
+    const bedKey = JSON.stringify([row.sectId, row.siteId, receipt.tick]);
+    const uses = (bedUses.get(bedKey) ?? 0) + 1;
+    if (!shift || receipt.guardId !== shift.guardId || receipt.guardId === row.patientId || shift.sectId !== row.sectId ||
+        shift.siteId !== row.siteId || receipt.tick !== row.settledTick || receipt.tick <= row.queuedTick ||
+        receipt.tick >= row.expiresTick || receipt.tick <= shift.startedTick || receipt.tick >= shift.expiresTick ||
+        shift.lastServedTick === undefined || receipt.tick > shift.lastServedTick || serviceUses.has(serviceKey) || uses > INFIRMARY_MAX_BEDS ||
+        receipt.stonesSpent !== INFIRMARY_TREATMENT_STONES || receipt.herbsSpent !== INFIRMARY_TREATMENT_HERBS ||
+        receipt.hpRestored > Math.round((infirmaryPatientMax.get(row.patientId) ?? 0) * INFIRMARY_HEAL_FRACTION)) fail('infirmaries.cases.receipt');
+    serviceUses.add(serviceKey);
+    bedUses.set(bedKey, uses);
+  }
   const habitatSerials = new Set<number>();
   const habitatBeasts = new Map(w.spiritBeasts.map((animal) => [animal.id, animal]));
   const habitatSites = new Map(w.locations.map((site) => [site.id, site]));
