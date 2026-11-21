@@ -9,8 +9,9 @@ export const SANDBOX_VIEWS = [
 ] as const;
 export type WorkspaceId = (typeof SANDBOX_VIEWS)[number]['id'];
 
-export function SandboxWorkspace({ active, onChange, views }: {
+export function SandboxWorkspace({ active, onChange, views, panelLead, autoFocusTab = true, hideActiveContent = false }: {
   active: WorkspaceId; onChange: (view: WorkspaceId) => void; views: Record<WorkspaceId, ReactNode>;
+  panelLead?: ReactNode; autoFocusTab?: boolean; hideActiveContent?: boolean;
 }) {
   const uid = useId();
   const buttons = useRef<Array<HTMLButtonElement | null>>([]);
@@ -20,8 +21,8 @@ export function SandboxWorkspace({ active, onChange, views }: {
     if (previousView.current === active) return;
     previousView.current = active;
     // Also returns focus to the visible tab after a panel-local navigation shortcut.
-    buttons.current[activeIndex]?.focus({ preventScroll: true });
-  }, [active, activeIndex]);
+    if (autoFocusTab) buttons.current[activeIndex]?.focus({ preventScroll: true });
+  }, [active, activeIndex, autoFocusTab]);
   const change = (next: WorkspaceId) => {
     onChange(next);
   };
@@ -52,11 +53,19 @@ export function SandboxWorkspace({ active, onChange, views }: {
       <main className="mx-auto w-full max-w-[76rem] flex-1 px-2.5 pt-2.5 pb-[calc(4.5rem+env(safe-area-inset-bottom))] sm:px-4 lg:pb-6">
         {SANDBOX_VIEWS.map(({ id }) => <section key={id} id={`${uid}-panel-${id}`} role="tabpanel" aria-labelledby={`${uid}-tab-${id}`}
           hidden={active !== id} className="min-w-0" data-workspace={id}>
-          {(active === id || id === 'map') ? views[id] : null}
+          {active === id && panelLead}
+          {id === 'map' && <MapWorkspaceContent hidden={active === id && hideActiveContent}>{views.map}</MapWorkspaceContent>}
+          {id !== 'map' && active === id && !hideActiveContent && views[id]}
         </section>)}
       </main>
     </>
   );
+}
+
+function MapWorkspaceContent({ hidden, children }: { hidden: boolean; children: ReactNode }) {
+  // Keep the map mounted across ordinary workspace changes. An invalidated
+  // chronicle handoff must not keep displaying its former frame.
+  return hidden ? <div hidden>{children}</div> : children;
 }
 
 export interface WorkspaceSection {

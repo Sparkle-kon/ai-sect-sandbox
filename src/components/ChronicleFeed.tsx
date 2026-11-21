@@ -1,10 +1,22 @@
-import React from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ScrollText } from 'lucide-react';
-import { WorldEvent } from '../types/world';
+import type { WorldEvent } from '../types/world';
+import type { ChronicleFocusOptions, ChronicleFocusRequest } from '../engine/chronicleFocusEngine';
 import { DialogueTranscript } from './DialogueTranscript';
+
+export type ChronicleCategoryFilter = 'all' | WorldEvent['category'];
+export interface ChronicleFeedPosition { listScrollTop: number; pageScrollY: number }
+export interface ChronicleFeedReturn extends ChronicleFeedPosition { token: number; request: ChronicleFocusRequest }
 
 interface ChronicleFeedProps {
   events: WorldEvent[];
+  category?: ChronicleCategoryFilter;
+  onCategoryChange?: (value: ChronicleCategoryFilter) => void;
+  focusOptions?: (eventId: string) => ChronicleFocusOptions;
+  onJump?: (request: ChronicleFocusRequest, position: ChronicleFeedPosition) => void;
+  returnPosition?: ChronicleFeedReturn;
+  onReturnHandled?: (token: number) => void;
+  focusNotice?: string;
 }
 
 const CATEGORY_BADGE: Record<
@@ -37,52 +49,104 @@ const CATEGORY_BADGE: Record<
   },
 };
 
-export const ChronicleFeed: React.FC<ChronicleFeedProps> = ({ events }) => {
-  return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 flex flex-col h-[340px]">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <ScrollText className="w-4 h-4 text-amber-400" />
-          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-200">
-            修仙界天机编年史 (World Chronicle)
-          </h3>
-        </div>
-        <span className="text-[11px] text-slate-400">
-          共记录 {events.length} 条因果
-        </span>
-      </div>
+const control = 'min-h-11 min-w-0 max-w-full rounded border border-slate-700 bg-slate-950 px-2 text-xs text-slate-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300';
+const kindLabel: Record<ChronicleFocusRequest['kind'], string> = { site: '地图', actor: '人物', sect: '宗门' };
 
-      <div className="flex-1 overflow-y-auto space-y-2 pr-1">
-        {events.map((evt) => {
+export const findChronicleReturnTarget = <T extends { dataset: DOMStringMap }>(
+  elements: ArrayLike<T>, request: ChronicleFocusRequest,
+): T | undefined => Array.from(elements).find(({ dataset }) =>
+  dataset.eventId === request.eventId && dataset.targetKind === request.kind && dataset.targetId === request.targetId);
+
+export function ChronicleFeed({
+  events, category, onCategoryChange, focusOptions, onJump, returnPosition, onReturnHandled, focusNotice,
+}: ChronicleFeedProps) {
+  const [localCategory, setLocalCategory] = useState<ChronicleCategoryFilter>('all');
+  const filter = category ?? localCategory;
+  const visible = filter === 'all' ? events : events.filter((entry) => entry.category === filter);
+  const listRef = useRef<HTMLDivElement>(null);
+  const filterRef = useRef<HTMLSelectElement>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const handled = useRef<number>();
+  const onHandled = useRef(onReturnHandled);
+  onHandled.current = onReturnHandled;
+
+  useEffect(() => {
+    if (!returnPosition || handled.current === returnPosition.token) return;
+    let second: number | undefined;
+    // The feed is lazy and can remount when the workspace comes back. Wait for its layout.
+    const first = window.requestAnimationFrame(() => {
+      second = window.requestAnimationFrame(() => {
+        const list = listRef.current;
+        if (!list) return;
+        const original = findChronicleReturnTarget(list.querySelectorAll<HTMLButtonElement>('button[data-chronicle-focus]'), returnPosition.request);
+        (original ?? filterRef.current ?? headingRef.current)?.focus({ preventScroll: true });
+        list.scrollTop = returnPosition.listScrollTop;
+        window.scrollTo({ top: returnPosition.pageScrollY, left: 0, behavior: 'instant' });
+        handled.current = returnPosition.token;
+        onHandled.current?.(returnPosition.token);
+      });
+    });
+    return () => {
+      window.cancelAnimationFrame(first);
+      if (second !== undefined) window.cancelAnimationFrame(second);
+    };
+  }, [returnPosition]);
+
+  return (
+    <div className="flex h-[340px] min-w-0 flex-col rounded-xl border border-slate-800 bg-slate-900/60 p-3 sm:p-4">
+      <div className="mb-2 flex min-w-0 flex-wrap items-center justify-between gap-1.5">
+        <div className="flex min-w-0 items-start gap-2">
+          <ScrollText aria-hidden="true" className="h-4 w-4 shrink-0 text-amber-400" />
+          <h3 tabIndex={-1} ref={headingRef} className="min-w-0 break-words text-xs font-bold text-slate-200">修仙界天机编年史 (World Chronicle)</h3>
+        </div>
+        <span className="text-[11px] text-slate-400">共记录 {events.length} 条因果</span>
+        {(onCategoryChange || category !== undefined) && <label className="flex min-w-0 flex-wrap items-center gap-1.5 text-xs text-slate-300">
+          纪事分类
+          <select ref={filterRef} className={control} value={filter} onChange={(event) => {
+            const value = event.currentTarget.value;
+            if (value !== 'all' && !Object.hasOwn(CATEGORY_BADGE, value)) return;
+            const next = value as ChronicleCategoryFilter;
+            if (category === undefined) setLocalCategory(next);
+            onCategoryChange?.(next);
+            if (listRef.current) listRef.current.scrollTop = 0;
+          }}>
+            <option value="all">全部</option>
+            {(Object.keys(CATEGORY_BADGE) as WorldEvent['category'][]).map((value) => <option key={value} value={value}>{CATEGORY_BADGE[value].label}</option>)}
+          </select>
+        </label>}
+      </div>
+      {focusNotice && <p role="status" className="mb-1 break-words text-xs text-amber-200">{focusNotice}</p>}
+      <div ref={listRef} aria-label="纪事列表" className="min-h-0 min-w-0 flex-1 space-y-2 overflow-y-auto pr-1">
+        {!visible.length && <p className="p-2 text-xs text-slate-400">这个分类暂无纪事。</p>}
+        {visible.map((evt) => {
           const badge = CATEGORY_BADGE[evt.category];
+          const options = evt.witnessScope !== 'participants' && onJump ? focusOptions?.(evt.id) : undefined;
           return (
-            <div
-              key={evt.id}
-              className="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800/80 space-y-1"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`px-1.5 py-0.5 text-[10px] font-medium rounded border ${badge.className}`}
-                  >
-                    {badge.label}
-                  </span>
-                  <span className="text-xs font-semibold text-slate-100">
-                    {evt.title}
-                  </span>
+            <article key={evt.id} className="min-w-0 space-y-1 rounded-lg border border-slate-800/80 bg-slate-950/80 p-2.5">
+              <div className="flex min-w-0 flex-wrap items-center justify-between gap-1.5">
+                <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                  <span className={`rounded border px-1.5 py-0.5 text-[10px] font-medium ${badge.className}`}>{badge.label}</span>
+                  <span className="min-w-0 break-words text-xs font-semibold text-slate-100">{evt.title}</span>
                 </div>
-                <span className="text-[11px] text-slate-500 whitespace-nowrap">
-                  仙历 {evt.year}年{evt.month}月
-                </span>
+                <span className="whitespace-nowrap text-[11px] text-slate-400">仙历 {evt.year}年{evt.month}月</span>
               </div>
-              <p className="text-xs text-slate-300 leading-relaxed">
-                {evt.description}
-              </p>
+              <p className="break-words text-xs leading-relaxed text-slate-300">{evt.description}</p>
+              {options && options.links.length > 0 && <div className="flex min-w-0 flex-wrap gap-1" aria-label="可查看的纪事词条">
+                {options.links.filter((link) => link.eventId === evt.id).map(({ label, eventId, kind, targetId }) => (
+                  <button type="button" key={`${kind}:${targetId}`} data-chronicle-focus
+                    data-event-id={eventId} data-target-kind={kind} data-target-id={targetId}
+                    className={`${control} break-words py-1 text-left text-amber-100`}
+                    onClick={() => onJump?.({ eventId, kind, targetId }, { listScrollTop: listRef.current?.scrollTop ?? 0, pageScrollY: window.scrollY })}>
+                    {kindLabel[kind]}：{label}
+                  </button>
+                ))}
+              </div>}
+              {options?.withheld && <p className="text-xs text-slate-400">部分词条当前不可定位，不显示未核实位置。</p>}
               {evt.dialogue && <DialogueTranscript dialogue={evt.dialogue} />}
-            </div>
+            </article>
           );
         })}
       </div>
     </div>
   );
-};
+}

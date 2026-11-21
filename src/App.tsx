@@ -4,7 +4,7 @@ import type { SaveBranchSource } from './engine/storageEngine';
 import { courierCheckpoint } from './engine/sealedCourierEngine';
 import { applyWatchMutation, captureWatchDigests } from './engine/watchlistEngine';
 import type { WatchlistCommand, WatchlistMutationResult } from './engine/watchlistEngine';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Play, Pause, FastForward, RotateCcw, Sparkles, BarChart3 } from 'lucide-react';
 import { createInitialWorld } from './data/initialWorld';
 import {
@@ -38,6 +38,10 @@ import { createTimeline, forkTimeline, readTimelineHead, readTimelineSnapshot, r
 import type { WorldTimeline } from './engine/timelineEngine';
 import { activeAvatar, possessAvatar, queueAvatarOrder } from './engine/avatarEngine';
 import { resolveAvatarSnapshot } from './engine/avatarRuntime';
+import { CHRONICLE_FOCUS_UNAVAILABLE, createChronicleFocusResolver } from './engine/chronicleFocusEngine';
+import type { ChronicleFocusRequest } from './engine/chronicleFocusEngine';
+import type { ChronicleCategoryFilter, ChronicleFeedPosition, ChronicleFeedReturn } from './components/ChronicleFeed';
+import { FocusedSectSummary } from './components/FocusedSectSummary';
 
 const AgentInspector = React.lazy(async () => ({ default: (await import('./components/AgentInspector')).AgentInspector }));
 const AttestationPanel = React.lazy(async () => ({ default: (await import('./components/AttestationPanel')).AttestationPanel }));
@@ -74,6 +78,13 @@ const SectCouncilModal = React.lazy(async () => ({ default: (await import('./com
 const AnalyticsModal = React.lazy(async () => ({ default: (await import('./components/AnalyticsModal')).AnalyticsModal }));
 
 interface AppProps { initialWorkspace?: WorkspaceId; initialSection?: string }
+interface ChronicleTrail extends ChronicleFeedReturn {
+  viewerId: string;
+  category: ChronicleCategoryFilter;
+  scope: string;
+  revision: number;
+}
+const chronicleWorkspace = { site: 'map', actor: 'people', sect: 'sect' } as const;
 type FastForwardPhase = 'idle' | 'running' | 'pausing' | 'paused' | 'staging' | 'ready' | 'error';
 type FastForwardViewState = { phase: FastForwardPhase; progress?: FastForwardProgress; notice?: string };
 interface ActiveFastForward {
@@ -95,6 +106,13 @@ const panel = 'space-y-2 rounded-xl border border-slate-800 bg-slate-900 p-3';
 
 export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSection }) => {
   const [workspace, setWorkspace] = useState<WorkspaceId>(initialWorkspace);
+  const [chronicleFilter, setChronicleFilter] = useState<ChronicleCategoryFilter>('all');
+  const [focusTrail, setFocusTrail] = useState<ChronicleTrail>();
+  const [chronicleReturn, setChronicleReturn] = useState<ChronicleFeedReturn>();
+  const [focusNotice, setFocusNotice] = useState<string>();
+  const [mapFocusFailed, setMapFocusFailed] = useState<number>();
+  const focusSerial = useRef(0);
+  const backRef = useRef<HTMLButtonElement>(null);
   const [world, setWorld] = useState<WorldState>(() => createInitialWorld());
   const [viewEpoch, setViewEpoch] = useState(0);
   const saveContextVersion = useRef(0);
@@ -296,7 +314,14 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
     updateWorld((previous) => applyMapBrush(previous, kind, points));
   };
 
+  const discardChronicleContext = () => {
+    setFocusTrail(undefined);
+    setChronicleReturn(undefined);
+    setFocusNotice(focusTrail || chronicleReturn ? CHRONICLE_FOCUS_UNAVAILABLE : undefined);
+  };
+
   const clearPreview = () => {
+    discardChronicleContext();
     browsing.current = false;
     setPreview(undefined);
   };
@@ -385,6 +410,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
     setIsRunning(false);
     setCouncilOpen(false);
     saveContextVersion.current += 1;
+    discardChronicleContext();
     browsing.current = true;
     setPreview({ tick, world: snapshot });
   };
@@ -515,14 +541,65 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
     visibleWorld.cultivators[0];
   const aliveCount = visibleWorld.cultivators.filter((c) => c.alive).length;
   const activeActorId = selectedCultivator?.id ?? null;
+  const currentFocusScope = focusTrail?.scope === viewScopeKey && focusTrail.revision === saveContextVersion.current;
+  const trail = currentFocusScope ? focusTrail : undefined;
+  const resolver = useMemo(() => workspace === 'chronicle' || trail
+    ? createChronicleFocusResolver(visibleWorld, trail?.viewerId ?? activeActorId) : undefined,
+  [visibleWorld, trail, activeActorId, workspace]);
+  const focusProof = trail && resolver?.resolve(trail.request);
+  const focusTarget = focusProof?.ok && trail?.token !== mapFocusFailed ? focusProof.target : undefined;
+  const focusSect = focusTarget?.kind === 'sect' ? visibleWorld.sects.find(({ id }) => id === focusTarget.targetId) : undefined;
+  const focusProfile = focusTarget?.kind === 'actor' && activeActorId === focusTarget.targetId;
+  const reportMapFocusFailure = useCallback(() => setMapFocusFailed(trail?.token), [trail?.token]);
+  useEffect(() => {
+    if (focusTrail && !currentFocusScope) {
+      setFocusTrail(undefined);
+      setFocusNotice(CHRONICLE_FOCUS_UNAVAILABLE);
+    }
+  }, [focusTrail, currentFocusScope]);
+  useEffect(() => {
+    if (trail) backRef.current?.focus({ preventScroll: true });
+  }, [trail]);
   const characterLocation = visibleWorld.locations.find((site) => site.id === selectedCultivator?.locationId);
   const inspect = (workspaceSection: 'profile' | 'cultivation' | 'mind' | 'sect') => <React.Suspense fallback={<p role="status">载入修士档案…</p>}>
     <AgentInspector world={visibleWorld} cultivator={selectedCultivator} onSelectCultivator={setSelectedCultivatorId} workspaceSection={workspaceSection} />
   </React.Suspense>;
   const openWorkspace = (next: WorkspaceId) => {
-    if (workspace !== next && typeof window !== 'undefined') window.scrollTo({ top: 0 });
+    if (workspace !== next) {
+      setFocusTrail(undefined);
+      setChronicleReturn(undefined);
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    }
     setWorkspace(next);
   };
+  const followChronicle = (request: ChronicleFocusRequest, position: ChronicleFeedPosition) => {
+    const currentView = browsing.current ? preview?.world : authority.current;
+    if (workspace !== 'chronicle' || !activeActorId || currentView !== visibleWorld ||
+        history.current.activeBranchId !== timeline.activeBranchId || stepInFlight.current || fastForwardRun.current ||
+        !resolver?.resolve(request).ok) {
+      setFocusNotice(CHRONICLE_FOCUS_UNAVAILABLE);
+      return;
+    }
+    setIsRunning(false);
+    setFocusNotice(undefined);
+    setChronicleReturn(undefined);
+    setFocusTrail({ ...position, token: ++focusSerial.current, request, viewerId: activeActorId,
+      category: chronicleFilter, scope: viewScopeKey, revision: saveContextVersion.current });
+    if (request.kind === 'actor') setSelectedCultivatorId(request.targetId);
+    setWorkspace(chronicleWorkspace[request.kind]);
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  };
+  const returnToChronicle = () => {
+    if (!trail || history.current.activeBranchId !== timeline.activeBranchId ||
+        browsing.current !== Boolean(preview) || trail.revision !== saveContextVersion.current) return;
+    setFocusTrail(undefined);
+    setSelectedCultivatorId(trail.viewerId);
+    setChronicleFilter(trail.category);
+    setChronicleReturn(trail);
+    setFocusNotice(focusTarget ? undefined : CHRONICLE_FOCUS_UNAVAILABLE);
+    setWorkspace('chronicle');
+  };
+  const clearChronicleReturn = (token: number) => setChronicleReturn((previous) => previous?.token === token ? undefined : previous);
   const opened = (view: WorkspaceId, fallback?: string) => initialWorkspace === view ? initialSection ?? fallback : fallback;
 
   return (
@@ -559,9 +636,14 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
         </div>
       </header>
 
-      <SandboxWorkspace active={workspace} onChange={openWorkspace} views={{
+      <SandboxWorkspace active={workspace} onChange={openWorkspace} autoFocusTab={!(trail || chronicleReturn)}
+        hideActiveContent={Boolean(trail && !focusTarget)} panelLead={trail && <div className="mb-2 flex min-w-0 flex-wrap items-center gap-2">
+          <button type="button" ref={backRef} onClick={returnToChronicle} className={`${action} bg-slate-800 text-amber-100`}>返回原纪事</button>
+          {!focusTarget && <p role="status" className="break-words text-xs text-amber-200">{CHRONICLE_FOCUS_UNAVAILABLE}</p>}
+        </div>} views={{
         map: <div className="grid min-w-0 items-start gap-2.5 lg:grid-cols-[minmax(0,1fr)_17rem] lg:gap-4">
           <div className="min-w-0"><WorldMapCanvas compact scopeKey={viewScopeKey} world={visibleWorld} selectedCultivatorId={activeActorId}
+            chronicleFocus={trail?.request.kind === 'site' && focusTarget ? trail : undefined} onChronicleFocusUnavailable={reportMapFocusFailure}
             onSelectCultivator={setSelectedCultivatorId} onBrushStroke={preview ? undefined : handleBrushStroke} /></div>
           <aside className={`${panel} min-w-0`} aria-label="当前修士">
             <div className="flex flex-wrap items-center justify-between gap-1.5">
@@ -578,7 +660,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
         </div>,
         people: <div className="grid min-w-0 items-start gap-3 md:grid-cols-[17rem_minmax(0,1fr)]">
           <React.Suspense fallback={<p role="status">载入修士名册…</p>}><ActorRoster world={visibleWorld} selected={selectedCultivator} onSelect={setSelectedCultivatorId} /></React.Suspense>
-          <WorkspaceSections label={`${selectedCultivator?.name ?? '修士'} · 人物档案`} initialOpen={opened('people', 'profile')} sections={[
+          <WorkspaceSections label={`${selectedCultivator?.name ?? '修士'} · 人物档案`} initialOpen={focusProfile ? 'profile' : opened('people', 'profile')} sections={[
             { id: 'profile', label: '人物概况', content: inspect('profile') },
             { id: 'cultivation', label: '修为、法宝与丹药', content: inspect('cultivation') },
             { id: 'mind', label: '心声、记忆与流言', content: inspect('mind') },
@@ -601,8 +683,11 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
             </React.Suspense> }]),
           ]} />
         </div>,
-        chronicle: <WorkspaceSections label="纪事与历史" initialOpen={opened('chronicle', 'feed')} sections={[
-          { id: 'feed', label: '当世纪事', content: <React.Suspense fallback={<p role="status">载入当世纪事…</p>}><ChronicleFeed events={visibleWorld.events.filter((entry) => !entry.id.startsWith('evt-sealed-dispatch-'))} /></React.Suspense> },
+        chronicle: <WorkspaceSections label="纪事与历史" initialOpen={chronicleReturn ? 'feed' : opened('chronicle', 'feed')} sections={[
+          { id: 'feed', label: '当世纪事', content: <React.Suspense fallback={<p role="status">载入当世纪事…</p>}><ChronicleFeed
+            events={visibleWorld.events.filter((entry) => !entry.id.startsWith('evt-sealed-dispatch-'))}
+            category={chronicleFilter} onCategoryChange={setChronicleFilter} focusOptions={resolver?.build}
+            onJump={followChronicle} returnPosition={chronicleReturn} onReturnHandled={clearChronicleReturn} focusNotice={focusNotice} /></React.Suspense> },
           { id: 'library', label: '藏书阁与史书', content: <React.Suspense fallback={<p role="status">载入藏书阁…</p>}><ChronicleLibraryPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense> },
           { id: 'notebook', label: '书签与地图批注', content: <React.Suspense fallback={<p role="status">载入分支记录…</p>}>
             <ChronicleNotebookPanel key={`${timeline.activeBranchId}:${preview?.tick ?? 'live'}:${activeActorId ?? ''}`}
@@ -625,8 +710,8 @@ export const App: React.FC<AppProps> = ({ initialWorkspace = 'map', initialSecti
             <EstateMemorialPanel world={visibleWorld} cultivator={selectedCultivator} />
           </React.Suspense> },
         ]} />,
-        sect: <WorkspaceSections label="宗门事务" initialOpen={opened('sect', 'governance')} sections={[
-          { id: 'governance', label: '宗门地位、库账与外交', content: inspect('sect') },
+        sect: <WorkspaceSections label="宗门事务" initialOpen={focusSect ? 'governance' : opened('sect', 'governance')} sections={[
+          { id: 'governance', label: '宗门地位、库账与外交', content: focusSect ? <FocusedSectSummary name={focusSect.name} alignment={focusSect.alignment} /> : inspect('sect') },
           { id: 'oaths', label: '天道契书与宗门仲裁', content: <React.Suspense fallback={<p role="status">载入契书记录…</p>}><OathContractsPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense> },
           { id: 'doctrine', label: '道统与分合', content: <React.Suspense fallback={<p role="status">载入道统记录…</p>}>
             <SectDoctrinePanel world={visibleWorld} cultivator={selectedCultivator} />

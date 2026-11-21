@@ -63,4 +63,14 @@ describe('mobile-first sandbox workspaces', () => {
     expect(html).not.toContain('新增修士229');
     expect(world.cultivators).toHaveLength(229);
   });
+
+  it('keeps a safe way back when a focused target is no longer verified', () => {
+    const html = renderToStaticMarkup(<SandboxWorkspace active="people" onChange={() => undefined} hideActiveContent
+      panelLead={<button>返回原纪事</button>}
+      views={{ map: <b>保留地图</b>, people: <b>不显示失效目标</b>, chronicle: null, sect: null, world: null }} />);
+    expect(html).toContain('返回原纪事');
+    expect(html).not.toContain('不显示失效目标');
+    expect(html).toContain('保留地图');
+    expect(html.match(/role="tab"/g)).toHaveLength(5);
+  });
 });

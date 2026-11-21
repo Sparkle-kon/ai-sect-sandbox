@@ -35,6 +35,8 @@ import { activeAvatar } from '../engine/avatarEngine';
 import { localQiWeather } from '../engine/weatherEngine';
 import { visiblePilgrimageMapCheckpoint } from './pilgrimageMapView';
 import { visibleSanctuaryMapMarks } from './sanctuaryView';
+import { resolveChronicleFocus } from '../engine/chronicleFocusEngine';
+import type { ChronicleFocusRequest } from '../engine/chronicleFocusEngine';
 
 const TerrainSuccessionPanel = React.lazy(async () => ({ default: (await import('./TerrainSuccessionPanel')).TerrainSuccessionPanel }));
 const MapKeyboardExplorer = React.lazy(async () => ({ default: (await import('./MapKeyboardExplorer')).MapKeyboardExplorer }));
@@ -54,6 +56,8 @@ interface WorldMapCanvasProps {
   onBrushStroke?: (kind: GodBrushKind, points: MapPoint[]) => void;
   compact?: boolean;
   scopeKey?: string;
+  chronicleFocus?: { request: ChronicleFocusRequest; viewerId: string; token: number };
+  onChronicleFocusUnavailable?: () => void;
 }
 
 export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
@@ -64,6 +68,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   onBrushStroke,
   compact = false,
   scopeKey = '',
+  chronicleFocus,
+  onChronicleFocusUnavailable,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [camera, setCamera] = useState(DEFAULT_CAMERA);
@@ -79,6 +85,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const [followsSelection, setFollowsSelection] = useState(false);
   const [explorerOpen, setExplorerOpen] = useState(false);
   const [focusMessage, setFocusMessage] = useState('');
+  const focusedChronicle = useRef<number>();
   const explorerSummary = useRef<HTMLElement | null>(null);
   const keyboardHelp = useId();
   const cameraRef = useRef(camera);
@@ -733,6 +740,15 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     if (isCurrentLocation(visible.id)) onSelectLocation?.(visible);
     setFocusMessage(`地图已定位：${visible.name}`);
   };
+  useEffect(() => {
+    if (!chronicleFocus || focusedChronicle.current === chronicleFocus.token) return;
+    focusedChronicle.current = chronicleFocus.token;
+    const { request, viewerId } = chronicleFocus;
+    const site = request.kind === 'site' && resolveChronicleFocus(world, request, viewerId).ok
+      ? seenLocations.find(({ id }) => id === request.targetId) : undefined;
+    if (site) focusSite(site);
+    else onChronicleFocusUnavailable?.();
+  }, [chronicleFocus, focusSite, onChronicleFocusUnavailable, seenLocations, world]);
   const locateActor = (id: string) => {
     const point = actorPositions.find(({ actor }) => actor.id === id);
     if (!point) return;
