@@ -1,6 +1,8 @@
 import type { MapTile, WorldState } from '../types/world';
 import { BIOME_PALETTE } from './terrainMapView';
 
+export const EXPLORED_TERRAIN_SHADE = '#192238';
+
 type Classification = (tile: MapTile) => 'visible' | 'explored' | 'hidden';
 
 export function drawTerrain(
@@ -19,15 +21,18 @@ export function drawTerrain(
     const state = classify(tile);
     const x = tile.col * cellW;
     const y = tile.row * cellH;
-    const palette = BIOME_PALETTE[tile.biome];
-    ctx.fillStyle = state === 'hidden' ? '#070c19' : palette.base;
-    ctx.fillRect(x, y, cellW + 0.5, cellH + 0.5);
-    if (state === 'hidden') {
+    if (state !== 'visible') {
+      // Exploration remembers tile position, not an authoritative update to mutable biome.
+      ctx.fillStyle = state === 'hidden' ? '#070c19' : EXPLORED_TERRAIN_SHADE;
+      ctx.fillRect(x, y, cellW + 0.5, cellH + 0.5);
       ctx.strokeStyle = '#10172a';
       ctx.lineWidth = 0.5;
       ctx.strokeRect(x, y, cellW, cellH);
       continue;
     }
+    const palette = BIOME_PALETTE[tile.biome];
+    ctx.fillStyle = palette.base;
+    ctx.fillRect(x, y, cellW + 0.5, cellH + 0.5);
     // Seeded strokes create texture without changing between renders.
     const grain = Math.abs(Math.imul(tile.col + 11, 92821) ^ Math.imul(tile.row + 17, 68917) ^ Number(seed));
     const stampX = x + cellW * (0.15 + (grain % 11) / 30);
@@ -41,10 +46,7 @@ export function drawTerrain(
     ctx.lineTo(stampX + cellW * 0.26, stampY + cellH * 0.10);
     ctx.stroke();
     ctx.globalAlpha = 1;
-    if (state === 'explored') {
-      ctx.fillStyle = 'rgba(4,8,18,0.70)';
-      ctx.fillRect(x, y, cellW + 0.5, cellH + 0.5);
-    } else if (heat) {
+    if (heat) {
       const qi = Math.min(100, Math.max(0, tile.spiritQi)) / 100;
       const pulse = 0.96 + 0.04 * Math.sin(phase + (tile.col + tile.row) * 0.24);
       ctx.fillStyle = `hsla(${Math.round(191 - qi * 159)},88%,58%,${(0.12 + qi * 0.41) * pulse})`;

@@ -6,11 +6,13 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        // Keep framework code and shared icons cacheable between gameplay updates.
+        // Keep framework code and independent rule modules cacheable between gameplay updates.
         manualChunks: {
           'react-runtime': ['react', 'react-dom', 'react-dom/client', 'react/jsx-runtime'],
           'interface-icons': ['lucide-react'],
           'resource-journal': ['./src/engine/resourceFlowEngine.ts'],
+          'cognitive-response-guide': ['./src/engine/llmCognitiveResponseGuide.ts'],
+          'institution-rules': ['./src/engine/estateEngine.ts', './src/engine/sectCreditEngine.ts', './src/engine/serviceRetirementEngine.ts'],
         },
       },
     },

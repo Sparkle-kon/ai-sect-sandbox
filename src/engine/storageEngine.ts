@@ -1,3 +1,4 @@
+import { createTerrainSuccessionState, TERRAIN_QUIET_CAP, TERRAIN_RECOVERY_LIMIT } from './terrainSuccessionEngine';
 import { createResourceFlowState, RESOURCE_FLOW_DETAIL_LIMIT, RESOURCE_FLOW_MONTH_LIMIT, RESOURCE_FLOW_REASON, sameFlowAccount } from './resourceFlowEngine';
 import { COMMONS_MAINTENANCE_UNIT, COMMONS_MAX_RESERVE, COMMONS_OFFER_TICKS, COMMONS_ROUND_TICKS, COMMONS_TERM_TICKS, commonsQuotaShares, createSharedCommonsState } from './sharedCommonsEngine';
 import { createServiceRetirementState, SERVICE_RETIREMENT_HISTORY_LIMIT, SERVICE_RETIREMENT_MIN_TICKS, isRetiredFromService } from './serviceRetirementEngine';
@@ -100,7 +101,7 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER SECT_SERVICE SHARED_COMMONS REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const flowGood = one('stone','jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
@@ -175,6 +176,7 @@ const noteTarget: Validator = (value, path) => {
   fail(path);
 };
 const facilityLevels = structure({qi_array:num(0,3,true),alchemy_hall:num(0,3,true),scripture_pavilion:num(0,3,true),defense_array:num(0,3,true),spirit_mine:num(0,3,true)});
+const terrainBiome = one('灵山','毒沼','剑冢','荒漠','魔渊','坊市');
 const locationKind = one('sect_hq','spirit_vein','secret_realm','market','abyss');
 
 const shape = structure({
@@ -220,6 +222,11 @@ const shape = structure({
   mapPresentation:structure({tick,trails:arr(SAVE_COLLECTION_LIMIT,structure({cultivatorId:id,tick,fromLocationId:id,toLocationId:id,
     points:arr(6402,structure({x:num(0,1000),y:num(0,600)}))})),
     effects:arr(SAVE_COLLECTION_LIMIT,structure({id,tick,kind:one('damage','breakthrough','clash','lightning'),locationId:id,actorIds:ids,text:otext}))}),
+  terrainSuccession:structure({lastAdvancedTick:otick,cells:arr(6400,structure({
+    tileId:id,firstTick:tick,lastStressTick:tick,consecutiveStress:tick,quietTicks:num(0,TERRAIN_QUIET_CAP,true),baselineBiome:terrainBiome,baselineQi:percentage,
+    recoverableLoss:percentage,permanentLoss:percentage,affectedBiome:optional(one('毒沼','荒漠')),scarredBiome:optional(one('荒漠')),
+    phase:one('stressed','recovering','recovered','scarred'),workCount:num(0,TERRAIN_RECOVERY_LIMIT,true),lastWorkedTick:otick,lastWorkedBy:oid
+  }))}),
   mapHazards:arr(1200,structure({id,kind:one('meteor','beast_tide','cursed_miasma'),tileId:id,createdTick:tick,expiresTick:tick,intensity:num(1,3,true)})),
   spiritBeasts:arr(500,structure({id,name:id,kind:one('妖兽','凶兽','瑞兽'),locationId:id,homeLocationId:id,hp:wealth,maxHp:num(1,1_000_000_000),
     power:wealth,cultivation:percentage,alive:bool,tamedBy:oid,nextActionTick:tick})),
@@ -251,7 +258,7 @@ const shape = structure({
     tick,year:tick,month,totalEntries:num(0,Number.MAX_SAFE_INTEGER,true),
     totals:arr(9,structure({good:flowGood,transfer:flowMeasure,production:flowMeasure,consumption:flowMeasure,loss:flowMeasure})),
     entries:arr(RESOURCE_FLOW_DETAIL_LIMIT,structure({
-      id:flowSerial,tick,mechanism:one('alchemy','market','sect_economy','oath','commons','relocation'),
+      id:flowSerial,tick,mechanism:one('alchemy','market','sect_economy','oath','commons','relocation','terrain'),
       refId:id,reason:strings(40,1),good:flowGood,amount:flowMeasure,visibility:flowScope,
       kind:one('transfer','production','consumption','loss'),from:optional(flowAccount),to:optional(flowAccount)
     }))
@@ -477,6 +484,7 @@ function verifyWorld(value: unknown): WorldState {
       ...(!Object.hasOwn(value, 'mentorship') ? { mentorship: { offers: [], lineage: [], budgets: [] } } : {}),
       ...(!Object.hasOwn(value, 'decisionTrace') ? { decisionTrace: { records: [] } } : {}),
       ...(!Object.hasOwn(value, 'coldHistory') ? { coldHistory: createColdHistoryState() } : {}),
+      ...(!Object.hasOwn(value, 'terrainSuccession') ? { terrainSuccession: createTerrainSuccessionState() } : {}),
       ...(!Object.hasOwn(value, 'resourceFlow') ? { resourceFlow: createResourceFlowState() } : {}),
       ...(!Object.hasOwn(value, 'sharedCommons') ? { sharedCommons: createSharedCommonsState() } : {}),
       ...(!Object.hasOwn(value, 'serviceRetirement') ? { serviceRetirement: createServiceRetirementState() } : {}),
@@ -524,6 +532,17 @@ function verifyWorld(value: unknown): WorldState {
   const sector = unique(w.sects, (item) => item.id, 'sects.id');
   const locations = unique(w.locations, (item) => item.id, 'locations.id');
   const map = unique(w.terrain.tiles, (item) => item.id, 'terrain.tiles.id');
+  if ((w.terrainSuccession.lastAdvancedTick ?? 0) > w.tick) fail('terrainSuccession.lastAdvancedTick');
+  unique(w.terrainSuccession.cells, ({ tileId }) => tileId, 'terrainSuccession.cells.tile');
+  for (const cell of w.terrainSuccession.cells) {
+    if (!map.has(cell.tileId) || cell.firstTick > cell.lastStressTick || cell.lastStressTick > w.tick ||
+        cell.consecutiveStress > cell.lastStressTick - cell.firstTick + 1 ||
+        cell.recoverableLoss + cell.permanentLoss > cell.baselineQi + 1e-8 ||
+        (cell.lastWorkedTick !== undefined && (cell.lastWorkedTick < cell.firstTick || cell.lastWorkedTick > w.tick)) ||
+        (cell.lastWorkedTick === undefined) !== (cell.lastWorkedBy === undefined) ||
+        (cell.lastWorkedBy !== undefined && !actor.has(cell.lastWorkedBy)) ||
+        (cell.workCount > 0 && cell.lastWorkedTick === undefined)) fail('terrainSuccession.cells.references');
+  }
   let previousFlowTick = -1;
   let previousFlowId = 0;
   for (const book of w.resourceFlow.months) {

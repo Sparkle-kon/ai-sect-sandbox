@@ -14,7 +14,7 @@ const REASONS: Readonly<Record<string, string>> = {
   brew_output: '炼成丹药', pill_use: '使用丹药', treasury_tax: '库账税赋', treasury_mining: '灵石矿产',
   treasury_upkeep: '宗门维护', treasury_overflow: '库容溢出', facility_construction: '设施建设',
   oath_funded: '天道契书托管', oath_paid: '契书价金支付', oath_refunded: '契书托管退款', oath_forfeited: '契书抵押罚没',
-  oath_goods: '契书实物交付', commons_upkeep: '中立灵地共管维护',
+  oath_goods: '契书实物交付', commons_upkeep: '中立灵地共管维护', terrain_recovery: '地脉修复实耗',
   order_deposit: '挂单托管', order_release: '撤单或到期退回', price_improvement: '限价差退回',
   local_fill: '现场交割', shipment_departure: '商队启程转入保管', shipment_delivery: '商队到货交割',
   shipment_return: '商队退运退款退货', shipment_refund: '货损退款', shipment_loss: '实际货损',

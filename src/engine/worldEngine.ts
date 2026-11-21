@@ -1,3 +1,4 @@
+import { advanceTerrainSuccession, resolveTerrainRecovery } from './terrainSuccessionEngine';
 import { openResourceFlowMonth } from './resourceFlowEngine';
 import { advanceSharedCommons, resolveSharedCommonsAction } from './sharedCommonsEngine';
 import { resolveServiceRetirementAction } from './serviceRetirementEngine';
@@ -222,6 +223,8 @@ export function applyCultivatorBrainDecision(
     case 'ATTEST_WITNESS':
     case 'CHALLENGE_WITNESS':
       return resolveWitnessAction(world, cultivator, decision);
+    case 'TERRAIN_RECOVERY':
+      return resolveTerrainRecovery(world, cultivator, decision);
     case 'SHARED_COMMONS':
       return resolveSharedCommonsAction(world, cultivator, decision);
     case 'SECT_SERVICE': {
@@ -698,7 +701,7 @@ export function advanceWorldTick(
   const avatarOrder = consumeAvatarOrder(nextState);
   maintainAlchemy(nextState);
   maintainSectEconomy(nextState);
-  const newEvents: WorldEvent[] = [...advanceSanctuaries(nextState), ...advanceCeasefires(nextState), ...advanceCompetitionSeasons(nextState), ...advanceMapHazards(nextState), ...advanceCouriers(nextState), ...advancePilgrimages(nextState), ...advanceRelocations(nextState), ...advanceSettlements(nextState), ...advanceVillageWorks(nextState), ...advanceSpiritBeasts(nextState, rng), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...advanceSharedCommons(nextState), ...advanceHouseholds(nextState)];
+  const newEvents: WorldEvent[] = [...advanceSanctuaries(nextState), ...advanceCeasefires(nextState), ...advanceCompetitionSeasons(nextState), ...advanceMapHazards(nextState), ...advanceTerrainSuccession(nextState), ...advanceCouriers(nextState), ...advancePilgrimages(nextState), ...advanceRelocations(nextState), ...advanceSettlements(nextState), ...advanceVillageWorks(nextState), ...advanceSpiritBeasts(nextState, rng), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...advanceSharedCommons(nextState), ...advanceHouseholds(nextState)];
   for (const event of newEvents) witnessEvent(nextState, event);
 
   for (const cultivator of [...nextState.cultivators]) {

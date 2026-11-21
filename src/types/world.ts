@@ -99,6 +99,7 @@ export type ActionType =
   | 'SEALED_COURIER'
   | 'SECT_SERVICE'
   | 'SHARED_COMMONS'
+  | 'TERRAIN_RECOVERY'
   | 'GATHER_HERBS'
   | 'BREW_PILL'
   | 'USE_PILL'
@@ -398,6 +399,7 @@ export interface LLMDecisionPayload {
   commonsMove?: CommonsMove;
   targetCommonsId?: string;
   targetCommonsThirdSectId?: string;
+  targetTerrainTileId?: string;
   serviceMove?: SectServiceMove;
   courierMove?: CourierMove;
   targetCourierId?: string;
@@ -574,6 +576,29 @@ export interface MapHazard {
   createdTick: number;
   expiresTick: number;
   intensity: number;
+}
+
+export interface TerrainSuccessionCell {
+  tileId: string;
+  firstTick: number;
+  lastStressTick: number;
+  consecutiveStress: number;
+  quietTicks: number;
+  baselineBiome: TerrainBiome;
+  baselineQi: number;
+  recoverableLoss: number;
+  permanentLoss: number;
+  scarredBiome?: TerrainBiome;
+  affectedBiome?: TerrainBiome;
+  phase: 'stressed' | 'recovering' | 'recovered' | 'scarred';
+  workCount: number;
+  lastWorkedTick?: number;
+  lastWorkedBy?: string;
+}
+
+export interface TerrainSuccessionState {
+  cells: TerrainSuccessionCell[];
+  lastAdvancedTick?: number;
 }
 
 export interface SpiritBeast {
@@ -1821,7 +1846,7 @@ export interface SharedCommonsPact {
 export interface SharedCommonsState { pacts: SharedCommonsPact[]; nextId: number }
 
 export type ResourceFlowGood = 'stone' | MarketGood;
-export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation';
+export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation' | 'terrain';
 export type ResourceFlowAccount =
   | { kind: 'actor' | 'site' | 'sect' | 'order' | 'shipment' | 'relocation'; id: string }
   | { kind: 'oath'; id: string; pocket: 'payment' | 'collateral' };
@@ -1915,6 +1940,7 @@ export interface WorldState {
   terrain: WorldTerrain;
   mapPresentation: MapPresentation;
   mapHazards: MapHazard[];
+  terrainSuccession: TerrainSuccessionState;
   spiritBeasts: SpiritBeast[];
   cultivators: Cultivator[];
   relationships: RelationshipEdge[];

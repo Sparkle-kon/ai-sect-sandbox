@@ -17,7 +17,7 @@ import { isActiveCampaign, SIEGE_LABELS } from './siegeLabels';
 import { isOpenOccasion, OCCASION_KIND, OCCASION_STATUS } from './occasionLabels';
 import { BOUNTY_STATUS, relevantBounty } from './bountyLabels';
 import { BIOME_PALETTE, createTerrainMapView, mapActorPositions } from './terrainMapView';
-import { drawTerrain } from './terrainMapDraw';
+import { drawTerrain, EXPLORED_TERRAIN_SHADE } from './terrainMapDraw';
 import { drawMapConvoys, mapTransitActorIds, visibleMapConvoys, visibleMapEscort } from './mapConvoyView';
 import { buildMapPresentation, MAP_EFFECT_LABELS, MOTION_MS } from './mapPresentationView';
 import { drawFlights, drawMapEffects } from './mapPresentationDraw';
@@ -34,6 +34,7 @@ import { localQiWeather } from '../engine/weatherEngine';
 import { visiblePilgrimageMapCheckpoint } from './pilgrimageMapView';
 import { visibleSanctuaryMapMarks } from './sanctuaryView';
 
+const TerrainSuccessionPanel = React.lazy(async () => ({ default: (await import('./TerrainSuccessionPanel')).TerrainSuccessionPanel }));
 const MapKeyboardExplorer = React.lazy(async () => ({ default: (await import('./MapKeyboardExplorer')).MapKeyboardExplorer }));
 
 const WEATHER_MARK = {
@@ -849,7 +850,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
               const width = MAP_WIDTH / world.terrain.columns;
               const height = MAP_HEIGHT / world.terrain.rows;
               return <rect key={tile.id} x={tile.col * width} y={tile.row * height} width={width} height={height}
-                fill={state === 'hidden' ? '#070c19' : BIOME_PALETTE[tile.biome].swatch}
+                fill={state === 'hidden' ? '#070c19' : state === 'explored' ? EXPLORED_TERRAIN_SHADE : BIOME_PALETTE[tile.biome].swatch}
                 opacity={state === 'explored' ? 0.35 : 1} />;
             })}
             <rect x={minViewport.x + 5} y={minViewport.y + 5}
@@ -1038,7 +1039,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           {seenLocations.map((location) => {
             const tile = mapView.locationTile.get(location.id);
             if (!isCurrentLocation(location.id)) {
-              return <li key={location.id}>{location.name} · {tile?.biome ?? '地形未详'} · 已探索，当前不可见</li>;
+              return <li key={location.id}>{location.name} · 已探索，当前不可见</li>;
             }
             const herbCount = countHerbs(location.herbs);
             const trialCount = trialsByLocation.get(location.id) ?? 0;
@@ -1112,21 +1113,26 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         className="border-t border-slate-800/80 bg-slate-900/40 px-4 py-2 text-[11px] text-slate-300"
         onToggle={(event) => setTileDetailsOpen(event.currentTarget.open)}
       >
-        <summary className="cursor-pointer">逐格查看地形与灵气</summary>
+        <summary className="min-h-11 cursor-pointer py-2.5">逐格查看地形与灵气</summary>
         {tileDetailsOpen && (
-          <ul className="mt-2 grid max-h-44 grid-cols-1 gap-1 overflow-y-auto sm:grid-cols-2">
-            {world.terrain.tiles.flatMap((tile) => {
-              const state = mapView.tileState(tile);
-              if (state === 'hidden') return [];
-              const owner = world.sects.find(({ id }) => id === tile.ownerSectId)?.name;
-              return (
-                <li key={tile.id} className="rounded bg-slate-900/70 px-1.5 py-0.5">
-                  第 {tile.row + 1} 行，第 {tile.col + 1} 列 · {tile.biome}
-                  {state === 'visible' ? ` · 灵气 ${tile.spiritQi} · ${owner ?? '无所属宗门'}` : ' · 已探索，当前不可见'}
-                </li>
-              );
-            })}
-          </ul>
+          <div className="mt-2 space-y-2">
+            <React.Suspense fallback={<p role="status">读取地脉与路线记录…</p>}>
+              <TerrainSuccessionPanel world={world} view={mapView} selected={selected} />
+            </React.Suspense>
+            <ul className="grid max-h-44 grid-cols-1 gap-1 overflow-y-auto sm:grid-cols-2">
+              {world.terrain.tiles.flatMap((tile) => {
+                const state = mapView.tileState(tile);
+                if (state === 'hidden') return [];
+                const owner = world.sects.find(({ id }) => id === tile.ownerSectId)?.name;
+                return (
+                  <li key={tile.id} className="rounded bg-slate-900/70 px-1.5 py-0.5">
+                    第 {tile.row + 1} 行，第 {tile.col + 1} 列
+                    {state === 'visible' ? ` · ${tile.biome} · 灵气 ${tile.spiritQi} · ${owner ?? '无所属宗门'}` : ' · 已探索，当前不可见'}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
         )}
       </details>
     </div>

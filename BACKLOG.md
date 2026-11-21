@@ -125,7 +125,7 @@
 - [x] **[P10-7] Voluntary Retirement and Return to Service (告老退居与自愿复出)**: Release actual guard, stewardship and council duties while preserving personal assets and rank history. Reassign service once, record voluntary return and test seamless operation when key officers retire together.
 - [x] **[P10-8] Shared Commons and Joint Quotas (灵地公域与共管配额)**: Let several sects fund a common site through explicit agreements, allocate real harvest and maintenance by signed shares, and settle unpaid commitments without duplicating stock or forcing territorial transfer.
 - [x] **[P10-9] Resource Flow Reconciliation (物资流向与月度对账)**: Show accountable transfers between people, sites, caravans, clan chests and escrow without counting the same goods in multiple ledgers. Distinguish production, consumption and losses in deterministic monthly receipts.
-- [ ] **[P10-10] Long-Term Terrain Recovery and Succession (地脉修复与长期演替)**: Track irreversible and recoverable ecological changes after prolonged stress. Follow bounded recovery work and terrain state transitions; prove routes remain connected or show a valid alternate route in the map index.
+- [x] **[P10-10] Long-Term Terrain Recovery and Succession (地脉修复与长期演替)**: Track irreversible and recoverable ecological changes after prolonged stress. Follow bounded recovery work and terrain state transitions; prove routes remain connected or show a valid alternate route in the map index.
 
 ---
 

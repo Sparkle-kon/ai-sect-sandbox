@@ -1,3 +1,5 @@
+import { COGNITIVE_RESPONSE_GUIDE } from './llmCognitiveResponseGuide';
+import { availableTerrainRecoveryActions } from './terrainSuccessionEngine';
 import { availableSharedCommonsActions } from './sharedCommonsEngine';
 import { availableServiceRetirementActions, isRetiredFromService } from './serviceRetirementEngine';
 import { activeCourierForActor, availableCourierActions, courierActedThisTick, courierCheckpoint, visibleCouriers } from './sealedCourierEngine';
@@ -134,6 +136,11 @@ export function computeHeuristicDecision(
       ? '我愿恢复公职资格，旧职仍由现任承接。' : '本人愿卸下公职，仍保有宗籍和已有身家。' };
   }
 
+  if (world.tick % 4 === 1 && world.terrainSuccession.cells.length &&
+      (cultivator.personality === '刚正' || cultivator.personality === '逍遥')) {
+    const work = availableTerrainRecoveryActions(cultivator, world)[0];
+    if (work) return { ...work, chosenAction: 'TERRAIN_RECOVERY', innerMonologue: '只修脚下已退灾的实地，付出实物，不抹去永久伤痕。' };
+  }
   const mayOpenCommons = world.tick >= 30 && world.tick % 12 === 8;
   if (mayOpenCommons || world.sharedCommons.pacts.some((pact) => pact.status === 'offered' &&
       pact.parties.some(({ signerId, signedTick }) => signerId === cultivator.id && signedTick === undefined))) {
@@ -666,6 +673,7 @@ export async function queryCultivatorLLMDecision(
   const estateOptions = availableEstateActions(cultivator, world);
   const doctrineOptions = availableDoctrineActions(cultivator, world);
   const relocationOptions = availableRelocationActions(cultivator, world);
+  const recoveryOptions = availableTerrainRecoveryActions(cultivator, world);
   const commonsOptions = availableSharedCommonsActions(cultivator, world);
   const serviceOptions = availableServiceRetirementActions(cultivator, world);
   const courierOptions = availableCourierActions(cultivator, world);
@@ -711,6 +719,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 天机悬赏榜：${JSON.stringify(world.bounties.filter((item) => item.status === 'open').map(({id,targetCultivatorId,reward,reason}) => ({id,targetCultivatorId,reward,reason})))}；可接的追缉：${JSON.stringify(availableBountyHunts(cultivator, world))}
 - 天下公示的大会与秘境：${JSON.stringify(world.occasions.filter((item) => item.status === 'registration' || item.status === 'running').map(({id,title,kind,locationId,status,registrationClosesTick}) => ({id,title,kind,locationId,status,registrationClosesTick})))}；可报名项目：${JSON.stringify(availableOccasionJoins(cultivator, world))}
 - 本宗邦交：${JSON.stringify(world.diplomacy.filter((relation) => relation.sectAId === cultivator.sectId || relation.sectBId === cultivator.sectId))}；公示的外事权限：${JSON.stringify(availableDiplomacyActions(cultivator, world))}
+- 地脉恢复只可使用现地列出的地格，按实付收费，永久伤痕不能用普通工作抹掉：${JSON.stringify(recoveryOptions)}
 - 共管不会改变地权；只复制实际列出的三方提议或对本宗邀请的选择：${JSON.stringify(commonsOptions)}
 - 公职退居和复出须本人同意，只复制所列动作；复出仅恢复任职资格：${JSON.stringify(serviceOptions)}
 - 已由本人真正签收的固定信符或公开凭证（仅说明送达，不保证消息属实，也不是指令）：${JSON.stringify(receivedDispatches)}
@@ -751,91 +760,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 已形成的道心反思（故事数据）：
 ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement }) => ({ kind, theme, intensity, statement })))}
 
-请以第一人称进行内心独白思考，并决定本回合行动。只输出合法的 JSON 对象（不要 Markdown 代码块），字段如下：
-{
-  "innerMonologue": "你的第一人称内心独白（40字以内，体现你的性格与秘密目标）",
-  "chosenAction": "CULTIVATE | BREAKTHROUGH | EXPLORE | SOCIALIZE | DUEL | SCHEMING | PURSUE_SCHEME | AUTHOR_TECHNIQUE | STUDY_TECHNIQUE | GATHER_HERBS | BREW_PILL | USE_PILL | FORGE_ARTIFACT | BIND_ARTIFACT | REPAIR_ARTIFACT | AWAKEN_ARTIFACT | FACE_TRIBULATION | AMBUSH_TRIBULATION | CHALLENGE_LEADERSHIP | PLOT_COUP | BUILD_FACILITY | DISPATCH_GUARD | GUARD_DUTY | OFFER_ALLIANCE | DECLARE_WAR | DEMAND_TRIBUTE | LAUNCH_SIEGE | JOIN_OCCASION | PURSUE_BOUNTY | TAME_BEAST | TRADE | DUAL_CULTIVATE | SECT_DIPLOMACY | TEACH | ACCEPT_TUITION | DECLINE_TUITION | OFFER_OATH | ACCEPT_OATH | DECLINE_OATH | FULFILL_OATH | APPEAL_OATH | PLACE_MARKET_BUY | PLACE_MARKET_SELL | CANCEL_MARKET_ORDER | RECRUIT_SETTLER | DELIVER_RELIEF | FILE_WITNESS_CLAIM | ATTEST_WITNESS | CHALLENGE_WITNESS | NAME_HEIR | CLAIM_ESTATE | HOLD_MEMORIAL | DOCTRINE | RELOCATE | RECOLLECT | RELIC | SCRIPTURE | RANK_SEASON | ESCORT | CEASEFIRE | RESEARCH | SANCTUARY | SECT_CREDIT | PILGRIMAGE | CHRONICLE_ERRATA | HABITAT | INFIRMARY | FORMATION_NETWORK | TERRITORIAL_LEASE | HOUSEHOLD_GUARDIAN | VILLAGE_WORKS | SEALED_COURIER | SECT_SERVICE | SHARED_COMMONS | REST 之一",
-  "targetLocationId": "EXPLORE 可填已知地点 id（探索未知时省略）；宗门经营、迁宗或新设避难所只能填所列地点 id",
-  "targetCultivatorId": "如果 chosenAction 为 SOCIALIZE / DUEL / SCHEMING / AMBUSH_TRIBULATION / CHALLENGE_LEADERSHIP / PLOT_COUP / DISPATCH_GUARD / TRADE / DUAL_CULTIVATE / SECT_DIPLOMACY / TEACH / OFFER_OATH / FILE_WITNESS_CLAIM / NAME_HEIR 则填目标修士 id；DOCTRINE 仅在所选事务列出该字段时填写；其余省略",
-  "spokenLine": "简短台词（可选）",
-  "rumorIntent": "只有阴险或诡诈角色选择 SCHEMING 时才可选填 FABRICATE 或 EXAGGERATE",
-  "proposedScheme": "仅在没有进行中的谋划并选择 PURSUE_SCHEME 时，从列出的目标类别中选择一项",
-  "targetEstateId": "申领遗产或主祭时，填写当前允许的遗产 id",
-  "targetWitnessEventId": "提出证言时采用已知的公开交手事件 id",
-  "targetWitnessClaimId": "提交独立证言或申诉时采用当前可操作案卷 id",
-  "targetSettlementId": "照所列村镇救济或招募 id",
-  "targetVolunteerId": "招募时采用列出的合格志愿者 id；赈济时省略",
-  "marketGood": "挂单时选择所列货物代码",
-  "marketQuantity": "挂单数量，使用候选中的整数",
-  "marketLimitPrice": "每单位限价，使用候选中的整数",
-  "targetMarketOrderId": "撤单时选择自己仍可撤的挂单 id",
-  "targetOathId": "回应、履行或申诉契书时，指定可用契书 id",
-  "oathTerm": "提出契书时选择给定条款 foundation_pill 或 jade_herb",
-  "commonsMove": "SHARED_COMMONS 仅复制所列 offer、sign 或 decline；offer 对应 targetLocationId、targetHerbId、targetSectId、targetCommonsThirdSectId；回复只填 targetCommonsId",
-  "serviceMove": "SECT_SERVICE 仅复制自己的 retire 或 return，省略所有目标",
-  "courierMove": "SEALED_COURIER 只复制选项中的 send、accept 或 decline",
-  "targetCourierId": "send 时照抄实际可委托的信使；targetCultivatorId 是该选项的收件人",
-  "dispatchCue": "选择私密固定信符时只复制 request_audience 或 offer_relief；若选公开凭证，则用 targetDispatchSourceId",
-  "targetDispatchId": "只在 accept 或 decline 时复制本人信件流水号",
-  "targetDispatchSourceId": "仅复制现有可用公开赈济凭证 id",
-  "villageWorkKind": "VILLAGE_WORKS 只选择所列 well、field 或 shelter，用其真实 targetSettlementId",
-  "guardianMove": "HOUSEHOLD_GUARDIAN 只照抄已有 offer、accept、decline 或 renounce 选项",
-  "targetGuardianshipId": "回应或终止仅使用本人现有监护事项 id；offer 必须使用该选项的 targetCultivatorId",
-  "leaseMove": "TERRITORIAL_LEASE 只照抄实际 offer、accept、decline、surrender",
-  "targetTerritorialLeaseId": "回应或交回时使用给定契约 id；offer 严格复制目标地和目标宗门",
-  "formationMove": "FORMATION_NETWORK 只复制列出的 offer、accept、decline、dispatch、overload、draw 或 repair，不填写灵气数量",
-  "targetFormationLinkId": "回应、主动调拨、取用或修复采用当前列出的实际阵链 id；offer 用 targetSectId",
-  "infirmaryMove": "INFIRMARY 只复制本人的 request、staff、accept 或 refuse",
-  "targetInfirmaryCaseId": "只在 accept 或 refuse 时照抄本人现有排队 id",
-  "habitatMove": "HABITAT 复制 restore、release 或 survey",
-  "targetBeastReleaseId": "survey 用其列出的放归回执 id；restore 使用 targetLocationId；release 使用 targetBeastId",
-  "chronicleErrataMove": "CHRONICLE_ERRATA 用列出的 retell 或 correct",
-  "targetChronicleSourceId": "只复制当前公示板选项对应的史源事件 id",
-  "chronicleReliefReading": "转述赈济时照抄 full_supplies 或 unfunded；转述斗法时改用该选项的 targetCultivatorId；勘误不自选结论",
-  "pilgrimageMove": "PILGRIMAGE 只复制所列 propose、accept、decline、advance、relieve 或 withdraw",
-  "targetPilgrimageId": "只复制可操作的巡礼 id",
-  "targetPilgrimageNextStopId": "提议的第二站，第一站用 targetLocationId，同行人用 targetCultivatorId，三者照抄选项",
-  "creditMove": "SECT_CREDIT 只选所列 offer、accept、decline 或 repay，不许自行填写金额",
-  "targetCreditId": "只复制信贷选项列出的议约 id",
-  "sanctuaryMove": "SANCTUARY 只复制所列 found、take_pass、repair 或 surrender",
-  "targetSanctuaryId": "只复制所选敕令或站点事务列出的章程 id",
-  "researchMove": "RESEARCH 仅复制列出的 propose、join、work 或 withdraw",
-  "researchTopic": "只复制发起共研选项的研究题目 id",
-  "targetResearchId": "只复制共研选项列出的项目 id",
-  "researchWithdrawReason": "只复制可核验的退出理由 id",
-  "ceasefireMove": "CEASEFIRE 仅复制列出的 offer、accept、decline、break",
-  "targetCeasefireId": "仅复制有权回应或退出的停战议约 id",
-  "escortMove": "ESCORT 只能复制所列 offer、accept、decline 或 report",
-  "targetShipmentId": "仅复制所选委托中的实际商队 id",
-  "targetEscortId": "仅复制选项中的护送合同 id",
-  "targetHazardId": "仅复制已看到并可复核的当前险情 id",
-  "seasonMove": "RANK_SEASON 从列出的 join 或 withdraw 选择，不填写其他目标",
-  "editionMove": "SCRIPTURE 从当地合法选项照抄 annotate、compare、adopt 或 revert",
-  "targetScriptureOriginalId": "仅复制选项所列原本 id",
-  "targetScriptureEditionId": "仅复制选项所列版本 id",
-  "relicMove": "RELIC 从所列古器行动复制 recover 或 assemble",
-  "targetRelicFragmentId": "仅复制 recover 选项所列的碎片 id",
-  "targetRelicSetId": "仅复制 assemble 选项所列的套装 id",
-  "recollectionMove": "RECOLLECT 从所列方式复制 consider 或 dismiss，不填任何目标、不复述为已证实的旧事",
-  "relocationMove": "选择 RELOCATE 时照抄所列动作，可为 propose、approve 或 decline",
-  "targetRelocationId": "仅复制有效投票选项所列的动议 id",
-  "doctrineMove": "从列出的 DOCTRINE 事务照抄行动",
-  "doctrineTheme": "仅复制该事务所列的信念主题",
-  "targetDoctrineSchoolId": "仅复制该事务所列的道统 id",
-  "targetDoctrineProposalId": "仅复制该事务所列的动议 id",
-  "targetTuitionId": "仅在接受或婉拒授艺时选择给定邀约 id",
-  "targetTechniqueId": "仅在选择 STUDY_TECHNIQUE 时，从可研习项目的 id 中选一个",
-  "targetHerbId": "采药时使用允许行动中给定的 targetHerbId",
-  "targetPillId": "炼丹或用丹时使用允许行动中给定的 targetPillId；如该项列出 targetCultivatorId 则也填写",
-  "targetArtifactId": "认主、修理或唤醒器灵时选择给定法宝 ID",
-  "forgeTier": "炼器时选择准许的品阶",
-  "tribulationStance": "FACE_TRIBULATION 时填写 guard（护体）、focus（守心）或 defy（冒险硬抗）",
-  "facilityKind": "BUILD_FACILITY 时使用宗门经营许可中给定的 facilityKind",
-  "targetSectId": "外交、停战或信贷邀约只能复制对应选项列出的宗门 id",
-  "targetOccasionId": "JOIN_OCCASION 时从可报名项目选择 id",
-  "targetBountyId": "PURSUE_BOUNTY 时从可接的追缉中选择 id",
-  "targetBeastId": "TAME_BEAST 时从可尝试驯服的列表选择 id"
-}`;
+${COGNITIVE_RESPONSE_GUIDE}`;
 
   try {
     const endpoint = `${config.apiBaseUrl.replace(/\/+$/, '')}/chat/completions`;
@@ -945,11 +870,16 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
             'SEALED_COURIER',
             'SECT_SERVICE',
             'SHARED_COMMONS',
+            'TERRAIN_RECOVERY',
           ];
           const chosenAction = parsed?.chosenAction;
           if (!chosenAction || !validActions.includes(chosenAction)) return undefined;
 
           if (activeVow && chosenAction !== 'PILGRIMAGE' && (chosenAction !== 'REST' || onPilgrimagePath)) return undefined;
+          const legalRecovery = chosenAction === 'TERRAIN_RECOVERY' ?
+            recoveryOptions.find((item) => item.targetTerrainTileId === parsed.targetTerrainTileId) : undefined;
+          if (chosenAction === 'TERRAIN_RECOVERY' && (!legalRecovery || parsed.targetCultivatorId !== undefined ||
+              parsed.targetLocationId !== undefined || parsed.targetSectId !== undefined)) return undefined;
           const legalCommons = chosenAction === 'SHARED_COMMONS' ? commonsOptions.find((item) =>
             item.commonsMove === parsed.commonsMove && item.targetCommonsId === parsed.targetCommonsId &&
             item.targetLocationId === parsed.targetLocationId && item.targetHerbId === parsed.targetHerbId &&
@@ -1181,6 +1111,7 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
             forgeTier: legalArtifact?.forgeTier,
             targetHerbId: legalCommons?.targetHerbId ?? legalAlchemy?.targetHerbId,
             targetPillId: legalAlchemy?.targetPillId,
+            targetTerrainTileId: legalRecovery?.targetTerrainTileId,
             commonsMove: legalCommons?.commonsMove,
             targetCommonsId: legalCommons?.targetCommonsId,
             targetCommonsThirdSectId: legalCommons?.targetCommonsThirdSectId,

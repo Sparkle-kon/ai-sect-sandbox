@@ -1,3 +1,4 @@
+import { rebaselineTerrainPaint, recordTerrainMeteor } from './terrainSuccessionEngine';
 import { cloneWorldWithColdHistory } from './coldHistoryEngine';
 import { courierCheckpoint, reconcileCourierDeaths } from './sealedCourierEngine';
 import { advanceHouseholds } from './householdEngine';
@@ -93,7 +94,9 @@ export function applyMapBrush(prev: WorldState, kind: GodBrushKind, points: MapP
   const brushEvents: WorldEvent[] = [];
   for (const tile of world.terrain.tiles) {
     if (!selected.has(tile.id)) continue;
+    const beforeTerrain = { biome: tile.biome, spiritQi: tile.spiritQi };
     const sites = kind === 'paint_vein' ? paintVein(world, tile) : nodesIn(world, tile.id);
+    if (kind === 'paint_vein') rebaselineTerrainPaint(world, tile.id);
     let hits: Hit[] = [];
     if (kind !== 'paint_vein') {
       const prior = world.mapHazards.find((item) => item.tileId === tile.id && item.kind === kind && world.tick < item.expiresTick);
@@ -105,6 +108,7 @@ export function applyMapBrush(prev: WorldState, kind: GodBrushKind, points: MapP
       if (kind === 'meteor') {
         tile.spiritQi = clamp(tile.spiritQi - 24, 5, 100);
         tile.biome = '荒漠';
+        recordTerrainMeteor(world, tile.id, beforeTerrain);
         for (const site of sites) site.spiritQi = clamp(site.spiritQi - 18, 5, 100);
         hits = hurt(world, peopleAtTile(world, tile.id), (person) => Math.max(1, Math.round(person.maxHp * (.19 + .045 * intensity))), BRUSH_TITLES[kind]);
       }
