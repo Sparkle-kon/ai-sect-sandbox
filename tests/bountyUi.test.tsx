@@ -56,10 +56,13 @@ describe('public bounty board UI', () => {
   });
 
   it('keeps the board in the application outside the selected-character inspector', () => {
-    const html = renderToStaticMarkup(<App />);
+    const html = renderToStaticMarkup(<App initialWorkspace="world" initialSection="bounties" />);
     expect(html).toContain('aria-label="天机悬赏榜"');
     expect(html).toContain('当前没有公开悬赏。');
-    expect(html.indexOf('aria-label="天机悬赏榜"')).toBeLessThan(html.indexOf('aria-label="业力与悬赏摘要"'));
+    expect(html).not.toContain('aria-label="业力与悬赏摘要"');
+    const person = renderToStaticMarkup(<App initialWorkspace="people" />);
+    expect(person).toContain('aria-label="业力与悬赏摘要"');
+    expect(person).not.toContain('aria-label="天机悬赏榜"');
   });
 
   it('prioritizes selected open status over history without placing bounty reasons or global markers on the map', () => {

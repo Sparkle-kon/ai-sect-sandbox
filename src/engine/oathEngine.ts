@@ -24,7 +24,7 @@ export interface OathOption {
 
 export function createOathState(): OathState { return { contracts: [], nextId: 1 }; }
 
-export function availableOathActions(actor: Cultivator, world: WorldState): OathOption[] {
+export function availableOathActions(actor: Cultivator, world: WorldState, includeOffers = true): OathOption[] {
   if (!isLive(actor)) return [];
   const liveContracts = world.oaths.contracts.filter(outstanding);
   const options: OathOption[] = [];
@@ -48,7 +48,7 @@ export function availableOathActions(actor: Cultivator, world: WorldState): Oath
       options.push({ action: 'APPEAL_OATH', targetOathId: oath.id });
     }
   }
-  if (ownContracts.length >= PARTY_SLOTS || !world.locations.some(({ id }) => id === actor.locationId)) return options;
+  if (!includeOffers || ownContracts.length >= PARTY_SLOTS || !world.locations.some(({ id }) => id === actor.locationId)) return options;
   for (const provider of world.cultivators) {
     if (provider.id === actor.id || !isLive(provider) || provider.locationId !== actor.locationId || related(provider.id).length >= PARTY_SLOTS ||
         ownContracts.some((item) => item.requesterId === provider.id || item.providerId === provider.id)) continue;

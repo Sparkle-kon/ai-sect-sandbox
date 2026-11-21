@@ -66,6 +66,7 @@ export function deriveMapPresentation(prev: WorldState, next: WorldState, events
     effects.set(id, { id, tick: next.tick, kind, locationId, actorIds: [...actorIds], text });
   };
   const damaged = new Set<string>();
+  const paths = new Map<string, MapPoint[]>();
   for (const entry of events) {
     if (entry.tick !== next.tick) continue;
     const first = entry.actorIds[0] ? after.get(entry.actorIds[0]) : undefined;
@@ -87,7 +88,9 @@ export function deriveMapPresentation(prev: WorldState, next: WorldState, events
       const origin = prevSites.get(previous.locationId) ?? nextSites.get(previous.locationId);
       const dest = nextSites.get(actor.locationId);
       if (origin && dest) {
-        const points = findMapPath(next, origin, dest);
+        const route = `${origin.x}/${origin.y}>${dest.x}/${dest.y}`;
+        const points = paths.get(route) ?? findMapPath(next, origin, dest);
+        paths.set(route, points);
         if (points.length > 1) trails.set(actor.id, { cultivatorId: actor.id, tick: next.tick, fromLocationId: previous.locationId,
           toLocationId: actor.locationId, points });
       }

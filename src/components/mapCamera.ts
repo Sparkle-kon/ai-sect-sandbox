@@ -40,3 +40,22 @@ export function clientToMapViewport(rect: Pick<DOMRect, 'left' | 'top' | 'width'
   if (!rect.width || !rect.height) return undefined;
   return { x: (point.x - rect.left) * MAP_WIDTH / rect.width, y: (point.y - rect.top) * MAP_HEIGHT / rect.height };
 }
+
+export function viewportPixelDistance(a: CameraPoint, b: CameraPoint, size: { width: number; height: number }): number {
+  return Math.hypot((a.x - b.x) * size.width / MAP_WIDTH, (a.y - b.y) * size.height / MAP_HEIGHT);
+}
+
+/** Keep a fingertip-sized hit radius after CSS scaling, choosing the actual nearest visible marker. */
+export function closestViewportTarget<T extends CameraPoint>(candidates: readonly T[], camera: MapCamera,
+  click: CameraPoint, size: { width: number; height: number }, radius: number): T | undefined {
+  if (size.width <= 0 || size.height <= 0 || radius <= 0) return undefined;
+  let nearest: T | undefined;
+  let best = radius;
+  for (const candidate of candidates) {
+    const screen = mapToScreen(camera, candidate);
+    if (screen.x < 0 || screen.y < 0 || screen.x > MAP_WIDTH || screen.y > MAP_HEIGHT) continue;
+    const gap = viewportPixelDistance(screen, click, size);
+    if (gap <= radius && (!nearest || gap < best)) { nearest = candidate; best = gap; }
+  }
+  return nearest;
+}

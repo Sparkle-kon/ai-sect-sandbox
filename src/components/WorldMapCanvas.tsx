@@ -15,7 +15,7 @@ import { BIOME_PALETTE, createTerrainMapView, mapActorPositions } from './terrai
 import { drawTerrain } from './terrainMapDraw';
 import { buildMapPresentation, MAP_EFFECT_LABELS, MOTION_MS } from './mapPresentationView';
 import { drawFlights, drawMapEffects } from './mapPresentationDraw';
-import { centerCamera, clientToMapViewport, DEFAULT_CAMERA, MAP_HEIGHT, MAP_WIDTH, MAX_ZOOM, panCamera, screenToMap, zoomCamera } from './mapCamera';
+import { centerCamera, clientToMapViewport, closestViewportTarget, DEFAULT_CAMERA, MAP_HEIGHT, MAP_WIDTH, MAX_ZOOM, panCamera, screenToMap, viewportPixelDistance, zoomCamera } from './mapCamera';
 import type { CameraPoint, MapCamera } from './mapCamera';
 import { BRUSH_LABELS, brushPoint, drawHazards, getVisibleHazards } from './mapBrushView';
 import { BEAST_COLORS, visibleBeastsByLocation } from './spiritBeastView';
@@ -35,6 +35,7 @@ interface WorldMapCanvasProps {
   onSelectCultivator: (id: string) => void;
   onSelectLocation?: (loc: LocationNode) => void;
   onBrushStroke?: (kind: GodBrushKind, points: MapPoint[]) => void;
+  compact?: boolean;
 }
 
 export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
@@ -43,15 +44,17 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   onSelectCultivator,
   onSelectLocation,
   onBrushStroke,
+  compact = false,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [camera, setCamera] = useState(DEFAULT_CAMERA);
+  const [touchPan, setTouchPan] = useState(false);
   const cameraRef = useRef(camera);
   const updateCamera = (next: MapCamera) => { cameraRef.current = next; setCamera(next); };
   const [brush, setBrush] = useState<GodBrushKind | 'browse'>('browse');
   const [preview, setPreview] = useState<MapPoint[]>([]);
   const gesture = useRef<{
-    pointer: number; initial: CameraPoint; previous: CameraPoint; moved: boolean;
+    pointer: number; initial: CameraPoint; previous: CameraPoint; moved: boolean; isTouch: boolean;
     brush?: GodBrushKind; points: MapPoint[];
   } | undefined>();
   const [fog, setFog] = useState(false);
@@ -313,6 +316,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       // 5. Draw only actors in the current field of view.
       const frameActors = drawFlights(ctx, actorPositions, presentation.routes, elapsed, animate);
       paintedActors.current = frameActors;
+      const marked = new Set<string>();
       for (const { actor: cultivator, x: cx, y: cy } of frameActors) {
           const sect = world.sects.find((s) => s.id === cultivator.sectId);
           const color = sect?.color ?? '#38bdf8';
@@ -359,14 +363,16 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           ctx.fillStyle = '#f8fafc';
           ctx.font = 'bold 11px sans-serif';
           ctx.textAlign = 'center';
-          ctx.fillText(`${cultivator.name}`, cx, cy + 24);
+          const labelCell = `${Math.floor(cx * camera.zoom / 75)}:${Math.floor(cy * camera.zoom / 36)}`;
+          const showName = !compact || isSelected || (camera.zoom >= 2 && !marked.has(labelCell));
+          if (showName) { ctx.fillText(`${cultivator.name}`, cx, cy + 24); marked.add(labelCell); }
           if (cultivator.id === avatarId) {
             ctx.fillStyle = '#fde68a';
             ctx.fillText('临身', cx, cy - 20);
           }
           ctx.fillStyle = '#cbd5e1';
           ctx.font = '10px sans-serif';
-          ctx.fillText(
+          if (showName) ctx.fillText(
             `${cultivator.realm}${cultivator.realmStage}`,
             cx,
             cy + 36
@@ -420,7 +426,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener('change', stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, hazards, beastsByLocation, weatherAtVisibleSites, armedBrush, preview]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, hazards, beastsByLocation, weatherAtVisibleSites, armedBrush, preview, compact]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -452,7 +458,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     if (!screen) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     const points = armedBrush ? brushPoint([], screenToMap(cameraRef.current, screen)) : [];
-    gesture.current = { pointer: event.pointerId, initial: screen, previous: screen, moved: false, brush: armedBrush, points };
+    gesture.current = { pointer: event.pointerId, initial: screen, previous: screen, moved: false,
+      isTouch: event.pointerType === 'touch', brush: armedBrush, points };
     if (armedBrush) setPreview(points);
   };
   const updateGesture = (event: React.PointerEvent<HTMLCanvasElement>) => {
@@ -464,10 +471,12 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     if (active.brush) {
       const next = brushPoint(active.points, screenToMap(currentCamera, screen));
       if (next !== active.points) { active.points = next; setPreview(next); }
-    } else if (active.moved || Math.hypot(screen.x - active.initial.x, screen.y - active.initial.y) >= 8) {
+    } else if (active.moved || viewportPixelDistance(screen, active.initial, event.currentTarget.getBoundingClientRect()) >= (active.isTouch ? 9 : 5)) {
       if (!active.moved) active.previous = active.initial;
       active.moved = true;
-      updateCamera(panCamera(currentCamera, { x: screen.x - active.previous.x, y: screen.y - active.previous.y }));
+      if (!active.isTouch || touchPan || !compact) {
+        updateCamera(panCamera(currentCamera, { x: screen.x - active.previous.x, y: screen.y - active.previous.y }));
+      }
     }
     active.previous = screen;
   };
@@ -483,16 +492,15 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       if (active.brush === armedBrush && points.length > 0) onBrushStroke?.(active.brush, points);
       return;
     }
-    if (!position || active.moved || (screen && Math.hypot(screen.x - active.initial.x, screen.y - active.initial.y) >= 8)) return;
+    const size = event.currentTarget.getBoundingClientRect();
+    if (!screen || active.moved || viewportPixelDistance(screen, active.initial, size) >= (active.isTouch ? 9 : 5)) return;
     const currentIds = new Set(actorPositions.map(({ actor }) => actor.id));
-    for (const { actor, x, y } of paintedActors.current) {
-      if (currentIds.has(actor.id) && Math.hypot(position.x - x, position.y - y) <= 20) {
-        onSelectCultivator(actor.id);
-        return;
-      }
-    }
-    const clickedLocation = seenLocations.find((site) => isCurrentLocation(site.id) &&
-      Math.hypot(position.x - site.x, position.y - site.y) <= 20);
+    const radius = active.isTouch ? 22 : Math.max(10, cameraRef.current.zoom * 20 * size.width / MAP_WIDTH);
+    const picked = closestViewportTarget(paintedActors.current.filter(({ actor }) => currentIds.has(actor.id)),
+      cameraRef.current, screen, size, radius);
+    if (picked) { onSelectCultivator(picked.actor.id); return; }
+    const clickedLocation = closestViewportTarget(seenLocations.filter((site) => isCurrentLocation(site.id)),
+      cameraRef.current, screen, size, radius);
     if (clickedLocation) onSelectLocation?.(clickedLocation);
   };
   const cancelGesture = (event: React.PointerEvent<HTMLCanvasElement>) => {
@@ -509,10 +517,10 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         <div className="flex items-center gap-2">
           <span className="inline-block w-2.5 h-2.5 rounded-full bg-amber-400" />
           <h2 className="text-sm font-semibold text-slate-200">
-            九州灵脉沙盒舆图
+            {compact ? '九州舆图' : '九州灵脉沙盒舆图'}
           </h2>
         </div>
-        <div className="flex flex-wrap items-center gap-3 text-xs">
+        <div className={`flex flex-wrap items-center gap-3 text-xs ${compact ? 'hidden sm:flex' : ''}`}>
           {world.sects.map((sect) => (
             <span key={sect.id} className="flex items-center gap-1.5 text-slate-300">
               <span
@@ -525,6 +533,21 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         </div>
       </div>
 
+      {compact && <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 px-3 py-1 text-xs text-slate-300" aria-label="地图快捷控制">
+        <button type="button" className="min-h-11 min-w-11 rounded border border-slate-700 disabled:opacity-40"
+          aria-label="缩小地图" disabled={camera.zoom <= 1} onClick={() => updateCamera(zoomCamera(camera, camera.zoom / 1.25, centerOfMap))}>−</button>
+        <button type="button" className="min-h-11 min-w-11 rounded border border-slate-700 disabled:opacity-40"
+          aria-label="放大地图" disabled={camera.zoom >= MAX_ZOOM} onClick={() => updateCamera(zoomCamera(camera, camera.zoom * 1.25, centerOfMap))}>＋</button>
+        <button type="button" className="min-h-11 rounded border border-slate-700 px-2 disabled:opacity-40"
+          disabled={camera.zoom === 1} onClick={() => updateCamera(DEFAULT_CAMERA)}>复位</button>
+        <span className="tabular-nums">{Math.round(camera.zoom * 100)}%</span>
+        <button type="button" aria-pressed={touchPan} onClick={() => setTouchPan((enabled) => !enabled)}
+          className={`min-h-11 rounded border px-2 sm:hidden ${touchPan ? 'border-sky-400 text-sky-100' : 'border-slate-700 text-slate-200'}`}>
+          {touchPan ? '拖图开启' : '拖图'}
+        </button>
+      </div>}
+      <details className="border-b border-slate-800" open={!compact || undefined}>
+        <summary className={`cursor-pointer px-3 py-2 text-xs text-slate-400 ${compact ? 'flex min-h-11 items-center' : 'sr-only'}`}>地图选项</summary>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-slate-800 px-4 py-2 text-xs text-slate-300">
         <label className="inline-flex items-center gap-1.5">
           <input type="checkbox" checked={fog} disabled={!selected && !fog} onChange={(event) => setFog(event.currentTarget.checked)} />
@@ -565,6 +588,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           {fog ? '修士视野中不可使用天道画笔。' : armedBrush ? '点击或拖笔，松开时应用一笔。' : '滚轮缩放，拖动平移，点击选择。'}
         </span>
       </div>
+      </details>
       <div className="relative">
         <canvas
         ref={canvasRef}
@@ -575,12 +599,13 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         onPointerUp={endGesture}
         onPointerCancel={cancelGesture}
         onLostPointerCapture={cancelGesture}
-        className={`w-full h-auto touch-none select-none block ${armedBrush ? 'cursor-crosshair' : 'cursor-grab active:cursor-grabbing'}`}
+        style={{ touchAction: !compact || touchPan || armedBrush ? 'none' : 'pan-y' }}
+        className={`w-full h-auto select-none block ${armedBrush ? 'cursor-crosshair' : 'cursor-grab active:cursor-grabbing'}`}
         aria-label="修仙世界地图。选择修士可查看下方识海状态摘要；也可通过识海面板的修士按钮切换。雷劫用静态闪电标注；围攻地点用玫红虚线圈标注；各地渡劫、驻守、围攻和活跃盛会可在下方列表查看；本月移动、交锋和可见灵兽也有文字摘要。"
       />
         <button
           type="button"
-          className="absolute bottom-2 right-2 w-24 overflow-hidden rounded border border-slate-500 bg-slate-950/90 shadow-md sm:w-36"
+          className={`absolute bottom-2 right-2 w-24 overflow-hidden rounded border border-slate-500 bg-slate-950/90 shadow-md sm:w-36 ${compact ? 'hidden sm:block' : ''}`}
           aria-label="小地图：点击定位"
           title="小地图：点击定位"
           onClick={(event) => {
@@ -604,7 +629,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           </svg>
         </button>
       </div>
-      <div className="px-4 py-2 border-t border-slate-800/80 bg-slate-900/60 text-[11px] text-slate-400 flex flex-wrap gap-x-4 gap-y-1" aria-label="选中修士记忆摘要">
+      <div className={`px-4 py-2 border-t border-slate-800/80 bg-slate-900/60 text-[11px] text-slate-400 flex-wrap gap-x-4 gap-y-1 ${compact ? 'hidden' : 'flex'}`} aria-label="选中修士记忆摘要">
         {selected ? (
           <>
             <span className="text-slate-200">{selected.name}{!selected.alive ? '（已陨落，不在地图上显示）' : ''}</span>

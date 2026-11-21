@@ -68,7 +68,7 @@ export function spreadRumors(world: WorldState): void {
   // One packet per listener per month; a snapshot prevents same-month cascades.
   for (const listener of live) {
     const seen = new Map(listener.rumors.map((item) => [item.id, item.confidence]));
-    const candidates: Rumor[] = [];
+    let best: Rumor | undefined;
     for (const sender of live) {
       if (sender.id === listener.id) continue;
       const conversation = sender.locationId === listener.locationId;
@@ -76,14 +76,15 @@ export function spreadRumors(world: WorldState): void {
       if (!conversation && !flyingSword) continue;
       for (const item of snapshot.get(sender.id) ?? []) {
         const confidence = Math.floor(item.confidence * (conversation ? 0.84 : 0.7));
-        if (confidence < 25 || confidence <= (seen.get(item.id) ?? 0)) continue;
-        candidates.push({
-          ...item, confidence, learnedTick: world.tick, hops: item.hops + 1,
-          provenance: conversation ? 'conversation' : 'flying_sword', sourceCultivatorId: sender.id,
-        });
+        // The source packet is sorted by confidence, so weaker remaining candidates cannot win.
+        if (confidence < 25 || (best && confidence < best.confidence)) break;
+        if (confidence <= (seen.get(item.id) ?? 0)) continue;
+        if (best && confidence === best.confidence &&
+            (item.originTick < best.originTick || (item.originTick === best.originTick && item.id >= best.id))) continue;
+        best = { ...item, confidence, learnedTick: world.tick, hops: item.hops + 1,
+          provenance: conversation ? 'conversation' : 'flying_sword', sourceCultivatorId: sender.id };
       }
     }
-    const best = candidates.sort(byValue)[0];
     if (best) learn(listener, best, world.tick);
   }
 }

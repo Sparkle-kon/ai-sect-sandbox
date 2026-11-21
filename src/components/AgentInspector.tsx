@@ -21,12 +21,13 @@ interface AgentInspectorProps {
   world: WorldState;
   cultivator: Cultivator | undefined;
   onSelectCultivator: (id: string) => void;
+  workspaceSection?: 'profile' | 'cultivation' | 'mind' | 'sect';
 }
 
 export const AgentInspector: React.FC<AgentInspectorProps> = ({
   world,
   cultivator,
-  onSelectCultivator,
+  onSelectCultivator, workspaceSection,
 }) => {
   if (!cultivator) {
     return (
@@ -39,11 +40,15 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
   const sect = world.sects.find((s) => s.id === cultivator.sectId);
   const location = world.locations.find((l) => l.id === cultivator.locationId);
   const bounty = relevantBounty(world.bounties, cultivator.id);
+  const profile = !workspaceSection || workspaceSection === 'profile';
+  const cultivation = !workspaceSection || workspaceSection === 'cultivation';
+  const mind = !workspaceSection || workspaceSection === 'mind';
+  const sectDetails = !workspaceSection || workspaceSection === 'sect';
 
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3.5">
+    <div className="min-w-0 rounded-xl border border-slate-800 bg-slate-900/60 p-3.5 space-y-3.5 break-words">
       {/* Quick Switch Roster */}
-      <div className="flex flex-wrap gap-1.5 pb-2 border-b border-slate-800">
+      {!workspaceSection && <div className="flex flex-wrap gap-1.5 pb-2 border-b border-slate-800">
         {world.cultivators.map((c) => (
           <button
             key={c.id}
@@ -60,12 +65,12 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
             {c.name}
           </button>
         ))}
-      </div>
+      </div>}
 
       {/* Header */}
-      <div className="flex items-start justify-between">
+      {profile && <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <h3 className="text-base font-bold text-slate-100">
               {cultivator.name}
             </h3>
@@ -91,13 +96,13 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
         >
           {cultivator.alive ? `当前: ${cultivator.currentAction}` : '已陨落'}
         </span>
-      </div>
+      </div>}
 
-      {/* Inner Monologue (Chain of Thought) */}
-      <div className="p-3 rounded-lg bg-slate-950/90 border border-indigo-500/30 space-y-1.5">
+      {/* Fictional character narration */}
+      {mind && <div className="p-3 rounded-lg bg-slate-950/90 border border-indigo-500/30 space-y-1.5">
         <div className="flex items-center gap-1.5 text-xs font-semibold text-indigo-300">
           <Brain className="w-3.5 h-3.5" />
-          <span>识海内心独白 (Agent Chain-of-Thought)</span>
+          <span>角色心声（虚构叙事）</span>
         </div>
         <p className="text-xs text-slate-200 italic leading-relaxed">
           “{cultivator.innerMonologue}”
@@ -106,8 +111,9 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
           <Sparkles className="w-3 h-3" />
           <span>深层执念：{cultivator.secretGoal}</span>
         </div>
-      </div>
+      </div>}
 
+      {profile && <>
       {/* Vital Stats Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
         <div className="p-2 rounded bg-slate-950/60 border border-slate-800/80">
@@ -160,7 +166,9 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
         </div>
       </div>
 
-      <section aria-label="灵根、功法与法宝" className="space-y-2">
+      </>}
+
+      {cultivation && <section aria-label="灵根、功法与法宝" className="space-y-2">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
           <div className="inline-flex items-center gap-1.5">
             <span className="text-slate-400">灵根：</span>
@@ -179,21 +187,26 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
           </div>
         </div>
         <ArtifactPanel cultivator={cultivator} cultivators={world.cultivators} />
-      </section>
+      </section>}
 
-      <p aria-label="业力与悬赏摘要" className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-400">
+      {profile && <p aria-label="业力与悬赏摘要" className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-400">
         <span>业力 {cultivator.karma}</span>
         <span>恶行记录 {cultivator.transgressions}</span>
         {bounty && <span className={bounty.status === 'open' ? 'text-rose-300' : 'text-slate-400'}>悬赏：{BOUNTY_STATUS[bounty.status]}</span>}
-      </p>
+      </p>}
+      {sectDetails && <>
       <SectHierarchyPanel cultivator={cultivator} sect={sect} cultivators={world.cultivators} />
       <SectEconomyPanel cultivator={cultivator} sect={sect} world={world} />
       <SectDiplomacyPanel sect={sect} world={world} />
-      <WorldOccasionsPanel world={world} cultivator={cultivator} />
-      <SpiritBeastPanel cultivator={cultivator} location={location} beasts={world.spiritBeasts ?? []} />
+      </>}
+      {!workspaceSection && <WorldOccasionsPanel world={world} cultivator={cultivator} />}
+      {profile && <SpiritBeastPanel cultivator={cultivator} location={location} beasts={world.spiritBeasts ?? []} />}
+      {cultivation && <>
       <TribulationPanel cultivator={cultivator} />
       <TechniquePanel cultivator={cultivator} sect={sect} location={location} cultivators={world.cultivators} />
       <AlchemyPanel cultivator={cultivator} location={location} />
+      </>}
+      {mind && <>
       <ReflectionPanel cultivator={cultivator} />
       <RumorPanel cultivator={cultivator} locations={world.locations} cultivators={world.cultivators} />
       <SchemePanel cultivator={cultivator} locations={world.locations} cultivators={world.cultivators} />
@@ -206,6 +219,7 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
         <MemoryPanel memories={cultivator.coreMemories} tick={world.tick} core />
         <MemoryPanel memories={cultivator.memories} tick={world.tick} />
       </div>
+      </>}
     </div>
   );
 };

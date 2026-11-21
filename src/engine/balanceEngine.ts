@@ -4,10 +4,10 @@ import { adjustSectAffinity, resolveDiplomacyAction, SIEGE_COST } from './diplom
 import { CORE_LIMIT, EPISODIC_LIMIT } from './memoryEngine';
 import { advanceWorldTick } from './worldEngine';
 
-export interface BalanceSettings { seed: number; ticks?: number; restBelow?: number }
+export interface BalanceSettings { populationScenario?: 'evolving' | 'baseline'; seed: number; ticks?: number; restBelow?: number }
 export interface BalanceReport {
-  seed: number; steps: number; restBelow: number; initialLiving: number; finalLiving: number;
-  minimumLiving: number; maximumLiving: number; maximumRoster: number; populationCeiling: number; extinctAtTick?: number;
+  seed: number; steps: number; restBelow: number; populationScenario: 'evolving' | 'baseline'; initialLiving: number; finalLiving: number;
+  minimumLiving: number; maximumLiving: number; maximumRoster: number; verifiedRecruits: number; extinctAtTick?: number;
   maximumEpisodicMemory: number; maximumCoreMemory: number; maximumRumors: number; maximumReflections: number;
   maximumTreasury: number; maximumPersonalStones: number; maximumTotalHerbs: number;
   activeSieges: number; completedSieges: number; longestObservedSiege: number; distinctSieges: number;
@@ -24,17 +24,19 @@ const threshold = (restBelow = 0) => {
   return restBelow;
 };
 
-export function runBalanceSimulation({ seed, ticks, restBelow = 0 }: BalanceSettings): BalanceReport {
+export function runBalanceSimulation({ seed, ticks, restBelow = 0, populationScenario = 'evolving' }: BalanceSettings): BalanceReport {
   const steps = duration(ticks);
   const rest = threshold(restBelow);
   if (!checkNat(seed, 0xffffffff)) throw new RangeError('Seed must be uint32.');
   let world = createInitialWorld(seed);
+  // A named control case isolates stress from new village intake. Live gameplay and the CLI use evolving.
+  if (populationScenario === 'baseline') world.settlements = { villages: [], records: [] };
   const initialLiving = world.cultivators.filter(({ alive }) => alive).length;
-  const populationCeiling = world.cultivators.length + new Set(world.settlements.villages.flatMap(({volunteers}) =>
-    volunteers.map(({id}) => id))).size;
+  const initialRoster = new Set(world.cultivators.map(({ id }) => id));
+  const verifiedRecruitment = new Set<string>();
   const report: BalanceReport = {
-    seed, steps, restBelow: rest, initialLiving, finalLiving: initialLiving, minimumLiving: initialLiving, maximumLiving: initialLiving,
-    maximumRoster: world.cultivators.length, populationCeiling, maximumEpisodicMemory: 0, maximumCoreMemory: 0, maximumTreasury: 0,
+    seed, steps, restBelow: rest, populationScenario, initialLiving, finalLiving: initialLiving, minimumLiving: initialLiving, maximumLiving: initialLiving,
+    maximumRoster: world.cultivators.length, verifiedRecruits: 0, maximumEpisodicMemory: 0, maximumCoreMemory: 0, maximumTreasury: 0,
     maximumPersonalStones: 0, maximumTotalHerbs: 0, maximumRumors: 0, maximumReflections: 0,
     activeSieges: 0, completedSieges: 0, longestObservedSiege: 0, distinctSieges: 0, supervisedRestOrders: 0, violations: [],
   };
@@ -53,7 +55,12 @@ export function runBalanceSimulation({ seed, ticks, restBelow = 0 }: BalanceSett
     report.maximumLiving = Math.max(report.maximumLiving, present);
     report.maximumRoster = Math.max(report.maximumRoster, world.cultivators.length);
     if (!present && report.extinctAtTick === undefined) report.extinctAtTick = world.tick;
-    if (world.cultivators.length > populationCeiling) violation('population_growth');
+    for (const row of world.settlements.records) if (row.kind === 'recruitment' && row.tick === world.tick &&
+      row.people === 1 && row.cultivatorId && row.volunteerId && row.cultivatorId === `recruit-${row.volunteerId}`) verifiedRecruitment.add(row.cultivatorId);
+    report.verifiedRecruits = verifiedRecruitment.size;
+    const currentIds = new Set(world.cultivators.map(({ id }) => id));
+    if (currentIds.size !== world.cultivators.length || world.cultivators.some(({ id }) => !initialRoster.has(id) && !verifiedRecruitment.has(id)) ||
+        world.settlements.villages.some(({ population, capacity }) => population < 0 || population > capacity)) violation('population_growth');
     if (new Set(world.cultivators.map(({ id }) => id)).size !== world.cultivators.length) violation('duplicate_cultivator');
     let herbs = 0;
     for (const actor of world.cultivators) {
@@ -102,7 +109,8 @@ export function runBalanceSimulation({ seed, ticks, restBelow = 0 }: BalanceSett
       overrides[actor.id] = { chosenAction: 'REST', innerMonologue: '压力测试：伤势较重，优先休整。' };
       report.supervisedRestOrders++;
     }
-    world = advanceWorldTick(world, rest ? overrides : undefined);
+    world = advanceWorldTick(world, rest ? overrides : undefined, undefined, 'utility', undefined,
+      { captureTrace: false, capturePresentation: false });
     observe();
   }
   if (report.extinctAtTick !== undefined) {

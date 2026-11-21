@@ -25,7 +25,7 @@ function fixture() {
   sect.spiritStones = 500;
   const observed: Village = {
     id: 'village-local', locationId: local.id, name: '桥头村', population: 86, capacity: 120, stress: 61,
-    lastDisasterTick: 4, lastReliefTick: 5, volunteers: [
+    lastDisasterTick: 4, lastReliefTick: 5, nextVolunteerSequence: 1, juvenileCohorts: [{ bornTick: 4, count: 2 }], volunteers: [
       { id: 'willing', name: '公开自愿者', age: 23, spiritRoot: '木', willingness: 99, aptitude: 85 },
       { id: 'unwilling', name: '未表入门者', age: 24, spiritRoot: '土', willingness: 0, aptitude: 75 },
       { id: 'enlisted', name: '已经入门者', age: 26, spiritRoot: '金', willingness: 99, aptitude: 80, enlistedCultivatorId: viewer.id },
@@ -36,6 +36,7 @@ function fixture() {
   world.settlements = {
     villages: [observed, unobserved, undiscovered],
     records: [
+      { id: 'birth', tick: 8, kind: 'growth', settlementId: observed.id, people: 2, stones: 0, herbs: 0, description: '' },
       { id: 'move', tick: 8, kind: 'migration', settlementId: observed.id, targetSettlementId: undiscovered.id,
         people: 5, stones: 0, herbs: 0, description: `迁往${undiscovered.name}` },
       { id: 'relief', tick: 5, kind: 'relief', settlementId: observed.id, actorId: viewer.id, sectId: sect.id,
@@ -59,6 +60,7 @@ describe('mortal settlements presentation', () => {
     const html = markup();
     expect(html).toContain('桥头村 · 人口 86/120');
     expect(html).toContain('压力 61/100');
+    expect(html).toContain('未成年 2 人');
     expect(html).toContain('当前可招募 1 人');
     expect(html).toContain('公开自愿者');
     expect(html).not.toContain('未表入门者');
@@ -74,6 +76,8 @@ describe('mortal settlements presentation', () => {
 
   it('dates real migration, relief and disaster ledger without revealing hidden destinations', () => {
     const html = fixture().markup();
+    expect(html).toContain('Tick #8 · 本地新增人口');
+    expect(html).toContain('新生 2 人');
     expect(html).toContain('Tick #8 · 迁徙 → 未观测目的地');
     expect(html).toContain('迁出 5 人');
     expect(html).toContain('Tick #5 · 赈济');

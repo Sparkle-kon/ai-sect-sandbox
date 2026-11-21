@@ -6,10 +6,10 @@ import { createTerrainMapView } from './terrainMapView';
 
 type RecordEntry = WorldState['settlements']['records'][number];
 const KIND_LABELS: Record<RecordEntry['kind'], string> = {
-  disaster: '受灾', migration: '迁徙', relief: '赈济', recruitment: '自愿入门',
+  disaster: '受灾', migration: '迁徙', relief: '赈济', recruitment: '自愿入门', growth: '本地新增人口',
 };
 const PEOPLE_LABELS: Record<RecordEntry['kind'], string> = {
-  disaster: '遇难', migration: '迁出', relief: '受益', recruitment: '自愿入门',
+  disaster: '遇难', migration: '迁出', relief: '受益', recruitment: '自愿入门', growth: '新生',
 };
 
 export function MortalVillagesPanel({ world, cultivator }: { world: WorldState; cultivator: Cultivator | undefined }) {
@@ -31,7 +31,7 @@ export function MortalVillagesPanel({ world, cultivator }: { world: WorldState; 
           {cultivator ? `${cultivator.name}的已知村镇 · 当前观察 ${visible.size} 处` : '选择修士后查看其已知村镇。'}
         </p>
         <p className="text-xs text-slate-400">
-          此处只查看。可招募仅指当前满足条件的自愿者，不代表必定加入。
+          此处只查看。可招募仅指当前满足条件的成年自愿者，不代表必定加入。
         </p>
       </header>
       {villages.length === 0 ? <p className="text-xs text-slate-400">{cultivator ? '未探索到村镇。' : '未选中修士，无地方观察。'}</p> : (
@@ -54,7 +54,7 @@ export function MortalVillagesPanel({ world, cultivator }: { world: WorldState; 
                 {observed ? (
                   <div className="mt-2 space-y-2 text-xs text-slate-300">
                     <p>
-                      压力 {village.stress}/100
+                      压力 {village.stress}/100 · 未成年 {(village.juvenileCohorts ?? []).reduce((sum, cohort) => sum + cohort.count, 0)} 人
                       {village.lastDisasterTick !== undefined ? ` · 最近受灾 Tick #${village.lastDisasterTick}` : ''}
                       {village.lastReliefTick !== undefined ? ` · 最近赈济 Tick #${village.lastReliefTick}` : ''}
                     </p>

@@ -92,14 +92,14 @@ export function computeHeuristicDecision(
     };
   }
 
-  const estateOptions = availableEstateActions(cultivator, world);
+  const mayNameHeir = world.tick % 12 === 7 && !cultivator.namedHeirId && cultivator.age >= cultivator.lifespan * .62;
+  const estateOptions = availableEstateActions(cultivator, world, mayNameHeir);
   const nextEstate = estateOptions.find(({ action }) => action === 'CLAIM_ESTATE') ??
     (world.tick % 5 === 0 ? estateOptions.find(({ action }) => action === 'HOLD_MEMORIAL') : undefined) ??
-    (world.tick % 12 === 7 && !cultivator.namedHeirId && cultivator.age >= cultivator.lifespan * .62
-      ? estateOptions.find(({ action }) => action === 'NAME_HEIR') : undefined);
+    (mayNameHeir ? estateOptions.find(({ action }) => action === 'NAME_HEIR') : undefined);
   if (nextEstate) return { ...nextEstate, chosenAction: nextEstate.action, innerMonologue: '亲缘、师承与归葬皆须按实情记录。' };
 
-  const witnessActions = availableWitnessActions(cultivator, world);
+  const witnessActions = availableWitnessActions(cultivator, world, world.tick % 7 === 3);
   const evidenceAction = witnessActions.find(({ action }) => action === 'CHALLENGE_WITNESS') ??
     witnessActions.find(({ action }) => action === 'ATTEST_WITNESS') ??
     (world.tick % 7 === 3 ? witnessActions.find((option) => {
@@ -135,22 +135,24 @@ export function computeHeuristicDecision(
     }
   }
 
-  const oaths = availableOathActions(cultivator, world);
+  const mayOfferOath = world.tick >= 6 && world.tick % 9 === 4;
+  const oaths = availableOathActions(cultivator, world, mayOfferOath);
   const obligation = oaths.find(({ action }) => action === 'FULFILL_OATH') ??
     oaths.find(({ action }) => action === 'APPEAL_OATH') ??
     oaths.find(({ action }) => action === (cultivator.personality === '诡诈' || cultivator.personality === '嗜血' ? 'DECLINE_OATH' : 'ACCEPT_OATH'));
   if (obligation) return { ...obligation, chosenAction: obligation.action, innerMonologue: '以本门库存和现有证据处置这份契约。' };
-  if (world.tick >= 6 && world.tick % 9 === 4) {
+  if (mayOfferOath) {
     const offer = oaths.find(({ action }) => action === 'OFFER_OATH');
     if (offer) return { ...offer, chosenAction: offer.action, innerMonologue: '两宗可以订下明确交割与担保，不必空言。' };
   }
 
-  const learning = availableMentorshipActions(cultivator, world);
+  const mayTeach = world.tick % 4 === 2 && !cultivator.guardAssignment;
+  const learning = availableMentorshipActions(cultivator, world, mayTeach);
   const tuition = learning.find((option) => option.action === (cultivator.personality === '狂傲' ||
     (cultivator.personality === '苟道' && cultivator.hp < cultivator.maxHp * 0.75) ? 'DECLINE_TUITION' : 'ACCEPT_TUITION'));
   if (tuition) return { ...tuition, chosenAction: tuition.action, innerMonologue: tuition.action === 'ACCEPT_TUITION'
     ? '同门愿传授见解，我且请益。' : '功法须切合自身，今日先谢过师门。' };
-  if (world.tick % 4 === 2 && !cultivator.guardAssignment) {
+  if (mayTeach) {
     const lesson = learning.find((option) => option.action === 'TEACH');
     if (lesson) return { ...lesson, chosenAction: lesson.action, innerMonologue: '此时正可推演经意，且请同门来听。' };
   }

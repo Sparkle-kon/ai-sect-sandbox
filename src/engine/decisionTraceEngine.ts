@@ -112,7 +112,7 @@ const MECHANICAL_FIELDS = [
 
 export function rememberReplayDecision(tape: DecisionReplayTape, actorId: string, decision: LLMDecisionPayload, rngDraws = 0): void {
   const state = runtimeTapes.get(tape);
-  if (!state || state.decisions.size >= 500) return;
+  if (!state) return;
   const details = Object.fromEntries(MECHANICAL_FIELDS.flatMap((key) => {
     const value = decision[key];
     return typeof value === 'string' || typeof value === 'number' ? [[key, value]] : [];

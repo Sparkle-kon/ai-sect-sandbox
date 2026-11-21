@@ -3,12 +3,12 @@ import { runBalanceSimulation, runSiegeBalanceFixture, tuneSimulationBalance } f
 import { CORE_LIMIT, EPISODIC_LIMIT } from '../src/engine/memoryEngine';
 
 describe('seeded offline world balance benchmark', () => {
-  it('survives a 1000-tick run and two 500-tick holdouts without runaway population or invalid accounting', () => {
+  it('survives long isolated control scenarios without invalid accounting', () => {
     for (const [seed, ticks] of [[0, 1000], [2031, 500], [0xffffffff, 500]]) {
-      const report = runBalanceSimulation({ seed, ticks });
+      const report = runBalanceSimulation({ seed, ticks, populationScenario: 'baseline' });
       expect(report.violations, `seed ${seed}`).toEqual([]);
       expect(report.minimumLiving, `seed ${seed}`).toBeGreaterThan(0);
-      expect(report.maximumRoster).toBeLessThanOrEqual(report.populationCeiling);
+      expect(report.maximumRoster).toBeLessThanOrEqual(report.initialLiving + report.verifiedRecruits);
       expect(report.maximumEpisodicMemory).toBeLessThanOrEqual(EPISODIC_LIMIT);
       expect(report.maximumCoreMemory).toBeLessThanOrEqual(CORE_LIMIT);
       expect(report.maximumTotalHerbs).toBeGreaterThan(0);
@@ -16,6 +16,14 @@ describe('seeded offline world balance benchmark', () => {
       expect(report.longestObservedSiege).toBeLessThanOrEqual(9);
     }
   }, 40_000);
+
+  it('runs 500 true growing-world ticks, exceeding the old roster cap without unaccounted characters', () => {
+    const report = runBalanceSimulation({ seed: 0, ticks: 500 });
+    expect(report.violations).toEqual([]);
+    expect(report.minimumLiving).toBeGreaterThan(0);
+    expect(report.maximumRoster).toBeGreaterThan(48);
+    expect(report.verifiedRecruits).toBe(report.maximumRoster - report.initialLiving);
+  }, 120_000);
 
   it('uses a valid five-plus coalition and real assault that spends treasury, drains the array, and ends', () => {
     const report = runSiegeBalanceFixture();

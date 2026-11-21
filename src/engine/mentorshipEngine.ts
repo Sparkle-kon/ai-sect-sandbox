@@ -45,7 +45,7 @@ function canTeach(world: WorldState, mentor: Cultivator, student: Cultivator): b
   return (!parent || parent.mentorId === mentor.id) && !wouldCycle(world, mentor.id, student.id);
 }
 
-export function availableMentorshipActions(actor: Cultivator, world: WorldState): MentorshipOption[] {
+export function availableMentorshipActions(actor: Cultivator, world: WorldState, includeTeaching = true): MentorshipOption[] {
   if (!live(actor)) return [];
   const pending = world.mentorship.offers.filter(({ status, expiresTick }) => status === 'pending' && expiresTick > world.tick);
   const requests: MentorshipOption[] = [];
@@ -56,7 +56,7 @@ export function availableMentorshipActions(actor: Cultivator, world: WorldState)
       requests.push({ action: 'ACCEPT_TUITION', targetTuitionId: offer.id });
     }
   }
-  if (pending.length >= MAX_PENDING || !mentorshipBudgetRemaining(actor, world)) return requests;
+  if (!includeTeaching || pending.length >= MAX_PENDING || !mentorshipBudgetRemaining(actor, world)) return requests;
   for (const student of world.cultivators) {
     if (!canTeach(world, actor, student) || pending.some(({ studentId }) => studentId === student.id) ||
         world.mentorship.offers.some((offer) => offer.mentorId === actor.id && offer.studentId === student.id &&

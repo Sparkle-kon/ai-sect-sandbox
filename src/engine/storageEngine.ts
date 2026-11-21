@@ -6,6 +6,8 @@ export const WORLD_SAVE_MAX_BYTES = 8 * 1024 * 1024;
 export const WORLD_SAVE_MAX_SLOTS = 12;
 const FORMAT = 'ai-sect-sandbox';
 const VERSION = 1;
+// Variable-size roster ledgers are constrained by the file byte budget, not an NPC-count limit.
+const SAVE_COLLECTION_LIMIT = WORLD_SAVE_MAX_BYTES;
 type ErrorCode = 'size' | 'json' | 'version' | 'invalid_world' | 'invalid_slot' | 'slot_limit' | 'not_found' | 'storage';
 export class WorldSaveError extends Error {
   constructor(readonly code: ErrorCode, message: string) { super(message); this.name = 'WorldSaveError'; }
@@ -48,7 +50,7 @@ const percentage = num(0, 100);
 const affinity = num(-100, 100);
 const count = num(0, 10_000, true);
 const month = num(1, 12, true);
-const ids = arr(1200, id);
+const ids = arr(SAVE_COLLECTION_LIMIT, id);
 const oid = optional(id), otick = optional(tick), otext = optional(text);
 const spirit = one('金','木','水','火','土','雷','暗','天灵根');
 const realm = one('练气','筑基','金丹','元婴','化神','炼虚','合体','大乘','渡劫');
@@ -91,11 +93,11 @@ const shape = structure({
     monthlyEconomy:optional(structure({tick,taxes:wealth,mining:wealth,upkeep:wealth,net:num(-1_000_000_000,1_000_000_000)}))})),
   locations:arr(1200,structure({id,name:id,x:num(0,1000),y:num(0,600),type:one('sect_hq','spirit_vein','secret_realm','market','abyss'),spiritRoot:spirit,
     spiritQi:num(0,150),ownerSectId:oid,inheritanceScrolls:arr(350,technique),herbs,herbCapacity:herbs,furnaceGrade:one(0,1,2,3),description:text})),
-  cultivators:arr(500,structure({id,name:id,title:text,sectId:strings(240),sectRank,contribution:wealth,transgressions:percentage,realm,realmStage:num(1,9,true),
+  cultivators:arr(SAVE_COLLECTION_LIMIT,structure({id,name:id,title:text,sectId:strings(240),sectRank,contribution:wealth,transgressions:percentage,realm,realmStage:num(1,9,true),
     qiProgress:percentage,hp:wealth,maxHp:num(1,1_000_000_000),combatPower:wealth,age:wealth,lifespan:wealth,
     personality:one('刚正','阴险','狂傲','苟道','痴情','嗜血','逍遥','诡诈'),locationId:id,spiritStones:wealth,karma:affinity,currentAction:action,
     innerMonologue:text,secretGoal:text,spiritRoot:spirit,technique,techniqueMastery:percentage,authoredTechnique:optional(technique),herbs,pills,pillToxicity:percentage,
-    exploredTileIds:ids,artifacts:arr(700,artifact),memories:arr(160,memory),coreMemories:arr(160,memory),memorySequence:tick,
+    exploredTileIds:ids,artifacts:arr(SAVE_COLLECTION_LIMIT,artifact),memories:arr(160,memory),coreMemories:arr(160,memory),memorySequence:tick,
     reflections:arr(100,structure({id,tick,kind:one('belief','obsession','heart_demon'),theme:one('cultivation','conflict','community','heavenly'),intensity:num(1,10),statement:text,sourceMemoryIds:ids,source})),
     rumors:arr(200,structure({id,subject:text,locationId:oid,originTick:tick,learnedTick:tick,provenance:one('witness','conversation','flying_sword','fabricated'),
       confidence:percentage,hops:count,sourceCultivatorId:oid,originEventId:oid,originSourceCultivatorId:oid,
@@ -105,8 +107,8 @@ const shape = structure({
     tribulation:optional(structure({id,targetRealm:realm,startedTick:tick,stage:one('lightning','heart_demon','passed','failed'),nextWave:count,totalWaves:count,
       pressure:percentage,interruptions:count,resolvedTick:otick,lastOutcome:otext,lastActedTick:otick})),
     guardAssignment:optional(structure({locationId:id,assignedTick:tick,expiresTick:tick})),namedHeirId:oid,alive:bool})),
-  relationships:arr(8000,structure({fromId:id,toId:id,type:one('师徒','同门','道侣','血仇','挚友','竞争'),affinity,note:text})),
-  events:arr(200,structure({...publicFact,witnessScope:optional(one('participants')),duelWinnerId:oid,damage:optional(arr(500,structure({cultivatorId:id,amount:wealth})))})),
+  relationships:arr(SAVE_COLLECTION_LIMIT,structure({fromId:id,toId:id,type:one('师徒','同门','道侣','血仇','挚友','竞争'),affinity,note:text})),
+  events:arr(200,structure({...publicFact,witnessScope:optional(one('participants')),duelWinnerId:oid,damage:optional(arr(SAVE_COLLECTION_LIMIT,structure({cultivatorId:id,amount:wealth})))})),
   diplomacy:arr(1200,structure({sectAId:id,sectBId:id,affinity,pact:one('neutral','alliance','war'),sinceTick:tick,lastActionTick:otick})),
   sieges:arr(2000,structure({id,attackerSectId:id,defenderSectId:id,destinationId:id,participantIds:ids,status:one('marching','sieging','victory','repelled'),
     startedTick:tick,rounds:count,lastResolvedTick:otick,outcome:otext})),
@@ -119,9 +121,9 @@ const shape = structure({
     escrow:arr(48,structure({sectId:id,amount:wealth})),hunterId:oid,settledTick:otick})),
   terrain:structure({seed:unsigned32,columns:num(1,80,true),rows:num(1,80,true),tiles:arr(6400,structure({id,col:num(0,79,true),row:num(0,79,true),
     biome:one('灵山','毒沼','剑冢','荒漠','魔渊','坊市'),spiritQi:percentage,ownerSectId:oid}))}),
-  mapPresentation:structure({tick,trails:arr(500,structure({cultivatorId:id,tick,fromLocationId:id,toLocationId:id,
+  mapPresentation:structure({tick,trails:arr(SAVE_COLLECTION_LIMIT,structure({cultivatorId:id,tick,fromLocationId:id,toLocationId:id,
     points:arr(6402,structure({x:num(0,1000),y:num(0,600)}))})),
-    effects:arr(1000,structure({id,tick,kind:one('damage','breakthrough','clash','lightning'),locationId:id,actorIds:ids,text:otext}))}),
+    effects:arr(SAVE_COLLECTION_LIMIT,structure({id,tick,kind:one('damage','breakthrough','clash','lightning'),locationId:id,actorIds:ids,text:otext}))}),
   mapHazards:arr(1200,structure({id,kind:one('meteor','beast_tide','cursed_miasma'),tileId:id,createdTick:tick,expiresTick:tick,intensity:num(1,3,true)})),
   spiritBeasts:arr(500,structure({id,name:id,kind:one('妖兽','凶兽','瑞兽'),locationId:id,homeLocationId:id,hp:wealth,maxHp:num(1,1_000_000_000),
     power:wealth,cultivation:percentage,alive:bool,tamedBy:oid,nextActionTick:tick})),
@@ -136,24 +138,27 @@ const shape = structure({
     candidates:arr(48,structure({id,action:one('REST','CULTIVATE','BREAKTHROUGH','SOCIALIZE','EXPLORE','FACE_TRIBULATION'),
       score:num(-1000,1000),reason:one('recover','cultivate','ready','social','travel','tribulation'),
       targetLocationId:oid,targetCultivatorId:oid,tribulationStance:optional(one('guard','focus','defy'))}))}))}),
-  estates:structure({entries:arr(500,structure({id,deceasedId:id,locationId:id,openedTick:tick,closesTick:tick,
+  estates:structure({entries:arr(SAVE_COLLECTION_LIMIT,structure({id,deceasedId:id,locationId:id,openedTick:tick,closesTick:tick,
     namedHeirId:oid,sponsorSectId:oid,status:one('open','settled','unclaimed'),
-    holdings:structure({stones:wealth,herbs,pills,artifacts:arr(700,artifact)}),
+    holdings:structure({stones:wealth,herbs,pills,artifacts:arr(SAVE_COLLECTION_LIMIT,artifact)}),
     distributed:structure({stones:wealth,herbs,pills,artifactIds:ids}),
-    eligibleHeirs:arr(500,structure(eligibility)),claims:arr(500,structure({...eligibility,tick})),
+    eligibleHeirs:arr(SAVE_COLLECTION_LIMIT,structure(eligibility)),claims:arr(SAVE_COLLECTION_LIMIT,structure({...eligibility,tick})),
     beneficiaryId:oid,settledTick:otick,memorial:optional(structure({tick,organizerId:id,attendeeIds:ids,relationshipImpacts:count}))}))}),
   witnesses:structure({nextId:tick,
     facts:arr(240,structure({eventId:id,tick,locationId:id,participantIds:arr(2,id),winnerId:id,witnessIds:ids})),
     claims:arr(80,structure({id,sourceEventId:id,publicationEventId:id,claimantId:id,subjectId:id,locationId:id,
       filedTick:tick,deadlineTick:tick,challengeUntilTick:tick,status:one('pending','disputed','corroborated','retracted'),
-      attestations:arr(500,structure({actorId:id,tick,verdict:one('supports','contradicts')})),
+      attestations:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,tick,verdict:one('supports','contradicts')})),
       appeal:optional(structure({tick,actorId:id,verdict:one('upheld','rejected'),reason:text})),settledTick:otick,
       reputationSectId:oid,reputationPenalty:percentage,reputationRestored:percentage,reason:otext}))}),
   settlements:structure({lastAdvancedTick:otick,
     villages:arr(48,structure({id,locationId:id,name:id,population:count,capacity:count,stress:percentage,
-      volunteers:arr(80,structure({id,name:id,age:wealth,spiritRoot:spirit,willingness:percentage,aptitude:percentage,enlistedCultivatorId:oid})),
+      volunteers:arr(SAVE_COLLECTION_LIMIT,structure({id,name:id,age:wealth,spiritRoot:spirit,willingness:percentage,aptitude:percentage,
+        enlistedCultivatorId:oid,cohortYear:otick})),
+      nextVolunteerSequence:optional(num(1,100_000_000,true)),
+      juvenileCohorts:optional(arr(200,structure({bornTick:tick,count}))),lastCohortYear:otick,lastRecruitTick:otick,
       lastDisasterTick:otick,lastReliefTick:otick})),
-    records:arr(100,structure({id,tick,kind:one('disaster','migration','relief','recruitment'),settlementId:id,targetSettlementId:oid,
+    records:arr(100,structure({id,tick,kind:one('disaster','migration','relief','recruitment','growth'),settlementId:id,targetSettlementId:oid,
       actorId:oid,sectId:oid,volunteerId:oid,cultivatorId:oid,people:count,stones:wealth,herbs:count,description:text}))}),
   markets:structure({nextId:tick,
     orders:arr(320,structure({id,sequence:tick,actorId:id,locationId:id,side:one('buy','sell'),good:marketGood,
@@ -174,8 +179,8 @@ const shape = structure({
   mentorship:structure({
     offers:arr(240,structure({id,mentorId:id,studentId:id,technique,createdTick:tick,expiresTick:tick,
       status:one('pending','accepted','declined','expired'),resolvedTick:otick,outcome:otext})),
-    lineage:arr(600,structure({mentorId:id,studentId:id,technique,formedTick:tick,lastLessonTick:tick,lessons:count,flaw:percentage})),
-    budgets:arr(500,structure({mentorId:id,tick,spent:num(0,2,true)})),lastMaintainedTick:otick}),
+    lineage:arr(SAVE_COLLECTION_LIMIT,structure({mentorId:id,studentId:id,technique,formedTick:tick,lastLessonTick:tick,lessons:count,flaw:percentage})),
+    budgets:arr(SAVE_COLLECTION_LIMIT,structure({mentorId:id,tick,spent:num(0,2,true)})),lastMaintainedTick:otick}),
   playerAvatar:structure({possessedId:oid,possessionUntilTick:otick,switchAvailableTick:tick,essence:percentage,lastRefreshTick:tick,
     pendingOrder:optional(structure({actorId:id,action:one('REST','CULTIVATE'),queuedTick:tick})),
     transcript:arr(72,structure({id,tick,mode,intent,targetCultivatorId:id,message:text,actorId:oid,reply:text,
@@ -286,6 +291,19 @@ function verifyWorld(value: unknown): WorldState {
     for (const person of w.cultivators) for (const rumor of person.rumors) {
       if (historicalPrivate.has(rumor.id)) rumor.witnessScope = 'participants';
     }
+  }
+  for (const village of w.settlements.villages) {
+    // Older snapshots have the original numbered volunteers but no cohort metadata.
+    if (village.nextVolunteerSequence === undefined) {
+      const highest = village.volunteers.reduce((max, item) => {
+        const ordinal = Number(item.id.match(/-vol-(\d+)$/)?.[1] ?? 0);
+        return Number.isSafeInteger(ordinal) ? Math.max(max, ordinal) : max;
+      }, 4);
+      village.nextVolunteerSequence = highest + 1;
+    }
+    village.juvenileCohorts ??= [];
+    if (village.juvenileCohorts.some(({ bornTick }) => bornTick > w.tick) ||
+        village.juvenileCohorts.reduce((sum, group) => sum + group.count, 0) > village.population) fail('settlements.cohorts');
   }
   const settlementIds = unique(w.settlements.villages, ({id}) => id, 'settlements.villages.id');
   const volunteers = w.settlements.villages.flatMap((village) => village.volunteers);

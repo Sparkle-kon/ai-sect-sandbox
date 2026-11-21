@@ -744,6 +744,7 @@ export interface MortalVolunteer {
   willingness: number;
   aptitude: number;
   enlistedCultivatorId?: string;
+  cohortYear?: number;
 }
 export interface MortalSettlement {
   id: string;
@@ -753,13 +754,17 @@ export interface MortalSettlement {
   capacity: number;
   stress: number;
   volunteers: MortalVolunteer[];
+  nextVolunteerSequence: number;
+  juvenileCohorts: Array<{ bornTick: number; count: number }>;
+  lastCohortYear?: number;
+  lastRecruitTick?: number;
   lastDisasterTick?: number;
   lastReliefTick?: number;
 }
 export interface SettlementRecord {
   id: string;
   tick: number;
-  kind: 'disaster' | 'migration' | 'relief' | 'recruitment';
+  kind: 'disaster' | 'migration' | 'relief' | 'recruitment' | 'growth';
   settlementId: string;
   targetSettlementId?: string;
   actorId?: string;

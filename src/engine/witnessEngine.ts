@@ -51,7 +51,7 @@ export function visibleWitnessClaims(world: WorldState, actor?: Cultivator): Wit
   return world.witnesses.claims.filter((claim) => !actor || knowsClaim(actor, world, claim));
 }
 
-export function availableWitnessActions(actor: Cultivator, world: WorldState): WitnessOption[] {
+export function availableWitnessActions(actor: Cultivator, world: WorldState, includeFiling = true): WitnessOption[] {
   if (!live(actor) || world.cultivators.find(({ id }) => id === actor.id) !== actor) return [];
   const { claims, facts } = world.witnesses;
   const options: WitnessOption[] = [];
@@ -66,7 +66,7 @@ export function availableWitnessActions(actor: Cultivator, world: WorldState): W
       options.push({ action: 'ATTEST_WITNESS', targetWitnessClaimId: claim.id });
     }
   }
-  if (claims.length >= MAX_CLAIMS || claims.filter(({ settledTick }) => settledTick === undefined).length >= MAX_LIVE_CASES ||
+  if (!includeFiling || claims.length >= MAX_CLAIMS || claims.filter(({ settledTick }) => settledTick === undefined).length >= MAX_LIVE_CASES ||
       claims.some(({ claimantId, filedTick }) => claimantId === actor.id && filedTick === world.tick)) return options;
   for (const fact of [...facts].sort((a, b) => b.tick - a.tick || byId(a.eventId, b.eventId))) {
     if (fact.locationId !== actor.locationId || world.tick < fact.tick || world.tick - fact.tick > SOURCE_WINDOW ||

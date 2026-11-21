@@ -571,6 +571,7 @@ export function advanceWorldTick(
     tape?: DecisionReplayTape;
     modelActors?: ReadonlySet<string>;
     captureTrace?: boolean;
+    capturePresentation?: boolean;
     replayDraws?: Readonly<Record<string, number>>;
     onActor?: (actorId: string, candidates: DecisionTraceCandidate[], applied: boolean) => void;
   }
@@ -685,7 +686,9 @@ export function advanceWorldTick(
     settleAnnualCouncilOffline(nextState);
     settleChronicleOffline(nextState);
   }
-  nextState.mapPresentation = deriveMapPresentation(prevState, nextState, newEvents);
+  nextState.mapPresentation = traceOptions?.capturePresentation === false
+    ? { tick: nextState.tick, trails: [], effects: [] }
+    : deriveMapPresentation(prevState, nextState, newEvents);
   return nextState;
 }
 

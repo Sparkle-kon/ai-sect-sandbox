@@ -4,13 +4,20 @@ import { knownMapLocations, noteTerrainVisit, terrainTileAt } from './terrainEng
 export const SETTLEMENT_RELIEF = { stones: 12, jade_leaf: 2 } as const;
 export const SETTLEMENT_RECRUIT_STIPEND = 25;
 export const SETTLEMENT_STRESS_LIMIT = 65;
-const MAX_ACTIVE_CULTIVATORS = 48;
+export const MORTAL_MATURITY_TICKS = 18 * 12;
+const MAX_NEW_VOLUNTEERS_PER_YEAR = 2;
+const MAX_OUTSTANDING_VOLUNTEERS = 8;
+const VOLUNTEER_OFFER_YEARS = 3;
+const RETAIN_ENLISTED_PER_VILLAGE = 8;
 const ROOTS: SpiritRoot[] = ['金', '木', '水', '火', '土', '雷', '暗'];
 const FAMILY = ['沈', '许', '梁', '顾', '乔', '谢', '杜', '陆', '苏', '陈', '温', '林'];
 const GIVEN = ['清禾', '怀安', '栖月', '照山', '雨桥', '兰舟', '闻竹', '云川'];
 const clamp = (value: number) => Math.min(100, Math.max(0, value));
 const live = (actor: Cultivator) => actor.alive && actor.hp > 0;
 const activeVolunteers = (village: MortalSettlement) => village.volunteers.filter((person) => !person.enlistedCultivatorId);
+const youngCount = (village: MortalSettlement) => village.juvenileCohorts.reduce((sum, cohort) => sum + cohort.count, 0);
+const adultCount = (village: MortalSettlement) => Math.max(0, village.population - youngCount(village));
+const unregisteredAdults = (village: MortalSettlement) => Math.max(0, adultCount(village) - activeVolunteers(village).length);
 const byId = <T extends { id: string }>(a: T, b: T): number => a.id.localeCompare(b.id);
 
 export type SettlementOption =
@@ -43,7 +50,7 @@ export function createSettlementState(locations: LocationNode[], seed: number): 
       };
     });
     return { id, locationId: site.id, name: `${site.name}外村`, population, capacity: population + 18 + base % 13,
-      stress: site.type === 'market' ? 5 + base % 10 : 18 + base % 18, volunteers };
+      stress: site.type === 'market' ? 5 + base % 10 : 18 + base % 18, volunteers, nextVolunteerSequence: 5, juvenileCohorts: [] };
   });
   return { villages, records: [] };
 }
@@ -74,8 +81,8 @@ export function availableSettlementActions(actor: Cultivator, world: WorldState)
       actor.spiritStones >= SETTLEMENT_RELIEF.stones && actor.herbs.jade_leaf >= SETTLEMENT_RELIEF.jade_leaf) {
     choices.push({ action: 'DELIVER_RELIEF', targetSettlementId: village.id });
   }
-  if (village.stress < SETTLEMENT_STRESS_LIMIT && sponsor(world, actor) &&
-      world.cultivators.filter(live).length < MAX_ACTIVE_CULTIVATORS) {
+  if (village.stress < SETTLEMENT_STRESS_LIMIT && adultCount(village) > 0 && sponsor(world, actor) &&
+      village.lastRecruitTick !== world.tick) {
     choices.push(...village.volunteers.filter((person) => consenting(village, person) &&
       !world.cultivators.some(({ id }) => id === `recruit-${person.id}`)).map((person): SettlementOption =>
       ({ action: 'RECRUIT_SETTLER', targetSettlementId: village.id, targetVolunteerId: person.id })));
@@ -129,6 +136,7 @@ export function resolveSettlementAction(world: WorldState, actor: Cultivator, de
   const recruit = enlist(person, actor, village);
   sect.spiritStones -= SETTLEMENT_RECRUIT_STIPEND;
   village.population--;
+  village.lastRecruitTick = world.tick;
   person.enlistedCultivatorId = recruit.id;
   world.cultivators.push(recruit);
   noteTerrainVisit(world, recruit);
@@ -138,6 +146,48 @@ export function resolveSettlementAction(world: WorldState, actor: Cultivator, de
   person.id, '凡人自愿入门');
 }
 
+
+function annualCohort(world: WorldState, village: MortalSettlement, stressedByHazard: boolean): WorldEvent | undefined {
+  if (world.tick <= 1 || world.month !== 1 || village.lastCohortYear === world.year) return undefined;
+  village.lastCohortYear = world.year;
+
+  const referenced = new Set(world.settlements.records.filter(({ settlementId }) => settlementId === village.id)
+    .flatMap(({ volunteerId }) => volunteerId ? [volunteerId] : []));
+  const latestEnlisted = new Set(village.volunteers.filter((person) => person.enlistedCultivatorId)
+    .slice(-RETAIN_ENLISTED_PER_VILLAGE).map(({ id }) => id));
+  village.volunteers = village.volunteers.filter((person) => {
+    if (person.enlistedCultivatorId) return latestEnlisted.has(person.id) || referenced.has(person.id);
+    person.age = Math.min(120, person.age + 1);
+    person.cohortYear ??= world.year - 1;
+    return world.year - person.cohortYear < VOLUNTEER_OFFER_YEARS && person.age <= 47;
+  });
+  if (stressedByHazard || village.stress >= SETTLEMENT_STRESS_LIMIT) return undefined;
+
+  // Candidates are existing, previously unregistered adults; recruiting removes one from the village.
+  // New children are tracked independently for a full 18 years and never counted in this supply early.
+  const yearlySlots = village.stress < 24 ? MAX_NEW_VOLUNTEERS_PER_YEAR : 1;
+  const availableSlots = Math.max(0, Math.min(yearlySlots, MAX_OUTSTANDING_VOLUNTEERS - activeVolunteers(village).length, unregisteredAdults(village)));
+  for (let slot = 0; slot < availableSlots; slot++) {
+    const sequence = village.nextVolunteerSequence++;
+    const id = `${village.id}-vol-${sequence}`;
+    const number = mixed(world.random.seed, id);
+    village.volunteers.push({
+      id, cohortYear: world.year, name: FAMILY[number % FAMILY.length] + GIVEN[Math.floor(number / 13) % GIVEN.length],
+      age: 18 + number % 23, spiritRoot: ROOTS[Math.floor(number / 113) % ROOTS.length],
+      aptitude: 60 + number % 35, willingness: 79 + number % 20,
+    });
+  }
+
+  // A village needs an adult community; empty or severely distressed settlements cannot create residents.
+  const annualBirths = village.stress < 24 ? 3 : village.stress < 45 ? 2 : 1;
+  const count = adultCount(village) >= 2 ? Math.min(annualBirths, village.capacity - village.population) : 0;
+  if (count <= 0) return undefined;
+  village.population += count;
+  village.juvenileCohorts.push({ bornTick: world.tick, count });
+  return log(world, village, { kind: 'growth', people: count, stones: 0, herbs: 0,
+    description: `${village.name}今年新生${count}人，纳入未成年坊籍，成年前不计入招募人选。` }, 'births', '凡村人口添丁');
+}
+
 export function advanceSettlements(world: WorldState): WorldEvent[] {
   const state = world.settlements;
   if (state.lastAdvancedTick !== undefined && world.tick <= state.lastAdvancedTick) return [];
@@ -145,7 +195,7 @@ export function advanceSettlements(world: WorldState): WorldEvent[] {
   const events: WorldEvent[] = [];
   const villages = state.villages.filter(({ locationId }) => world.locations.some(({ id }) => id === locationId)).sort(byId);
   for (const village of villages) {
-    if (world.tick > 1 && world.month === 1) for (const person of activeVolunteers(village)) person.age = Math.min(120, person.age + 1);
+    village.juvenileCohorts = village.juvenileCohorts.filter(({ bornTick }) => world.tick - bornTick < MORTAL_MATURITY_TICKS);
     const location = world.locations.find(({ id }) => id === village.locationId)!;
     const tile = terrainTileAt(world, location.x, location.y);
     const hazard = tile && world.mapHazards.filter((item) =>
@@ -154,7 +204,7 @@ export function advanceSettlements(world: WorldState): WorldEvent[] {
     if (hazard && (village.lastDisasterTick === undefined || world.tick - village.lastDisasterTick >= 3)) {
       const stress = 12 + Math.min(24, hazard.intensity * 7);
       // Population includes the named volunteers: do not silently kill a tracked individual.
-      const deaths = Math.min(Math.max(0, village.population - activeVolunteers(village).length),
+      const deaths = Math.min(unregisteredAdults(village),
         Math.min(5, Math.floor(hazard.intensity) + (hazard.kind === 'meteor' ? 1 : 0)));
       village.population -= deaths;
       village.stress = clamp(village.stress + stress);
@@ -165,6 +215,8 @@ export function advanceSettlements(world: WorldState): WorldEvent[] {
     } else if (!hazard && world.tick % 3 === 0) {
       village.stress = clamp(village.stress - 1);
     }
+    const growth = annualCohort(world, village, Boolean(hazard));
+    if (growth) events.push(growth);
   }
   if (world.tick % 3 !== 0) return events;
   // A given village can send or receive once in a migration round. Population is transferred, never minted.
@@ -175,7 +227,7 @@ export function advanceSettlements(world: WorldState): WorldEvent[] {
       target.population < target.capacity && target.stress + 20 <= origin.stress)
       .sort((a, b) => a.stress - b.stress || byId(a, b))[0];
     if (!destination) continue;
-    const people = Math.min(4, origin.population - activeVolunteers(origin).length, destination.capacity - destination.population);
+    const people = Math.min(4, unregisteredAdults(origin), destination.capacity - destination.population);
     // Ordinary residents migrate as a cohort; named candidate records remain at their home village.
     if (people <= 0) continue;
     origin.population -= people;

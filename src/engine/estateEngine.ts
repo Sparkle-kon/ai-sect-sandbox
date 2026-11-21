@@ -98,10 +98,10 @@ function mourners(world: WorldState, estate: EstateRecord, actor: Cultivator): C
     estate.eligibleHeirs.some(({ actorId }) => actorId === person.id)).sort(byId).slice(0, 7)];
 }
 
-export function availableEstateActions(actor: Cultivator, world: WorldState): EstateOption[] {
+export function availableEstateActions(actor: Cultivator, world: WorldState, includeNomination = true): EstateOption[] {
   if (!live(actor) || !world.cultivators.includes(actor) || !world.locations.some(({ id }) => id === actor.locationId)) return [];
   const choices: EstateOption[] = [];
-  const heirs = world.cultivators.filter((candidate) => {
+  const heirs = !includeNomination ? [] : world.cultivators.filter((candidate) => {
     if (!live(candidate) || candidate.id === actor.id || candidate.id === actor.namedHeirId || candidate.locationId !== actor.locationId) return false;
     const bond = edgeBetween(world, actor.id, candidate.id);
     return (bond && bond.affinity >= 45 && bond.type !== '血仇' && bond.type !== '竞争') ||
