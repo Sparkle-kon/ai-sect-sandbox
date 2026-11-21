@@ -1,3 +1,5 @@
+import {availableDanxiaMedicineActions} from './danxiaMedicineEngine';
+import {activeDanxiaMedicineEscort,danxiaMedicineActedThisTick} from './danxiaMedicineTerms';
 import {hasOrdinaryIntentHistory,rankOrdinaryIntents} from './ordinaryIntentEngine';
 import { availableSeasonalHousingActions, seasonalHousingTravelTarget, type SeasonalHousingOption } from './seasonalHousingEngine';
 import { availableMentorTransferActions, type MentorTransferOption } from './mentorTransferEngine';
@@ -325,6 +327,8 @@ export function computeHeuristicDecision(
   if (activeEscortForActor(world, cultivator)) {
     return { chosenAction: 'REST', innerMonologue: '护送沿实际山路进行，途中不接其他事务。' };
   }
+  if(activeDanxiaMedicineEscort(world,cultivator)||danxiaMedicineActedThisTick(world,cultivator))
+    return {chosenAction:'REST',innerMonologue:'药束沿实路移动，不在旧站接下别事。'};
   if (activeRelocationForActor(world, cultivator)) {
     return { chosenAction: 'REST', innerMonologue: '正随迁宗队列行军，本月不单独行动。' };
   }
@@ -805,7 +809,7 @@ export function computeHeuristicDecision(
     (c) =>
       c.alive &&
       c.id !== cultivator.id &&
-      c.locationId === cultivator.locationId && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) && !courierCheckpoint(world, c) && !boundaryReliefCheckpoint(world, c)
+      c.locationId === cultivator.locationId && !activeDanxiaMedicineEscort(world,c) && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) && !courierCheckpoint(world, c) && !boundaryReliefCheckpoint(world, c)
   );
 
   const refuge=urgentOrdinaryRefuge(cultivator,world);
@@ -1403,6 +1407,16 @@ export function computeHeuristicDecision(
   }
 
   // Cold-start actors keep the original seeded fallback below (including its RNG order).
+  if(world.danxiaMedicine.commitments.length||world.danxiaShortages.cases.some(row=>row.status==='open')){
+    const menu=availableDanxiaMedicineActions(cultivator,world);
+    const pending=menu.find(row=>row.danxiaMedicineMove==='receive')??menu.find(row=>row.danxiaMedicineMove==='recover')??
+      menu.find(row=>row.danxiaMedicineMove==='brew')??menu.find(row=>row.danxiaMedicineMove==='accept');
+    const initial=cultivator.personality==='刚正'||cultivator.personality==='逍遥'?
+      menu.find(row=>row.danxiaMedicineMove==='offer_ship')??menu.find(row=>row.danxiaMedicineMove==='retain'):
+      menu.find(row=>row.danxiaMedicineMove==='retain');
+    const chosen=pending??initial;
+    if(chosen)return {...chosen,chosenAction:chosen.action,innerMonologue:'只按实际持药、同意和位置处理；药到手也不表示已施治。'};
+  }
   const ordinary=utilityRankedOrdinaryDecision(cultivator,world);
   if(ordinary)return ordinary;
 
@@ -1558,7 +1572,7 @@ export async function requestCultivatorLLMDecision(
   requestTick: number,
   options: { signal?: AbortSignal; onStart?: () => void } = {},
 ): Promise<LLMDecisionPayload | undefined> {
-  if (options.signal?.aborted || !config.enabled || !config.apiKey.trim() || activeRelocationForActor(world, cultivator) ||
+  if (options.signal?.aborted || !config.enabled || !config.apiKey.trim() || activeDanxiaMedicineEscort(world,cultivator)||activeRelocationForActor(world, cultivator) ||
       activeEscortForActor(world, cultivator)) return undefined;
   if (activeCourierForActor(world, cultivator)) {
     // No general context is composed for an active carrier at a real post. This is one fair-scheduled request, not a second call.
@@ -1594,7 +1608,7 @@ export async function requestCultivatorLLMDecision(
     (c) =>
       c.alive &&
       c.id !== cultivator.id &&
-      c.locationId === cultivator.locationId && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) && !courierCheckpoint(world, c) && !boundaryReliefCheckpoint(world, c)
+      c.locationId === cultivator.locationId && !activeDanxiaMedicineEscort(world,c) && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) && !courierCheckpoint(world, c) && !boundaryReliefCheckpoint(world, c)
   );
   const recalled = recallMemories(cultivator, world.tick).map((m) => ({
     tick: m.tick,
@@ -1691,6 +1705,7 @@ export async function requestCultivatorLLMDecision(
   const stipendPromptOptions = stipendOptions.map(({ stipendMove, targetInfirmaryCaseId, targetStipendId }) =>
     ({ stipendMove, targetInfirmaryCaseId, targetStipendId }));
   const careFollowupOptions = availableCareFollowupActions(cultivator, world, requestTick);
+  const danxiaOptions=availableDanxiaMedicineActions(cultivator,world,requestTick);
   const careFollowupPromptOptions = careFollowupOptions.map(({ careFollowupMove, targetInfirmaryCaseId, targetCareFollowupId }) =>
     ({ careFollowupMove, targetInfirmaryCaseId, targetCareFollowupId }));
   const infirmaryOptions = availableInfirmaryActions(cultivator, world, requestTick)
@@ -1778,6 +1793,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 地契只按本地印契和真实所有权办理，只出租限期采集许可，不转移疆域：${JSON.stringify(leaseOptions)}
 - 阵网只用实际签约、到场与灵气选项；overload 是主动超载且必会断链，不是默认调拨：${JSON.stringify(formationOptions)}
 - 退居俸养只复制本人执行回合许可：offer 只填已有旧勤凭据的 targetInfirmaryCaseId；accept、adopt、decline、withdraw 只填 targetStipendId。不得填写姓名、病况、钱款、日期、继任依据、发放结果或复职：${JSON.stringify(stipendPromptOptions)}
+- 丹霞留药、托运、签收或取回只照抄本人选项；不得补写药量、路程、不在场的人、收药结果或施治：${JSON.stringify(danxiaOptions)}
 - 出院后复诊只复制本人实际许可：schedule 只填本人既有出诊的 targetInfirmaryCaseId；attend、withdraw 只填 targetCareFollowupId。不得填写当值人、日期、费用、症状、优先级或疗效：${JSON.stringify(careFollowupPromptOptions)}
 - 静养院只可复制本人执行回合的 request、staff、accept、accept_handoff 或 refuse。accept_handoff 是病患另行同意真实已值守的候补，只抄本人候诊编号；不填人员、班次、病况、地名、冲突细节、费用和奖励：${JSON.stringify(infirmaryOptions)}${mayStaffFollowup
     ? '\n- 此地已有可由后来当值人处理的复诊约期；若自愿值守，只复制现有 INFIRMARY staff，不指定人。' : ''}
@@ -1901,6 +1917,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'HABITAT',
             'INFIRMARY',
             'CARE_FOLLOWUP',
+            'DANXIA_MEDICINE',
             'SECT_STIPEND',
             'FORMATION_NETWORK',
             'TERRITORIAL_LEASE',
@@ -2155,6 +2172,16 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             return legalStipend.stipendMove === 'offer'
               ? { chosenAction: 'SECT_STIPEND', stipendMove: 'offer', targetInfirmaryCaseId: legalStipend.targetInfirmaryCaseId, innerMonologue }
               : { chosenAction: 'SECT_STIPEND', stipendMove: legalStipend.stipendMove, targetStipendId: legalStipend.targetStipendId, innerMonologue };
+          }
+          if(chosenAction==='DANXIA_MEDICINE'){
+            const choice=danxiaOptions.find(row=>row.danxiaMedicineMove===parsed.danxiaMedicineMove&&
+              row.targetDanxiaShortageId===parsed.targetDanxiaShortageId&&row.targetDanxiaMedicineId===parsed.targetDanxiaMedicineId&&
+              row.targetCultivatorId===parsed.targetCultivatorId);
+            if(!choice||Object.keys(parsed).some(field=>!['chosenAction','innerMonologue','danxiaMedicineMove','targetDanxiaShortageId',
+                'targetDanxiaMedicineId','targetCultivatorId'].includes(field)))return undefined;
+            const {action,...allowed}=choice;
+            const text=typeof parsed.innerMonologue==='string'?parsed.innerMonologue.trim().slice(0,160):'';
+            return {...allowed,chosenAction:action,innerMonologue:text||'按实到与约定核对。'};
           }
           const legalCareFollowup = chosenAction === 'CARE_FOLLOWUP' ? careFollowupOptions.find((item) =>
             item.careFollowupMove === parsed.careFollowupMove && item.targetInfirmaryCaseId === parsed.targetInfirmaryCaseId &&

@@ -1,3 +1,4 @@
+import {activeDanxiaMedicineEscort,danxiaMedicineCheckpoint,danxiaMedicineParties} from '../engine/danxiaMedicineTerms';
 import { courierCheckpoint } from '../engine/sealedCourierEngine';
 import { pilgrimageCheckpoint } from '../engine/pilgrimageEngine';
 import { expeditionRescueCheckpoint } from '../engine/expeditionRescueCheckpoint';
@@ -43,6 +44,14 @@ export function createTerrainMapView(world: WorldState, viewer: Cultivator | und
     ? (current ?? (viewer?.alive ? currentVisibleTileIds(world, viewer) : new Set<string>())) : undefined;
   const liveActors = world.cultivators.filter((actor) => {
     if (!actor.alive || hiddenGates.has(actor.locationId)) return false;
+    const medicinal=activeDanxiaMedicineEscort(world,actor);
+    if(medicinal){
+      if(!viewer||!world.cultivators.includes(viewer)||!danxiaMedicineParties(medicinal).includes(viewer.id))return false;
+      const point=danxiaMedicineCheckpoint(world,actor);
+      if(!point||(current&&!current.has(terrainTileAt(world,point.x,point.y)?.id??'')))return false;
+      trailPositions.set(actor.id,point);
+      return true;
+    }
     const rescue = guardedTravelTiles && expeditionRescueCheckpoint(world, actor);
     const relief = guardedTravelTiles && boundaryReliefCheckpoint(world, actor);
     const checkpoint = rescue ?? relief ?? courierCheckpoint(world, actor) ?? pilgrimageCheckpoint(world, actor);

@@ -10,6 +10,9 @@ import type { Cultivator, InfirmaryCase, StaffedDutyKind, WorldState } from '../
 import { CareFollowupReceipts } from './CareFollowupReceipts';
 import { projectDanxiaShortages } from '../engine/danxiaShortageEngine';
 import { DanxiaShortageReceipts } from './DanxiaShortageReceipts';
+import { projectDanxiaMedicine } from '../engine/danxiaMedicineEngine';
+import { DanxiaMedicineControls, type DanxiaMedicineControlsProps } from './DanxiaMedicineControls';
+import { DanxiaMedicineReceipts } from './DanxiaMedicineReceipts';
 
 const STATUS: Record<InfirmaryCase['status'], string> = {
   waiting: '等待救治', treated: '已同意并接受救治', refused: '本人已拒绝', closed: '排队已结束',
@@ -20,14 +23,17 @@ const END: Record<NonNullable<InfirmaryCase['reason']>, string> = {
 
 const DUTY: Record<StaffedDutyKind, string> = { observatory: '观象实测', cohort: '合班实授' };
 
-export function InfirmaryPanel({ world, cultivator }: { world: WorldState; cultivator: Cultivator }) {
+export function InfirmaryPanel({ world, cultivator, medicineControls }: {
+  world: WorldState; cultivator: Cultivator; medicineControls?: DanxiaMedicineControlsProps;
+}) {
   const viewer = world.cultivators.find(({ id }) => id === cultivator.id);
   const view = visibleInfirmaries(world, viewer);
   const followups = projectCareFollowups(world, viewer);
   const shortages = projectDanxiaShortages(world, viewer);
+  const medicine = projectDanxiaMedicine(world, viewer);
   const { capacity, ownCases = [], ownShift, ownQueuePosition, ownDutyDisposition } = view ?? {};
   const followupCapacity = capacity ? projectLocalCareFollowupCapacity(world, viewer) : undefined;
-  if (!capacity && !ownCases.length && !ownShift && !followups.length && !shortages.length) return null;
+  if (!capacity && !ownCases.length && !ownShift && !followups.length && !shortages.length && !medicine.length) return null;
   const sect = world.sects.find(({ id }) => id === view?.sectId);
   const sites = new Map(world.locations.map(({ id, name }) => [id, name]));
 
@@ -83,6 +89,8 @@ export function InfirmaryPanel({ world, cultivator }: { world: WorldState; culti
         ) : <p className="text-slate-400">暂无本人救治记录。</p>}
         <CareFollowupReceipts appointments={followups} tick={world.tick} />
         <DanxiaShortageReceipts rows={shortages} />
+        <DanxiaMedicineReceipts rows={medicine} />
+        {(shortages.length > 0 || medicine.length > 0) && medicineControls && <DanxiaMedicineControls {...medicineControls} />}
       </div>
     </details>
   );

@@ -1,3 +1,4 @@
+import type {DanxiaMedicineControlsProps} from './DanxiaMedicineControls';
 import React from 'react';
 import { Brain, Shield, Coins, Compass, Heart, Sparkles } from 'lucide-react';
 import { Cultivator, WorldState } from '../types/world';
@@ -32,6 +33,7 @@ const ScriptureEditionPanel = React.lazy(async () => ({ default: (await import('
 const RelicSetPanel = React.lazy(async () => ({ default: (await import('./RelicSetPanel')).RelicSetPanel }));
 
 interface AgentInspectorProps {
+  medicineControls?:DanxiaMedicineControlsProps;
   world: WorldState;
   cultivator: Cultivator | undefined;
   onSelectCultivator: (id: string) => void;
@@ -43,6 +45,7 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
   world,
   cultivator,
   onSelectCultivator, workspaceSection, artifactSalvage,
+  medicineControls,
 }) => {
   if (!cultivator) {
     return (
@@ -223,7 +226,7 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
       {profile && <ProbationPanel world={world} cultivator={cultivator} />}
       {sectDetails && <>
       <SectHierarchyPanel cultivator={cultivator} sect={sect} cultivators={world.cultivators} />
-      <SectEconomyPanel cultivator={cultivator} sect={sect} world={world} />
+      <SectEconomyPanel cultivator={cultivator} sect={sect} world={world} medicineControls={medicineControls} />
       <SectDiplomacyPanel sect={sect} world={world} />
       </>}
       {!workspaceSection && <WorldOccasionsPanel world={world} cultivator={cultivator} />}

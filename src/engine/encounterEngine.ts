@@ -1,3 +1,4 @@
+import {activeDanxiaMedicineEscort} from './danxiaMedicineTerms';
 import { courierCheckpoint } from './sealedCourierEngine';
 import { pilgrimageCheckpoint } from './pilgrimageEngine';
 import { activeEscortForActor } from './escortEngine';
@@ -22,10 +23,10 @@ export function firstActorRelationships(edges: readonly RelationshipEdge[], acto
 }
 
 export function availableEncounters(actor: Cultivator, world: WorldState) {
-  if (activeRelocationForActor(world, actor) || activeEscortForActor(world, actor) || pilgrimageCheckpoint(world, actor) || courierCheckpoint(world, actor)) return [];
+  if (activeDanxiaMedicineEscort(world,actor)||activeRelocationForActor(world, actor) || activeEscortForActor(world, actor) || pilgrimageCheckpoint(world, actor) || courierCheckpoint(world, actor)) return [];
   const location = world.locations.find((place) => place.id === actor.locationId);
   const nearby = world.cultivators.filter((other) => other.alive && other.id !== actor.id &&
-    other.locationId === actor.locationId && !activeRelocationForActor(world, other) && !activeEscortForActor(world, other) && !pilgrimageCheckpoint(world, other) && !courierCheckpoint(world, other));
+    other.locationId === actor.locationId && !activeDanxiaMedicineEscort(world,other) && !activeRelocationForActor(world, other) && !activeEscortForActor(world, other) && !pilgrimageCheckpoint(world, other) && !courierCheckpoint(world, other));
   if (!nearby.length) return [];
   const edges = firstActorRelationships(world.relationships, actor.id);
   return nearby.flatMap((other) => {

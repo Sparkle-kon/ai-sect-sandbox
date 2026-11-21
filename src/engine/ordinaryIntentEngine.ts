@@ -1,3 +1,4 @@
+import {activeDanxiaMedicineEscort} from './danxiaMedicineTerms';
 import type {Cultivator,HerbId,LLMDecisionPayload,LocationNode,PersonalityTrait,WorldState} from '../types/world';
 import {availableAlchemy} from './alchemyEngine';
 import {boundaryReliefCheckpoint} from './boundaryReliefCheckpoint';
@@ -44,7 +45,7 @@ const live=(a:Cultivator)=>a.alive&&a.hp>0;
 const publicSite=(site:LocationNode)=>site.type!=='secret_realm'&&site.type!=='abyss';
 const actualExecution=(world:WorldState,tick:number)=>tick===world.tick||tick===world.tick+1;
 function inTransit(world:WorldState,actor:Cultivator,tick=world.tick){
-  return !!activeCourierForActor(world,actor)||(tick===world.tick&&courierActedThisTick(world,actor))||!!activeEscortForActor(world,actor)||
+  return !!activeDanxiaMedicineEscort(world,actor)||!!activeCourierForActor(world,actor)||(tick===world.tick&&courierActedThisTick(world,actor))||!!activeEscortForActor(world,actor)||
     !!activeRelocationForActor(world,actor)||!!pilgrimageCheckpoint(world,actor)||!!boundaryReliefCheckpoint(world,actor)||
     !!expeditionRescueCheckpoint(world,actor)||!!activeSiegeForActor(world,actor);
 }

@@ -1,8 +1,9 @@
+import { flowDanxiaMedicine } from './danxiaMedicineTerms';
 import { flowActor, flowSite, recordResourceFlow } from './resourceFlowEngine';
 import { commonsHarvestLimit, settleCommonsHarvest } from './sharedCommonsEngine';
 import { authorizedHerbHarvestLimit, settleLeasedHerbHarvest } from './territorialLeaseEngine';
 import { localQiWeather, weatherHerbRegrowth } from './weatherEngine';
-import type { Cultivator, HerbId, LLMDecisionPayload, PillId, WorldEvent, WorldState } from '../types/world';
+import type { Cultivator, DanxiaMedicineCommitment, HerbId, LLMDecisionPayload, LocationNode, PillId, WorldEvent, WorldState } from '../types/world';
 import { recordMemory } from './memoryEngine';
 import { guardingHerbBeast } from './spiritBeastEngine';
 import { canUseFurnace, claimFurnaceUse } from './furnaceReservationEngine';
@@ -98,6 +99,54 @@ function event(world: WorldState, actor: Cultivator, title: string, description:
   };
 }
 
+function brewNative(world:WorldState,actor:Cultivator,place:LocationNode,pill:PillId,rng:()=>number,
+  held?:DanxiaMedicineCommitment):{success:boolean;event:WorldEvent}|undefined {
+  const cost=alchemyCost(pill,place.furnaceGrade),recipe=ALCHEMY_RECIPES[pill];
+  if(!claimFurnaceUse(world,actor,place.id,'brew'))return undefined;
+  const pocket=flowActor(actor.id),participant={kind:'participants',actorIds:[actor.id]} as const;
+  for(const herb of HERBS){
+    const used=recipe.herbs[herb]??0;
+    if(!used)continue;
+    const from=held&&herb==='jade_leaf'?flowDanxiaMedicine(held.id):pocket;
+    if(held&&herb==='jade_leaf')held.escrow=0;
+    else actor.herbs[herb]-=used;
+    recordResourceFlow(world,{kind:'consumption',mechanism:'alchemy',refId:place.id,reason:'brew_material',
+      from,good:herb,amount:used,visibility:participant});
+  }
+  actor.spiritStones-=cost;
+  recordResourceFlow(world,{kind:'consumption',mechanism:'alchemy',refId:place.id,reason:'brew_fee',
+    from:pocket,good:'stone',amount:cost,visibility:participant});
+  const success=rng()<alchemySuccess(actor,pill,place.furnaceGrade);
+  if(success){
+    actor.pills[pill]+=1;
+    recordResourceFlow(world,{kind:'production',mechanism:'alchemy',refId:place.id,reason:'brew_output',
+      to:pocket,good:pill,amount:1,visibility:participant});
+  }
+  return {success,event:event(world,actor,`${actor.name}${success?'炼丹成丹':'炼丹失手'}`,
+    `${actor.name}借${place.furnaceGrade}阶丹炉耗费${cost}灵石与药材炼制【${recipe.name}】，${success?'凝成一枚灵丹。':'炉火失控，药材与灵石尽耗，未能成丹。'}`)};
+}
+
+/** Other real materials, fee and furnace are never supplied by holding a batch of jade leaves. */
+export function canBrewDanxiaCustody(actor:Cultivator,world:WorldState,executionTick=world.tick):boolean {
+  const place=world.locations.find(site=>site.id===actor.locationId);
+  const recipe=ALCHEMY_RECIPES.foundation;
+  return !!place&&world.cultivators.includes(actor)&&actor.alive&&actor.hp>0&&
+    place.furnaceGrade>=recipe.furnaceGrade&&actor.pills.foundation<99&&actor.herbs.earth_root>=(recipe.herbs.earth_root??Infinity)&&
+    actor.spiritStones>=alchemyCost('foundation',place.furnaceGrade)&&canUseFurnace(world,actor,place.id,'brew',undefined,executionTick);
+}
+
+/** No caller-provided balance can mint herbs. Only the bound live game account can be spent. */
+export function brewDanxiaCustody(world:WorldState,actor:Cultivator,held:DanxiaMedicineCommitment,rng:()=>number):
+  {success:boolean;event:WorldEvent}|undefined {
+  const rows=world.danxiaMedicine.commitments.filter(row=>row.id===held.id);
+  const place=world.locations.find(site=>site.id===held.originId);
+  if(rows.length!==1||rows[0]!==held||held.choice!=='retain'||held.status!=='retained'||held.escrow!==2||
+      held.discipleId!==actor.id||!place||actor.locationId!==place.id||!canBrewDanxiaCustody(actor,world))return undefined;
+  const actual=brewNative(world,actor,place,'foundation',rng,held);
+  if(actual)actual.event.witnessScope='participants';
+  return actual;
+}
+
 export function resolveAlchemy(world: WorldState, actor: Cultivator, decision: LLMDecisionPayload, rng: () => number): WorldEvent | null {
   const option = availableAlchemy(actor, world).find((choice) => choice.action === decision.chosenAction &&
     choice.targetHerbId === decision.targetHerbId && choice.targetPillId === decision.targetPillId &&
@@ -120,28 +169,7 @@ export function resolveAlchemy(world: WorldState, actor: Cultivator, decision: L
   }
   const pill = option.targetPillId!;
   const recipe = ALCHEMY_RECIPES[pill];
-  if (option.action === 'BREW_PILL') {
-    const cost = alchemyCost(pill, place.furnaceGrade);
-    if (!claimFurnaceUse(world, actor, place.id, 'brew')) return null;
-    for (const herb of HERBS) {
-      const used = recipe.herbs[herb] ?? 0;
-      if (!used) continue;
-      actor.herbs[herb] -= used;
-      recordResourceFlow(world, { kind: 'consumption', mechanism: 'alchemy', refId: place.id, reason: 'brew_material',
-        from: pocket, good: herb, amount: used, visibility: participant });
-    }
-    actor.spiritStones -= cost;
-    recordResourceFlow(world, { kind: 'consumption', mechanism: 'alchemy', refId: place.id, reason: 'brew_fee',
-      from: pocket, good: 'stone', amount: cost, visibility: participant });
-    const success = rng() < alchemySuccess(actor, pill, place.furnaceGrade);
-    if (success) {
-      actor.pills[pill] += 1;
-      recordResourceFlow(world, { kind: 'production', mechanism: 'alchemy', refId: place.id, reason: 'brew_output',
-        to: pocket, good: pill, amount: 1, visibility: participant });
-    }
-    return event(world, actor, `${actor.name}${success ? '炼丹成丹' : '炼丹失手'}`,
-      `${actor.name}借${place.furnaceGrade}阶丹炉耗费${cost}灵石与药材炼制【${recipe.name}】，${success ? '凝成一枚灵丹。' : '炉火失控，药材与灵石尽耗，未能成丹。'}`);
-  }
+  if (option.action === 'BREW_PILL') return brewNative(world,actor,place,pill,rng)?.event??null;
   actor.pills[pill] -= 1;
   recordResourceFlow(world, { kind: 'consumption', mechanism: 'alchemy', refId: place.id, reason: 'pill_use',
     from: pocket, good: pill, amount: 1, visibility: participant });

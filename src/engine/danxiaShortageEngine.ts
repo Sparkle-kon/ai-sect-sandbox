@@ -106,7 +106,8 @@ export function advanceDanxiaShortages(world: WorldState): WorldEvent[] {
     row.resolution = { tick:world.tick,reason,requiredLeaves,availableLeaves };
     results.push(caseEvent(world,row,'closed'));
   }
-  world.danxiaShortages.cases = world.danxiaShortages.cases.filter(row => row.status === 'open' ||
+  const cited=new Set(world.danxiaMedicine.commitments.map(row=>row.shortageId));
+  world.danxiaShortages.cases = world.danxiaShortages.cases.filter(row => row.status === 'open' || cited.has(row.id) ||
     !row.resolution || world.tick - row.resolution.tick <= DANXIA_CLOSED_RETENTION_TICKS);
   return results;
 }

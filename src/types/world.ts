@@ -118,6 +118,7 @@ export type ActionType =
   | 'HABITAT'
   | 'INFIRMARY'
   | 'CARE_FOLLOWUP'
+  | 'DANXIA_MEDICINE'
   | 'FORMATION_NETWORK'
   | 'TERRITORIAL_LEASE'
   | 'HOUSEHOLD_GUARDIAN'
@@ -463,6 +464,9 @@ export interface LLMConfig {
 export interface LLMDecisionPayload {
   innerMonologue: string;
   chosenAction: ActionType;
+  danxiaMedicineMove?: DanxiaMedicineMove;
+  targetDanxiaShortageId?: string;
+  targetDanxiaMedicineId?: string;
   observatoryMove?: ObservatoryMove;
   observatoryStation?: 'edge';
   alignedWeatherMove?: AlignedWeatherMove;
@@ -993,6 +997,7 @@ export type AvatarOrder = 'REST' | 'CULTIVATE';
 export type AvatarPendingOrder = { actorId: string; queuedTick: number } & (
   | { action: AvatarOrder }
   | { action: 'SALVAGE_ARTIFACT'; targetArtifactId: string; targetLocationId: string }
+  | { action: 'DANXIA_MEDICINE'; danxiaMedicineMove: DanxiaMedicineMove; targetDanxiaShortageId?:string; targetDanxiaMedicineId?:string; targetCultivatorId?:string }
 );
 export interface AvatarTranscriptEntry extends AvatarInteractionRequest {
   id: string;
@@ -2524,9 +2529,9 @@ export interface SharedCommonsPact {
 export interface SharedCommonsState { pacts: SharedCommonsPact[]; nextId: number }
 
 export type ResourceFlowGood = 'stone' | 'jade_seed' | MarketGood;
-export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation' | 'terrain' | 'workshop' | 'road' | 'observatory' | 'pilgrimage' | 'granary' | 'furnace_safety' | 'artifact_salvage' | 'village_supply' | 'civic_memorial' | 'village_fair' | 'sect_stipend' | 'seed_culture' | 'care_followup';
+export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation' | 'terrain' | 'workshop' | 'road' | 'observatory' | 'pilgrimage' | 'granary' | 'furnace_safety' | 'artifact_salvage' | 'village_supply' | 'civic_memorial' | 'village_fair' | 'sect_stipend' | 'seed_culture' | 'care_followup' | 'danxia_medicine';
 export type ResourceFlowAccount =
-  | { kind: 'actor' | 'site' | 'sect' | 'order' | 'shipment' | 'relocation' | 'workshop' | 'salvage' | 'granary' | 'village_supply' | 'village_fair' | 'seed_lot' | 'seed_plot'; id: string }
+  | { kind: 'actor' | 'site' | 'sect' | 'order' | 'shipment' | 'relocation' | 'workshop' | 'salvage' | 'granary' | 'village_supply' | 'village_fair' | 'seed_lot' | 'seed_plot' | 'danxia_medicine'; id: string }
   | { kind: 'oath'; id: string; pocket: 'payment' | 'collateral' };
 export type ResourceFlowVisibility =
   | { kind: 'observer' }
@@ -3126,6 +3131,7 @@ export interface AlignedWeatherState { comparisons: AlignedWeatherComparison[]; 
 export interface WorldState {
   fieldObservatories: FieldObservatoriesState;
   danxiaShortages: DanxiaShortagesState;
+  danxiaMedicine: DanxiaMedicineState;
   expeditionOmens: ExpeditionOmensState;
   alignedWeather: AlignedWeatherState;
   villageCensuses: VillageCensusesState;
@@ -3237,3 +3243,18 @@ export interface DanxiaShortage {
   status:'open'|'closed';resolution?:{tick:number;reason:'adequate_stock'|'commitment_ended'|'authority_lost';requiredLeaves:number;availableLeaves:number};
 }
 export interface DanxiaShortagesState { cases:DanxiaShortage[] }
+
+export type DanxiaMedicineMove = 'observe'|'retain'|'offer_ship'|'brew'|'accept'|'decline'|'receive'|'recover';
+export type DanxiaMedicineStatus = 'observed'|'retained'|'offered'|'in_transit'|'arrived'|'returning'|'recoverable'|
+  'brewed'|'brew_failed'|'received'|'recovered'|'lost';
+export interface DanxiaMedicineCommitment {
+  id:string; shortageId:string; sourceCaseId:string; appointmentId:string; discipleId:string; patientId:string;
+  householdId:string; volunteerId:string; settlementId:string; originId:string; destinationId:string; escortId?:string;
+  choice:'observe'|'retain'|'offer_ship'; startedTick:number; offerUntilTick:number; status:DanxiaMedicineStatus; escrow:0|2;
+  reservedTick?:number; acceptedTick?:number; departedTick?:number; arrivedTick?:number; receiveUntilTick?:number;
+  path?:MapPoint[]; pathIndex?:number; lastMovedTick?:number; returnStartedTick?:number; returnedTick?:number;
+  disposition?:{tick:number;reason:'offer_expired'|'escort_declined'|'recipient_declined'|'recipient_missed'|'title_lost'|'disciple_lost'|'route_lost'|'escort_lost'};
+  hazard?:RouteWarningHazardProof;
+  settlement?:{tick:number;kind:'observed'|'brewed'|'brew_failed'|'received'|'recovered'|'lost'; actorId:string;artifactEventId?:string};
+}
+export interface DanxiaMedicineState { commitments:DanxiaMedicineCommitment[] }

@@ -7,6 +7,7 @@ const compare = (a: string,b: string) => a < b ? -1 : a > b ? 1 : 0;
 export function validateDanxiaShortageHistory(world: WorldState, actorIds: ReadonlySet<string>, fail: (path: string) => never): void {
   if (!world.danxiaShortages.cases.length) return;
   // Original appointment/money/shift validation runs before this additional authored-incident proof.
+  const pinnedShortages = new Set(world.danxiaMedicine.commitments.map(row=>row.shortageId));
   const appointments = new Map(world.careFollowups.appointments.map(row=>[row.id,row]));
   const household = new Map(world.households.groups.map(row=>[row.id,row]));
   const members = new Map(world.households.members.map(row=>[row.volunteerId,row]));
@@ -57,7 +58,7 @@ export function validateDanxiaShortageHistory(world: WorldState, actorIds: Reado
           capital.herbs.jade_leaf >= stillScheduled.length * CARE_FOLLOWUP_JADE_LEAF) fail('danxiaShortages.cases.lifecycle');
       active=true;
     } else if (!resolution || resolution.tick < openedTick || resolution.tick > Math.min(world.tick, latestEligible) ||
-        world.tick-resolution.tick>DANXIA_CLOSED_RETENTION_TICKS || resolution.requiredLeaves > requiredLeaves ||
+        (world.tick-resolution.tick>DANXIA_CLOSED_RETENTION_TICKS && !pinnedShortages.has(id)) || resolution.requiredLeaves > requiredLeaves ||
         (resolution.reason === 'adequate_stock' ? resolution.requiredLeaves === 0 || resolution.availableLeaves < resolution.requiredLeaves :
           resolution.requiredLeaves !== 0 || (resolution.reason==='authority_lost' && resolution.availableLeaves!==0))) {
       fail('danxiaShortages.cases.resolution');

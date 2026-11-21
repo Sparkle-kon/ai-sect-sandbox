@@ -1,3 +1,5 @@
+import { advanceDanxiaMedicine, resolveDanxiaMedicineAction } from './danxiaMedicineEngine';
+import { activeDanxiaMedicineEscort, danxiaMedicineActedThisTick } from './danxiaMedicineTerms';
 import {advanceDanxiaShortages,openDanxiaShortage} from './danxiaShortageEngine';
 import { isScopedExpeditionGate } from './expeditionOmenTerms';
 import { recordOrdinaryActionEvidence, snapshotOrdinaryAction } from './ordinaryActionEvidence';
@@ -199,6 +201,11 @@ export function applyCultivatorBrainDecision(
     cultivator.innerMonologue = forced ? '天劫未止，无暇旁顾，先守住雷心。' : decision.innerMonologue;
     return resolveTribulation(world, cultivator, stance, rng);
   }
+  if(activeDanxiaMedicineEscort(world,cultivator)||danxiaMedicineActedThisTick(world,cultivator)){
+    cultivator.currentAction='DANXIA_MEDICINE';
+    cultivator.innerMonologue='药束随实际路段走置；本轮不能在旧站另接事务。';
+    return null;
+  }
   if (activeCourierForActor(world, cultivator) || courierActedThisTick(world, cultivator)) {
     if (decision.chosenAction === 'COURIER_HANDOFF' && decision.courierHandoffMove === 'offer' &&
         courierHandoffMayOfferNow(world, cultivator)) {
@@ -373,6 +380,8 @@ export function applyCultivatorBrainDecision(
       return resolveInfirmaryAction(world, cultivator, decision);
     case 'CARE_FOLLOWUP':
       return resolveCareFollowupAction(world, cultivator, decision);
+    case 'DANXIA_MEDICINE':
+      return resolveDanxiaMedicineAction(world,cultivator,decision,rng);
     case 'HABITAT':
       return resolveHabitatAction(world, cultivator, decision);
     case 'CHRONICLE_ERRATA':
@@ -600,7 +609,7 @@ export function applyCultivatorBrainDecision(
 
     case 'SOCIALIZE': {
       const target = world.cultivators.find((c) =>
-        c.alive && c.id !== cultivator.id && c.locationId === cultivator.locationId && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) && !courierCheckpoint(world, c) && !expeditionRescueCheckpoint(world, c) && !boundaryReliefCheckpoint(world, c) &&
+        c.alive && c.id !== cultivator.id && c.locationId === cultivator.locationId && !activeDanxiaMedicineEscort(world,c) && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) && !courierCheckpoint(world, c) && !expeditionRescueCheckpoint(world, c) && !boundaryReliefCheckpoint(world, c) &&
         (decision.targetCultivatorId === undefined || c.id === decision.targetCultivatorId)
       );
       if (!target) return null;
@@ -637,7 +646,7 @@ export function applyCultivatorBrainDecision(
 
     case 'SCHEMING': {
       const target = world.cultivators.find((c) =>
-        c.alive && c.id !== cultivator.id && c.locationId === cultivator.locationId && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) && !courierCheckpoint(world, c) && !expeditionRescueCheckpoint(world, c) && !boundaryReliefCheckpoint(world, c) &&
+        c.alive && c.id !== cultivator.id && c.locationId === cultivator.locationId && !activeDanxiaMedicineEscort(world,c) && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) && !courierCheckpoint(world, c) && !expeditionRescueCheckpoint(world, c) && !boundaryReliefCheckpoint(world, c) &&
         (decision.targetCultivatorId === undefined || c.id === decision.targetCultivatorId)
       );
       if (!target) return null;
@@ -688,7 +697,7 @@ export function applyCultivatorBrainDecision(
 
     case 'DUEL': {
       const defender = world.cultivators.find((c) =>
-        c.alive && c.id !== cultivator.id && c.locationId === cultivator.locationId && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) && !courierCheckpoint(world, c) && !expeditionRescueCheckpoint(world, c) && !boundaryReliefCheckpoint(world, c) &&
+        c.alive && c.id !== cultivator.id && c.locationId === cultivator.locationId && !activeDanxiaMedicineEscort(world,c) && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) && !courierCheckpoint(world, c) && !expeditionRescueCheckpoint(world, c) && !boundaryReliefCheckpoint(world, c) &&
         (decision.targetCultivatorId === undefined || c.id === decision.targetCultivatorId)
       );
       if (!defender) return null;
@@ -845,7 +854,7 @@ export function advanceWorldTick(
   const avatarOrder = consumeAvatarOrder(nextState);
   const danxiaRegrowth = maintainAlchemy(nextState);
   maintainSectEconomy(nextState);
-  const newEvents: WorldEvent[] = [...advanceSanctuaries(nextState), ...advanceCeasefires(nextState), ...advanceCompetitionSeasons(nextState), ...advanceMapHazards(nextState), ...advanceTerrainSuccession(nextState), ...advanceRoads(nextState), ...advanceCouriers(nextState), ...advancePilgrimages(nextState), ...advanceRelocations(nextState), ...advanceWorkshopInstitutionClosures(nextState), ...advanceSettlements(nextState), ...advanceVillageSupply(nextState), ...advanceVillageWorks(nextState), ...advanceSpiritBeasts(nextState, rng), ...advanceSeedCulture(nextState), ...advanceVillageFairs(nextState), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...advanceSharedCommons(nextState), ...advanceHouseholds(nextState), ...advanceSeasonalHousing(nextState)];
+  const newEvents: WorldEvent[] = [...advanceSanctuaries(nextState), ...advanceCeasefires(nextState), ...advanceCompetitionSeasons(nextState), ...advanceMapHazards(nextState), ...advanceTerrainSuccession(nextState), ...advanceRoads(nextState), ...advanceCouriers(nextState), ...advanceDanxiaMedicine(nextState), ...advancePilgrimages(nextState), ...advanceRelocations(nextState), ...advanceWorkshopInstitutionClosures(nextState), ...advanceSettlements(nextState), ...advanceVillageSupply(nextState), ...advanceVillageWorks(nextState), ...advanceSpiritBeasts(nextState, rng), ...advanceSeedCulture(nextState), ...advanceVillageFairs(nextState), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...advanceSharedCommons(nextState), ...advanceHouseholds(nextState), ...advanceSeasonalHousing(nextState)];
   newEvents.push(...openDanxiaShortage(nextState,danxiaRegrowth));
   for (const event of newEvents) witnessEvent(nextState, event);
   openFurnaceTurn(nextState);
@@ -879,6 +888,11 @@ export function advanceWorldTick(
       }
     }
 
+    if(!isTribulationActive(cultivator)&&(activeDanxiaMedicineEscort(nextState,cultivator)||danxiaMedicineActedThisTick(nextState,cultivator))){
+      cultivator.currentAction='DANXIA_MEDICINE';
+      cultivator.innerMonologue='沿原路实际护送或折返；无本人签收不得宣告已交。';
+      continue;
+    }
     if (activeCourierForActor(nextState, cultivator) || courierActedThisTick(nextState, cultivator)) {
       const supplied = precomputedDecisions && Object.hasOwn(precomputedDecisions, cultivator.id) ? precomputedDecisions[cultivator.id] : undefined;
       const allowedHandoff = courierHandoffMayOfferNow(nextState, cultivator);

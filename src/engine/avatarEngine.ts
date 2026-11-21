@@ -1,3 +1,5 @@
+import { availableDanxiaMedicineActions } from './danxiaMedicineEngine';
+import { activeDanxiaMedicineEscort,danxiaMedicineActedThisTick } from './danxiaMedicineTerms';
 import type { AvatarIntent, AvatarInteractionMode, AvatarInteractionOption, AvatarInteractionRequest, AvatarOrder, AvatarTranscriptEntry, Cultivator, LLMDecisionPayload, PlayerAvatarState, WorldState } from '../types/world';
 import { availableArtifactSalvageActions } from './artifactSalvageEngine';
 import { activeSiegeForActor } from './diplomacyEngine';
@@ -17,7 +19,7 @@ export const avatarInteractionCost = (mode: AvatarInteractionMode, intent: Avata
 const clamp = (value: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, value));
 const clean = (value: unknown, max: number) => typeof value === 'string' ?
   value.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, max) : '';
-const availableBody = (world: WorldState, actor: Cultivator) => actor.alive && actor.hp > 0 && !isTribulationActive(actor) &&
+const availableBody = (world: WorldState, actor: Cultivator) => actor.alive && actor.hp > 0 && !isTribulationActive(actor) && !activeDanxiaMedicineEscort(world,actor) && !danxiaMedicineActedThisTick(world,actor) &&
   !activeSiegeForActor(world, actor) && !world.occasions.some((holiday) =>
     (holiday.status === 'registration' || holiday.status === 'running') && holiday.participantIds.includes(actor.id));
 
@@ -97,6 +99,24 @@ export function queueAvatarSalvage(world: WorldState, actorId: string, targetArt
   return true;
 }
 
+export type AvatarDanxiaMedicineOption=ReturnType<typeof availableDanxiaMedicineActions>[number];
+
+/** Queue an eligible exact medicinal choice without reserving any stock before the native turn. */
+export function queueAvatarDanxiaMedicine(world:WorldState,actorId:string,choice:AvatarDanxiaMedicineOption):boolean {
+  const host=activeAvatar(world);
+  if(!host||!canQueueAvatarSalvage(world,actorId)||choice.danxiaMedicineMove==='observe')return false;
+  const listed=availableDanxiaMedicineActions(host,world,world.tick+1).find(option=>
+    option.danxiaMedicineMove===choice.danxiaMedicineMove&&option.targetDanxiaShortageId===choice.targetDanxiaShortageId&&
+    option.targetDanxiaMedicineId===choice.targetDanxiaMedicineId&&option.targetCultivatorId===choice.targetCultivatorId);
+  if(!listed)return false;
+  const {danxiaMedicineMove,targetDanxiaShortageId,targetDanxiaMedicineId,targetCultivatorId}=listed;
+  world.playerAvatar.essence-=AVATAR_ORDER_COST;
+  world.playerAvatar.pendingOrder={actorId,action:'DANXIA_MEDICINE',queuedTick:world.tick,danxiaMedicineMove,
+    ...(targetDanxiaShortageId?{targetDanxiaShortageId}:{}),...(targetDanxiaMedicineId?{targetDanxiaMedicineId}:{}),
+    ...(targetCultivatorId?{targetCultivatorId}:{} )};
+  return true;
+}
+
 export function consumeAvatarOrder(world: WorldState): { actorId: string; decision: LLMDecisionPayload } | undefined {
   const state = world.playerAvatar;
   const order = state?.pendingOrder;
@@ -104,7 +124,10 @@ export function consumeAvatarOrder(world: WorldState): { actorId: string; decisi
   delete state.pendingOrder;
   if (world.tick !== order.queuedTick + 1 || activeAvatar(world)?.id !== order.actorId) return undefined;
   const targets = order.action === 'SALVAGE_ARTIFACT' ?
-    { targetArtifactId: order.targetArtifactId, targetLocationId: order.targetLocationId } : {};
+    { targetArtifactId: order.targetArtifactId, targetLocationId: order.targetLocationId } :
+    order.action==='DANXIA_MEDICINE'?{danxiaMedicineMove:order.danxiaMedicineMove,targetDanxiaShortageId:order.targetDanxiaShortageId,
+      targetDanxiaMedicineId:order.targetDanxiaMedicineId,targetCultivatorId:order.targetCultivatorId}:{};
+
   return { actorId: order.actorId, decision: { chosenAction: order.action, innerMonologue: '遵化身指令行动', ...targets } };
 }
 

@@ -1,3 +1,6 @@
+import {activeAvatar,canQueueAvatarSalvage,queueAvatarDanxiaMedicine} from './engine/avatarEngine';
+import {availableDanxiaMedicineActions,type DanxiaMedicineOption} from './engine/danxiaMedicineEngine';
+import type {DanxiaMedicineControlsProps} from './components/DanxiaMedicineControls';
 import { StoryFirstHome } from './components/StoryFirstHome';
 import { projectStoryHomepage } from './engine/storyHomepage';
 import { FAST_FORWARD_MAX_TICKS } from './engine/fastForwardEngine';
@@ -799,8 +802,29 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
     setAvatarNotice(undefined);
     return true;
   };
+  const medicineContextVersion=saveContextVersion.current;
+  const medicineAvatar=!preview&&selectedCultivator&&activeAvatar(world)?.id===selectedCultivator.id&&
+    canQueueAvatarSalvage(world,selectedCultivator.id)?selectedCultivator:undefined;
+  const queueDanxiaMedicine=(option:DanxiaMedicineOption)=>{
+    if(!medicineAvatar||browsing.current||stepInFlight.current||fastForwardRun.current||campaignGuard.current||
+      history.current!==timeline||authority.current!==world||saveContextVersion.current!==medicineContextVersion)return false;
+    setIsRunning(false);
+    const updated=updateWorld(current=>{
+      const next=structuredClone(current);
+      return queueAvatarDanxiaMedicine(next,medicineAvatar.id,option)?next:current;
+    });
+    return updated!==world;
+  };
+  const medicineControls:DanxiaMedicineControlsProps|undefined=dashboardOpen&&workspace==='sect'&&selectedCultivator?{
+    scopeKey:`${viewScopeKey}:${selectedCultivator.id}`,revisionKey:visibleWorld,
+    choices:medicineAvatar?availableDanxiaMedicineActions(medicineAvatar,world,world.tick+1).map(option=>({
+      option,...(option.targetCultivatorId?{label:world.cultivators.find(actor=>actor.id===option.targetCultivatorId)?.name}:{})
+    })):[],
+    disabled:isStepping||fastForwardLocked||!!preview,
+    ...(medicineAvatar?{onQueue:queueDanxiaMedicine}:{}),
+  }:undefined;
   const inspect = (workspaceSection: 'profile' | 'cultivation' | 'mind' | 'sect') => <React.Suspense fallback={<p role="status">载入修士档案…</p>}>
-    <AgentInspector world={visibleWorld} cultivator={selectedCultivator} onSelectCultivator={setSelectedCultivatorId} workspaceSection={workspaceSection}
+    <AgentInspector world={visibleWorld} cultivator={selectedCultivator} onSelectCultivator={setSelectedCultivatorId} workspaceSection={workspaceSection} medicineControls={workspaceSection==='sect'?medicineControls:undefined}
       artifactSalvage={{ scopeKey:viewScopeKey, busy:isStepping || fastForwardLocked, readOnly:!!preview, onConfirm:queueSelectedSalvage }} />
   </React.Suspense>;
   const openWorkspace = (next: WorkspaceId) => {

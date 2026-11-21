@@ -350,6 +350,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     oathArbitrations: createOathArbitrationState(),
     fieldObservatories: createFieldObservatoriesState(),
     danxiaShortages: { cases: [] },
+    danxiaMedicine: { commitments: [] },
     expeditionOmens: { rows: [] },
     alignedWeather: createAlignedWeatherState(),
     competitionReviews: createCompetitionReviewState(),

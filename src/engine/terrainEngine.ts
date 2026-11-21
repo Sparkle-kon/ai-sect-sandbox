@@ -1,3 +1,4 @@
+import {danxiaMedicineCheckpoint} from './danxiaMedicineTerms';
 import { isScopedExpeditionGate } from './expeditionOmenTerms';
 import { courierCheckpoint } from './sealedCourierEngine';
 import { pilgrimageCheckpoint } from './pilgrimageEngine';
@@ -68,7 +69,7 @@ export function terrainTileAt(world: WorldState, x: number, y: number): MapTile 
 }
 
 export function currentVisibleTileIds(world: WorldState, actor: Cultivator): Set<string> {
-  const site = expeditionRescueCheckpoint(world, actor) ?? boundaryReliefCheckpoint(world, actor) ??
+  const site = danxiaMedicineCheckpoint(world,actor) ?? expeditionRescueCheckpoint(world, actor) ?? boundaryReliefCheckpoint(world, actor) ??
     courierCheckpoint(world, actor) ?? pilgrimageCheckpoint(world, actor) ??
     world.locations.find(({ id }) => id === actor.locationId);
   if (!actor.alive || !site) return new Set();

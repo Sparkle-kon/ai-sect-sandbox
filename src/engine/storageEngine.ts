@@ -55,6 +55,8 @@ import { SEED_GROW_TICKS, SEED_LOT_UNITS, SEED_SAMPLE_UNITS } from './seedCultur
 import { validateSeedCultureHistory } from './storageSeedCultureValidation';
 import { createCareFollowupsState } from './careFollowupEngine';
 import { createDanxiaShortagesState } from './danxiaShortageEngine';
+import { DANXIA_MEDICINE_MAX_STEPS } from './danxiaMedicineTerms';
+import { validateDanxiaMedicineHistory } from './storageDanxiaMedicineValidation';
 import { validateDanxiaShortageHistory } from './storageDanxiaShortageValidation';
 import { validateCareFollowupHistory } from './storageCareFollowupValidation';
 import { createToolLoansState } from './toolLoanEngine';
@@ -170,13 +172,13 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT SALVAGE_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY CARE_FOLLOWUP FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER COURIER_HANDOFF SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP FURNACE_RESERVATION FURNACE_SAFETY DAMAGE_ASSURANCE SPARRING EXPEDITION_RESCUE SHORT_SHIFT BOUNDARY_RELIEF MENTOR_TRANSFER APPRENTICE_COHORT SEASONAL_HOUSING HOUSEHOLD_NAME CARAVAN_RESTITUTION VILLAGE_GRANARY VILLAGE_SUPPLY ROUTE_WARNING PAVILION_LOAN WORKSHOP_CAPACITY CIVIC_MEMORIAL VILLAGE_FAIR SECT_STIPEND SEED_CULTURE TOOL_LOAN RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY ALIGNED_WEATHER SEASON_REVIEW REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT SALVAGE_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY CARE_FOLLOWUP DANXIA_MEDICINE FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER COURIER_HANDOFF SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP FURNACE_RESERVATION FURNACE_SAFETY DAMAGE_ASSURANCE SPARRING EXPEDITION_RESCUE SHORT_SHIFT BOUNDARY_RELIEF MENTOR_TRANSFER APPRENTICE_COHORT SEASONAL_HOUSING HOUSEHOLD_NAME CARAVAN_RESTITUTION VILLAGE_GRANARY VILLAGE_SUPPLY ROUTE_WARNING PAVILION_LOAN WORKSHOP_CAPACITY CIVIC_MEMORIAL VILLAGE_FAIR SECT_STIPEND SEED_CULTURE TOOL_LOAN RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY ALIGNED_WEATHER SEASON_REVIEW REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const flowGood = one('stone','jade_seed','jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const flowMeasure = num(0,Number.MAX_SAFE_INTEGER);
 const flowSerial = num(1,Number.MAX_SAFE_INTEGER,true);
-const flowAccount = structure({kind:one('actor','site','sect','order','shipment','oath','relocation','workshop','salvage','granary','village_supply','village_fair','seed_lot','seed_plot'),id,
+const flowAccount = structure({kind:one('actor','site','sect','order','shipment','oath','relocation','workshop','salvage','granary','village_supply','village_fair','seed_lot','seed_plot','danxia_medicine'),id,
   pocket:optional(one('payment','collateral'))});
 const granaryReceipt: Validator = (value, path) => {
   const kind = (value as { kind?: unknown } | null)?.kind;
@@ -629,7 +631,7 @@ const shape = structure({
     tick,year:tick,month,totalEntries:num(0,Number.MAX_SAFE_INTEGER,true),
     totals:arr(10,structure({good:flowGood,transfer:flowMeasure,production:flowMeasure,consumption:flowMeasure,loss:flowMeasure})),
     entries:arr(RESOURCE_FLOW_DETAIL_LIMIT,structure({
-      id:flowSerial,tick,mechanism:one('alchemy','market','sect_economy','oath','commons','relocation','terrain','workshop','road','observatory','pilgrimage','granary','furnace_safety','artifact_salvage','village_supply','civic_memorial','village_fair','sect_stipend','seed_culture','care_followup'),
+      id:flowSerial,tick,mechanism:one('alchemy','market','sect_economy','oath','commons','relocation','terrain','workshop','road','observatory','pilgrimage','granary','furnace_safety','artifact_salvage','village_supply','civic_memorial','village_fair','sect_stipend','seed_culture','care_followup','danxia_medicine'),
       refId:id,reason:strings(40,1),good:flowGood,amount:flowMeasure,visibility:flowScope,
       kind:one('transfer','production','consumption','loss'),from:optional(flowAccount),to:optional(flowAccount)
     }))
@@ -711,6 +713,18 @@ const shape = structure({
     lastRepairTick:otick,brokenTick:otick,receipts:arr(FORMATION_RECEIPT_LIMIT,structure({tick,
       kind:one('dispatch','overload','draw','repair','dissipate'),actorId:oid,fromSiteId:oid,toSiteId:oid,
       sent:optional(count),delivered:optional(count),lost:optional(count),drawn:optional(count),stonesSpent:optional(count),dissipated:optional(count)}))
+  }))}),
+  danxiaMedicine:structure({commitments:arr(SAVE_COLLECTION_LIMIT,structure({
+    id,shortageId:id,sourceCaseId:id,appointmentId:id,discipleId:id,patientId:id,householdId:id,volunteerId:id,
+    settlementId:id,originId:id,destinationId:id,escortId:oid,choice:one('observe','retain','offer_ship'),startedTick:tick,offerUntilTick:tick,
+    status:one('observed','retained','offered','in_transit','arrived','returning','recoverable','brewed','brew_failed','received','recovered','lost'),
+    escrow:one(0,2),reservedTick:otick,acceptedTick:otick,departedTick:otick,arrivedTick:otick,receiveUntilTick:otick,
+    path:optional(arr(DANXIA_MEDICINE_MAX_STEPS+1,structure({x:num(0,1000),y:num(0,600)}))),
+    pathIndex:optional(num(0,DANXIA_MEDICINE_MAX_STEPS,true)),lastMovedTick:otick,returnStartedTick:otick,returnedTick:otick,
+    disposition:optional(structure({tick,reason:one('offer_expired','escort_declined','recipient_declined','recipient_missed',
+      'title_lost','disciple_lost','route_lost','escort_lost')})),
+    hazard:optional(villageSupplyHazard),
+    settlement:optional(structure({tick,kind:one('observed','brewed','brew_failed','received','recovered','lost'),actorId:id,artifactEventId:oid})),
   }))}),
   danxiaShortages:structure({cases:arr(SAVE_COLLECTION_LIMIT,structure({
     id,siteId:id,openedTick:tick,discipleId:id,patientId:id,settlementId:id,householdId:id,volunteerId:id,
@@ -899,9 +913,20 @@ const shape = structure({
       teachTick:otick,attendTick:otick,closedTick:otick,reason:optional(one('offer_expired','absent_signature','unavailable','no_budget')),
       lesson:optional(structure({tick,masteryBefore:num(0,100),masteryAfter:num(0,100),instructionSpent:num(1,1,true)}))}))}),
   playerAvatar:structure({possessedId:oid,possessionUntilTick:otick,switchAvailableTick:tick,essence:percentage,lastRefreshTick:tick,
-    pendingOrder:optional((value,path) => (value as {action?:unknown} | null)?.action === 'SALVAGE_ARTIFACT' ?
-      structure({actorId:id,action:one('SALVAGE_ARTIFACT'),queuedTick:tick,targetArtifactId:id,targetLocationId:id})(value,path) :
-      structure({actorId:id,action:one('REST','CULTIVATE'),queuedTick:tick})(value,path)),
+    pendingOrder:optional((value,path) => {
+      const order = value as {action?:unknown;danxiaMedicineMove?:unknown} | null;
+      const fixed = {actorId:id,queuedTick:tick};
+      if(order?.action==='SALVAGE_ARTIFACT')
+        return structure({...fixed,action:one('SALVAGE_ARTIFACT'),targetArtifactId:id,targetLocationId:id})(value,path);
+      if(order?.action==='DANXIA_MEDICINE'){
+        const action=one('DANXIA_MEDICINE'), move=order.danxiaMedicineMove;
+        if(move==='retain')return structure({...fixed,action,danxiaMedicineMove:one('retain'),targetDanxiaShortageId:id})(value,path);
+        if(move==='offer_ship')return structure({...fixed,action,danxiaMedicineMove:one('offer_ship'),targetDanxiaShortageId:id,
+          targetCultivatorId:id})(value,path);
+        return structure({...fixed,action,danxiaMedicineMove:one('brew','accept','decline','receive','recover'),targetDanxiaMedicineId:id})(value,path);
+      }
+      return structure({...fixed,action:one('REST','CULTIVATE')})(value,path);
+    }),
     transcript:arr(72,structure({id,tick,mode,intent,targetCultivatorId:id,message:text,actorId:oid,reply:text,
       outcome:one('agreed','resisted','revealed','recruited'),source,effect:text}))}),
 });
@@ -964,6 +989,7 @@ function verifyWorld(value: unknown): WorldState {
       ...(!Object.hasOwn(value, 'territorialLeases') ? { territorialLeases: createTerritorialLeaseState() } : {}),
       ...(!Object.hasOwn(value, 'formations') ? { formations: createFormationNetworkState() } : {}),
       ...(!Object.hasOwn(value, 'infirmaries') ? { infirmaries: createInfirmaryState() } : {}),
+      ...(!Object.hasOwn(value, 'danxiaMedicine') ? { danxiaMedicine: { commitments:[] } } : {}),
       ...(!Object.hasOwn(value, 'danxiaShortages') ? { danxiaShortages: createDanxiaShortagesState() } : {}),
       ...(!Object.hasOwn(value, 'careFollowups') ? { careFollowups: createCareFollowupsState() } : {}),
       ...(!Object.hasOwn(value, 'habitats') ? { habitats: createHabitatState() } : {}),
@@ -1850,6 +1876,7 @@ function verifyWorld(value: unknown): WorldState {
   }
   validateCareFollowupHistory(w, serviceUses, bedUses, fail);
   validateDanxiaShortageHistory(w, actor, fail);
+  validateDanxiaMedicineHistory(w, actor, fail);
   const habitatSerials = new Set<number>();
   const habitatBeasts = new Map(w.spiritBeasts.map((animal) => [animal.id, animal]));
   const habitatSites = new Map(w.locations.map((site) => [site.id, site]));

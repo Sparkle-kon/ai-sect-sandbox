@@ -1,3 +1,4 @@
+import {activeDanxiaMedicineEscort} from './danxiaMedicineTerms';
 import type { Cultivator, LLMDecisionPayload, WorldState } from '../types/world';
 import { activeAvatar } from './avatarEngine';
 import { activeSiegeForActor } from './diplomacyEngine';
@@ -54,7 +55,7 @@ export function modelDecisionCandidates(world: WorldState): Cultivator[] {
   return world.cultivators.filter((actor) => actor.alive && actor.hp > 0 && actor.id !== commandedId &&
     (world.month < 12 || actor.age + 1 < actor.lifespan) &&
     (!activeCourierForActor(world, actor) || availableCourierHandoffActions(actor, world, nextTick).some(({ courierHandoffMove }) => courierHandoffMove === 'offer')) &&
-    !activeEscortForActor(world, actor) && !activeRelocationForActor(world, actor) &&
+    !activeDanxiaMedicineEscort(world,actor)&&!activeEscortForActor(world, actor) && !activeRelocationForActor(world, actor) &&
     !activeSiegeForActor(world, actor) && isEligibleForOccasionDecision(world, actor, nextTick) &&
     (!boundaryReliefCheckpoint(world, actor) || availableBoundaryReliefActions(actor, world, nextTick).length > 0) &&
     (!pilgrimageCheckpoint(world, actor) || availablePilgrimageActions(actor, world, false, nextTick).length > 0));
