@@ -1,3 +1,4 @@
+import { OBSERVATORY_INBOX_LIMIT, OBSERVATORY_LEAD_TICKS, OBSERVATORY_RETENTION_TICKS, OBSERVATORY_TERMINAL_LIMIT, createFieldObservatoriesState } from './fieldObservatoryEngine';
 import { ARBITRATION_HEARING_WINDOW, ARBITRATION_JOIN_WINDOW, ARBITRATION_MAX_APPOINTMENTS_PER_SIDE, ARBITRATION_MAX_OBSERVERS, createOathArbitrationState } from './oathArbitrationEngine';
 import { createVillageCensusesState, VILLAGE_CENSUS_PERIOD_LIMIT } from './villageCensusEngine';
 import { createRoadState, ROAD_CONDITION_MAX, ROAD_FARE, ROAD_PAID_STRIDE, ROAD_PATH_POINT_LIMIT, ROAD_PATH_TILE_LIMIT } from './roadEngine';
@@ -107,7 +108,7 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const flowGood = one('stone','jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
@@ -183,6 +184,22 @@ const noteTarget: Validator = (value, path) => {
 };
 const facilityLevels = structure({qi_array:num(0,3,true),alchemy_hall:num(0,3,true),scripture_pavilion:num(0,3,true),defense_array:num(0,3,true),spirit_mine:num(0,3,true)});
 const terrainBiome = one('灵山','毒沼','剑冢','荒漠','魔渊','坊市');
+const fieldReading = structure({kind:one('平息','灵潮','罡风','霜息'),intensity:num(0,1)});
+const observatoryActor = structure({
+  runs:arr(OBSERVATORY_TERMINAL_LIMIT + 1,structure({
+    locationId:id,openedTick:tick,targetTick:tick,baseline:fieldReading,forecast:fieldReading,
+    status:one('pending','measured','missed'),reading:optional(fieldReading),
+    relay:optional(structure({recipientId:id,relayedTick:tick}))
+  })),
+  inbox:arr(OBSERVATORY_INBOX_LIMIT,structure({operatorId:id,openedTick:tick}))
+});
+const observatoryActors: Validator = (value, path) => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return fail(path);
+  for (const [actorId, account] of Object.entries(value)) {
+    id(actorId, `${path}.key`);
+    observatoryActor(account, `${path}.${actorId}`);
+  }
+};
 const censusNumber = num(0,Number.MAX_SAFE_INTEGER,true);
 const censusCount = structure({villageId:id,population:censusNumber,juveniles:censusNumber});
 const locationKind = one('sect_hq','spirit_vein','secret_realm','market','abyss');
@@ -262,6 +279,7 @@ const shape = structure({
       attestations:arr(SAVE_COLLECTION_LIMIT,structure({actorId:id,tick,verdict:one('supports','contradicts')})),
       appeal:optional(structure({tick,actorId:id,verdict:one('upheld','rejected'),reason:text})),settledTick:otick,
       reputationSectId:oid,reputationPenalty:percentage,reputationRestored:percentage,reason:otext}))}),
+  fieldObservatories:structure({byActor:observatoryActors}),
   oathArbitrations:structure({
     observations:arr(SAVE_COLLECTION_LIMIT,structure({oathId:id,tenderTick:tick,siteId:id,observerIds:arr(ARBITRATION_MAX_OBSERVERS,id)})),
     cases:arr(SAVE_COLLECTION_LIMIT,structure({
@@ -324,7 +342,7 @@ const shape = structure({
     tick,year:tick,month,totalEntries:num(0,Number.MAX_SAFE_INTEGER,true),
     totals:arr(9,structure({good:flowGood,transfer:flowMeasure,production:flowMeasure,consumption:flowMeasure,loss:flowMeasure})),
     entries:arr(RESOURCE_FLOW_DETAIL_LIMIT,structure({
-      id:flowSerial,tick,mechanism:one('alchemy','market','sect_economy','oath','commons','relocation','terrain','workshop','road'),
+      id:flowSerial,tick,mechanism:one('alchemy','market','sect_economy','oath','commons','relocation','terrain','workshop','road','observatory'),
       refId:id,reason:strings(40,1),good:flowGood,amount:flowMeasure,visibility:flowScope,
       kind:one('transfer','production','consumption','loss'),from:optional(flowAccount),to:optional(flowAccount)
     }))
@@ -550,6 +568,7 @@ function verifyWorld(value: unknown): WorldState {
       ...(!Object.hasOwn(value, 'mentorship') ? { mentorship: { offers: [], lineage: [], budgets: [] } } : {}),
       ...(!Object.hasOwn(value, 'decisionTrace') ? { decisionTrace: { records: [] } } : {}),
       ...(!Object.hasOwn(value, 'coldHistory') ? { coldHistory: createColdHistoryState() } : {}),
+      ...(!Object.hasOwn(value, 'fieldObservatories') ? { fieldObservatories: createFieldObservatoriesState() } : {}),
       ...(!Object.hasOwn(value, 'oathArbitrations') ? { oathArbitrations: createOathArbitrationState() } : {}),
       ...(!Object.hasOwn(value, 'villageCensuses') ? { villageCensuses: createVillageCensusesState() } : {}),
       ...(!Object.hasOwn(value, 'roads') ? { roads: createRoadState() } : {}),
@@ -614,6 +633,31 @@ function verifyWorld(value: unknown): WorldState {
         (cell.lastWorkedTick === undefined) !== (cell.lastWorkedBy === undefined) ||
         (cell.lastWorkedBy !== undefined && !actor.has(cell.lastWorkedBy)) ||
         (cell.workCount > 0 && cell.lastWorkedTick === undefined)) fail('terrainSuccession.cells.references');
+  }
+  const fieldActorStates = new Map(Object.entries(w.fieldObservatories.byActor));
+  const readingValid = ({ kind, intensity }: { kind: string; intensity: number }) =>
+    Math.abs(intensity * 100 - Math.round(intensity * 100)) <= 1e-8 &&
+    (kind === '平息' ? intensity === 0 : intensity >= .05);
+  for (const [operatorId, entry] of fieldActorStates) {
+    if (!actor.has(operatorId) || (!entry.runs.length && !entry.inbox.length) ||
+        entry.runs.filter(({ status }) => status === 'pending').length > 1 ||
+        entry.runs.filter(({ status }) => status !== 'pending').length > OBSERVATORY_TERMINAL_LIMIT)
+      fail('fieldObservatories.byActor.references');
+    unique(entry.runs, ({ openedTick }) => String(openedTick), 'fieldObservatories.runs.tick');
+    unique(entry.inbox, ({ operatorId, openedTick }) => JSON.stringify([operatorId, openedTick]), 'fieldObservatories.inbox.source');
+    for (const run of entry.runs) {
+      if (!locations.has(run.locationId) || run.openedTick > w.tick || run.targetTick !== run.openedTick + OBSERVATORY_LEAD_TICKS ||
+          !readingValid(run.baseline) || run.forecast.kind !== run.baseline.kind || run.forecast.intensity !== run.baseline.intensity ||
+          (run.status === 'measured' ? run.targetTick > w.tick || !run.reading || !readingValid(run.reading) :
+            ('reading' in run || 'relay' in run || (run.status === 'missed' && run.targetTick > w.tick))) ||
+          (run.status === 'measured' && run.relay && (!actor.has(run.relay.recipientId) || run.relay.recipientId === operatorId ||
+            run.relay.relayedTick <= run.targetTick || run.relay.relayedTick > w.tick || run.relay.relayedTick > run.targetTick + OBSERVATORY_RETENTION_TICKS)))
+        fail('fieldObservatories.runs.references');
+    }
+    for (const inbox of entry.inbox) {
+      const actual = fieldActorStates.get(inbox.operatorId)?.runs.find(({ openedTick }) => openedTick === inbox.openedTick);
+      if (!actual || actual.status !== 'measured' || actual.relay?.recipientId !== operatorId) fail('fieldObservatories.inbox.references');
+    }
   }
   unique(w.oathArbitrations.cases, ({ oathId }) => oathId, 'oathArbitrations.cases.oath');
   const tenderKey = (oathId: string, at: number) => JSON.stringify([oathId, at]);

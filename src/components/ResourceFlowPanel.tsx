@@ -18,6 +18,7 @@ const REASONS: Readonly<Record<string, string>> = {
   workshop_deposit: '委制备料入库', workshop_fuel: '工坊实耗炉钱', workshop_material: '工坊实耗材料',
   workshop_wage: '合格成品工钱', workshop_refund: '工坊退还未用款料',
   road_charter: '驿路开工实际支出', road_maintenance: '驿路修缮实耗', road_crossing: '实际启程通行费',
+  observatory_instrument: '临时观象实付仪料',
   order_deposit: '挂单托管', order_release: '撤单或到期退回', price_improvement: '限价差退回',
   local_fill: '现场交割', shipment_departure: '商队启程转入保管', shipment_delivery: '商队到货交割',
   shipment_return: '商队退运退款退货', shipment_refund: '货损退款', shipment_loss: '实际货损',

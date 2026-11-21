@@ -1,3 +1,4 @@
+import { availableObservatoryActions } from './fieldObservatoryEngine';
 import { availableOathArbitrationActions } from './oathArbitrationEngine';
 import { availableVillageCensusActions } from './villageCensusEngine';
 import { availableRoadActions } from './roadEngine';
@@ -149,6 +150,14 @@ export function computeHeuristicDecision(
     const work = availableTerrainRecoveryActions(cultivator, world)[0];
     if (work) return { ...work, chosenAction: 'TERRAIN_RECOVERY', innerMonologue: '只修脚下已退灾的实地，付出实物，不抹去永久伤痕。' };
   }
+  const mayFundWeather = world.tick >= 29 && (world.tick + cultivator.id.charCodeAt(cultivator.id.length - 1)) % 19 === 4 &&
+    (cultivator.personality === '刚正' || cultivator.personality === '逍遥');
+  const surveyOptions = mayFundWeather || Object.hasOwn(world.fieldObservatories.byActor, cultivator.id)
+    ? availableObservatoryActions(cultivator, world) : [];
+  const dueWeather = surveyOptions.find(({ observatoryMove }) => observatoryMove === 'measure');
+  const observe = dueWeather ?? surveyOptions.find(({ observatoryMove }) => observatoryMove === 'relay') ??
+    (mayFundWeather ? surveyOptions.find(({ observatoryMove }) => observatoryMove === 'fund') : undefined);
+  if (observe) return { ...observe, chosenAction: 'FIELD_OBSERVATORY', innerMonologue: '只记录到场实测；推测另记，转给同伴的仍是当时旧读数。' };
   const arbitrationMarks = world.oathArbitrations;
   if (arbitrationMarks.cases.length || arbitrationMarks.observations.length) {
     const moves = availableOathArbitrationActions(cultivator, world, cultivator.personality === '刚正' || cultivator.personality === '逍遥');
@@ -702,9 +711,12 @@ export async function queryCultivatorLLMDecision(
   onSource?: (source: 'llm' | 'utility') => void,
   requestTick = world.tick,
 ): Promise<LLMDecisionPayload> {
-  const fallback = () => {
+  const fallback = (): LLMDecisionPayload => {
     onSource?.('utility');
-    return computeHeuristicDecision(cultivator, world, actorFallbackRandom(world, cultivator.id, requestTick));
+    const due = Object.hasOwn(world.fieldObservatories.byActor, cultivator.id) ?
+      availableObservatoryActions(cultivator, world, requestTick).find(({ observatoryMove }) => observatoryMove === 'measure') : undefined;
+    return due ? { ...due, chosenAction: 'FIELD_OBSERVATORY', innerMonologue: '如期到场，实测再与旧预测相比。' }
+      : computeHeuristicDecision(cultivator, world, actorFallbackRandom(world, cultivator.id, requestTick));
   };
   if (!config.enabled || !config.apiKey.trim() || activeRelocationForActor(world, cultivator) || activeEscortForActor(world, cultivator) ||
       activeCourierForActor(world, cultivator)) return fallback();
@@ -743,6 +755,7 @@ export async function queryCultivatorLLMDecision(
   const estateOptions = availableEstateActions(cultivator, world);
   const doctrineOptions = availableDoctrineActions(cultivator, world);
   const relocationOptions = availableRelocationActions(cultivator, world);
+  const observatoryOptions = availableObservatoryActions(cultivator, world, requestTick);
   const censusOptions = availableVillageCensusActions(cultivator, world);
   const roadOptions = availableRoadActions(cultivator, world);
   const probationOptions = availableProbationActions(cultivator, world);
@@ -794,6 +807,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 天机悬赏榜：${JSON.stringify(world.bounties.filter((item) => item.status === 'open').map(({id,targetCultivatorId,reward,reason}) => ({id,targetCultivatorId,reward,reason})))}；可接的追缉：${JSON.stringify(availableBountyHunts(cultivator, world))}
 - 天下公示的大会与秘境：${JSON.stringify(world.occasions.filter((item) => item.status === 'registration' || item.status === 'running').map(({id,title,kind,locationId,status,registrationClosesTick}) => ({id,title,kind,locationId,status,registrationClosesTick})))}；可报名项目：${JSON.stringify(availableOccasionJoins(cultivator, world))}
 - 本宗邦交：${JSON.stringify(world.diplomacy.filter((relation) => relation.sectAId === cultivator.sectId || relation.sectBId === cultivator.sectId))}；公示的外事权限：${JSON.stringify(availableDiplomacyActions(cultivator, world))}
+- 临时观象只复制实际地点的 fund、到期 measure 或带原日期 relay；只能记录实测，不能填写强度：${JSON.stringify(observatoryOptions)}
 - 坊籍核点必须本人在场，只可复制已列村落：${JSON.stringify(censusOptions)}
 - 驿路选项要求实地维修和真实资源；巡礼只有实际列出的付费路才可选，普通路线不另收路费：${JSON.stringify(roadOptions)}
 - 赎责见习必须复制已列动作；赈济另走真实 DELIVER_RELIEF，复籍不抹去原处分：${JSON.stringify(probationOptions)}
@@ -958,6 +972,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'PROBATION',
             'ROAD',
             'VILLAGE_CENSUS',
+            'FIELD_OBSERVATORY',
           ];
           const chosenAction = parsed?.chosenAction;
           if (!chosenAction || !validActions.includes(chosenAction)) return undefined;
@@ -1126,6 +1141,11 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             item.targetWitnessClaimId === parsed.targetWitnessClaimId && item.targetCultivatorId === parsed.targetCultivatorId);
           if (isWitness && !legalWitness) return undefined;
 
+          const legalObservatory = chosenAction === 'FIELD_OBSERVATORY' ? observatoryOptions.find((item) =>
+            item.observatoryMove === parsed.observatoryMove && item.targetLocationId === parsed.targetLocationId &&
+            item.targetObservatoryTick === parsed.targetObservatoryTick && item.targetCultivatorId === parsed.targetCultivatorId) : undefined;
+          if (chosenAction === 'FIELD_OBSERVATORY' && (!legalObservatory || parsed.targetSectId !== undefined ||
+              parsed.targetSettlementId !== undefined)) return undefined;
           const legalCensus = chosenAction === 'VILLAGE_CENSUS' ? censusOptions.find((item) =>
             item.targetSettlementId === parsed.targetSettlementId) : undefined;
           if (chosenAction === 'VILLAGE_CENSUS' && (!legalCensus || parsed.targetLocationId !== undefined ||
@@ -1217,7 +1237,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             chosenAction,
             targetLocationId: legalSanctuary ? legalSanctuary.targetLocationId : legalRelocation ? legalRelocation.targetLocationId :
               chosenAction !== 'DOCTRINE' && typeof parsed.targetLocationId === 'string' ? parsed.targetLocationId : undefined,
-            targetCultivatorId: legalArbitration ? legalArbitration.targetCultivatorId : legalWorkshop ? legalWorkshop.targetCultivatorId : legalDoctrine ? legalDoctrine.targetCultivatorId : legalEstate ? legalEstate.targetCultivatorId : legalWitness ? legalWitness.targetCultivatorId : legalOath ? legalOath.targetCultivatorId : legalTraining ? legalTraining.targetCultivatorId
+            targetCultivatorId: legalObservatory ? legalObservatory.targetCultivatorId : legalArbitration ? legalArbitration.targetCultivatorId : legalWorkshop ? legalWorkshop.targetCultivatorId : legalDoctrine ? legalDoctrine.targetCultivatorId : legalEstate ? legalEstate.targetCultivatorId : legalWitness ? legalWitness.targetCultivatorId : legalOath ? legalOath.targetCultivatorId : legalTraining ? legalTraining.targetCultivatorId
               : typeof parsed.targetCultivatorId === 'string' ? parsed.targetCultivatorId : undefined,
             spokenLine: typeof parsed.spokenLine === 'string' ? parsed.spokenLine.trim().slice(0, 90) : undefined,
             facilityKind: legalInfrastructure?.facilityKind,
@@ -1310,6 +1330,8 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             marketLimitPrice: legalMarket && legalMarket.action !== 'CANCEL_MARKET_ORDER' ? legalMarket.marketLimitPrice : undefined,
             targetMarketOrderId: legalMarket && legalMarket.action === 'CANCEL_MARKET_ORDER' ? legalMarket.targetMarketOrderId : undefined,
             targetOathId: legalArbitration?.targetOathId ?? (legalOath ? legalOath.targetOathId : undefined),
+            observatoryMove: legalObservatory?.observatoryMove,
+            targetObservatoryTick: legalObservatory?.targetObservatoryTick,
             arbitrationMove: legalArbitration?.arbitrationMove,
             targetTenderTick: legalArbitration?.targetTenderTick,
             oathTerm: legalOath ? legalOath.oathTerm : undefined,

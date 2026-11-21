@@ -2,6 +2,7 @@ import { visibleQiWeather } from '../engine/weatherEngine';
 import type { QiWeatherReading } from '../engine/weatherEngine';
 import type { Cultivator, WorldState } from '../types/world';
 import { createTerrainMapView } from './terrainMapView';
+import { FieldObservatoryPanel } from './FieldObservatoryPanel';
 
 const KIND_STYLE: Record<QiWeatherReading['kind'], string> = {
   平息: 'text-slate-300', 灵潮: 'text-teal-200', 罡风: 'text-amber-200', 霜息: 'text-sky-200',
@@ -67,6 +68,7 @@ export function WeatherAtlasPanel({ world, cultivator }: { world: WorldState; cu
           })}
         </div>
       )}
+      <FieldObservatoryPanel world={world} cultivator={cultivator} />
     </section>
   );
 }

@@ -11,6 +11,7 @@ export default defineConfig({
           'react-runtime': ['react', 'react-dom', 'react-dom/client', 'react/jsx-runtime'],
           'interface-icons': ['lucide-react'],
           'resource-journal': ['./src/engine/resourceFlowEngine.ts'],
+          'agreement-rules': ['./src/engine/oathEngine.ts', './src/engine/oathArbitrationEngine.ts'],
           'cognitive-protocol': ['./src/engine/llmCognitiveResponseGuide.ts', './src/engine/llmScheduler.ts'],
           'institution-rules': ['./src/engine/estateEngine.ts', './src/engine/sectCreditEngine.ts', './src/engine/serviceRetirementEngine.ts'],
           'archive-rules': ['./src/engine/coldHistoryEngine.ts', './src/engine/memoryEngine.ts', './src/engine/scenarioObjectiveEngine.ts'],

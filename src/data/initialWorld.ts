@@ -1,3 +1,4 @@
+import { createFieldObservatoriesState } from '../engine/fieldObservatoryEngine';
 import { createOathArbitrationState } from '../engine/oathArbitrationEngine';
 import { createVillageCensusesState } from '../engine/villageCensusEngine';
 import { createRoadState } from '../engine/roadEngine';
@@ -292,6 +293,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     roads: createRoadState(),
     villageCensuses: createVillageCensusesState(),
     oathArbitrations: createOathArbitrationState(),
+    fieldObservatories: createFieldObservatoriesState(),
     witnesses: createWitnessState(),
     estates: createEstateState(),
     decisionTrace: createDecisionTraceState(),

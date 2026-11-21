@@ -1,3 +1,4 @@
+import { advanceFieldObservatories, resolveObservatoryAction } from './fieldObservatoryEngine';
 import { resolveOathArbitrationAction } from './oathArbitrationEngine';
 import { closeVillageCensusPeriod, resolveVillageCensusAction } from './villageCensusEngine';
 import { advanceRoads, resolveRoadAction } from './roadEngine';
@@ -262,6 +263,8 @@ export function applyCultivatorBrainDecision(
       return resolveHabitatAction(world, cultivator, decision);
     case 'CHRONICLE_ERRATA':
       return resolveChronicleErrataAction(world, cultivator, decision);
+    case 'FIELD_OBSERVATORY':
+      return resolveObservatoryAction(world, cultivator, decision);
     case 'OATH_ARBITRATION':
       return resolveOathArbitrationAction(world, cultivator, decision);
     case 'VILLAGE_CENSUS':
@@ -860,6 +863,7 @@ export function advanceWorldTick(
     settleAnnualCouncilOffline(nextState);
     settleChronicleOffline(nextState);
   }
+  advanceFieldObservatories(nextState);
   closeVillageCensusPeriod(nextState);
   compactColdHistory(nextState);
   if (nextState.watchlists.watches.length) {

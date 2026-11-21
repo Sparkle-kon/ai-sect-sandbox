@@ -106,6 +106,7 @@ export type ActionType =
   | 'BREW_PILL'
   | 'USE_PILL'
   | 'VILLAGE_CENSUS'
+  | 'FIELD_OBSERVATORY'
   | 'OATH_ARBITRATION'
   | 'PROBATION'
   | 'WORKSHOP'
@@ -366,6 +367,8 @@ export interface LLMConfig {
 export interface LLMDecisionPayload {
   innerMonologue: string;
   chosenAction: ActionType;
+  observatoryMove?: ObservatoryMove;
+  targetObservatoryTick?: number;
   targetLocationId?: string;
   targetCultivatorId?: string;
   spokenLine?: string;
@@ -1969,7 +1972,7 @@ export interface SharedCommonsPact {
 export interface SharedCommonsState { pacts: SharedCommonsPact[]; nextId: number }
 
 export type ResourceFlowGood = 'stone' | MarketGood;
-export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation' | 'terrain' | 'workshop' | 'road';
+export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation' | 'terrain' | 'workshop' | 'road' | 'observatory';
 export type ResourceFlowAccount =
   | { kind: 'actor' | 'site' | 'sect' | 'order' | 'shipment' | 'relocation' | 'workshop'; id: string }
   | { kind: 'oath'; id: string; pocket: 'payment' | 'collateral' };
@@ -2127,7 +2130,25 @@ export interface VillageCensusPeriod {
 }
 export interface VillageCensusesState { periods: VillageCensusPeriod[] }
 
+export type ObservatoryMove = 'fund' | 'measure' | 'relay';
+export interface FieldWeatherReading { kind: '平息' | '灵潮' | '罡风' | '霜息'; intensity: number }
+export type FieldObservatoryRun = {
+  locationId: string;
+  openedTick: number;
+  targetTick: number;
+  baseline: FieldWeatherReading;
+  forecast: FieldWeatherReading;
+} & (
+  | { status: 'pending' }
+  | { status: 'missed' }
+  | { status: 'measured'; reading: FieldWeatherReading; relay?: { recipientId: string; relayedTick: number } }
+);
+export interface FieldObservatoryInboxEntry { operatorId: string; openedTick: number }
+export interface FieldObservatoryActorState { runs: FieldObservatoryRun[]; inbox: FieldObservatoryInboxEntry[] }
+export interface FieldObservatoriesState { byActor: Record<string, FieldObservatoryActorState> }
+
 export interface WorldState {
+  fieldObservatories: FieldObservatoriesState;
   villageCensuses: VillageCensusesState;
   probation: ProbationState;
   workshops: WorkshopState;
