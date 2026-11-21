@@ -1,3 +1,4 @@
+import { createMentorTransferState } from '../engine/mentorTransferEngine';
 import { createCompetitionReviewState } from '../engine/seasonReviewEngine';
 import { createCausalChronicleState } from '../engine/chronicleCausalityEngine';
 import { createAlignedWeatherState } from '../engine/alignedWeatherEngine';
@@ -283,6 +284,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
   const world: WorldState = {
     random,
     mentorship: createMentorshipState(),
+    mentorTransfers: createMentorTransferState(),
     oaths: createOathState(),
     markets: createMarketState(),
     settlements: createSettlementState(locations, seed),

@@ -146,6 +146,7 @@ export type ActionType =
   | 'EXPEDITION_RESCUE'
   | 'SHORT_SHIFT'
   | 'BOUNDARY_RELIEF'
+  | 'MENTOR_TRANSFER'
   | 'APPRENTICE_COHORT'
   | 'HOUSEHOLD_NAME'
   | 'CARAVAN_RESTITUTION'
@@ -558,6 +559,10 @@ export interface LLMDecisionPayload {
   boundaryReliefMove?: BoundaryReliefMove;
   targetBoundaryReliefId?: string;
   cohortMove?: ApprenticeCohortMove;
+  mentorTransferMove?: MentorTransferMove;
+  targetOldMentorId?: string;
+  targetMentorReleaseId?: string;
+  targetMentorTransferId?: string;
   cohortInviteeIds?: string[];
   targetCohortId?: string;
   nameMove?: HouseholdNameMove;
@@ -1010,6 +1015,38 @@ export interface MentorshipLineage {
   lessons: number;
   flaw: number;
 }
+export type MentorTransferMove = 'end' | 'offer' | 'accept' | 'decline' | 'teach' | 'attend';
+export interface MentorRelease {
+  id: string;
+  studentId: string;
+  oldMentorId: string;
+  sourceTuitionId: string;
+  techniqueId: string;
+  formedTick: number;
+  lastLessonTick: number;
+  endedTick: number;
+  endedById: string;
+}
+export interface MentorTransfer {
+  id: string;
+  releaseId: string;
+  studentId: string;
+  newMentorId: string;
+  techniqueId: string;
+  sectId: string;
+  siteId: string;
+  offeredTick: number;
+  expiresTick: number;
+  status: 'offered' | 'accepted' | 'declined' | 'expired' | 'held';
+  acceptTick?: number;
+  periodTick?: number;
+  teachTick?: number;
+  attendTick?: number;
+  closedTick?: number;
+  reason?: 'offer_expired' | 'absent_signature' | 'unavailable' | 'no_budget';
+  lesson?: {tick:number; masteryBefore:number; masteryAfter:number; instructionSpent:1};
+}
+export interface MentorTransferState { releases: MentorRelease[]; transfers: MentorTransfer[]; nextId: number }
 export interface TeachingBudget { mentorId: string; tick: number; spent: number }
 export interface MentorshipState {
   offers: TuitionOffer[];
@@ -3118,6 +3155,7 @@ export interface WorldState {
   oaths: OathState;
   oathArbitrations: OathArbitrationState;
   mentorship: MentorshipState;
+  mentorTransfers: MentorTransferState;
   random: WorldRandomState;
   playerAvatar: PlayerAvatarState;
   chronicleArchive: ChronicleArchive;

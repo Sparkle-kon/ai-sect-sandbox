@@ -1,5 +1,7 @@
 import { useMemo } from 'react';
 import { availableMentorshipActions, mentorshipBudgetRemaining, mentorshipTechniqueMultiplier, MENTOR_MONTHLY_BUDGET } from '../engine/mentorshipEngine';
+import { projectMentorTransfers } from '../engine/mentorTransferEngine';
+import { MentorshipRenewalReceipts } from './MentorshipRenewalReceipts';
 import type { Cultivator, Technique, WorldState } from '../types/world';
 
 type Lineage = WorldState['mentorship']['lineage'][number];
@@ -41,6 +43,8 @@ export function MentorshipPanel({ world, cultivator }: { world: WorldState; cult
   const branches = useMemo(() => relatedMentorshipBranches(world.mentorship?.lineage ?? [], actorId), [world, actorId]);
   const names = new Map(world.cultivators.map(({ id, name }) => [id, name]));
   const name = (id: string) => names.get(id) ?? '修士未详';
+  const transferView = projectMentorTransfers(world,cultivator);
+  const endedEdges = new Set(transferView.releases.map(({oldMentorId,studentId,formedTick})=>JSON.stringify([oldMentorId,studentId,formedTick])));
   const related = (world.mentorship?.offers ?? []).filter(({ mentorId, studentId }) => mentorId === actorId || studentId === actorId);
   const pending = related.filter(({ status }) => status === 'pending').sort((a, b) => b.createdTick - a.createdTick);
   const settled = related.filter(({ status }) => status !== 'pending').sort((a, b) => (b.resolvedTick ?? b.createdTick) - (a.resolvedTick ?? a.createdTick)).slice(0, 8);
@@ -89,7 +93,8 @@ export function MentorshipPanel({ world, cultivator }: { world: WorldState; cult
                       {edges.map((entry) => (
                         <li key={`${entry.mentorId}:${entry.studentId}:${entry.formedTick}`} className="rounded bg-slate-900/80 p-2">
                           <p className="text-slate-200">{name(entry.mentorId)} → {name(entry.studentId)}
-                            {entry.studentId === actorId ? ' · 师从' : entry.mentorId === actorId ? ' · 授艺' : ' · 同一传承链'}
+                            {endedEdges.has(JSON.stringify([entry.mentorId,entry.studentId,entry.formedTick])) ? ' · 旧约已结，实授仍存' :
+                              entry.studentId === actorId ? ' · 师从' : entry.mentorId === actorId ? ' · 授艺' : ' · 同一传承链'}
                           </p>
                           <p className="text-slate-400">结缘 Tick #{entry.formedTick} · 最近授艺 Tick #{entry.lastLessonTick} · 共 {entry.lessons} 课</p>
                           <p className={entry.flaw > 0 ? 'text-amber-200' : 'text-slate-400'}>偏解 {entry.flaw}/100 点{entry.flaw === 0 ? '（未见偏差）' : ''}</p>
@@ -108,6 +113,7 @@ export function MentorshipPanel({ world, cultivator }: { world: WorldState; cult
               ? <ul className="mt-2 max-h-56 space-y-1.5 overflow-y-auto">{[...pending, ...settled].map(offerRow)}</ul>
               : <p className="mt-1 text-xs text-slate-400">暂无相关邀约。</p>}
           </details>
+          <MentorshipRenewalReceipts view={transferView} viewerId={actorId} nameByExactId={(id)=>names.get(id)} />
         </>
       )}
     </section>

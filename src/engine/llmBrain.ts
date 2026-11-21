@@ -1,3 +1,4 @@
+import { availableMentorTransferActions, type MentorTransferOption } from './mentorTransferEngine';
 import { availableSeasonReviewActions, SEASON_REVIEW_WINDOW } from './seasonReviewEngine';
 import { availableObservatoryActions, availableObservatoryFundingActions, OBSERVATORY_COST } from './fieldObservatoryEngine';
 import { availableAlignedWeatherActions } from './alignedWeatherEngine';
@@ -355,6 +356,16 @@ export function computeHeuristicDecision(
     if (consent) return { ...consent, chosenAction: consent.action, innerMonologue: '此法与我正在练的原本一致，我自愿参加一课。' };
     const leave = !canTrain ? lessons.find(({ cohortMove }) => cohortMove === 'leave') : undefined;
     if (leave) return { ...leave, chosenAction: leave.action, innerMonologue: '伤势不宜练习，先按约自愿退出。' };
+  }
+  const willingTransfer = cultivator.hp >= cultivator.maxHp * .64 && cultivator.personality !== '嗜血';
+  const transferRole = world.mentorTransfers.transfers.some(row =>
+    (row.status === 'offered' || row.status === 'accepted') && (row.studentId === cultivator.id || row.newMentorId === cultivator.id));
+  if (transferRole) {
+    const options = availableMentorTransferActions(cultivator,world);
+    const owing = options.find(({mentorTransferMove}) => mentorTransferMove === 'teach' || mentorTransferMove === 'attend');
+    if (owing) return toMentorTransferDecision(owing,'按本人此前的约定实到，授课结果另行核验。');
+    const answer = options.find(({mentorTransferMove}) => mentorTransferMove === (willingTransfer ? 'accept' : 'decline'));
+    if (answer) return toMentorTransferDecision(answer,willingTransfer ? '愿与同门续修原功法，另约同堂。' : '此时不宜转接，先谢绝。');
   }
   const willingFollowup = !cultivator.guardAssignment &&
     (cultivator.hp / Math.max(1, cultivator.maxHp) <= CARE_FOLLOWUP_NEED_THRESHOLD || cultivator.pillToxicity > 0);
@@ -1147,6 +1158,16 @@ export function computeHeuristicDecision(
     if (lesson) return { ...lesson, chosenAction: lesson.action, innerMonologue: '以在场实习同本功法的修士邀一小班；各人自行应允。' };
   }
 
+  if (willingTransfer && world.tick >= 24 && (world.tick+cultivator.id.charCodeAt(cultivator.id.length-1)) % 23 === 8) {
+    const transfer = availableMentorTransferActions(cultivator,world);
+    const offer = transfer.find(({mentorTransferMove})=>mentorTransferMove==='offer');
+    if (offer) return toMentorTransferDecision(offer,'旧约已由本人结束，我只提出续学，由弟子自行决定。');
+    const end = transfer.find(({mentorTransferMove})=>mentorTransferMove==='end');
+    const former = end && world.cultivators.find(({id})=>id===end.targetOldMentorId);
+    if (end && former && (!former.alive || former.sectId !== cultivator.sectId || former.service?.status === 'retired'))
+      return toMentorTransferDecision(end,'旧师已不能按原约授业，我愿收束旧约；所学仍在。');
+  }
+
   if (world.householdNames.entries.some(({ status }) => status === 'proposed')) {
     const village = world.settlements.villages.find(({ locationId }) => locationId === cultivator.locationId);
     if (village && world.householdNames.entries.some(({ status, settlementId, actorId }) =>
@@ -1473,6 +1494,7 @@ export async function requestCultivatorLLMDecision(
   const unverifiedTrail = knownRumorLead(cultivator, world);
   const mentorshipOptions = availableMentorshipActions(cultivator, world);
   const cohortOptions = availableApprenticeCohortActions(cultivator, world, requestTick);
+  const mentorTransferOptions = availableMentorTransferActions(cultivator,world,requestTick);
   const arbitrationOptions = availableOathArbitrationActions(cultivator, world);
   const oathOptions = availableOathActions(cultivator, world);
   const marketOptions = availableMarketActions(cultivator, world);
@@ -1601,6 +1623,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 临时观象只复制实际地点的 fund、到期 measure 或带原日期 relay。仅 fund 任选列表中的观测位（现地中心省略、边位用 observatoryStation:'edge'）；不填写读数或强度：${JSON.stringify(observatoryOptions)}
 - 同刻异读只复制本人实际许可：offer 用自身原本的 targetLocationId、现场同行人 targetCultivatorId、本人 targetObservatoryTick；compare 用 targetAlignedWeatherId 及本人 targetObservatoryTick；decline 或 withdraw 只填 targetAlignedWeatherId。没见过的读数、强度、方位或结论不得填写：${JSON.stringify(alignedWeatherPromptOptions)}
 - 巡界换防只复制当前获准选项；offer 必须用已列真实哨位和候任修士，accept、decline、withdraw 只用换防编号。不可填写路线、灵气、地权、岗哨覆盖或其他守卫：${JSON.stringify(boundaryReliefOptions)}
+- 续结师承只可原样复制本人合法动作。结束不删旧课；接受、到场与真正授课彼此不同，额度与熟练度不得自报：${JSON.stringify(mentorTransferOptions)}
 - 合班传法只用真正可执行的 offer、accept、leave、teach、attend 或 cancel。offer 原样复制功法编号与完整有序的受邀名单，其余只用班号；出席、功法熟练度与出师由实练凭据核验，不许填写这些结果：${JSON.stringify(cohortOptions)}
 - 跨宗短聘只复制现场许可的 offer、accept、decline、withdraw 或 work；offer 用已列的目标修士和真实观象日期，其他只用该短聘编号。不能填写报酬、地点、天气或宗籍：${JSON.stringify(shortShiftOptions)}
 - 坊籍核点必须本人在场，只可复制已列村落：${JSON.stringify(censusOptions)}
@@ -1771,6 +1794,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'EXPEDITION_RESCUE',
             'SHORT_SHIFT',
             'BOUNDARY_RELIEF',
+            'MENTOR_TRANSFER',
             'APPRENTICE_COHORT',
             'HOUSEHOLD_NAME',
             'CARAVAN_RESTITUTION',
@@ -1881,6 +1905,17 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
           if (chosenAction === 'VILLAGE_SUPPLY' && (!legalVillageSupply || Object.keys(parsed).some((field) =>
             !['chosenAction', 'innerMonologue', 'villageSupplyMove',
               legalVillageSupply.villageSupplyMove === 'offer' ? 'targetSettlementId' : 'targetVillageSupplyId'].includes(field)))) return undefined;
+          if (chosenAction === 'MENTOR_TRANSFER') {
+            const exact = mentorTransferOptions.find(option=>option.mentorTransferMove===parsed.mentorTransferMove&&
+              option.targetOldMentorId===parsed.targetOldMentorId&&option.targetMentorReleaseId===parsed.targetMentorReleaseId&&
+              option.targetMentorTransferId===parsed.targetMentorTransferId);
+            if (!exact || Object.keys(parsed).some(field=>!['chosenAction','innerMonologue','spokenLine','mentorTransferMove',
+              ...(exact.mentorTransferMove==='end'?['targetOldMentorId']:exact.mentorTransferMove==='offer'?
+                ['targetMentorReleaseId']:['targetMentorTransferId'])].includes(field))) return undefined;
+            const innerMonologue = (typeof parsed.innerMonologue === 'string' && parsed.innerMonologue.trim().slice(0,160)) ||
+              cultivator.innerMonologue || '只按本人真实同意与实到凭据行事。';
+            return toMentorTransferDecision(exact,innerMonologue);
+          }
           const invitees = parsed.cohortInviteeIds;
           const legalCohort = chosenAction === 'APPRENTICE_COHORT' ? cohortOptions.find((item) =>
             item.cohortMove === parsed.cohortMove && item.targetTechniqueId === parsed.targetTechniqueId &&
@@ -2402,4 +2437,9 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
               ? parsed.rumorIntent : undefined,
           };
   });
+}
+
+
+function toMentorTransferDecision({action,...targets}:MentorTransferOption,innerMonologue:string):LLMDecisionPayload {
+  return {chosenAction:action,...targets,innerMonologue};
 }

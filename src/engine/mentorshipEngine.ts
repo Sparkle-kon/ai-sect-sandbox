@@ -56,6 +56,8 @@ function canTeach(world: WorldState, mentor: Cultivator, student: Cultivator): b
   if (mentor.tribulation?.stage === 'lightning' || mentor.tribulation?.stage === 'heart_demon' ||
       student.tribulation?.stage === 'lightning' || student.tribulation?.stage === 'heart_demon') return false;
   const parent = world.mentorship.lineage.find((edge) => edge.studentId === student.id);
+  if (parent && world.mentorTransfers.releases.some(row => row.studentId === student.id &&
+      row.oldMentorId === parent.mentorId && row.formedTick === parent.formedTick)) return false;
   return (!parent || parent.mentorId === mentor.id) && !wouldCycle(world, mentor.id, student.id);
 }
 
@@ -153,7 +155,18 @@ export function maintainMentorship(world: WorldState): void {
     }
   }
   const open = state.offers.filter(({ status }) => status === 'pending');
-  state.offers = [...open, ...state.offers.filter(({ status }) => status !== 'pending').slice(0, Math.max(0,HISTORY_LIMIT - open.length))];
+  const pinned = new Set(world.mentorTransfers.releases.map(({sourceTuitionId}) => sourceTuitionId));
+  const learned = new Map(state.lineage.map(row => [row.studentId,row]));
+  const retained = state.offers.filter(row => {
+    if (row.status !== 'accepted') return false;
+    const lineage = learned.get(row.studentId);
+    return pinned.has(row.id) || lineage?.mentorId === row.mentorId && lineage.lastLessonTick === row.resolvedTick &&
+      techniqueKey(lineage.technique) === techniqueKey(row.technique);
+  });
+  const retainedIds = new Set(retained.map(({id})=>id));
+  const recent = new Set(state.offers.filter(({ status,id }) => status !== 'pending' && !retainedIds.has(id))
+    .slice(0, Math.max(0,HISTORY_LIMIT-open.length)).map(({id})=>id));
+  state.offers = [...open,...state.offers.filter(({id})=>retainedIds.has(id)||recent.has(id))];
   for (const edge of state.lineage) {
     const student = world.cultivators.find(({ id }) => id === edge.studentId);
     if (student && live(student) && student.currentAction === 'CULTIVATE' && world.tick > edge.lastLessonTick &&

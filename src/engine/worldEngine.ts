@@ -1,3 +1,4 @@
+import { advanceMentorTransfers, resolveMentorTransferAction } from './mentorTransferEngine';
 import { advanceSeasonReviews, resolveSeasonReviewAction } from './seasonReviewEngine';
 import { advanceDamageAssurance, resolveDamageAssuranceAction } from './damageAssuranceEngine';
 import { advanceAlignedWeather, resolveAlignedWeatherAction } from './alignedWeatherEngine';
@@ -309,6 +310,8 @@ export function applyCultivatorBrainDecision(
       return resolveShortShiftAction(world, cultivator, decision);
     case 'BOUNDARY_RELIEF':
       return resolveBoundaryReliefAction(world, cultivator, decision);
+    case 'MENTOR_TRANSFER':
+      return resolveMentorTransferAction(world, cultivator, decision);
     case 'APPRENTICE_COHORT':
       return resolveApprenticeCohortAction(world, cultivator, decision);
     case 'HOUSEHOLD_NAME':
@@ -994,7 +997,7 @@ export function advanceWorldTick(
     newEvents.push(event);
     witnessEvent(nextState, event);
   }
-  for(const event of advanceSectStipends(nextState)) {
+  for(const event of [...advanceMentorTransfers(nextState), ...advanceSectStipends(nextState)]) {
     newEvents.push(event);
     witnessEvent(nextState,event);
   }
