@@ -25,6 +25,11 @@ const REASONS: Readonly<Record<string, string>> = {
   shipment_return: '商队退运退款退货', shipment_refund: '货损退款', shipment_loss: '实际货损',
   artifact_salvage_recovery: '拆解原器实回玄土根',
   furnace_safety_inspection: '现场验炉实耗灵石', furnace_safety_repair: '炉体修缮实耗备料',
+  seed_source_used: '实耗原有灵叶留种', seed_lot_sealed: '另册实存种子',
+  seed_trial_consumed: '每次小样实际用种', seed_planted: '实际播种入田',
+  seed_crop_rooted: '已发根的实种转成新株', seed_germination_loss: '实测未发根损失',
+  seed_crop_matured: '实熟仍存田圃', seed_harvest_delivered: '本人实收入袋',
+  seed_plot_loss: '苗圃实际损失', seed_lot_loss: '实际余种损失',
   stipend_payment: '退居俸养本期实际兑付',
   civic_memorial_supplies: '乡祠立册实际耗用',
   fair_reserve_fee: '乡集摊位预约资金保管', fair_local_service: '原地摆摊实际摊费', fair_refund_fee: '未摆摊实退原预约资金',
@@ -39,8 +44,8 @@ const control = 'min-h-11 min-w-0 rounded border border-slate-700 bg-slate-950 p
 const PAGE_SIZE = 8;
 const MONTHS = 6;
 
-const goodName = (good: FlowGood) => good === 'stone' ? '灵石' : MARKET_GOODS[good]?.label ?? '物资未详';
-const units = (good: FlowGood) => good === 'stone' ? '灵石'
+const goodName = (good: FlowGood) => good === 'stone' ? '灵石' : good === 'jade_seed' ? '青玉叶种子' : MARKET_GOODS[good]?.label ?? '物资未详';
+const units = (good: FlowGood) => good === 'stone' ? '灵石' : good === 'jade_seed' ? '粒'
   : good === 'jade_leaf' || good === 'earth_root' || good === 'star_bloom' || good === 'shadow_moss' ? '株' : '枚';
 
 export function ResourceFlowMonth({ ledger, world, scope, visibleSiteIds }: {
@@ -68,6 +73,8 @@ export function ResourceFlowMonth({ ledger, world, scope, visibleSiteIds }: {
       case 'granary': return '村镇义仓';
       case 'village_supply': return '互助在途封存';
       case 'village_fair': return '乡集摊位待付保管';
+      case 'seed_lot': return '留种实物批次';
+      case 'seed_plot': return '在地苗圃与实收暂存';
       case 'salvage': return '货损幸存物封存';
       case 'relocation': return '迁址在途公库';
       case 'workshop': return '工坊备料托管';

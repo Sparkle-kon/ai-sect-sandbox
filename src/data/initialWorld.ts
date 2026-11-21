@@ -23,6 +23,7 @@ import { createPavilionLoansState } from '../engine/pavilionLoanEngine';
 import { createCivicMemorialsState } from '../engine/civicMemorialEngine';
 import { createVillageFairsState } from '../engine/villageFairEngine';
 import { createSectStipendsState } from '../engine/sectStipendEngine';
+import { createSeedCultureState } from '../engine/seedCultureEngine';
 import { createCaravanRestitutionState } from '../engine/caravanRestitutionEngine';
 import { createTerrainSuccessionState } from '../engine/terrainSuccessionEngine';
 import { createResourceFlowState } from '../engine/resourceFlowEngine';
@@ -326,6 +327,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     civicMemorials: createCivicMemorialsState(),
     villageFairs: createVillageFairsState(),
     sectStipends: createSectStipendsState(),
+    seedCulture: createSeedCultureState(),
     relicExhibits: createRelicExhibitState(),
     probation: createProbationState(),
     roads: createRoadState(),

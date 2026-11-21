@@ -10,6 +10,8 @@ export const RESOURCE_FLOW_REASON = /^[a-z][a-z0-9_]{0,39}$/;
 export const createResourceFlowState = (): ResourceFlowState => ({ nextId: 1, months: [] });
 
 export const flowActor = (id: string): ResourceFlowAccount => ({ kind: 'actor', id });
+export const flowSeedLot = (id:string):ResourceFlowAccount => ({kind:'seed_lot',id});
+export const flowSeedPlot = (id:string):ResourceFlowAccount => ({kind:'seed_plot',id});
 export const flowSite = (id: string): ResourceFlowAccount => ({ kind: 'site', id });
 export const flowSect = (id: string): ResourceFlowAccount => ({ kind: 'sect', id });
 export const flowOrder = (id: string): ResourceFlowAccount => ({ kind: 'order', id });

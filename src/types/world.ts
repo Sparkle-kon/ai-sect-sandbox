@@ -153,6 +153,7 @@ export type ActionType =
   | 'CIVIC_MEMORIAL'
   | 'VILLAGE_FAIR'
   | 'SECT_STIPEND'
+  | 'SEED_CULTURE'
   | 'FORGE_ARTIFACT'
   | 'BIND_ARTIFACT'
   | 'REPAIR_ARTIFACT'
@@ -558,6 +559,9 @@ export interface LLMDecisionPayload {
   civicMemorialMove?: CivicMemorialMove;
   villageFairMove?: VillageFairMove;
   stipendMove?:SectStipendMove;
+  seedMove?:SeedCultureMove;
+  targetSeedLotId?:string;
+  targetSeedPlotId?:string;
   targetStipendId?:string;
   targetVillageFairId?: string;
   targetCivicDeedId?: string;
@@ -2282,6 +2286,41 @@ export interface SectStipend {
 }
 export interface SectStipendsState {stipends:SectStipend[];nextId:number}
 
+export type SeedCultureMove='reserve'|'test'|'plant'|'harvest';
+export interface SeedWeather {
+  tick:number;
+  season:'春'|'夏'|'秋'|'冬';
+  kind:'平息'|'灵潮'|'罡风'|'霜息';
+  intensity:number;
+  soilQi:number;
+}
+export interface SeedTrial {tick:number;weather:SeedWeather;sample:2;sprouted:0|1|2}
+export interface SeedLot {
+  id:string;
+  ownerId:string;
+  siteId:string;
+  createdTick:number;
+  remaining:number;
+  tests:SeedTrial[];
+  loss?:{tick:number;units:number;reason:'owner_died'|'site_lost'};
+}
+export interface SeedPlot {
+  id:string;
+  lotId:string;
+  ownerId:string;
+  siteId:string;
+  plantedTick:number;
+  maturesTick:number;
+  status:'growing'|'ready'|'harvested'|'lost';
+  weather:SeedWeather[];
+  maturedTick?:number;
+  yield?:0|1|2;
+  settledTick?:number;
+  loss?:{reason:'site_hazard'|'owner_died'|'site_lost'|'spoiled'|'failed_germination';units:number;good:'jade_seed'|'jade_leaf';
+    hazard?:Pick<MapHazard,'id'|'kind'|'tileId'|'createdTick'|'expiresTick'|'intensity'>};
+}
+export interface SeedCultureState {lots:SeedLot[];plots:SeedPlot[];nextLotId:number;nextPlotId:number}
+
 export type CommonsMove = 'offer' | 'sign' | 'decline';
 export type CommonsCloseReason = 'declined' | 'offer_expiry' | 'title_change' | 'site_lost' | 'term_complete' | 'stale_signer';
 export interface CommonsParty { sectId: string; signerId: string; share: 1 | 2; signedTick?: number }
@@ -2313,10 +2352,10 @@ export interface SharedCommonsPact {
 }
 export interface SharedCommonsState { pacts: SharedCommonsPact[]; nextId: number }
 
-export type ResourceFlowGood = 'stone' | MarketGood;
-export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation' | 'terrain' | 'workshop' | 'road' | 'observatory' | 'pilgrimage' | 'granary' | 'furnace_safety' | 'artifact_salvage' | 'village_supply' | 'civic_memorial' | 'village_fair' | 'sect_stipend';
+export type ResourceFlowGood = 'stone' | 'jade_seed' | MarketGood;
+export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation' | 'terrain' | 'workshop' | 'road' | 'observatory' | 'pilgrimage' | 'granary' | 'furnace_safety' | 'artifact_salvage' | 'village_supply' | 'civic_memorial' | 'village_fair' | 'sect_stipend' | 'seed_culture';
 export type ResourceFlowAccount =
-  | { kind: 'actor' | 'site' | 'sect' | 'order' | 'shipment' | 'relocation' | 'workshop' | 'salvage' | 'granary' | 'village_supply' | 'village_fair'; id: string }
+  | { kind: 'actor' | 'site' | 'sect' | 'order' | 'shipment' | 'relocation' | 'workshop' | 'salvage' | 'granary' | 'village_supply' | 'village_fair' | 'seed_lot' | 'seed_plot'; id: string }
   | { kind: 'oath'; id: string; pocket: 'payment' | 'collateral' };
 export type ResourceFlowVisibility =
   | { kind: 'observer' }
@@ -2850,6 +2889,7 @@ export interface WorldState {
   civicMemorials: CivicMemorialsState;
   villageFairs: VillageFairsState;
   sectStipends: SectStipendsState;
+  seedCulture: SeedCultureState;
   resourceFlow: ResourceFlowState;
   roads: RoadState;
   sharedCommons: SharedCommonsState;

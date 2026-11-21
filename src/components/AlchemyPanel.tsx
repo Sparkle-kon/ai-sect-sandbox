@@ -3,6 +3,7 @@ export { countHerbs } from './mapStatusLabels';
 
 import { ALCHEMY_RECIPES, HERB_LABELS, alchemyCost, alchemySuccess } from '../engine/alchemyEngine';
 import { projectFurnaceSafety, type FurnaceSafetyView } from '../engine/furnaceSafetyEngine';
+import { SeedCulturePanel } from './SeedCulturePanel';
 
 const HERBS = (Object.keys(HERB_LABELS) as HerbId[]).map((id) => [id, HERB_LABELS[id]] as const);
 const PILLS = (Object.keys(ALCHEMY_RECIPES) as PillId[]).map((id) => [id, ALCHEMY_RECIPES[id].name] as const);
@@ -104,6 +105,7 @@ export function AlchemyPanel({ world, cultivator, location }: { world: WorldStat
           {cultivator.alive ? '当前未在可查地点，无法查看当地丹炉和灵草。' : '修士已陨落，不再查看当地丹炉和灵草。'}
         </p>
       )}
+      {viewer && <SeedCulturePanel world={world} cultivator={viewer} />}
       <RecipeBook cultivator={cultivator} location={presentLocation} safety={safety} />
     </section>
   );

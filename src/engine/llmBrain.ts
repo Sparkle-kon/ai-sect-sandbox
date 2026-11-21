@@ -4,6 +4,7 @@ import { availableShortShiftActions } from './shortShiftEngine';
 import { availableCaravanRestitutionActions } from './caravanRestitutionEngine';
 import { availableVillageGranaryActions, projectVillageGranary } from './villageGranaryEngine';
 import { availableVillageFairActions } from './villageFairEngine';
+import { availableSeedCultureActions } from './seedCultureEngine';
 import { availableCivicMemorialActions } from './civicMemorialEngine';
 import { availableVillageSupplyActions } from './villageSupplyEngine';
 import { availableBoundaryReliefActions } from './boundaryReliefEngine';
@@ -574,15 +575,9 @@ export function computeHeuristicDecision(
     }) : undefined);
   if (evidenceAction) return { ...evidenceAction, chosenAction: evidenceAction.action, innerMonologue: '证言应以亲知来由或已掌握的案卷为据。' };
 
-  if (world.tick >= 4 && !cultivator.guardAssignment) {
-    const options = availableSettlementActions(cultivator, world);
-    const relief = options.find((option) => option.action === 'DELIVER_RELIEF');
-    if (relief) return { ...relief, chosenAction: relief.action, innerMonologue: '灾后所缺须从实际库存筹措。' };
-    if (world.tick % 6 === 2) {
-      const recruit = options.find((option) => option.action === 'RECRUIT_SETTLER');
-      if (recruit) return { ...recruit, chosenAction: recruit.action, innerMonologue: '此人具仙缘且愿入门，依规发放安置资粮。' };
-    }
-  }
+  const villageNeeds = world.tick >= 4 && !cultivator.guardAssignment ? availableSettlementActions(cultivator, world) : [];
+  const relief = villageNeeds.find((option) => option.action === 'DELIVER_RELIEF');
+  if (relief) return { ...relief, chosenAction: relief.action, innerMonologue: '灾后所缺须从实际库存筹措。' };
 
   const civicAtVillage = world.civicMemorials.deeds.length > 0 && !cultivator.guardAssignment &&
     cultivator.hp >= cultivator.maxHp * .75 &&
@@ -592,6 +587,34 @@ export function computeHeuristicDecision(
     const confirm = availableCivicMemorialActions(cultivator, world).filter(({ civicMemorialMove }) => civicMemorialMove === 'verify');
     if (confirm.length === 1) return { chosenAction: 'CIVIC_MEMORIAL', civicMemorialMove: 'verify',
       targetCivicMemorialId: confirm[0].targetCivicMemorialId, innerMonologue: '我只核认自己当场见过的一件实事，不代人证明亲缘或行踪。' };
+  }
+
+  const willingSeedCulture = !cultivator.guardAssignment && cultivator.hp >= cultivator.maxHp * .75;
+  const wantSeedReserve = world.tick >= 16 && cultivator.herbs.jade_leaf >= 5 &&
+    (world.tick + cultivator.id.charCodeAt(cultivator.id.length - 1)) % 17 === 8;
+  const ownLocalSeedWork = () =>
+    world.seedCulture.lots.some(({ ownerId, siteId, remaining, loss }) =>
+      ownerId === cultivator.id && siteId === cultivator.locationId && remaining > 0 && !loss) ||
+    world.seedCulture.plots.some(({ ownerId, siteId, status }) =>
+      ownerId === cultivator.id && siteId === cultivator.locationId && status === 'ready');
+  const seeds = willingSeedCulture && (wantSeedReserve || ownLocalSeedWork()) ? availableSeedCultureActions(cultivator, world) : [];
+  const harvests = seeds.filter(({ seedMove }) => seedMove === 'harvest');
+  if (harvests.length === 1) return { chosenAction: 'SEED_CULTURE', seedMove: 'harvest',
+    targetSeedPlotId: harvests[0].targetSeedPlotId, innerMonologue: '只收现场确实成熟的一畦，不把试苗当作收成。' };
+
+  if (world.tick % 6 === 2) {
+    const recruit = villageNeeds.find((option) => option.action === 'RECRUIT_SETTLER');
+    if (recruit) return { ...recruit, chosenAction: recruit.action, innerMonologue: '此人具仙缘且愿入门，依规发放安置资粮。' };
+  }
+
+  const plantings = seeds.filter(({ seedMove }) => seedMove === 'plant');
+  if (plantings.length === 1) return { chosenAction: 'SEED_CULTURE', seedMove: 'plant',
+    targetSeedLotId: plantings[0].targetSeedLotId, innerMonologue: '已留原读数，按实有余量与现场条件落种。' };
+  if (plantings.length === 0) {
+    const trials = seeds.filter((choice) => choice.seedMove === 'test' && world.seedCulture.lots.some(({ id, tests }) =>
+      id === choice.targetSeedLotId && tests.length === 0));
+    if (trials.length === 1) return { chosenAction: 'SEED_CULTURE', seedMove: 'test',
+      targetSeedLotId: trials[0].targetSeedLotId, innerMonologue: '拿自存这批种料实试，先留下原读数。' };
   }
 
   if (cultivator.technique.id && !cultivator.guardAssignment && world.tick >= 12 && world.tick % 4 === 3) {
@@ -1051,6 +1074,12 @@ export function computeHeuristicDecision(
       targetInfirmaryCaseId: offers[0].targetInfirmaryCaseId, innerMonologue: '只依既有旧勤记录提请俸养，由对方本人选择。' };
   }
 
+  if (wantSeedReserve) {
+    const reserves = seeds.filter(({ seedMove }) => seedMove === 'reserve');
+    if (reserves.length === 1) return { chosenAction: 'SEED_CULTURE', seedMove: 'reserve',
+      targetLocationId: reserves[0].targetLocationId, innerMonologue: '从本人已有的翡翠灵叶中留种，单独计作种料。' };
+  }
+
   // Irreversible disposal is optional and never interrupts a scheduled duty.
   // Keep a usable alternative and leave even slightly repairable or distinctive gear alone.
   if (world.tick >= 16 && world.tick % 13 === 3 && !cultivator.guardAssignment &&
@@ -1200,6 +1229,9 @@ export async function requestCultivatorLLMDecision(
   const arbitrationOptions = availableOathArbitrationActions(cultivator, world);
   const oathOptions = availableOathActions(cultivator, world);
   const marketOptions = availableMarketActions(cultivator, world);
+  const seedOptions = availableSeedCultureActions(cultivator, world, requestTick);
+  const seedPromptOptions = seedOptions.map(({ seedMove, targetLocationId, targetSeedLotId, targetSeedPlotId }) =>
+    ({ seedMove, targetLocationId, targetSeedLotId, targetSeedPlotId }));
   const villageFairOptions = availableVillageFairActions(cultivator, world, requestTick);
   const villageFairPromptOptions = villageFairOptions.map(({ villageFairMove, targetSettlementId, targetVillageFairId, targetMarketOrderId }) =>
     ({ villageFairMove, targetSettlementId, targetVillageFairId, targetMarketOrderId }));
@@ -1348,6 +1380,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 自身天劫：${JSON.stringify(isTribulationActive(cultivator) ? cultivator.tribulation : null)}；如果正在应劫，须选择 FACE_TRIBULATION；同地可袭扰的仇敌：${JSON.stringify(availableAmbushTargets(cultivator, world).map((target) => ({ id: target.id, name: target.name })))}
 - 法宝状况：${JSON.stringify(ownArtifactView)}；本地可用炼器行动：${JSON.stringify(availableArtifactActions(cultivator, world, requestTick))}
 - 拆解旧器 SALVAGE_ARTIFACT 不可反悔；只成对复制本人于本地执行回合实有的 targetArtifactId、targetLocationId。不填写物料、回收量、耐久、归属或对白：${JSON.stringify(salvageOptions)}
+- 灵植留种只复制本人在实地可执行的许可：reserve 只填 targetLocationId；test、plant 只填 targetSeedLotId；harvest 只填 targetSeedPlotId。不要填写天气、样本量、出苗、收成或远处地点：${JSON.stringify(seedPromptOptions)}
 - 丹毒：${cultivator.pillToxicity}/100；灵药包：${JSON.stringify(cultivator.herbs)}；已有丹药：${JSON.stringify(cultivator.pills)}；允许的炼丹行动：${JSON.stringify(availableAlchemy(cultivator, world, requestTick))}
 - 炉体停用只用本人、此地、执行回合许可的 inspect、repair 或 reopen，照抄 targetFurnaceSafetyId。不得填写完整度、奖惩、物资、地点、复开日期或额外炉位；复开本轮仍停炉：${JSON.stringify(furnaceSafetyOptions)}
 - 炉位预约仅复制执行回合的实际许可：${JSON.stringify(furnaceOptions)}；预约不是已开炉，不自填时间、容量或物料。
@@ -1416,6 +1449,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'AUTHOR_TECHNIQUE',
             'STUDY_TECHNIQUE',
             'GATHER_HERBS',
+            'SEED_CULTURE',
             'BREW_PILL',
             'USE_PILL',
             'FORGE_ARTIFACT',
@@ -1874,6 +1908,22 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
           const legalArtifact = artifactAction ? availableArtifactActions(cultivator, world, requestTick).find((item) =>
             item.action === chosenAction && item.targetArtifactId === parsed.targetArtifactId && item.forgeTier === parsed.forgeTier) : undefined;
           if (artifactAction && !legalArtifact) return undefined;
+          const legalSeed = chosenAction === 'SEED_CULTURE' ? seedOptions.find((item) =>
+            item.seedMove === parsed.seedMove && item.targetLocationId === parsed.targetLocationId &&
+            item.targetSeedLotId === parsed.targetSeedLotId && item.targetSeedPlotId === parsed.targetSeedPlotId) : undefined;
+          if (chosenAction === 'SEED_CULTURE' && (!legalSeed || Object.keys(parsed).some((field) =>
+            !['chosenAction', 'innerMonologue', 'seedMove', legalSeed.seedMove === 'reserve' ? 'targetLocationId'
+              : legalSeed.seedMove === 'harvest' ? 'targetSeedPlotId' : 'targetSeedLotId'].includes(field)))) return undefined;
+          if (legalSeed) {
+            const innerMonologue = (typeof parsed.innerMonologue === 'string' && parsed.innerMonologue.trim().slice(0, 160)) ||
+              cultivator.innerMonologue || '按本人在实地确认的种料行事。';
+            if (legalSeed.seedMove === 'reserve') return { chosenAction: 'SEED_CULTURE', seedMove: 'reserve',
+              targetLocationId: legalSeed.targetLocationId, innerMonologue };
+            if (legalSeed.seedMove === 'harvest') return { chosenAction: 'SEED_CULTURE', seedMove: 'harvest',
+              targetSeedPlotId: legalSeed.targetSeedPlotId, innerMonologue };
+            return { chosenAction: 'SEED_CULTURE', seedMove: legalSeed.seedMove,
+              targetSeedLotId: legalSeed.targetSeedLotId, innerMonologue };
+          }
           const alchemyAction = chosenAction === 'GATHER_HERBS' || chosenAction === 'BREW_PILL' || chosenAction === 'USE_PILL';
           const legalAlchemy = alchemyAction ? availableAlchemy(cultivator, world, requestTick).find((option) =>
             option.action === chosenAction && option.targetHerbId === parsed.targetHerbId &&
