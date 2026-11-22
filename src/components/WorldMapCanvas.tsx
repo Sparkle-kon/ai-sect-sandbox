@@ -1,3 +1,4 @@
+import {resolveMapDossierFocus,type MapDossierFocusRequest} from './mapDossierFocus';
 import {drawMapCultivatorToken} from './mapCultivatorTokens';
 import {drawMapLandmarkGlyph} from './mapLandmarkGlyphs';
 import {makeMapNamePills,drawMapNamePills,measureMapNamePill} from './mapCanvasNamePills';
@@ -143,6 +144,7 @@ interface WorldMapCanvasProps {
   fogEnabled?:boolean;
   onFogChange?:(next:boolean)=>void;
   pulseFocus?:WorldPulseFocusRequest;
+  dossierFocus?:MapDossierFocusRequest;
   pulseFocusActive?:boolean;
   onPulseFocusHandled?:(token:number)=>void;
   inspectionRevision?:number;
@@ -163,7 +165,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   onSelectLocation,
   onBrushStroke,
   inspectionEnabled=true,
-  fogEnabled,onFogChange,pulseFocus,pulseFocusActive=true,onPulseFocusHandled,
+  fogEnabled,onFogChange,pulseFocus,pulseFocusActive=true,onPulseFocusHandled,dossierFocus,
   inspectionRevision=0,
   onEntityIntervention,
   compact = false,
@@ -1126,6 +1128,16 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     setStrategicMode(undefined);
     navigateCamera(focusMapPoint(cameraRef.current,site),`地图已定位：${site.name}`,true);
   },[pulseFocus,pulseFocusActive,world,scopeKey,selectedCultivatorId,fog,onPulseFocusHandled]);
+  const consumedDossierFocus=useRef<MapDossierFocusRequest>();
+  useEffect(()=>{
+    if(!dossierFocus||consumedDossierFocus.current===dossierFocus||!inspectionEnabled||armedBrush)return;
+    consumedDossierFocus.current=dossierFocus;
+    const point=resolveMapDossierFocus(dossierFocus,{world,scopeKey,revision:inspectionRevision,
+      fog,selectedId:selectedCultivatorId,points:actorPositions});
+    if(!point)return;
+    commandCamera(focusMapPoint(cameraRef.current,point));
+    setFocusMessage(`地图已定位：${point.actor.name}`);
+  },[dossierFocus,inspectionEnabled,armedBrush,world,scopeKey,inspectionRevision,fog,selectedCultivatorId,actorPositions]);
   const locateActor = (id: string) => {
     const point = actorPositions.find(({ actor }) => actor.id === id);
     if (!point) return;

@@ -1,3 +1,6 @@
+import {MapSidebarDossier} from './components/MapSidebarDossier';
+import {projectMapSidebarDossier} from './components/mapSidebarDossierModel';
+import type {MapDossierFocusRequest} from './components/mapDossierFocus';
 import {useCultivatorGuidancePanels} from './components/useCultivatorGuidancePanels';
 import {CultivatorInspectorBridge} from './components/CultivatorInspectorBridge';
 import {HighDramaPresetPicker} from './components/HighDramaPresetPicker';
@@ -24,9 +27,6 @@ import { projectWitnessedPersonalStory } from './engine/witnessedPersonalStory';
 import { createPublicDialogueResolver } from './engine/publicDialogueProvenance';
 import { projectEarnedChronicleLead, projectProtagonistSuccession } from './engine/protagonistSuccession';
 import { projectChronicleLead, publicChronicleSceneEvents } from './engine/chronicleLead';
-import { courierCheckpoint } from './engine/sealedCourierEngine';
-import { expeditionRescueCheckpoint } from './engine/expeditionRescueCheckpoint';
-import { boundaryReliefCheckpoint } from './engine/boundaryReliefCheckpoint';
 import { applyWatchMutation } from './engine/watchlistEngine';
 import type { WatchlistCommand, WatchlistMutationResult } from './engine/watchlistEngine';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -55,7 +55,7 @@ import {WorldPulseBar} from './components/WorldPulseBar';
 import {projectWorldPulse,type WorldPulseRisk} from './components/worldPulseModel';
 import type {WorldPulseFocusRequest} from './components/mapPulseFocus';
 import {applyScopedMapEntityIntervention,type MapEntityPopoverBinding} from './components/mapEntityPopoverWrite';
-import type {MapEntityAction} from './components/mapEntityPopoverModel';
+import type {MapEntityAction,MapEntityTarget} from './components/mapEntityPopoverModel';
 import {createTerrainMapView} from './components/terrainMapView';
 import { possessAvatar, queueAvatarOrder } from './engine/avatarEngine';
 import {projectFrontierSupplyLinks} from './engine/frontierSupplyLinks';
@@ -89,12 +89,12 @@ interface ChronicleTrail extends ChronicleFeedReturn {
 }
 const chronicleWorkspace = { site: 'map', actor: 'people', sect: 'sect' } as const;
 const action = 'inline-flex min-h-11 items-center justify-center gap-1.5 rounded-md px-3 text-xs font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300 disabled:opacity-40';
-const panel = 'space-y-2 rounded-xl border border-slate-800 bg-slate-900 p-3';
 
 export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, initialCockpit = false }) => {
   const [cockpitOpen,setCockpitOpen]=useState(initialCockpit);
   const [mapFog,setMapFog]=useState(false);
   const [pulseFocus,setPulseFocus]=useState<WorldPulseFocusRequest>();
+  const [dossierFocus,setDossierFocus]=useState<MapDossierFocusRequest>();
   const pulseSerial=useRef(0);
   const cockpitHeading=useRef<HTMLHeadingElement>(null);
   const [dashboardOpen, setDashboardOpen] = useState(initialWorkspace !== undefined);
@@ -325,6 +325,15 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
     },binding,action,whisperText))!==starting;
   };
 
+  const mapDossier=useMemo(()=>dashboardOpen&&workspace==='map'?projectMapSidebarDossier(visibleWorld,selectedCultivator,
+    createTerrainMapView(visibleWorld,selectedCultivator,mapFog),!preview):undefined,
+    [dashboardOpen,workspace,visibleWorld,selectedCultivator,mapFog,preview]);
+  const actFromMapDossier=(target:MapEntityTarget,move:MapEntityAction,text?:string)=>{
+    if(!canMapWrite||!mapDossier?.actions.some(row=>row.action===move&&row.target.id===target.id&&row.target.kind===target.kind))return false;
+    return handleMapEntityIntervention({world:visibleWorld,scopeKey:viewScopeKey,revision:inspectionRevision,
+      viewerId:activeActorId,fog:mapFog,target},move,text);
+  };
+
   const mayReadPersonal = Boolean(selectedCultivator?.alive && selectedCultivator.hp > 0);
   const readingRoster = dashboardOpen && workspace === 'people';
   const rosterFocalId = useMemo(() => readingRoster ? projectRosterFocalId(visibleWorld) : undefined,
@@ -390,7 +399,6 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   useEffect(() => {
     if (trail) backRef.current?.focus({ preventScroll: true });
   }, [trail]);
-  const characterLocation = visibleWorld.locations.find((site) => site.id === selectedCultivator?.locationId);
   const {immersive,atlasExtras}=useCivicRealmViews({
     simulation,selectedCultivator,cockpitOpen,dashboardOpen,workspace,onSelectCultivator:setSelectedCultivatorId,
     onClearAvatarNotice:()=>setAvatarNotice(undefined),
@@ -702,12 +710,12 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
           <button type="button" data-control-dock="back" ref={backRef} onClick={returnToChronicle} className={`${action} bg-slate-800 text-amber-100`}>返回原纪事</button>
           {!focusTarget && <p role="status" className="break-words text-xs text-amber-200">{CHRONICLE_FOCUS_UNAVAILABLE}</p>}
         </div>} views={{
-        map: immersive??<div className="grid min-w-0 items-start gap-2.5 lg:grid-cols-[minmax(0,1fr)_17rem] lg:gap-4">
+        map: immersive??<div className="grid min-w-0 items-start gap-2.5 lg:grid-cols-[minmax(0,1fr)_21rem] xl:grid-cols-[minmax(0,1fr)_23rem] lg:gap-4">
           <div className="min-w-0"><React.Suspense fallback={<div role="status" className="grid min-h-64 place-items-center rounded-xl border border-slate-800 text-sm text-slate-300">载入舆图…</div>}>
             <WorldMapCanvas compact scopeKey={viewScopeKey} world={visibleWorld} selectedCultivatorId={activeActorId} previousWorld={previousMapWorld} historical={Boolean(preview)}
           inspectionEnabled={canInspectMap} inspectionRevision={inspectionRevision} onEntityIntervention={canMapWrite?handleMapEntityIntervention:undefined}
           fogEnabled={mapFog} onFogChange={setMapFog} pulseFocus={pulseFocus} pulseFocusActive={canInspectMap}
-          onPulseFocusHandled={clearWorldPulse}
+          onPulseFocusHandled={clearWorldPulse} dossierFocus={dossierFocus}
             toolsOpen={workspace === 'map' && (foldPreferences.mapTools ?? false)} onToolsOpenChange={(mapTools) =>
               setFoldPreferences((previous) => (previous.mapTools ?? false) === mapTools ? previous : { ...previous, mapTools })}
             additionalTools={handedness === 'default' && !preview && !isRunning ? <button type="button" disabled={fastForwardLocked||storyDecisionPending&&!isRunning} onClick={toggleStoryAutoplay}
@@ -717,20 +725,11 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
             <DeferredGrandSiegeMapScene world={visibleWorld} viewer={selectedCultivator} fog={mapFog}
               visible={workspace==='map'&&!featuredStoryCard}/>
           </React.Suspense></div>
-          <aside className={`${panel} min-w-0`} aria-label="当前修士">
-            <div className="flex flex-wrap items-center justify-between gap-1.5">
-              <div className="min-w-0 break-words">
-                <p className="text-xs text-slate-400">当前修士</p>
-                <h2 className="text-base font-semibold text-amber-100">{selectedCultivator?.name ?? '未选中人物'}</h2>
-              </div>
-              <button type="button" onClick={() => openWorkspace('people')} className={`${action} max-sm:hidden bg-slate-800 text-slate-100 hover:bg-slate-700`}>人物详情</button>
-            </div>
-            {selectedCultivator && <p className="break-words text-xs leading-relaxed text-slate-300">
-              {selectedCultivator.realm} {selectedCultivator.realmStage}层 · {selectedCultivator.alive ? `气血 ${selectedCultivator.hp}/${selectedCultivator.maxHp}` : '已陨落'} · {expeditionRescueCheckpoint(visibleWorld, selectedCultivator) ? '位于实际撤离关口' :
-                boundaryReliefCheckpoint(visibleWorld, selectedCultivator) ? '位于实际换防关口' :
-                  courierCheckpoint(visibleWorld, selectedCultivator) ? '信使途中' : characterLocation?.name ?? '所在地点未详'}
-            </p>}
-          </aside>
+          {mapDossier&&<MapSidebarDossier key={`${viewScopeKey}:${inspectionRevision}:${activeActorId}:${visibleWorld.tick}:${visibleWorld.interventionSequence}:${mapFog}`}
+            data={mapDossier} onReadActor={mapDossier.actor?()=>openWorkspace('people'):undefined}
+            onFocus={mapDossier.actor?()=>setDossierFocus({world:visibleWorld,scopeKey:viewScopeKey,revision:inspectionRevision,
+              fog:mapFog,actorId:mapDossier.actor!.target.id}):undefined}
+            onCommit={canMapWrite?actFromMapDossier:undefined}/>}
         </div>,
         people: <div className="grid min-w-0 items-start gap-3 md:grid-cols-[17rem_minmax(0,1fr)]">
           <React.Suspense fallback={<p role="status">载入修士名册…</p>}><ActorRoster world={visibleWorld} selected={selectedCultivator} dismissOnSelect onSelect={selectRosterActor}
