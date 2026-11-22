@@ -2,7 +2,8 @@ import {projectMapEntitySiteDetails,type MapEntitySiteDetail} from './mapEntityS
 import {projectMapCultivatorPortrait,type CultivatorPortraitSpec} from './cultivatorPortraitModel';
 import {activeAvatar} from '../engine/avatarEngine';
 import {personaLine,privatePersonaText} from '../engine/wildPersonaEngine';
-import type {ActionType,Cultivator,LocationNode,WorldState} from '../types/world';
+import {labelPublicMapAction} from './actionLabels';
+import type {Cultivator,LocationNode,WorldState} from '../types/world';
 import type {GodInterventionCommand} from '../engine/worldEngine';
 import {isChronicleStoryFact} from '../engine/chronicleLead';
 import {isScopedExpeditionGate} from '../engine/expeditionOmenTerms';
@@ -17,12 +18,6 @@ export type MapEntityRead=
      population?:number;spiritRoot?:LocationNode['spiritRoot'];details?:readonly MapEntitySiteDetail[];eventTitles:readonly string[]};
 
 type View=ReturnType<typeof createTerrainMapView>;
-const simpleActions:Partial<Record<ActionType,string>>={
-  CULTIVATE:'修炼',REST:'调息',BREAKTHROUGH:'尝试破境',EXPLORE:'游历',DUEL:'斗法',FACE_TRIBULATION:'应对天劫',
-  SOCIALIZE:'交谈',GATHER_HERBS:'采集灵草',BREW_PILL:'炼丹',FORGE_ARTIFACT:'炼器',STUDY_TECHNIQUE:'参悟功法',
-  AUTHOR_TECHNIQUE:'著录功法',TEACH:'传法',DUAL_CULTIVATE:'共同修行',TRADE:'交易',PILGRIMAGE:'朝山巡礼',
-  GUARD_DUTY:'值守',TAME_BEAST:'驯养灵兽',DELIVER_RELIEF:'赈济',
-};
 const cleaned=(text:string)=>text.replace(/[\p{Cc}\p{Cf}\p{Cs}\u2028\u2029]/gu,' ').replace(/\s+/gu,' ').trim();
 const cap=(text:string,n:number)=>Array.from(text).slice(0,n).join('');
 const trueActor=(actor:Cultivator)=>actor.alive&&actor.hp>0&&actor.positionPlane===undefined;
@@ -83,7 +78,7 @@ export function projectMapEntityPopover(world:WorldState,view:View,target:MapEnt
     const portrait=projectMapCultivatorPortrait(world,view,actor);
     return {kind:'actor',target:{kind:'actor',id:actor.id},name:cap(cleaned(actor.name),80),
       realm:`${actor.realm}${actor.realmStage}层`,hp:actor.hp,maxHp:actor.maxHp,
-      ...(portrait?{portrait}:{}),actionLabel:simpleActions[actor.currentAction]??'行事中',...(monologue?{monologue}:{persona:personaLine(actor,'thought')})};
+      ...(portrait?{portrait}:{}),actionLabel:labelPublicMapAction(actor.currentAction),...(monologue?{monologue}:{persona:personaLine(actor,'thought')})};
   }
   if(target.kind!=='site')return undefined;
   const site=siteInView(world,view,target.id);

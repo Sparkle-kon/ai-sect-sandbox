@@ -1,4 +1,5 @@
 import {useEffect,useId,useRef,useState,type RefObject} from 'react';
+import {BookOpen,ChevronDown} from 'lucide-react';
 import {HIGH_DRAMA_PRESETS,highDramaPreset,type HighDramaPreset} from '../engine/highDramaPresetTerms';
 import type {BuiltinScenarioPresetId} from '../types/world';
 
@@ -83,8 +84,10 @@ function PresetPicker({disabled=false,onStart,revision}:Omit<HighDramaPresetPick
   return <section className="min-w-0 border-t border-slate-800 pt-2.5" aria-label="另择开局">
     <button ref={launcher} type="button" aria-expanded={opened&&!disabled} aria-controls={opened&&!disabled?id:undefined}
       disabled={disabled||starting} onClick={()=>opened?close():setOpened(true)}
-      className={`${action} border-transparent text-slate-300 hover:bg-slate-900`}>
+      className={`${action} inline-flex items-center gap-2 !border-amber-200/30 bg-gradient-to-br from-amber-950/40 to-slate-950 !text-amber-100 hover:!border-amber-200/65 hover:!text-amber-50`}>
+      <BookOpen size={16} aria-hidden="true" className="shrink-0 text-amber-300"/>
       {opened&&!disabled?'合上开局卷':'另选开局剧本'}
+      <ChevronDown size={14} aria-hidden="true" className={opened&&!disabled?'rotate-180 shrink-0':'shrink-0'}/>
     </button>
     {opened&&!disabled&&<div id={id} aria-busy={starting} className="mt-2 min-w-0 space-y-3 rounded-xl border border-amber-300/30 bg-gradient-to-b from-amber-950/30 to-slate-950 px-3 py-3 sm:px-4">
        {preset?<HighDramaPresetPreview preset={preset} id={id} previewHeading={previewHeading} starting={starting} failed={failed}
@@ -94,7 +97,7 @@ function PresetPicker({disabled=false,onStart,revision}:Omit<HighDramaPresetPick
         <ul className="space-y-2">
           {HIGH_DRAMA_PRESETS.map(item=><li key={item.id}>
             <button ref={previousChoice.current===item.id?previousChoiceButton:undefined} type="button"
-              className={`${action} block w-full bg-slate-950/80 py-2 text-left font-medium text-amber-100`}
+              className={`${action} block w-full !border-amber-200/20 bg-gradient-to-r from-slate-900 to-slate-950 py-2.5 text-left font-medium !text-amber-100 hover:!border-amber-200/55 hover:from-amber-950/40`}
               onClick={()=>{previousChoice.current=item.id;setReview({id:item.id,revision});setFailed(false);}}>
               {item.title}
             </button>

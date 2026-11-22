@@ -30,6 +30,16 @@ describe('device-local workspace folds', () => {
     expect(readWorkspaceFoldPreferences()).toEqual({ sections: { people: 'profile', world: 'settings' } });
   });
 
+  it('persists only the explicit desktop roster boolean, independently of other workspace folds',()=>{
+    const {store}=browser();
+    writeWorkspaceFoldPreferences({sections:{people:'profile'},rosterDesktop:false});
+    expect(readWorkspaceFoldPreferences()).toEqual({sections:{people:'profile'},rosterDesktop:false});
+    writeWorkspaceFoldPreferences({sections:{people:null},rosterDesktop:true});
+    expect(readWorkspaceFoldPreferences()).toEqual({sections:{people:null},rosterDesktop:true});
+    store.set(WORKSPACE_FOLD_STORAGE_KEY,'{"version":1,"sections":{},"rosterDesktop":"closed","rosterMobile":true}');
+    expect(readWorkspaceFoldPreferences()).toEqual({sections:{}});
+  });
+
   it('never serializes identifiers, arbitrary strings or unrelated contextual/device state', () => {
     const { store } = browser();
     writeWorkspaceFoldPreferences({

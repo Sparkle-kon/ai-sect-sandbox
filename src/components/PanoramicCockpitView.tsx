@@ -1,29 +1,37 @@
 import {highDramaPreset} from '../engine/highDramaPresetTerms';
 import type {PublicBondArc} from './DramaticBondRead';
-import {useSyncExternalStore,type ReactNode,type Ref} from 'react';
+import type {ReactNode,Ref} from 'react';
+import {Compass,Map as MapIcon} from 'lucide-react';
+import {useViewportAtLeast} from './useViewportAtLeast';
 import type {WorldState} from '../types/world';
 import {CockpitStoryStage} from './CockpitStoryStage';
 import {CockpitTimeControls,type CockpitTimeControlsProps} from './CockpitTimeControls';
 import {PanoramicCockpit,type PanoramicCockpitProps} from './PanoramicCockpit';
 
-const wideScreen='(min-width: 1280px)';
-const media=()=>typeof window==='undefined'?undefined:window.matchMedia?.(wideScreen);
-const readWidth=()=>media()?.matches??false;
-const readServerWidth=()=>false;
-function subscribeWidth(onChange:()=>void){
-  const query=media();
-  query?.addEventListener?.('change',onChange);
-  return ()=>query?.removeEventListener?.('change',onChange);
-}
+const DESKTOP_WORKSPACE_WIDTH=1024;
+const focus='focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300';
 
 export function CockpitModeSwitch({active,disabled,onSwitch}:{
   active:boolean;disabled?:boolean;onSwitch:()=>void;
 }){
-  const wide=useSyncExternalStore(subscribeWidth,readWidth,readServerWidth);
+  const wide=useViewportAtLeast(DESKTOP_WORKSPACE_WIDTH);
   if(!wide&&!active)return null;
   return <button type="button" disabled={disabled} onClick={onSwitch}
-    className="inline-flex min-h-11 items-center rounded-md border border-amber-200/30 bg-slate-900 px-3 text-sm font-semibold text-amber-100 hover:border-amber-200/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300 disabled:opacity-50">
+    className={`inline-flex min-h-11 min-w-0 items-center gap-2 rounded-lg border border-amber-200/35 bg-gradient-to-br from-amber-950/45 to-slate-950 px-3 text-sm font-semibold text-amber-100 hover:border-amber-200/80 hover:text-amber-50 disabled:opacity-50 ${focus}`}>
+    {!active&&<Compass size={16} aria-hidden="true" className="shrink-0 text-amber-300"/>}
     {active?'故事书卷':'全息大盘'}
+  </button>;
+}
+
+export function DesktopSandboxEntrance({onOpen,disabled}:{
+  onOpen:()=>void;disabled?:boolean;
+}){
+  const wide=useViewportAtLeast(DESKTOP_WORKSPACE_WIDTH);
+  if(!wide)return null;
+  return <button type="button" disabled={disabled} onClick={onOpen}
+    className={`inline-flex min-h-11 max-w-full items-center gap-2 rounded-lg border border-teal-200/40 bg-gradient-to-br from-teal-900/65 to-slate-950 px-3 text-sm font-semibold text-teal-100 hover:border-teal-200/80 hover:text-teal-50 disabled:opacity-50 ${focus}`}>
+    <MapIcon size={16} aria-hidden="true" className="shrink-0 text-teal-200"/>
+    进入沙盒
   </button>;
 }
 

@@ -1,4 +1,7 @@
-import {useId,useMemo,useRef,useState} from 'react';
+import {useId,useMemo,useState} from 'react';
+import {CultivatorPortrait} from './CultivatorPortrait';
+import {projectCultivatorPortrait} from './cultivatorPortraitModel';
+import {useViewportAtLeast} from './useViewportAtLeast';
 import type {Cultivator,WorldState} from '../types/world';
 import {createActorRosterIndex,pageActorRoster,partitionActorRosterPage,rosterActorDisambiguator,selectActorRoster,type RosterStatus}
   from './actorRosterIndex';
@@ -11,6 +14,8 @@ export interface ActorRosterProps {
   selected?:Cultivator;
   onSelect:(id:string)=>void;
   dismissOnSelect?:boolean;
+  desktopOpen?:boolean;
+  onDesktopOpenChange?:(open:boolean)=>void;
   scopeKey?:string;
   focalId?:string;
   scene?:ActorRosterScene;
@@ -21,8 +26,17 @@ const entry='min-h-11 min-w-0 max-w-full rounded border border-slate-700 bg-slat
 export function ActorRoster({scopeKey,...props}:ActorRosterProps) {
   return <Roster key={scopeKey??''} {...props}/>;
 }
-function Roster({world,selected,onSelect,dismissOnSelect=false,focalId,scene,onReadScene}:Omit<ActorRosterProps,'scopeKey'>){
-  const uid=useId(),roster=useRef<HTMLDetailsElement>(null);
+function Roster({world,selected,onSelect,dismissOnSelect=false,desktopOpen,onDesktopOpenChange,focalId,scene,onReadScene}:Omit<ActorRosterProps,'scopeKey'>){
+  const uid=useId();
+  const desktop=useViewportAtLeast(768);
+  const [mobileOpen,setMobileOpen]=useState(false);
+  const [desktopFallback,setDesktopFallback]=useState(true);
+  const open=desktop?(desktopOpen??desktopFallback):mobileOpen;
+  const toggle=()=>{
+    if(!desktop){setMobileOpen(!open);return;}
+    if(onDesktopOpenChange)onDesktopOpenChange(!open);
+    else setDesktopFallback(!open);
+  };
   const [search,setSearch]=useState(''),[status,setStatus]=useState<RosterStatus>('all'),[cursor,setCursor]=useState(0);
   const index=createActorRosterIndex(world);
   const selection=useMemo(()=>selectActorRoster(index,search,status),[index,search,status]);
@@ -33,22 +47,27 @@ function Roster({world,selected,onSelect,dismissOnSelect=false,focalId,scene,onR
   const select=(actor:Cultivator)=>{
     if(index.byId.get(actor.id)!==actor)return;
     if(dismissOnSelect&&selected===actor)return;
-    if(dismissOnSelect&&roster.current)roster.current.open=false;
+    if(dismissOnSelect&&!desktop)setMobileOpen(false);
     onSelect(actor.id);
   };
   const actorButton=(actor:Cultivator,isSelected:boolean,pin?:{focal:boolean;selected:boolean})=>{
     const suffix=rosterActorDisambiguator(index,actor);
+    // Only bounded displayed rows are illustrated; no portrait catalogue is generated.
+    const portrait=desktop&&open?projectCultivatorPortrait(world,actor):undefined;
     return <button type="button" aria-pressed={isSelected} onClick={()=>select(actor)}
       disabled={index.byId.get(actor.id)!==actor}
-      className={entry+' w-full py-1 text-left disabled:opacity-40 '+(isSelected?'border-amber-500/60 text-amber-200':'')}>
-      {pin?.focal&&<span className="mr-1 inline-block rounded bg-amber-950/70 px-1 text-xs text-amber-200">主角</span>}
-      {pin?.selected&&<span className="mr-1 inline-block rounded bg-slate-800 px-1 text-xs text-slate-300">已选人物</span>}
-      <span>{actor.name}</span>
-      <span className="block text-xs text-slate-400">{actor.alive?actor.realm+' '+actor.realmStage+'层':'已陨落'}{suffix&&' · '+suffix}</span>
+      className={entry+' flex w-full items-center gap-1.5 py-1 text-left disabled:opacity-40 '+(isSelected?'border-amber-500/60 text-amber-200':'')}>
+      {portrait&&<CultivatorPortrait portrait={portrait} className="h-8 w-7"/>}
+      <span className="min-w-0">
+        {pin?.focal&&<span className="mr-1 inline-block rounded bg-amber-950/70 px-1 text-xs text-amber-200">主角</span>}
+        {pin?.selected&&<span className="mr-1 inline-block rounded bg-slate-800 px-1 text-xs text-slate-300">已选人物</span>}
+        <span>{actor.name}</span>
+        <span className="block text-xs text-slate-400">{actor.alive?actor.realm+' '+actor.realmStage+'层':'已陨落'}{suffix&&' · '+suffix}</span>
+      </span>
     </button>;
   };
-  return <details ref={roster} className="min-w-0 rounded-lg border border-slate-800 bg-slate-900" aria-label="修士名册">
-    <summary className="min-h-11 cursor-pointer rounded p-3 text-sm font-semibold text-slate-100 focus-visible:outline focus-visible:outline-amber-300">修士名册 · {world.cultivators.length} 位</summary>
+  return <details open={open} className="min-w-0 rounded-lg border border-slate-800 bg-slate-900" aria-label="修士名册">
+    <summary onClick={event=>{event.preventDefault();toggle();}} className="min-h-11 cursor-pointer rounded p-3 text-sm font-semibold text-slate-100 focus-visible:outline focus-visible:outline-amber-300">修士名册 · {world.cultivators.length} 位</summary>
     <div className="min-w-0 space-y-2 border-t border-slate-800 p-2.5 sm:p-3">
       {pinned.length>0&&<ul aria-label="名册中的主角与已选人物" className="min-w-0 space-y-1.5">
         {pinned.map(row=><li key={row.actor.id} className="min-w-0 space-y-1">

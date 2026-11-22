@@ -4,6 +4,7 @@ import type { WorkspaceId } from './SandboxWorkspace';
 export interface WorkspaceFoldPreferences {
   sections: Partial<Record<Exclude<WorkspaceId, 'map'>, string | null>>;
   mapTools?: boolean;
+  rosterDesktop?: boolean;
 }
 
 export const WORKSPACE_FOLD_STORAGE_KEY = 'ai-sect:workspace-folds:v1';
@@ -36,6 +37,7 @@ function safePrefs(value: unknown): WorkspaceFoldPreferences {
     }
   }
   if (Object.hasOwn(value, 'mapTools') && typeof value.mapTools === 'boolean') clean.mapTools = value.mapTools;
+  if (Object.hasOwn(value, 'rosterDesktop') && typeof value.rosterDesktop === 'boolean') clean.rosterDesktop = value.rosterDesktop;
   return clean;
 }
 

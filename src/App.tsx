@@ -13,7 +13,7 @@ import { StoryFirstHome } from './components/StoryFirstHome';
 import {useFeaturedStoryDecision} from './components/useFeaturedStoryDecision';
 import { PlayerStoryEntry } from './components/PlayerStoryEntry';
 import { enterStoryLead, enterStoryOpening, orderStoryAvatar, projectStoryPlayerRole, storyOrderOutcome } from './components/storyPlayerController';
-import { CockpitModeSwitch, PanoramicCockpitView } from './components/PanoramicCockpitView';
+import { CockpitModeSwitch, DesktopSandboxEntrance, PanoramicCockpitView } from './components/PanoramicCockpitView';
 import { projectStoryHomepage } from './engine/storyHomepage';
 import {ChronicleArchiveHub} from './components/hubs/ChronicleArchiveHub';
 import {CivicWorldHub} from './components/hubs/CivicWorldHub';
@@ -551,16 +551,17 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   };
 
   const storyEntryRevision=saveContextVersion.current;
-  const storyEntryCurrent=()=>!dashboardOpen&&storyEntryOpen&&!stepInFlight.current&&!browsing.current&&
+  const storyWorkspaceCurrent=()=>!dashboardOpen&&!cockpitOpen&&!stepInFlight.current&&!browsing.current&&
     !fastForwardRun.current&&!campaignGuard.current&&history.current===timeline&&authority.current===world&&
     saveContextVersion.current===storyEntryRevision;
+  const storyEntryCurrent=()=>storyEntryOpen&&storyWorkspaceCurrent();
   const openStoryEntry=()=>{
     if(dashboardOpen||stepInFlight.current||browsing.current||fastForwardRun.current||campaignGuard.current)return;
     setStoryNotice(undefined);
     setStoryEntryOpen(true);
   };
   const openDashboard=()=>{
-    if(!storyEntryCurrent())return;
+    if(!storyWorkspaceCurrent())return;
     setIsRunning(false);
     setStoryEntryOpen(false);
     setDashboardOpen(true);
@@ -652,7 +653,10 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
     </React.Suspense>}/>;
 
   if (storyHome) return <main data-story-home data-story-turn={storyHome.calendar.tick} className="min-h-dvh bg-slate-950 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
-    <div className="mx-auto flex max-w-[76rem] justify-end px-4 empty:hidden">{cockpitSwitch}</div>
+    <div className="mx-auto flex max-w-[76rem] flex-wrap justify-end gap-2 px-4 empty:hidden">
+      {cockpitSwitch}
+      {!storyEntryOpen&&<DesktopSandboxEntrance onOpen={openDashboard} disabled={isStepping||fastForwardLocked}/>}
+    </div>
     {featuredStoryCard??(storyEntryOpen?<PlayerStoryEntry titleRef={storyEntryHeading} role={projectStoryPlayerRole(world,storyHome.lead)}
       revision={world} busy={isStepping||fastForwardLocked} onBack={()=>setStoryEntryOpen(false)} onTools={openDashboard}
       openings={<HighDramaPresetPicker scopeKey={viewScopeKey} revision={world} disabled={dramaticOpening.disabled} onStart={dramaticOpening.start}/>}
@@ -733,7 +737,9 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
         </div>,
         people: <div className="grid min-w-0 items-start gap-3 md:grid-cols-[17rem_minmax(0,1fr)]">
           <React.Suspense fallback={<p role="status">载入修士名册…</p>}><ActorRoster world={visibleWorld} selected={selectedCultivator} dismissOnSelect onSelect={selectRosterActor}
-            scopeKey={viewScopeKey} focalId={rosterFocalId} scene={rosterStoryStamp?.scene} onReadScene={openRosterStoryScene} /></React.Suspense>
+            scopeKey={viewScopeKey} focalId={rosterFocalId} scene={rosterStoryStamp?.scene} onReadScene={openRosterStoryScene}
+            desktopOpen={foldPreferences.rosterDesktop} onDesktopOpenChange={(rosterDesktop)=>
+              setFoldPreferences(previous=>previous.rosterDesktop===rosterDesktop?previous:{...previous,rosterDesktop})}/></React.Suspense>
           <WorkspaceSections label={`${selectedCultivator?.name ?? '修士'} · 人物档案`} initialOpen={opened('people', 'profile')}
             {...fold('people')} moreAfterContent headingRef={actorHeading} forcedOpen={focusProfile ? 'profile' : undefined} sections={[
             { id: 'profile', label: '人物概况', content: <>

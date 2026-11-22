@@ -1,44 +1,8 @@
 import { useId, useState } from 'react';
 import type { DecisionReplayComparison, DecisionReplayResult } from '../engine/decisionTraceEngine';
 import { knownMapLocations } from '../engine/terrainEngine';
-import type { ActionType, Cultivator, DecisionTraceCandidate, DecisionTraceRecord, WorldState } from '../types/world';
-
-const ACTION_LABELS: Record<ActionType, string> = {
-  ROGUELIKE_ENCOUNTER: '抉择奇遇',
-  AWAKEN_DESTINY: '觉醒天命',
-  FORBIDDEN_ART: '禁术抉择',
-  GRAND_SIEGE_HERO: '阵前抉择',
-  AUDIENCE_PLEDGE: '践行密议',
-  WATER_VEIN: '实察井水、借脉或采矿',
-  NORTH_MINING_CHARTER: '提出本人采契或按原件落笔',
-  NORTH_WELL_REVIEW: '复核旧井原件与现行规则',
-  UPPER_PASSAGE: '按实到的界路关口行事',
-  UPPER_ARRAY_FIELD: '在阵原依真路入居、走动或返关',
-  UPPER_ARRAY_FIELD_LOCAL: '亲到凝纹墩或晨修阵实付资材',
-  UPPER_ARRAY_FIELD_TRADE: '实到阵原或北井核办原约',
-  NORTH_GATE_RENEWAL: '按当世重开会的实据行事',
-  FRONTIER: '按实址过关、步行或登记驻住',
-  FRONTIER_PRODUCTION: '按在地水土与实物作业',
-  FRONTIER_TRADE: '当面签约或实装在途托管',
-  FRONTIER_PORT: '按外港潮窗与实际泊位作业',
-  FRONTIER_PORT_TRADE: '凭实在海陆货约落笔或验货',
-  FRONTIER_DRYLAND: '只用眼前井水、牧工与原批实物',
-  FRONTIER_DRYLAND_TRADE: '本人同场立约或到本仓实装',
-  CULTIVATE: '修炼', BREAKTHROUGH: '突破', EXPLORE: '探索', SOCIALIZE: '交谈', DUEL: '比斗',
-  SCHEMING: '筹谋', PURSUE_SCHEME: '执行密谋', AUTHOR_TECHNIQUE: '著录功法', STUDY_TECHNIQUE: '参悟功法',
-  TEACH: '传法授业', ACCEPT_TUITION: '接受传法', DECLINE_TUITION: '婉拒传法', OFFER_OATH: '提出契约',
-  ACCEPT_OATH: '接受契约', DECLINE_OATH: '拒绝契约', FULFILL_OATH: '履约', APPEAL_OATH: '契约申诉',
-  PLACE_MARKET_BUY: '坊市求购', PLACE_MARKET_SELL: '坊市出售', CANCEL_MARKET_ORDER: '撤回挂单',
-  SEASON_REVIEW: '赛季复核', FIELD_OBSERVATORY: '临时观象', ALIGNED_WEATHER: '同刻异读邀约或实测对读', OATH_ARBITRATION: '回避裁断', VILLAGE_CENSUS: '坊籍核点', VILLAGE_SUPPLY: '村镇签署或停止互助', ROUTE_WARNING: '实证驿路警示', PAVILION_LOAN: '藏经阁值守与借还', WORKSHOP_CAPACITY: '即刻解除未开工的一件或提议修订', CIVIC_MEMORIAL: '乡祠核验或另署后来原据', VILLAGE_FAIR: '真实乡集与摊位预付', SECT_STIPEND: '退居俸养提议与本人承接', SEED_CULTURE: '留种、实测、播种或实收', TOOL_LOAN: '共器借用与实地领回', ROAD: '驿路修缮', PROBATION: '赎责见习', RELIC_EXHIBIT: '古器陈列', SCRIBE_COMMISSION: '掌卷委写，实核或交稿', DISASTER_SHELTER: '临灾借泊、同意或回乡', CRAFT_TRAINING: '两人分工共铸一件器物', WAYPOST_MEAL: '与另一队同行者在山驿分茶', WORKSHOP_ESTATE: '承接故人留在工坊的余件', WORKSHOP_RELEASE: '局部交割后议止或回签', WORKSHOP: '工坊委制', FURNACE_RESERVATION: '预约炉位或撤回', FURNACE_SAFETY: '验炉、修缮或复验复开', DAMAGE_ASSURANCE: '炉损封存与实付补修', SPARRING: '自愿切磋、准备或认输', EXPEDITION_RESCUE: '秘境求援或同意撤离', EXPEDITION_DUNGEON: '按实地秘境房间行动', SHORT_SHIFT: '受聘观象、实到或退出', BOUNDARY_RELIEF: '签约换防、接替或退回', MENTOR_TRANSFER: '师承转接或到课签认', APPRENTICE_COHORT: '合班应邀、到课或授课', SEASONAL_HOUSING: '借居邀约、实到或停止', HOUSEHOLD_NAME: '本地称名或实名见证', CARAVAN_RESTITUTION: '发现原货或核验归还', VILLAGE_GRANARY: '实捐或支取义仓', TERRAIN_RECOVERY: '地脉修复', SHARED_COMMONS: '灵地公域', SECT_SERVICE: '本人退居或恢复公职资格', SEALED_COURIER: '封信委托或本人回应', COURIER_HANDOFF: '实站封信转接邀约或回应', VILLAGE_WORKS: '实付资材助建村镇', HOUSEHOLD_GUARDIAN: '提议、同意或结束自愿监护', TERRITORIAL_LEASE: '议地契、承租或交回采集许可', FORMATION_NETWORK: '联阵、调拨、取用或修复', INFIRMARY: '排队求治、同意、拒绝或值守', CARE_FOLLOWUP: '出院后复诊预约或本人实到', HABITAT: '复育栖地、放归或记录复见', CHRONICLE_ERRATA: '编录异闻或核对公开史料', PILGRIMAGE: '邀约、同行、援护或实地扎营接续', SECT_CREDIT: '商议宗门借还或偿付', SANCTUARY: '设立避难、领票或修缮', RESEARCH: '提议、参与或退出共研', CEASEFIRE: '议定停战或提出毁约', MARKET_FREIGHT: '过秤留约或承接本人货运', ESCORT: '商路请镖、护送或报险', RANK_SEASON: '报名或退出赛季', SCRIPTURE: '批注、校勘或研习版本', RELIC: '采回碎片或重铸古器', RECOLLECT: '审视或搁置残响', RELOCATE: '议决或护送迁宗', DOCTRINE: '参与道统事务', DOCTRINE_FOUNDING:'另立道统宗门', DOCTRINE_MATURITY:'道统失根与并宗', RECRUIT_SETTLER: '招募自愿者', DELIVER_RELIEF: '赈济村镇', FILE_WITNESS_CLAIM: '提出指证',
-  ATTEST_WITNESS: '提交亲历证词', CHALLENGE_WITNESS: '质疑指证', NAME_HEIR: '指定继承人',
-  CLAIM_ESTATE: '申领遗产', HOLD_MEMORIAL: '主持祭礼', GATHER_HERBS: '采集灵草', BREW_PILL: '炼丹', HEAVENLY_ALCHEMY: '实炉炼丹或自服本人成丹', DAO_PATH: '修习本命道途', IMMORTAL_AUCTION: '万宝会实物竞拍', CULTIVATION_CLAN: '道侣与家族约定', ASCENSION: '叩飞升天关',
-  USE_PILL: '服丹', FORGE_ARTIFACT: '铸器', BIND_ARTIFACT: '绑定法器', REPAIR_ARTIFACT: '修补法器', SALVAGE_ARTIFACT: '拆解破器', DANXIA_MEDICINE: '丹霞留药与护送', DANXIA_REVIEW:'丹霞次季核约',
-  AWAKEN_ARTIFACT: '唤醒器灵', FACE_TRIBULATION: '迎战天劫', AMBUSH_TRIBULATION: '干扰渡劫',
-  CHALLENGE_LEADERSHIP: '挑战掌门', PLOT_COUP: '争夺掌门之位', BUILD_FACILITY: '营建宗门设施',
-  DISPATCH_GUARD: '派遣守卫', GUARD_DUTY: '履行守卫职责', OFFER_ALLIANCE: '提议结盟', DECLARE_WAR: '宣战',
-  DEMAND_TRIBUTE: '索取贡礼', LAUNCH_SIEGE: '发起围攻', JOIN_OCCASION: '参加盛会', PURSUE_BOUNTY: '追查悬赏',
-  TAME_BEAST: '驯养灵兽', TRADE: '交易', DUAL_CULTIVATE: '共同修炼', SECT_DIPLOMACY: '宗门交涉', REST: '调息',
-};
+import { labelTraceAction } from './actionLabels';
+import type { Cultivator, DecisionTraceCandidate, DecisionTraceRecord, WorldState } from '../types/world';
 
 const REASONS: Record<DecisionTraceCandidate['reason'], string> = {
   recover: '恢复体力', cultivate: '积累修为', ready: '满足突破条件', social: '就近交流',
@@ -73,7 +37,7 @@ export function DecisionTracePanel({ world, cultivator, onReplay, busy = false, 
   const localActors = new Map(viewer ? world.cultivators.filter(({ locationId }) => locationId === viewer.locationId)
     .map(({ id, name }) => [id, name]) : []);
   const candidateCaption = (candidate: DecisionTraceCandidate) => {
-    const details = [ACTION_LABELS[candidate.action], candidate.targetLocationId ? locations.get(candidate.targetLocationId) ?? '地点未公开' : undefined,
+    const details = [labelTraceAction(candidate.action), candidate.targetLocationId ? locations.get(candidate.targetLocationId) ?? '地点未公开' : undefined,
       candidate.targetCultivatorId ? localActors.get(candidate.targetCultivatorId) ?? '对象未公开' : undefined,
       candidate.tribulationStance ? STANCES[candidate.tribulationStance] : undefined];
     return details.filter(Boolean).join(' · ');
@@ -94,7 +58,7 @@ export function DecisionTracePanel({ world, cultivator, onReplay, busy = false, 
             const record = records.find(({ id }) => id === event.target.value);
             if (record) setChoice({ actorId: record.actorId, traceId: record.id, candidateId: '' });
           }}>
-            {records.map((record) => <option value={record.id} key={record.id}>Tick #{record.tick} · {SOURCES[record.source]} · {record.chosenAction === 'redacted' ? '未公开行动' : ACTION_LABELS[record.chosenAction]}</option>)}
+            {records.map((record) => <option value={record.id} key={record.id}>Tick #{record.tick} · {SOURCES[record.source]} · {labelTraceAction(record.chosenAction)}</option>)}
           </select>
           <p className="text-xs text-slate-300">来源：{SOURCES[trace.source]} · {trace.applied ? '动作已应用' : '动作未应用'}</p>
           <div className="space-y-1 border-t border-slate-800 pt-2">

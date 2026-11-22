@@ -1,3 +1,4 @@
+import {labelAction} from './actionLabels';
 import {AscensionPanel,type AscensionControls} from './AscensionPanel';
 import {projectAscension} from '../engine/ascensionEngine';
 import {verifiedImmortalAscension} from '../engine/ascensionProof';
@@ -163,7 +164,7 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
               : 'bg-rose-500/20 text-rose-400'
           }`}
         >
-          {ascended?'已飞升':cultivator.alive?`当前: ${cultivator.currentAction}`:'已陨落'}
+          {ascended?'已飞升':cultivator.alive?`当前：${labelAction(cultivator.currentAction)}`:'已陨落'}
         </span>
       </div>}
 

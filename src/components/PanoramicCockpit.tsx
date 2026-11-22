@@ -29,7 +29,7 @@ export function PanoramicCockpit({map,timeControls,stage,inspector,relationships
       <p className="max-w-md text-xs leading-relaxed text-slate-300">看九州局势，追眼前一幕，再看人物为何走到这一步。</p>
     </header>
 
-    <div className="grid min-w-0 items-start gap-3 xl:grid-cols-[minmax(0,47fr)_minmax(0,28fr)_minmax(0,25fr)] xl:gap-4 2xl:gap-5">
+    <div data-cockpit-layout className="grid min-w-0 items-start gap-3 lg:grid-cols-[minmax(0,57fr)_minmax(0,43fr)] xl:grid-cols-[minmax(0,47fr)_minmax(0,28fr)_minmax(0,25fr)] xl:gap-4 2xl:gap-5">
       <section aria-labelledby={`${id}-map`} className={`${surface} overflow-hidden`}>
         <header className="flex min-w-0 items-center gap-2.5 border-b border-teal-200/15 bg-gradient-to-r from-teal-400/15 to-transparent px-3 py-3 sm:px-4">
           <Compass size={17} aria-hidden="true" className="shrink-0 text-teal-200"/>
@@ -53,13 +53,13 @@ export function PanoramicCockpit({map,timeControls,stage,inspector,relationships
         <div className="min-w-0 p-2 [overflow-wrap:anywhere] sm:p-3 [&>div]:min-w-0">{stage}</div>
       </section>
 
-      <aside aria-labelledby={`${id}-detail`} className={`${surface} border-indigo-200/20`}>
+      <aside aria-labelledby={`${id}-detail`} className={`${surface} border-indigo-200/20 lg:col-span-2 xl:col-span-1`}>
         <header className="flex min-w-0 items-center gap-2.5 rounded-t-2xl border-b border-indigo-200/15 bg-gradient-to-r from-indigo-500/15 to-transparent px-3 py-3 sm:px-4">
           <UserRound size={17} aria-hidden="true" className="shrink-0 text-indigo-200"/>
           <h3 id={`${id}-detail`} className={panelTitle}>人物与因果</h3>
         </header>
         <div role="group" aria-label="人物详情、关系与纪事"
-          className={`min-w-0 divide-y divide-indigo-100/10 rounded-b-xl [overflow-wrap:anywhere] xl:grid xl:h-[max(37rem,calc(100dvh-13rem))] xl:grid-rows-[minmax(0,1fr)_minmax(0,1.12fr)_minmax(0,1fr)]`}>
+          className={`min-w-0 divide-y divide-indigo-100/10 rounded-b-xl [overflow-wrap:anywhere] lg:grid lg:grid-cols-3 lg:divide-x lg:divide-y-0 xl:grid-cols-1 xl:divide-x-0 xl:divide-y xl:h-[max(37rem,calc(100dvh-13rem))] xl:grid-rows-[minmax(0,1fr)_minmax(0,1.12fr)_minmax(0,1fr)]`}>
           <section aria-labelledby={`${id}-inspector`} className={detailSlot}>
             <h4 id={`${id}-inspector`} className="text-xs font-semibold tracking-widest text-indigo-100">修士识海</h4>
             <div role="region" aria-labelledby={`${id}-inspector`} tabIndex={0} className={`${detailBody} ${focus}`}>{inspector}</div>
