@@ -48,6 +48,9 @@ export default defineConfig({
           'north-charter-terms': ['./src/engine/northMiningCharterTerms.ts'],
           'old-well-source': ['./src/engine/northWellRevisitTerms.ts','./src/engine/northWellRevisitEvidence.ts'],
           'upper-positions': ['./src/engine/upperPassageTerms.ts','./src/engine/upperPassageIsolation.ts'],
+          // Geography and economic terms are shared leaves, not the live engine/ledger graph.
+          'frontier-region-terms': ['./src/engine/frontierTerms.ts','./src/engine/frontierProductionTerms.ts',
+            './src/engine/frontierTradeTerms.ts','./src/engine/frontierPortTerms.ts','./src/engine/frontierPortTradeTerms.ts'],
           'terrain-ecology': ['./src/engine/terrainSuccessionEngine.ts','./src/engine/weatherEngine.ts'],
           'civic-works': ['./src/engine/villageWorksEngine.ts'],
           'household-register': ['./src/engine/householdNameEngine.ts','./src/engine/mortalAgeCohorts.ts'],

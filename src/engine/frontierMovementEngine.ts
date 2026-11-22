@@ -3,7 +3,7 @@ import {doctrineFoundingPhysicallyAt} from './doctrineFoundingEngine';
 import {flowActor,recordResourceFlow} from './resourceFlowEngine';
 import {terrainTileAt} from './terrainEngine';
 import {FRONTIER_CHARTS,FRONTIER_EDGES,FRONTIER_ENTER_ROOTS,FRONTIER_ENTER_STONES,FRONTIER_REGIONS,FRONTIER_SETTLE_ROOTS,
-  FRONTIER_SETTLE_STONES,FRONTIER_SITES,frontierEdge,frontierResidenceId,frontierSite,frontierStepMonth,frontierVisitId,
+  FRONTIER_SETTLE_STONES,FRONTIER_SITES,frontierEdge,frontierResidenceId,frontierSeaEdge,frontierSite,frontierStepMonth,frontierVisitId,
   frontierWinter,type FrontierAnchorId,type FrontierChartId,type FrontierMovementMove,type FrontierRegionId,type FrontierResidence,
   type FrontierSite,type FrontierSiteId,type FrontierState,type FrontierVisit} from './frontierTerms';
 
@@ -56,7 +56,7 @@ export function frontierPhysicalSite(world:WorldState,actor:Cultivator,tick=worl
   const active=activeFrontierVisit(world,actor.id),step=active?.steps.at(-1);
   if(!active||!step||active.enteredTick>tick||step.tick>tick||step.siteId!==actor.locationId)return undefined;
   const registered=frontierSite(step.siteId);
-  return registered?.regionId===active.regionId?registered:undefined;
+  return registered?.regionId===active.regionId&&registered.role!=='sea'?registered:undefined;
 }
 export function frontierActedOnGeography(world:WorldState,actorId:string,tick:number):boolean {
   const row=latest(world.frontier?.visits,actorId);
@@ -171,7 +171,7 @@ export function projectFrontierMovement(world:WorldState,actor?:Cultivator):Fron
   const visit=activeFrontierVisit(world,actor.id)!;
   const residence=frontierResidence(world,actor.id);
   return {scope:'frontier',...common,site:{...site},visibleSites:FRONTIER_SITES.filter(row=>row.regionId===regionId&&
-    (row.id===site.id||frontierEdge(row.id,site.id))).map(row=>({...row})),
+    (row.id===site.id||frontierEdge(row.id,site.id)||row.role==='sea'&&frontierSeaEdge(row.id,site.id))).map(row=>({...row})),
     visit:{enteredTick:visit.enteredTick,paidStones:visit.paidStones,paidRoots:visit.paidRoots},
     ...(residence?.regionId===regionId?{residence:{...residence}}:{})};
 }

@@ -1,4 +1,4 @@
-import {useId,useState} from 'react';
+import {useId,useState,type ReactNode} from 'react';
 import {AVATAR_ORDER_COST} from '../engine/avatarEngine';
 import type {FrontierMovementOption,FrontierMovementView} from '../engine/frontierMovementEngine';
 import {FRONTIER_SOUTH_PRACTICE_WATER,type FrontierProductionOption,type FrontierProductionView} from '../engine/frontierProductionTerms';
@@ -34,6 +34,7 @@ interface Props {
   tradeCandidates?:Readonly<Record<string,string>>;
   controls?:FrontierControls;
   host?:FrontierHostControls;
+  portPanel?:ReactNode;
 }
 type Review={choice:FrontierOrder;revision:object};
 type OrderGroup='FRONTIER'|'FRONTIER_PRODUCTION'|'FRONTIER_TRADE';
@@ -70,7 +71,7 @@ export function frontierScopedOrders(props:Props):FrontierOrder[]{
       if(!view||!view.options.some(row=>orderKey(row)===orderKey(option)))return false;
       if(view.scope==='anchor')return option.frontierMove==='enter'&&option.targetFrontierSiteId===view.gateId;
       if(!view.site)return false;
-      if(option.frontierMove==='travel')return view.visibleSites.some(site=>site.id===option.targetFrontierSiteId&&site.chartId===view.chartId);
+      if(option.frontierMove==='travel')return view.visibleSites.some(site=>site.id===option.targetFrontierSiteId&&site.chartId===view.chartId&&site.role!=='sea');
       if(option.frontierMove==='exit')return view.site.id===view.gateId&&option.targetFrontierSiteId===view.anchorId;
       return option.frontierMove==='settle'&&option.targetFrontierSiteId===view.site.id;
     }
@@ -94,7 +95,7 @@ function scopedPending(props:Props):FrontierOrder|undefined {
   if(!pending||!view)return undefined;
   if(pending.action==='FRONTIER'){
     if(view.scope==='anchor')return pending.frontierMove==='enter'&&pending.targetFrontierSiteId===view.gateId?pending:undefined;
-    if(pending.frontierMove==='travel')return view.visibleSites.some(site=>site.chartId===view.chartId&&site.id===pending.targetFrontierSiteId)?pending:undefined;
+    if(pending.frontierMove==='travel')return view.visibleSites.some(site=>site.chartId===view.chartId&&site.id===pending.targetFrontierSiteId&&site.role!=='sea')?pending:undefined;
     if(pending.frontierMove==='exit')return view.site?.id===view.gateId&&pending.targetFrontierSiteId===view.anchorId?pending:undefined;
     return pending.frontierMove==='settle'&&pending.targetFrontierSiteId===view.site?.id?pending:undefined;
   }
@@ -194,7 +195,7 @@ function Host({host}: {host:FrontierHostControls}){
 
 const shell='min-w-0 space-y-2 rounded border border-emerald-800/70 bg-slate-950 px-2 pb-2 text-sm text-slate-100 [overflow-wrap:anywhere]';
 export function FrontierPanel(props:Props){
-  const {view,host,controls,production,trade=[]}=props;
+  const {view,host,controls,production,trade=[],portPanel}=props;
   const choices=frontierScopedOrders(props);
   const movement=<Orders key={`walk:${controls?.scopeKey}`} props={props} choices={choices} group="FRONTIER"/>;
   const workshop=<Orders key={`work:${controls?.scopeKey}`} props={props} choices={choices} group="FRONTIER_PRODUCTION"/>;
@@ -213,12 +214,14 @@ export function FrontierPanel(props:Props){
       {blocked&&<p role="status" className="text-amber-200">{blocked}</p>}
       {movement}
       {tradePanel}
+      {portPanel}
     </details>;
   }
   const chart=FRONTIER_CHARTS[view.regionId],place=view.site;
   if(!place||place.chartId!==view.chartId||chart.id!==view.chartId)return null;
   const chartData={chartId:view.chartId,name:chart.name,rows:chart.rows,cols:chart.columns,currentTileId:place.id,
-    tiles:view.visibleSites.map(site=>({chartId:site.chartId,tileId:site.id,col:site.col,row:site.row,name:site.name}))};
+    tiles:view.visibleSites.map(site=>({chartId:site.chartId,tileId:site.id,col:site.col,row:site.row,name:site.name,
+      ...(site.role==='sea'?{surface:'sea' as const,heading:'水格不可步行'}:{})}))};
   const localProduction=production?.regionId===view.regionId&&production.siteId===place.id?production:undefined;
   return <section className={`${shell} p-3`} aria-label={chart.name}>
     <h2 className="text-base font-semibold text-emerald-100">{chart.name}</h2>
@@ -230,5 +233,6 @@ export function FrontierPanel(props:Props){
     {host&&<Host key={host.scopeKey} host={host}/>}
     {localProduction&&<FrontierProductionRead view={localProduction}>{workshop}</FrontierProductionRead>}
     {tradePanel}
+    {portPanel}
   </section>;
 }

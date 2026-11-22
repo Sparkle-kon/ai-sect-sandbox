@@ -3,6 +3,7 @@ import {isFrontierAction,resolveFrontierAction} from './frontierActions';
 import {recordFrontierDeath,settleFrontierMortality} from './frontierMovementEngine';
 import {advanceFrontierProduction} from './frontierProductionEngine';
 import {advanceFrontierTrade} from './frontierTradeEngine';
+import {advanceFrontierPortTrade} from './frontierPortTradeEngine';
 import {recordUpperPassageDeath,settleUpperPassageMortality} from './upperPassageEngine';
 import { recordRegionalActorReturn, recordRegionalEarlyPromotions, recordRegionalLatePromotions } from './regionalPromotionEngine';
 import { beginRegionalSimulationTurn, deferRegionalActorTurn, finishRegionalSimulationTurn, recordRegionalTurnRegistry, renewRegionalProtectionAfterEvent } from './regionalSimulationEngine';
@@ -1178,7 +1179,7 @@ export function advanceWorldTick(
     if (yearly) cultivator.reflections = synthesizeReflections(cultivator, nextState.tick);
   }
 
-  for(const event of advanceFrontierTrade(nextState)){
+  for(const event of [...advanceFrontierTrade(nextState),...advanceFrontierPortTrade(nextState)]){
     newEvents.push(event);
     witnessEvent(nextState,event);
   }

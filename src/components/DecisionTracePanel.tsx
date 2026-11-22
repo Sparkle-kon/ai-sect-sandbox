@@ -12,6 +12,8 @@ const ACTION_LABELS: Record<ActionType, string> = {
   FRONTIER: '按实址过关、步行或登记驻住',
   FRONTIER_PRODUCTION: '按在地水土与实物作业',
   FRONTIER_TRADE: '当面签约或实装在途托管',
+  FRONTIER_PORT: '按外港潮窗与实际泊位作业',
+  FRONTIER_PORT_TRADE: '凭实在海陆货约落笔或验货',
   CULTIVATE: '修炼', BREAKTHROUGH: '突破', EXPLORE: '探索', SOCIALIZE: '交谈', DUEL: '比斗',
   SCHEMING: '筹谋', PURSUE_SCHEME: '执行密谋', AUTHOR_TECHNIQUE: '著录功法', STUDY_TECHNIQUE: '参悟功法',
   TEACH: '传法授业', ACCEPT_TUITION: '接受传法', DECLINE_TUITION: '婉拒传法', OFFER_OATH: '提出契约',

@@ -1,4 +1,5 @@
 import type { FrontierBatchSlice, FrontierGood } from './frontierProductionTerms';
+import type {FrontierFarmChartId,FrontierFarmRegionId} from './frontierTerms';
 
 export const FRONTIER_TRADE_AMOUNT=2;
 export const FRONTIER_TRADE_WINTER_REEDS=1;
@@ -7,12 +8,12 @@ export const FRONTIER_TRADE_TERM_MONTHS=72;
 export const FRONTIER_TRADE_STRIDE=3;
 
 export type FrontierTradeMove='propose'|'accept'|'load'|'load_winter';
-export type FrontierTradeSide='north-snow'|'south-marsh';
+export type FrontierTradeSide=FrontierFarmRegionId;
 export type FrontierTradeStatus='offered'|'accepted'|'returning'|'exchanged'|'expired'|'returned';
 export type FrontierTradeCargoStatus='in_transit'|'arrived'|'returning'|'home_wait'|'returned'|'delivered';
 export type FrontierTradeRoute='standard'|'winter';
 export interface FrontierTradeCheckpoint {
-  readonly chartId:'lower-base'|'chart-north-snow'|'chart-south-marsh';
+  readonly chartId:'lower-base'|FrontierFarmChartId;
   readonly tileId:string;
 }
 export interface FrontierTradeWalk {readonly tick:number;readonly step:number}

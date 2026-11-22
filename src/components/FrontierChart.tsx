@@ -2,7 +2,7 @@ import {useEffect,useId,useMemo,useRef} from 'react';
 
 export interface FrontierChartCell {
   chartId:string;tileId:string;row:number;col:number;
-  name?:string;heading?:string;
+  name?:string;heading?:string;surface?:'sea';
 }
 export interface FrontierChartData {
   chartId:string;name:string;rows:number;cols:number;
@@ -27,7 +27,7 @@ export function frontierChartGeometry(data:FrontierChartData):Blueprint|undefine
   const tiles=valid.filter(tile=>ids.get(tile.tileId)===1&&coordinates.get(coordinateKey(tile))===1)
     .sort((left,right)=>left.row-right.row||left.col-right.col);
   const active=tiles.find(tile=>tile.tileId===currentTileId);
-  if(!active)return undefined;
+  if(!active||active.surface==='sea')return undefined;
   return {tiles,rows,cols,active};
 }
 
@@ -41,9 +41,9 @@ function paintFrontierChart(ctx:CanvasRenderingContext2D,blueprint:Blueprint){
   ctx.font='500 14px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
   for(const tile of tiles){
     const x=left+tile.col*size,y=top+tile.row*size,current=tile.tileId===active.tileId;
-    ctx.fillStyle=current?'#235153':'#132e36';
+    ctx.fillStyle=current?'#235153':tile.surface==='sea'?'#11364d':'#132e36';
     ctx.fillRect(x+1,y+1,size-2,size-2);
-    ctx.strokeStyle=current?'#fde68a':'#3e7078';ctx.lineWidth=current?3:1;
+    ctx.strokeStyle=current?'#fde68a':tile.surface==='sea'?'#448ca8':'#3e7078';ctx.lineWidth=current?3:1;
     ctx.strokeRect(x+2,y+2,size-4,size-4);
     ctx.fillStyle=current?'#fef3c7':'#d2f2f4';
     ctx.fillText(`${tile.row+1}·${tile.col+1}`,x+size/2,y+size*(tile.name?.trim()&&size>=42?.37:.50),size-7);

@@ -1,5 +1,5 @@
 import type {ResourceFlowAccount,ResourceFlowEntry,WorldState} from '../types/world';
-import {FRONTIER_REGIONS,FRONTIER_SITE_IDS,frontierSite,frontierWinter,type FrontierRegionId,type FrontierSiteId,type FrontierVisit} from './frontierTerms';
+import {FRONTIER_FARM_REGIONS,frontierFarmSite,isFrontierFarmRegion,frontierWinter,type FrontierFarmRegionId,type FrontierSiteId,type FrontierVisit} from './frontierTerms';
 import {FRONTIER_CROP_EXPIRES,FRONTIER_GOODS,FRONTIER_GROW_TICKS,FRONTIER_PRACTICE_QI,FRONTIER_PRODUCTION_MOVES,
   FRONTIER_SOIL_CAPACITY,FRONTIER_SOUTH_PRACTICE_WATER,FRONTIER_STOCK_CAPACITY,FRONTIER_TIDE_WATER,FRONTIER_WATER_CAPACITY,
   frontierBatchId,frontierCropGood,frontierCropId,frontierPeakTide,frontierProductionReceiptId,frontierSpringInflow,frontierTide,
@@ -17,8 +17,8 @@ const exact=(value:Row,fields:readonly string[],optional:readonly string[]=[])=>
   fields.every(key=>Object.hasOwn(value,key))&&Object.keys(value).every(key=>fields.includes(key)||optional.includes(key));
 const rowList=(value:unknown,shape:(row:unknown)=>boolean,max=128_000)=>
   Array.isArray(value)&&value.length<=max&&value.every((row:unknown)=>shape(row));
-const site=(value:unknown)=>one(value,FRONTIER_SITE_IDS);
-const region=(value:unknown)=>one(value,FRONTIER_REGIONS);
+const site=(value:unknown)=>typeof value==='string'&&!!frontierFarmSite(value);
+const region=isFrontierFarmRegion;
 const optionalTick=(row:Row,key:string)=>!Object.hasOwn(row,key)||int(row[key],1);
 const slices=(value:unknown)=>rowList(value,row=>object(row)&&exact(row,['batchId','amount'])&&id(row.batchId)&&int(row.amount,1,3),
   FRONTIER_STOCK_CAPACITY)&&Array.isArray(value)&&value.length>0;
@@ -68,7 +68,7 @@ function same(a:Readonly<object>,b:Readonly<object>):boolean {
 }
 const harvest=(plot:FrontierCrop)=>plot.regionId===north?2:plot.stressedTick!==undefined&&plot.protectedTick===undefined?2:3;
 const needsWater=(plot:FrontierCrop)=>plot.irrigatedTick===undefined&&(plot.regionId===south||plot.stressedTick!==undefined);
-const heldKey=(regionId:FrontierRegionId,batchId:string)=>JSON.stringify([regionId,batchId]);
+const heldKey=(regionId:FrontierFarmRegionId,batchId:string)=>JSON.stringify([regionId,batchId]);
 function placeAt(visits:readonly FrontierVisit[],id:string,tick:number){
   for(let i=visits.length-1;i>=0;i--){
     const row=visits[i];
@@ -89,7 +89,7 @@ export function validateFrontierProduction(world:WorldState,custody:readonly Fro
     return;
   }
   if(!state.receipts.length||state.lastAdvancedTick!==undefined&&state.lastAdvancedTick>world.tick)fail('frontier.production.calendar');
-  const water:Record<FrontierRegionId,number>={[north]:0,[south]:0}, soil=new Map<FrontierSiteId,FrontierSoil>();
+  const water:Record<FrontierFarmRegionId,number>={[north]:0,[south]:0}, soil=new Map<FrontierSiteId,FrontierSoil>();
   const crops=new Map<string,FrontierCrop>(),active=new Map<FrontierSiteId,FrontierCrop>(),batches=new Map<string,FrontierHarvestBatch>();
   const labor=new Set<string>(),perSite=new Set<string>(),receipts=new Set<string>(),maintenance=new Map<number,string>(),spring=new Set<number>();
   const actors=new Set(world.cultivators.map(row=>row.id));
@@ -97,14 +97,14 @@ export function validateFrontierProduction(world:WorldState,custody:readonly Fro
   const visits=world.frontier?.visits??[];
   const flows=new Map<string,ExpectedFlow>();
   const expectFlow=(row:ExpectedFlow)=>{const key=flowKey(row);if(flows.has(key))fail('frontier.production.flow.id');flows.set(key,row);};
-  const spendLinks=new Map<string,{actorId:string;tick:number;regionId:FrontierRegionId;purpose:FrontierProductionSpend['purpose']}>();
+  const spendLinks=new Map<string,{actorId:string;tick:number;regionId:FrontierFarmRegionId;purpose:FrontierProductionSpend['purpose']}>();
   const absolute=(year:number,month:number)=>year*12+month-1;
   const nativeMonth=absolute(world.year,world.month);
   let previous=0,laborTick=0;
   const storageTimeline:Array<{tick:number;before:number;after:number}>=[];
   for(const row of state.receipts){
     const {regionId,siteId,tick,actorId,kind}=row;
-    const actualSite=frontierSite(siteId),home=residences.get(actorId),siteRole=actualSite?.role;
+    const actualSite=frontierFarmSite(siteId),home=residences.get(actorId),siteRole=actualSite?.role;
     if(!actualSite||actualSite.regionId!==regionId||!actors.has(actorId)||tick>world.tick||tick<previous||
       nativeMonth-absolute(row.year,row.month)!==world.tick-tick||row.id!==frontierProductionReceiptId(tick,kind,siteId,actorId)||
       receipts.has(row.id))return fail('frontier.production.receipt');
@@ -225,7 +225,7 @@ export function validateFrontierProduction(world:WorldState,custody:readonly Fro
     !same([...batches.values()],state.batches))return fail('frontier.production.replay');
 
   const moves=new Map<number,Map<string,number>>();
-  function asset(tick:number,regionId:FrontierRegionId,batchId:string,delta:number){
+  function asset(tick:number,regionId:FrontierFarmRegionId,batchId:string,delta:number){
     const at=moves.get(tick)??new Map<string,number>();
     const key=heldKey(regionId,batchId);
     at.set(key,(at.get(key)??0)+delta);moves.set(tick,at);
@@ -279,7 +279,7 @@ export function validateFrontierProduction(world:WorldState,custody:readonly Fro
   }
   if(state.stock.length!==stock.size||new Set(state.stock.map(row=>heldKey(row.regionId,row.batchId))).size!==state.stock.length||
     state.stock.some(row=>stock.get(heldKey(row.regionId,row.batchId))!==row.amount)||
-    FRONTIER_REGIONS.some(id=>state.stock.filter(row=>row.regionId===id).reduce((sum,row)=>sum+row.amount,0)>FRONTIER_STOCK_CAPACITY))
+    FRONTIER_FARM_REGIONS.some(id=>state.stock.filter(row=>row.regionId===id).reduce((sum,row)=>sum+row.amount,0)>FRONTIER_STOCK_CAPACITY))
     return fail('frontier.production.stock');
   const complete=new Set(world.resourceFlow.months.filter(month=>month.totalEntries===month.entries.length).map(month=>month.tick));
   const recent=new Set<string>();

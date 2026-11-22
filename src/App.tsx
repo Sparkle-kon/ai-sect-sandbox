@@ -83,10 +83,13 @@ import type {UpperPassageControls,UpperPassageHostControls} from './components/U
 import {availableUpperPassageActions,projectUpperPassage} from './engine/upperPassageEngine';
 import {upperPassagePlane} from './engine/upperPassageTerms';
 import type {FrontierControls,FrontierHostControls} from './components/FrontierPanel';
+import type {FrontierPortControls} from './components/FrontierPortPanel';
+import {projectFrontierPort} from './engine/frontierPortLocalEngine';
+import {projectFrontierPortTrade} from './engine/frontierPortTradeEngine';
 import {projectFrontierMovement} from './engine/frontierMovementEngine';
 import {projectFrontierProduction} from './engine/frontierProductionEngine';
 import {projectFrontierTrade} from './engine/frontierTradeEngine';
-import {availableFrontierActions} from './engine/frontierActions';
+import {availableFrontierActions,isFrontierLandOption,isFrontierSeaOption,type FrontierOption} from './engine/frontierActions';
 import type {NorthGateRenewalControls} from './components/NorthGateRenewalPanel';
 import {availableNorthGateRenewalActions,projectNorthGateRenewal} from './engine/northGateRenewalEngine';
 import {northWellPanelEvidence} from './components/northWellRevisitView';
@@ -136,6 +139,7 @@ const WorldOccasionsPanel = React.lazy(async () => ({ default: (await import('./
 const ExpeditionRescuePanel = React.lazy(async () => ({ default: (await import('./components/ExpeditionRescuePanel')).ExpeditionRescuePanel }));
 const BoundaryReliefPanel = React.lazy(async () => ({ default: (await import('./components/BoundaryReliefPanel')).BoundaryReliefPanel }));
 const NorthGateRenewalPanel = React.lazy(async()=>({default:(await import('./components/NorthGateRenewalPanel')).NorthGateRenewalPanel}));
+const FrontierPortPanel=React.lazy(async()=>({default:(await import('./components/FrontierPortPanel')).FrontierPortPanel}));
 const FrontierPanel=React.lazy(async()=>({default:(await import('./components/FrontierPanel')).FrontierPanel}));
 const UpperPassagePanel = React.lazy(async () => ({default:(await import('./components/UpperPassagePanel')).UpperPassagePanel}));
 const NorthWellRevisitPanel = React.lazy(async () => ({default:(await import('./components/NorthWellRevisitPanel')).NorthWellRevisitPanel}));
@@ -1077,21 +1081,39 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
   const frontierCurrent=(revision:object)=>revision===world&&!frontierDisabled&&!browsing.current&&!stepInFlight.current&&
     !fastForwardRun.current&&!campaignGuard.current&&history.current===timeline&&authority.current===world&&
     saveContextVersion.current===waterVeinContextVersion;
+  const allFrontierChoices=frontierActor&&canQueueAvatarSalvage(world,frontierActor.id)?
+    availableFrontierActions(frontierActor,world,world.tick+1):[];
+  const frontierPending=frontierActor&&waterVeinPending?.actorId===frontierActor.id&&(
+    waterVeinPending.action==='FRONTIER'||waterVeinPending.action==='FRONTIER_PRODUCTION'||waterVeinPending.action==='FRONTIER_TRADE'||
+    waterVeinPending.action==='FRONTIER_PORT'||waterVeinPending.action==='FRONTIER_PORT_TRADE')?waterVeinPending:undefined;
+  const queueFrontierChoice=(option:FrontierOption,revision:object)=>{
+    if(!frontierActor||!frontierCurrent(revision))return false;
+    return updateWorld(current=>{
+      if(current!==world)return current;
+      const next=structuredClone(current);
+      return queueAvatarFrontier(next,frontierActor.id,option)?next:current;
+    })!==world;
+  };
   const frontierControls:FrontierControls|undefined=frontierActor&&frontierView?{
     scopeKey:`${viewScopeKey}:${frontierActor.id}:${frontierView.chartId}:${frontierView.site?.id??frontierView.anchorId}`,
-    revisionKey:visibleWorld,choices:canQueueAvatarSalvage(world,frontierActor.id)?
-      availableFrontierActions(frontierActor,world,world.tick+1):[],
-    pending:waterVeinPending?.actorId===frontierActor.id&&(waterVeinPending.action==='FRONTIER'||
-      waterVeinPending.action==='FRONTIER_PRODUCTION'||waterVeinPending.action==='FRONTIER_TRADE')?waterVeinPending:undefined,
-    disabled:frontierDisabled,onQueue:(option,revision)=>{
-      if(!frontierCurrent(revision))return false;
-      return updateWorld(current=>{
-        if(current!==world)return current;
-        const next=structuredClone(current);
-        return queueAvatarFrontier(next,frontierActor.id,option)?next:current;
-      })!==world;
-    },
+    revisionKey:visibleWorld,choices:allFrontierChoices.filter(isFrontierLandOption),
+    pending:frontierPending&&isFrontierLandOption(frontierPending)?frontierPending:undefined,
+    disabled:frontierDisabled,onQueue:queueFrontierChoice,
   }:undefined;
+  const portLocal=frontierView?.scope==='frontier'&&frontierView.regionId==='east-offshore'?
+    projectFrontierPort(visibleWorld,selectedCultivator):undefined;
+  const portTrades=frontierView?projectFrontierPortTrade(visibleWorld,selectedCultivator):[];
+  const portChoices=allFrontierChoices.filter(isFrontierSeaOption);
+  const portControls:FrontierPortControls|undefined=frontierControls?{
+    scopeKey:frontierControls.scopeKey,revisionKey:visibleWorld,choices:portChoices,
+    pending:frontierPending&&isFrontierSeaOption(frontierPending)?frontierPending:undefined,
+    disabled:frontierDisabled,onQueue:queueFrontierChoice,
+  }:undefined;
+  const portCandidates=Object.fromEntries(portChoices.flatMap(option=>{
+    if(option.action!=='FRONTIER_PORT_TRADE'||option.frontierPortTradeMove!=='propose')return [];
+    const actor=visibleWorld.cultivators.find(row=>row.id===option.targetCultivatorId);
+    return actor?[[actor.id,actor.name]]:[];
+  }));
   const frontierHostActor=frontierView?.scope==='frontier'&&!preview&&selectedCultivator&&
     canPossessFrontierAvatar(world,selectedCultivator.id)?selectedCultivator:undefined;
   const frontierHost:FrontierHostControls|undefined=frontierHostActor&&frontierView?{
@@ -1113,7 +1135,10 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
   }));
   const frontierRealmView=frontierView&&<React.Suspense fallback={<p role="status">查验亲到的地界…</p>}>
     <FrontierPanel view={frontierView} production={frontierProduction} trade={frontierTrade} controls={frontierControls}
-      host={frontierHost} tradeCandidates={frontierCandidates}/>
+      host={frontierHost} tradeCandidates={frontierCandidates}
+      portPanel={portLocal||portTrades.length||portChoices.length?
+        <FrontierPortPanel movement={frontierView} local={portLocal} trades={portTrades}
+          controls={portControls} tradeCandidates={portCandidates}/>:undefined}/>
   </React.Suspense>;
   const realmView=upperPassageView&&<React.Suspense fallback={<p role="status">查验脚下界路…</p>}>
     <UpperPassagePanel view={upperPassageView} controls={upperPassageControls} host={upperPassageHost}/>

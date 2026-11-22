@@ -394,7 +394,8 @@ export function computeHeuristicDecision(
   if(cultivator.positionPlane==='frontier'){
     // No Utility signature, fee-bearing travel or escrow without an explicit choice.
     const option=availableFrontierProviderActions(cultivator,world).find(row=>row.action==='FRONTIER_PRODUCTION'&&
-      (row.frontierProductionMove==='harvest'||row.frontierProductionMove==='draw_tide'));
+      (row.frontierProductionMove==='harvest'||row.frontierProductionMove==='draw_tide')||
+      row.action==='FRONTIER_PORT'&&row.frontierPortMove==='gather'&&cultivator.herbs.earth_root>=2&&cultivator.hp>cultivator.maxHp/2);
     return option?{...frontierCommand(option),innerMonologue:'只料理当月亲到的地物。'}:
       {chosenAction:'REST',innerMonologue:'且在眼前地界歇脚，不替旁人签契。'};
   }
@@ -2045,6 +2046,8 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'FRONTIER',
             'FRONTIER_PRODUCTION',
             'FRONTIER_TRADE',
+            'FRONTIER_PORT',
+            'FRONTIER_PORT_TRADE',
             'BREW_PILL',
             'USE_PILL',
             'FORGE_ARTIFACT',
@@ -2162,7 +2165,8 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
               (onPilgrimagePath || (chosenAction !== 'REST' && chosenAction !== 'ROUTE_WARNING'))) return undefined;
           if(isFrontierAction(chosenAction))return exactFrontierDecision(parsed,frontierOptions);
           if(parsed.frontierMove!==undefined||parsed.frontierProductionMove!==undefined||parsed.frontierTradeMove!==undefined||
-            parsed.targetFrontierSiteId!==undefined||parsed.targetFrontierTradeId!==undefined)return undefined;
+            parsed.targetFrontierSiteId!==undefined||parsed.targetFrontierTradeId!==undefined||parsed.frontierPortMove!==undefined||
+            parsed.frontierPortTradeMove!==undefined||parsed.targetFrontierPortTradeId!==undefined)return undefined;
           if(chosenAction==='NORTH_GATE_RENEWAL')return decodeNorthGateRenewal(parsed,renewalOptions);
           if(parsed.northGateRenewalMove!==undefined||parsed.targetNorthGateRenewalId!==undefined)return undefined;
           if((parsed.upperPassageMove!==undefined||parsed.targetUpperPassageNodeId!==undefined)&&

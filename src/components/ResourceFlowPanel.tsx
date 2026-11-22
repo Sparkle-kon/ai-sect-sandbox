@@ -10,6 +10,13 @@ type FlowGood = FlowRow['good'];
 
 const KIND: Record<FlowRow['kind'], string> = { transfer: '转移', production: '产出', consumption: '消耗', loss: '损失' };
 const REASONS: Readonly<Record<string, string>> = {
+  frontier_port_voyage_rigging: '实装航程耗用船具', frontier_port_voyage_fee: '实际装船所付港费',
+  frontier_port_practice_rigging: '借在泊船实修所耗船具',
+  frontier_port_work_output: '港方亲自作业实收', frontier_port_work_stones: '港务实际付石',
+  frontier_port_work_root: '港务用掉的原玄土根',
+  frontier_port_escrow_roots: '签约实押玄土根', frontier_port_salt_loaded: '原批潮晶入船舱托管',
+  frontier_port_salt_received: '中坊本人到场验收原潮晶', frontier_port_salt_returned: '原潮晶实回港仓',
+  frontier_port_roots_collected: '返港原根经本人验收', frontier_port_roots_refunded: '中坊原托管实退原主',
   frontier_entry_paid: '实际过关所付资材', frontier_home_paid: '登记驻住实际启动资材',
   frontier_tend_spring_root: '泉眼实耗地根', frontier_spring_inflow_water: '真实泉水入槽',
   frontier_draw_tide_water: '开闸后实收潮水', frontier_sow_water: '播种实耗本地水',
@@ -55,9 +62,10 @@ const PAGE_SIZE = 8;
 const MONTHS = 6;
 
 const goodName = (good: FlowGood) => good === 'stone' ? '灵石' : good === 'jade_seed' ? '青玉叶种子' :
-  good === 'frost_dose' ? '霜药' : good === 'ward_reed' ? '御寒芦' : good === 'frontier_water' ? '在地水' : MARKET_GOODS[good]?.label ?? '物资未详';
+  good === 'frost_dose' ? '霜药' : good === 'ward_reed' ? '御寒芦' : good === 'frontier_water' ? '在地水' :
+  good === 'reef_salt' ? '潮晶' : good === 'port_rigging' ? '船具' : MARKET_GOODS[good]?.label ?? '物资未详';
 const units = (good: FlowGood) => good === 'stone' ? '灵石' : good === 'jade_seed' ? '粒'
-  : good === 'frost_dose' || good === 'ward_reed' || good === 'frontier_water' ? '份'
+  : good === 'frost_dose' || good === 'ward_reed' || good === 'frontier_water' || good === 'reef_salt' || good === 'port_rigging' ? '份'
   : good === 'jade_leaf' || good === 'earth_root' || good === 'star_bloom' || good === 'shadow_moss' ? '株' : '枚';
 
 export function ResourceFlowMonth({ ledger, world, scope, visibleSiteIds }: {
@@ -90,7 +98,7 @@ export function ResourceFlowMonth({ ledger, world, scope, visibleSiteIds }: {
       case 'salvage': return '货损幸存物封存';
       case 'relocation': return '迁址在途公库';
       case 'workshop': return '工坊备料托管';
-      case 'frontier_store': return '另图在地仓';
+      case 'frontier_store': return row.id==='east-offshore'?'外港在地仓':'另图在地仓';
     }
   };
 

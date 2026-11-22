@@ -2,7 +2,7 @@ import type {Cultivator,LLMDecisionPayload,WorldEvent,WorldState} from '../types
 import {findMapPath} from './mapMotionEngine';
 import {terrainTileAt} from './terrainEngine';
 import {doctrineFoundingPhysicallyAt} from './doctrineFoundingEngine';
-import {FRONTIER_CHARTS,frontierEdge,frontierSite} from './frontierTerms';
+import {FRONTIER_CHARTS,frontierEdge,frontierFarmSite,isFrontierFarmRegion,isFrontierFarmSite} from './frontierTerms';
 import {frontierActedOnGeography,frontierAnchor,frontierPhysicalSite,frontierResidence,ensureFrontierState} from './frontierMovementEngine';
 import {canCreditFrontierTradeStock,consumeFrontierTradeStock,creditFrontierTradeStock,debitFrontierTradeStock,frontierProductionActed,frontierTradeStock} from './frontierProductionEngine';
 import {frontierTradeColdMonth,frontierTradeWinterRef,frontierTradeGood,otherFrontierTradeSide,FRONTIER_TRADE_AMOUNT,FRONTIER_TRADE_OFFER_MONTHS,
@@ -27,7 +27,8 @@ const forEachCargo=(trade:FrontierTradeAgreement,cb:(cargo:FrontierTradeCargo)=>
 export const createFrontierTradeState=():FrontierTradeState=>({agreements:[],nextId:1});
 function nativeTick(world:WorldState,executionTick:number){return executionTick===world.tick||executionTick===world.tick+1;}
 function signedAtMarket(world:WorldState,actor:Cultivator,executionTick:number):boolean {
-  return liveAdult(actor)&&actor.positionPlane===undefined&&actor.locationId===market&&!!frontierAnchor(world,south)&&
+  const residence=frontierResidence(world,actor.id);
+  return liveAdult(actor)&&(!residence||isFrontierFarmRegion(residence.regionId))&&actor.positionPlane===undefined&&actor.locationId===market&&!!frontierAnchor(world,south)&&
     !frontierActedOnGeography(world,actor.id,executionTick)&&doctrineFoundingPhysicallyAt(world,actor,market,executionTick);
 }
 function warehouseResidence(world:WorldState,actor:Cultivator,side:FrontierTradeSide,executionTick:number){
@@ -37,6 +38,7 @@ function warehouseResidence(world:WorldState,actor:Cultivator,side:FrontierTrade
     ?residence:undefined;
 }
 export function frontierTradeCheckpoints(world:WorldState,from:FrontierTradeSide,route:FrontierTradeRoute):FrontierTradeCheckpoint[]|undefined {
+  if(!isFrontierFarmRegion(from)||(route!=='standard'&&route!=='winter'))return undefined;
   const n=frontierAnchor(world,north),s=frontierAnchor(world,south);
   if(!n||!s)return;
   const nTile=FRONTIER_CHARTS[north].anchorTileId,sTile=FRONTIER_CHARTS[south].anchorTileId;
@@ -58,15 +60,16 @@ export function frontierTradeEdge(world:WorldState,from:FrontierTradeCheckpoint,
       const a=world.terrain.tiles.find(tile=>tile.id===from.tileId),b=world.terrain.tiles.find(tile=>tile.id===to.tileId);
       return a&&b&&Math.abs(a.col-b.col)+Math.abs(a.row-b.row)===1?{winterClosed:false}:undefined;
     }
-    const a=frontierSite(from.tileId),b=frontierSite(to.tileId),edge=frontierEdge(from.tileId,to.tileId);
+    const a=frontierFarmSite(from.tileId),b=frontierFarmSite(to.tileId),edge=frontierEdge(from.tileId,to.tileId);
     return a?.chartId===from.chartId&&b?.chartId===to.chartId&&edge&&Math.abs(a.col-b.col)+Math.abs(a.row-b.row)===1
       ?{winterClosed:!!edge.winterClosed}:undefined;
   }
   const old=from.chartId==='lower-base'?from:to,other=old===from?to:from;
   if(old.chartId!=='lower-base')return;
-  const chart=Object.values(FRONTIER_CHARTS).find(item=>item.id===other.chartId);
-  return chart?.anchorTileId===old.tileId&&chart.gateId===other.tileId
-    &&frontierAnchor(world,chart.id===FRONTIER_CHARTS[north].id?north:south)?{winterClosed:false}:undefined;
+  const side=other.chartId===FRONTIER_CHARTS[north].id?north:other.chartId===FRONTIER_CHARTS[south].id?south:undefined;
+  if(!side)return undefined;
+  const chart=FRONTIER_CHARTS[side];
+  return chart.anchorTileId===old.tileId&&chart.gateId===other.tileId&&frontierAnchor(world,side)?{winterClosed:false}:undefined;
 }
 export type FrontierTradeOption=
   | {action:'FRONTIER_TRADE';frontierTradeMove:'propose';targetCultivatorId:string;targetFrontierTradeId?:never}
@@ -201,7 +204,8 @@ export interface FrontierTradeView {
 interface FrontierCargoView {readonly status:FrontierTradeCargo['status'];readonly quantity:number;readonly pathLength:number;
   readonly stepsCompleted:number;readonly winterDetour:boolean;readonly waitedWinter:number}
 export function projectFrontierTrade(world:WorldState,actor:Cultivator|undefined):FrontierTradeView[]{
-  if(!actor||!liveAdult(actor)||world.cultivators.find(row=>row.id===actor.id)!==actor)return [];
+  if(!actor||!liveAdult(actor)||world.cultivators.find(row=>row.id===actor.id)!==actor||
+    actor.positionPlane==='frontier'&&!isFrontierFarmSite(frontierPhysicalSite(world,actor)))return [];
   const project=(cargo:FrontierTradeCargo):FrontierCargoView=>({status:cargo.status,quantity:FRONTIER_TRADE_AMOUNT,
     pathLength:cargo.checkpoints.length-1,stepsCompleted:cargo.cursor,winterDetour:cargo.route==='winter',waitedWinter:cargo.winterWaitTicks.length});
   return (world.frontier?.trade?.agreements??[]).filter(row=>participant(row,actor.id)).slice(-8).reverse().map(row=>({

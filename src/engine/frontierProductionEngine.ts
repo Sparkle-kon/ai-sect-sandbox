@@ -1,6 +1,6 @@
 import type {Cultivator,LLMDecisionPayload,ResourceFlowAccount,WorldEvent,WorldState} from '../types/world';
 import {activeFrontierVisit,frontierActedOnGeography,frontierPhysicalSite,frontierResidence} from './frontierMovementEngine';
-import {FRONTIER_REGIONS,frontierSite,frontierStepMonth,frontierWinter,type FrontierRegionId,type FrontierSite} from './frontierTerms';
+import {frontierFarmSite,isFrontierFarmRegion,isFrontierFarmSite,frontierStepMonth,frontierWinter,type FrontierFarmRegionId,type FrontierFarmSite} from './frontierTerms';
 import {flowActor,recordResourceFlow} from './resourceFlowEngine';
 import {FRONTIER_CROP_EXPIRES,FRONTIER_GROW_TICKS,FRONTIER_PRACTICE_QI,FRONTIER_PRODUCTION_MOVES,
   FRONTIER_SOIL_CAPACITY,FRONTIER_SOUTH_PRACTICE_WATER,FRONTIER_STOCK_CAPACITY,FRONTIER_TIDE_WATER,FRONTIER_WATER_CAPACITY,
@@ -13,14 +13,14 @@ function lastWhere<T>(rows:readonly T[]|undefined,matches:(row:T)=>boolean):T|un
   if(rows)for(let i=rows.length-1;i>=0;i--)if(matches(rows[i]))return rows[i];
   return undefined;
 }
-const presentStock=(state:FrontierProductionState,regionId:FrontierRegionId)=>
+const presentStock=(state:FrontierProductionState,regionId:FrontierFarmRegionId)=>
   state.stock.filter(entry=>entry.regionId===regionId).reduce((total,entry)=>total+entry.amount,0);
-export const flowFrontierStore=(id:FrontierRegionId):ResourceFlowAccount=>({kind:'frontier_store',id});
-const activeCrop=(state:FrontierProductionState|undefined,site:FrontierSite)=>{
+export const flowFrontierStore=(id:FrontierFarmRegionId):ResourceFlowAccount=>({kind:'frontier_store',id});
+const activeCrop=(state:FrontierProductionState|undefined,site:FrontierFarmSite)=>{
   const latest=lastWhere(state?.crops,row=>row.siteId===site.id);
   return latest&&!latest.resolved?latest:undefined;
 };
-const soilAt=(state:FrontierProductionState|undefined,site:FrontierSite)=>state?.soil.find(row=>row.siteId===site.id);
+const soilAt=(state:FrontierProductionState|undefined,site:FrontierFarmSite)=>state?.soil.find(row=>row.siteId===site.id);
 const usedLabor=(state:FrontierProductionState|undefined,actorId:string,tick:number)=>{
   for(let i=(state?.receipts.length??0)-1;i>=0;i--){
     const row=state!.receipts[i];
@@ -32,7 +32,7 @@ const usedLabor=(state:FrontierProductionState|undefined,actorId:string,tick:num
 export function frontierProductionActed(world:WorldState,actorId:string,tick:number):boolean {
   return usedLabor(world.frontier?.production,actorId,tick);
 }
-function usedSite(state:FrontierProductionState|undefined,site:FrontierSite,tick:number,move:FrontierProductionMove){
+function usedSite(state:FrontierProductionState|undefined,site:FrontierFarmSite,tick:number,move:FrontierProductionMove){
   for(let i=(state?.receipts.length??0)-1;i>=0;i--){
     const row=state!.receipts[i];
     if(row.tick<tick)break;
@@ -40,8 +40,8 @@ function usedSite(state:FrontierProductionState|undefined,site:FrontierSite,tick
   }
   return false;
 }
-const availableSoil=(state:FrontierProductionState|undefined,site:FrontierSite)=>soilAt(state,site)?.units??FRONTIER_SOIL_CAPACITY;
-const sowSoilCost=(state:FrontierProductionState|undefined,site:FrontierSite,tick:number)=>
+const availableSoil=(state:FrontierProductionState|undefined,site:FrontierFarmSite)=>soilAt(state,site)?.units??FRONTIER_SOIL_CAPACITY;
+const sowSoilCost=(state:FrontierProductionState|undefined,site:FrontierFarmSite,tick:number)=>
   tick-(soilAt(state,site)?.lastSowTick??-10)<FRONTIER_CROP_EXPIRES?2:1;
 const cropNeedsWater=(crop:FrontierCrop)=>crop.irrigatedTick===undefined&&(crop.regionId===south||crop.stressedTick!==undefined);
 const harvestUnits=(crop:FrontierCrop):number=>crop.regionId===north?2:crop.stressedTick!==undefined&&crop.protectedTick===undefined?2:3;
@@ -50,16 +50,16 @@ function setup(world:WorldState):FrontierProductionState|undefined {
   return world.frontier.production??={version:1,water:{[north]:0,[south]:0},soil:[],crops:[],batches:[],stock:[],consumptions:[],receipts:[]};
 }
 
-export function frontierTradeStock(world:WorldState,regionId:FrontierRegionId,good:FrontierGood):number {
+export function frontierTradeStock(world:WorldState,regionId:FrontierFarmRegionId,good:FrontierGood):number {
   const state=world.frontier?.production;
-  if(!state||!FRONTIER_REGIONS.includes(regionId))return 0;
+  if(!state||!isFrontierFarmRegion(regionId))return 0;
   const kinds=new Map(state.batches.map(batch=>[batch.id,batch.good]));
   return state.stock.filter(row=>row.regionId===regionId&&kinds.get(row.batchId)===good).reduce((sum,row)=>sum+row.amount,0);
 }
 /** Exact previously harvested units; cannot debit partially or mint from an empty store. */
-export function debitFrontierTradeStock(world:WorldState,regionId:FrontierRegionId,good:FrontierGood,amount:number):FrontierBatchSlice[]|undefined {
+export function debitFrontierTradeStock(world:WorldState,regionId:FrontierFarmRegionId,good:FrontierGood,amount:number):FrontierBatchSlice[]|undefined {
   const state=world.frontier?.production;
-  if(!state||!FRONTIER_REGIONS.includes(regionId)||!Number.isSafeInteger(amount)||amount<1||
+  if(!state||!isFrontierFarmRegion(regionId)||!Number.isSafeInteger(amount)||amount<1||
     frontierTradeStock(world,regionId,good)<amount)return undefined;
   const goods=new Map(state.batches.map(batch=>[batch.id,batch.good]));
   let remaining=amount;
@@ -74,9 +74,9 @@ export function debitFrontierTradeStock(world:WorldState,regionId:FrontierRegion
   state.stock=state.stock.filter(row=>row.amount>0);
   return slices;
 }
-export function canCreditFrontierTradeStock(world:WorldState,regionId:FrontierRegionId,slices:readonly FrontierBatchSlice[]):boolean {
+export function canCreditFrontierTradeStock(world:WorldState,regionId:FrontierFarmRegionId,slices:readonly FrontierBatchSlice[]):boolean {
   const state=world.frontier?.production;
-  if(!state||!FRONTIER_REGIONS.includes(regionId)||!slices.length||
+  if(!state||!isFrontierFarmRegion(regionId)||!slices.length||
     new Set(slices.map(slice=>slice.batchId)).size!==slices.length)return false;
   const batches=new Map(state.batches.map(batch=>[batch.id,batch.units]));
   const held=new Map<string,number>();
@@ -87,7 +87,7 @@ export function canCreditFrontierTradeStock(world:WorldState,regionId:FrontierRe
     (held.get(slice.batchId)??0)+slice.amount>(batches.get(slice.batchId)??0)))return false;
   return presentStock(state,regionId)+slices.reduce((n,row)=>n+row.amount,0)<=FRONTIER_STOCK_CAPACITY;
 }
-export function creditFrontierTradeStock(world:WorldState,regionId:FrontierRegionId,slices:readonly FrontierBatchSlice[]):boolean{
+export function creditFrontierTradeStock(world:WorldState,regionId:FrontierFarmRegionId,slices:readonly FrontierBatchSlice[]):boolean{
   const state=world.frontier?.production;
   if(!state||!canCreditFrontierTradeStock(world,regionId,slices))return false;
   for(const {batchId,amount} of slices){
@@ -97,7 +97,7 @@ export function creditFrontierTradeStock(world:WorldState,regionId:FrontierRegio
   }
   return true;
 }
-function spendGoods(world:WorldState,regionId:FrontierRegionId,good:FrontierGood,amount:number,
+function spendGoods(world:WorldState,regionId:FrontierFarmRegionId,good:FrontierGood,amount:number,
   {actorId,refId,purpose}:Pick<FrontierProductionSpend,'actorId'|'refId'|'purpose'>):FrontierBatchSlice[]|undefined{
   const state=world.frontier?.production;
   const expected=purpose==='protect_crop'?'frost_dose':'ward_reed';
@@ -109,7 +109,7 @@ function spendGoods(world:WorldState,regionId:FrontierRegionId,good:FrontierGood
     good,amount,refId,visibility:{kind:'participants',actorIds:[actorId]}});
   return slices;
 }
-export function consumeFrontierTradeStock(world:WorldState,regionId:FrontierRegionId,good:FrontierGood,amount:number,
+export function consumeFrontierTradeStock(world:WorldState,regionId:FrontierFarmRegionId,good:FrontierGood,amount:number,
   context:{actorId:string;refId:string;purpose:'winter_detour'}):FrontierBatchSlice[]|undefined{
   return spendGoods(world,regionId,good,amount,context);
 }
@@ -120,11 +120,11 @@ function activeResident(world:WorldState,actor:Cultivator,tick:number){
   const site=frontierPhysicalSite(world,actor,tick);
   const residence=site&&frontierResidence(world,actor.id);
   const visit=activeFrontierVisit(world,actor.id);
-  if(!site||!residence||residence.regionId!==site.regionId||residence.settledTick>=tick||!visit||
+  if(!isFrontierFarmSite(site)||!residence||residence.regionId!==site.regionId||residence.settledTick>=tick||!visit||
     (visit.steps.at(-1)?.tick??visit.enteredTick)>=tick||frontierActedOnGeography(world,actor.id,tick))return undefined;
   return site;
 }
-function quoteMoves(world:WorldState,actor:Cultivator,site:FrontierSite,executionTick:number):FrontierProductionMove[]{
+function quoteMoves(world:WorldState,actor:Cultivator,site:FrontierFarmSite,executionTick:number):FrontierProductionMove[]{
   const state=world.frontier?.production;
   if(usedLabor(state,actor.id,executionTick))return [];
   const region=site.regionId,water=state?.water[region]??0,month=frontierStepMonth(world.month,executionTick-world.tick);
@@ -156,7 +156,7 @@ export function availableFrontierProductionActions(actor:Cultivator,world:WorldS
   const site=activeResident(world,actor,executionTick);
   return site?quoteMoves(world,actor,site,executionTick).map(frontierProductionMove=>({action:'FRONTIER_PRODUCTION',frontierProductionMove,targetFrontierSiteId:site.id})):[];
 }
-function receipt(state:FrontierProductionState,world:WorldState,site:FrontierSite,
+function receipt(state:FrontierProductionState,world:WorldState,site:FrontierFarmSite,
   actorId:string,kind:FrontierProductionReceipt['kind'],fields:Partial<Pick<FrontierProductionReceipt,'waterDelta'|'rootsSpent'|'soilDelta'|'qiGained'|'plotId'>>={}){
   const row:FrontierProductionReceipt={id:frontierProductionReceiptId(world.tick,kind,site.id,actorId),kind,tick:world.tick,
     year:world.year,month:world.month,actorId,siteId:site.id,regionId:site.regionId,waterDelta:0,rootsSpent:0,soilDelta:0,qiGained:0,...fields};
@@ -192,7 +192,7 @@ export function resolveFrontierProductionAction(world:WorldState,actor:Cultivato
     !['chosenAction','action','innerMonologue','spokenLine','frontierProductionMove','targetFrontierSiteId'].includes(key)))return null;
   const option=availableFrontierProductionActions(actor,world).find(row=>row.frontierProductionMove===payload.frontierProductionMove&&
     row.targetFrontierSiteId===payload.targetFrontierSiteId);
-  const site=option&&frontierSite(option.targetFrontierSiteId);
+  const site=option&&frontierFarmSite(option.targetFrontierSiteId);
   if(!option||!site)return null;
   const state=setup(world);
   if(!state)return null;
@@ -251,7 +251,7 @@ export function advanceFrontierProduction(world:WorldState):void{
   const state=world.frontier?.production;
   if(!state||(state.lastAdvancedTick??0)>=world.tick)return;
   state.lastAdvancedTick=world.tick;
-  const spring=frontierSite('frontier-north-spring');
+  const spring=frontierFarmSite('frontier-north-spring');
   let maintained:FrontierProductionReceipt|undefined;
   for(let i=state.receipts.length-1;i>=0;i--){
     const row=state.receipts[i];
@@ -270,7 +270,7 @@ export function advanceFrontierProduction(world:WorldState):void{
     if(!crop.resolved)current.unshift(crop);
   }
   for(const crop of current){
-    const site=frontierSite(crop.siteId),age=world.tick-crop.sownTick;
+    const site=frontierFarmSite(crop.siteId),age=world.tick-crop.sownTick;
     if(crop.resolved||!site||age<1)continue;
     if(age>=FRONTIER_CROP_EXPIRES){
       crop.resolved={kind:'failed',tick:world.tick};
@@ -287,7 +287,7 @@ export function projectFrontierProduction(world:WorldState,viewer?:Cultivator):F
   // A same-month arrival has a physical address, but only an already established resident sees the workshop ledger.
   if(!viewer)return undefined;
   const site=frontierPhysicalSite(world,viewer,world.tick),resident=frontierResidence(world,viewer.id);
-  if(!site||!resident||resident.regionId!==site.regionId||!viewer.alive||viewer.hp<=0||!world.cultivators.includes(viewer))return undefined;
+  if(!isFrontierFarmSite(site)||!resident||resident.regionId!==site.regionId||!viewer.alive||viewer.hp<=0||!world.cultivators.includes(viewer))return undefined;
   const state=world.frontier?.production,crop=activeCrop(state,site),regionId=site.regionId;
   const localPlot=site.role==='field'||site.role==='winter-plot'?{...(site.role==='field'?{soil:availableSoil(state,site)}:{}),
     ...(crop?{plantedTick:crop.sownTick,readyTick:crop.readyTick,needIrrigation:cropNeedsWater(crop),protected:crop.protectedTick!==undefined}:{})}:undefined;

@@ -14,7 +14,7 @@ export function validateFrontierMovement(world:WorldState,fail:(path:string)=>ne
       fail('frontier.missing');
     return;
   }
-  if(!state.visits.length&&!state.trade?.agreements.length)fail('frontier.noNativeEntry');
+  if(!state.visits.length&&!state.trade?.agreements.length&&!state.port?.trade?.agreements.length)fail('frontier.noNativeEntry');
   const byId=new Map<string,FrontierVisit>(),latest=new Map<string,FrontierVisit>();
   const time=(tick:number)=>Number.isSafeInteger(tick)&&tick>=1&&tick<=world.tick;
   const atMonth=(tick:number)=>((world.month-1-(world.tick-tick))%12+12)%12+1;

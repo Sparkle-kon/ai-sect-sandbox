@@ -1,10 +1,10 @@
-import type {FrontierRegionId,FrontierSiteId} from './frontierTerms';
+import type {FrontierFarmRegionId,FrontierSiteId} from './frontierTerms';
 
 export const FRONTIER_PRODUCTION_MOVES=['tend_spring','draw_tide','sow','irrigate','harvest','rest_field','cultivate','protect_crop'] as const;
 export type FrontierProductionMove=typeof FRONTIER_PRODUCTION_MOVES[number];
 export const FRONTIER_GOODS=['frost_dose','ward_reed'] as const;
 export type FrontierGood=typeof FRONTIER_GOODS[number];
-export const FRONTIER_WATER_CAPACITY:Readonly<Record<FrontierRegionId,number>>={'north-snow':6,'south-marsh':8};
+export const FRONTIER_WATER_CAPACITY:Readonly<Record<FrontierFarmRegionId,number>>={'north-snow':6,'south-marsh':8};
 export const FRONTIER_STOCK_CAPACITY=12;
 export const FRONTIER_SOIL_CAPACITY=4;
 export const FRONTIER_GROW_TICKS=2;
@@ -15,7 +15,7 @@ export const FRONTIER_TIDE_WATER=4;
 export const frontierTide=(month:number)=>month>=3&&month<=11;
 export const frontierPeakTide=(month:number)=>month===8;
 export const frontierSpringInflow=(month:number)=>month===12||month<=2?1:3;
-export const frontierCropGood=(regionId:FrontierRegionId):FrontierGood=>regionId==='north-snow'?'frost_dose':'ward_reed';
+export const frontierCropGood=(regionId:FrontierFarmRegionId):FrontierGood=>regionId==='north-snow'?'frost_dose':'ward_reed';
 export interface FrontierProductionOption {
   action:'FRONTIER_PRODUCTION';
   frontierProductionMove:FrontierProductionMove;
@@ -23,32 +23,32 @@ export interface FrontierProductionOption {
 }
 export interface FrontierBatchSlice {readonly batchId:string;readonly amount:number}
 export interface FrontierProductionCustody {
-  readonly from:FrontierRegionId;readonly to?:FrontierRegionId;
+  readonly from:FrontierFarmRegionId;readonly to?:FrontierFarmRegionId;
   readonly loadedTick:number;readonly deliveredTick?:number;readonly slices:readonly FrontierBatchSlice[];
 }
-export interface FrontierStockEntry extends FrontierBatchSlice {regionId:FrontierRegionId;amount:number}
+export interface FrontierStockEntry extends FrontierBatchSlice {regionId:FrontierFarmRegionId;amount:number}
 export interface FrontierHarvestBatch {
-  id:string;plotId:string;siteId:FrontierSiteId;regionId:FrontierRegionId;good:FrontierGood;
+  id:string;plotId:string;siteId:FrontierSiteId;regionId:FrontierFarmRegionId;good:FrontierGood;
   units:number;harvestedTick:number;harvesterId:string;
 }
 export interface FrontierCrop {
-  id:string;siteId:FrontierSiteId;regionId:FrontierRegionId;sowerId:string;sownTick:number;readyTick:number;
+  id:string;siteId:FrontierSiteId;regionId:FrontierFarmRegionId;sowerId:string;sownTick:number;readyTick:number;
   irrigatedTick?:number;stressedTick?:number;protectedTick?:number;
   resolved?:{kind:'harvested';tick:number;batchId:string}|{kind:'failed';tick:number};
 }
 export interface FrontierSoil {siteId:FrontierSiteId;units:number;lastSowTick?:number}
 export type FrontierReceiptKind=FrontierProductionMove|'spring_inflow'|'crop_stress'|'crop_failed';
 export interface FrontierProductionReceipt {
-  id:string;kind:FrontierReceiptKind;tick:number;year:number;month:number;actorId:string;siteId:FrontierSiteId;regionId:FrontierRegionId;
+  id:string;kind:FrontierReceiptKind;tick:number;year:number;month:number;actorId:string;siteId:FrontierSiteId;regionId:FrontierFarmRegionId;
   waterDelta:number;rootsSpent:0|1;soilDelta:number;qiGained:number;plotId?:string;
 }
 export interface FrontierProductionSpend {
-  regionId:FrontierRegionId;actorId:string;tick:number;refId:string;purpose:'practice'|'protect_crop'|'winter_detour';
+  regionId:FrontierFarmRegionId;actorId:string;tick:number;refId:string;purpose:'practice'|'protect_crop'|'winter_detour';
   good:FrontierGood;slices:FrontierBatchSlice[];
 }
 export interface FrontierProductionState {
   version:1;
-  water:Record<FrontierRegionId,number>;
+  water:Record<FrontierFarmRegionId,number>;
   soil:FrontierSoil[];
   crops:FrontierCrop[];
   batches:FrontierHarvestBatch[];
@@ -58,7 +58,7 @@ export interface FrontierProductionState {
   lastAdvancedTick?:number;
 }
 export interface FrontierProductionView {
-  regionId:FrontierRegionId;siteId:FrontierSiteId;water:number;waterCapacity:number;isWinter:boolean;canDrawTide:boolean;
+  regionId:FrontierFarmRegionId;siteId:FrontierSiteId;water:number;waterCapacity:number;isWinter:boolean;canDrawTide:boolean;
   localPlot?:{soil?:number;plantedTick?:number;readyTick?:number;needIrrigation?:boolean;protected?:boolean};
   stock?:Record<FrontierGood,number>;
   options:FrontierProductionOption[];
