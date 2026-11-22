@@ -7,6 +7,17 @@ export type RegionalSimulationChange={kind:'set_focus';siteId:string}|{kind:'dis
 export interface RegionalAnnualReading {
   year:number;tick:number;regionId:RegionalFocusRegion;actorMonths:number;waivedActorMonths?:number;actors:number;qiAdded:number;hpAdded:number;
 }
+type RegionalOpeningClock={tick:number;year:number;month:number};
+export interface RegionalPromotionNotice {
+  kind:'courier_crossed'|'escort_crossed'|'siege_arrived'|'actor_returned';
+  observedTick:number;startsTick:number;throughTick:number;
+  fromRegionId:RegionalFocusRegion;toRegionId:RegionalFocusRegion;active:boolean;
+}
+export interface RegionalRecentOpenings {
+  clock:RegionalOpeningClock;
+  /** Only supply the exact native projection for the currently authorized observer. */
+  rows:readonly RegionalPromotionNotice[];
+}
 export interface RegionalModeReading {
   enabled:boolean;
   version?:number;
@@ -14,6 +25,7 @@ export interface RegionalModeReading {
   effective?:{region:RegionalFocusRegion;avatarDriven?:boolean};
   registeredRegions?:number;
   annual?:readonly RegionalAnnualReading[];
+  recentOpenings?:RegionalRecentOpenings;
 }
 export interface RegionalComparisonReading {
   seed:number;profileLabel:string;months:number;
@@ -36,6 +48,50 @@ export interface RegionalSimulationControls {
 const button='min-h-11 max-w-full rounded border border-slate-700 bg-slate-900 px-2.5 text-xs font-semibold text-slate-100 [overflow-wrap:anywhere] disabled:opacity-40';
 const field='min-h-11 min-w-0 w-full rounded border border-slate-700 bg-slate-950 px-2 text-base text-slate-100 disabled:opacity-40';
 
+const OPENING_KIND:Record<RegionalPromotionNotice['kind'],string>={
+  courier_crossed:'信使实际越境',
+  escort_crossed:'护送中的商队实际越境',
+  siege_arrived:'联军实际抵达',
+  actor_returned:'修士实际归返',
+};
+
+function regionalDate(clock:RegionalOpeningClock,tick:number):string {
+  const position=clock.month-1+(tick-clock.tick);
+  const year=clock.year+Math.floor(position/12);
+  if(!Number.isSafeInteger(position)||!Number.isSafeInteger(year)||year<1)return `第 ${tick} 轮`;
+  return `${year} 年 ${(position%12+12)%12+1} 月`;
+}
+
+export function RegionalRecentOpeningStatus({reading}:{reading:RegionalRecentOpenings}) {
+  const {clock}=reading;
+  const eligible=reading.rows.filter(row=>row.observedTick<=clock.tick&&row.observedTick<=row.startsTick&&row.startsTick<=row.throughTick);
+  const priority=(row:RegionalPromotionNotice)=>row.active&&row.startsTick<=clock.tick&&clock.tick<=row.throughTick?0:
+    clock.tick<row.startsTick?1:2;
+  eligible.sort((a,b)=>priority(a)-priority(b)||b.observedTick-a.observedTick);
+  const shownRegions=new Set<RegionalFocusRegion>();
+  const rows=eligible.filter(row=>{
+    if(shownRegions.has(row.toRegionId))return false;
+    shownRegions.add(row.toRegionId);return true;
+  });
+  if(!rows.length)return null;
+  return <section aria-label="视角内的地域近事" className="min-w-0 space-y-1 rounded border border-slate-800 bg-slate-950/45 p-2 [overflow-wrap:anywhere]">
+    <h6 className="font-semibold text-emerald-100">地域近事</h6>
+    <ul className="space-y-1">
+      {rows.map(row=><li key={row.toRegionId}>
+        <p>{regionalDate(clock,row.observedTick)} · {REGION[row.toRegionId]} · {OPENING_KIND[row.kind]}。</p>
+        <p className="text-slate-400">{clock.tick<row.startsTick
+          ? `自 ${regionalDate(clock,row.startsTick)} 起展开当地逐月行动；接境月不会重跑。`
+          : row.active&&clock.tick<=row.throughTick
+            ? `当地按原月规运行（${regionalDate(clock,row.startsTick)} 至 ${regionalDate(clock,row.throughTick)}）。`
+            : clock.tick>row.throughTick
+              ? `本次逐月展开截至 ${regionalDate(clock,row.throughTick)}，窗口已结束。`
+              : '目前未记为正在逐月展开。'}</p>
+      </li>)}
+    </ul>
+    <p className="text-slate-400">原有在途或到期义务仍走原账，不因地域展开重复结算。</p>
+  </section>;
+}
+
 export function RegionalSimulationSummary({mode,comparison}:{mode:RegionalModeReading;comparison?:RegionalComparisonReading}) {
   const annual=mode.annual??[];
   const rows=annual.slice(-6).reverse();
@@ -50,6 +106,7 @@ export function RegionalSimulationSummary({mode,comparison}:{mode:RegionalModeRe
       实际逐月关注区：{REGION[mode.effective.region]}{mode.effective.avatarDriven?'（当前附身者所在地域优先）':''}。
     </p>}
     <p className="text-slate-400">近域和原有逐月义务照原规则运行，包括实际在途的交接与到期。聚落、钱物、地权、灾害和人物寿元不改用年算。仅对满足条件的远地修士，用年末近似结算部分灵气与体力，不等同于给他们逐月安排原行动。</p>
+    {mode.enabled&&mode.recentOpenings&&<RegionalRecentOpeningStatus reading={mode.recentOpenings}/>}
     {rows.length>0&&<div className="space-y-1">
       <h6 className="font-semibold text-emerald-100">已经实际结算的年度记录</h6>
       <p className="text-slate-400">人月：一人有一个月计入记账，即为 1 人月。不代表未结算的月均会补领。</p>

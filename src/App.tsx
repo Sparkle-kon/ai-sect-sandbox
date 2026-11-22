@@ -69,6 +69,7 @@ import type { TimelineSnapshot, WorldTimeline } from './engine/timelineEngine';
 import {findEraEntryCandidate,projectEraEntryCandidates} from './engine/eraEntryCandidates';
 import {createTerrainMapView} from './components/terrainMapView';
 import {configureRegionalSimulation,projectRegionalSimulation,regionForPoint} from './engine/regionalSimulationEngine';
+import {projectRegionalPromotions} from './engine/regionalPromotionEngine';
 import {isScopedExpeditionGate} from './engine/expeditionOmenTerms';
 import {REGIONAL_BENCHMARK} from './components/regionalBenchmark';
 import type {RegionalFocusOption,RegionalSimulationControls} from './components/RegionalSimulationPanel';
@@ -795,7 +796,9 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
     mode:{enabled:!!world.regionalSimulation,version:regionalView?.version,
       focus:regionalSites.find(row=>row.siteId===world.regionalSimulation?.focusSiteId),
       effective:regionalView&&{region:regionalView.focus,avatarDriven:!!regionalAvatar},
-      registeredRegions:regionalView?.registeredRegions,annual:regionalView?.annual},
+      registeredRegions:regionalView?.registeredRegions,annual:regionalView?.annual,
+      recentOpenings:regionalView?{clock:{tick:world.tick,year:world.year,month:world.month},
+        rows:projectRegionalPromotions(world,regionalViewer)}:undefined},
     disabled:regionalDisabled,disabledReason:regionalDisabled?'先暂停推演或长局，再调整本分支。':undefined,
     onChange:change=>{
       if(change.kind!=='set_focus'||!regionalReadActive||regionalDisabled||

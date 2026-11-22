@@ -1,3 +1,5 @@
+import { regionForPoint, SIMULATION_REGIONS } from './simulationRegionGeometry';
+import { activeRegionalPromotionRegions } from './regionalPromotionEngine';
 import { activeAvatar } from './avatarEngine';
 import { boundaryReliefCheckpoint } from './boundaryReliefCheckpoint';
 import { danxiaMedicineCheckpoint,danxiaMedicineActedThisTick } from './danxiaMedicineTerms';
@@ -13,21 +15,13 @@ import type { Cultivator, LLMDecisionPayload, LocationNode, MapPoint, RegionalRe
 
 export const REGIONAL_SIMULATION_VERSION=1;
 export const REGIONAL_SIMULATION_AUDIT_YEARS=12;
-export const SIMULATION_REGIONS=['west','center','east'] as const satisfies readonly SimulationRegionId[];
+export { regionForColumn, regionForPoint, SIMULATION_REGIONS } from './simulationRegionGeometry';
 export const SIMULATION_REGION_NAMES={west:'西境',center:'中州',east:'东境'} as const;
 const alive=(actor:Cultivator)=>actor.alive&&actor.hp>0;
 const site=(world:WorldState,id:string)=>world.locations.find(row=>row.id===id);
 const open=(status:string)=>status==='active'||status==='offered'||status==='waiting'||status==='scheduled';
 const risky=(place:LocationNode)=>place.type==='secret_realm'||place.type==='abyss'||isScopedExpeditionGate(place);
 
-export function regionForColumn(column:number,total:number):SimulationRegionId|undefined {
-  if(!Number.isSafeInteger(column)||!Number.isSafeInteger(total)||total<3||column<0||column>=total)return undefined;
-  return SIMULATION_REGIONS[Math.min(2,Math.floor(column*3/total))];
-}
-export function regionForPoint(world:WorldState,point:MapPoint):SimulationRegionId|undefined {
-  const tile=terrainTileAt(world,point.x,point.y);
-  return tile&&regionForColumn(tile.col,world.terrain.columns);
-}
 export function currentActorRegion(world:WorldState,actor:Cultivator):SimulationRegionId|undefined {
   const relocation=world.relocations.plans.find(row=>row.status==='in_transit'&&row.garrisonIds.includes(actor.id));
   const escort=world.escorts.contracts.find(row=>row.status==='active'&&row.escortId===actor.id);
@@ -197,7 +191,11 @@ export function regionalModelPassiveActorIds(world:WorldState,required?:(actor:C
   const pending=world.playerAvatar.pendingOrder;
   if(pending)protectedActors.add(pending.actorId);
   const candidates=regionalCandidates(world,focus,protectedActors);
-  return new Set(world.cultivators.filter(actor=>candidates.has(actor.id)&&!required?.(actor)).map(actor=>actor.id));
+  const exact=activeRegionalPromotionRegions(world,world.tick+1);
+  return new Set(world.cultivators.filter(actor=>{
+    const candidate=candidates.get(actor.id);
+    return candidate&&!exact.has(candidate.regionId)&&!required?.(actor);
+  }).map(actor=>actor.id));
 }
 
 export function beginRegionalSimulationTurn(world:WorldState):RegionalTurn|undefined {
@@ -209,7 +207,7 @@ export function beginRegionalSimulationTurn(world:WorldState):RegionalTurn|undef
   const protectedActors=activeParties(world);
   if(avatar)protectedActors.add(avatar.id);
   const candidates=regionalCandidates(world,focus,protectedActors);
-  return {version:1,tick:world.tick,focus,exactRegions:new Set([focus]),protectedActors,obligationsDirty:false,concludedActors:new Set(),candidateActors:candidates,
+  return {version:1,tick:world.tick,focus,exactRegions:new Set([focus,...activeRegionalPromotionRegions(world)]),protectedActors,obligationsDirty:false,concludedActors:new Set(),candidateActors:candidates,
     deferredRows:new Map(state.actors.map(row=>[deferredKey(row.actorId,row.regionId),row]))};
 }
 

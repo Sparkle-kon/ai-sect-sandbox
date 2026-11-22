@@ -3250,7 +3250,18 @@ export interface RegionalDeferredActor {
 export interface RegionalAnnualSummary {
   year:number;tick:number;regionId:SimulationRegionId;actorMonths:number;waivedActorMonths:number;actors:number;qiAdded:number;hpAdded:number;
 }
+export interface RegionalPromotionCore {
+  observedTick:number;startsTick:number;throughTick:number;fromRegionId:SimulationRegionId;toRegionId:SimulationRegionId;
+}
+export type RegionalPromotion=RegionalPromotionCore&(
+  | {kind:'courier_crossed';sourceId:string;startIndex:number;endIndex:number;crossedTileIds:string[];actorId:string}
+  | {kind:'escort_crossed';sourceId:string;shipmentId:string;startIndex:number;endIndex:number;crossedTileIds:string[];actorId:string}
+  | {kind:'siege_arrived';sourceId:string;sourceSiteId:string;destinationSiteId:string;eventId:string;actorId:string}
+  | {kind:'actor_returned';sourceId:string;sourceSiteId:string;destinationSiteId:string;eventId?:string;witnessIds:string[]}
+);
+
 export interface RegionalSimulationState {
+  promotions?:RegionalPromotion[];
   version:1;focusSiteId:string;registrations:RegionalRegistration[];routes:RegionalRoute[];
   actors:RegionalDeferredActor[];annual:RegionalAnnualSummary[];
 }

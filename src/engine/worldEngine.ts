@@ -1,3 +1,4 @@
+import { recordRegionalActorReturn, recordRegionalEarlyPromotions, recordRegionalLatePromotions } from './regionalPromotionEngine';
 import { beginRegionalSimulationTurn, deferRegionalActorTurn, finishRegionalSimulationTurn, recordRegionalTurnRegistry, renewRegionalProtectionAfterEvent } from './regionalSimulationEngine';
 import {advanceDoctrineMaturity,resolveDoctrineMaturityAction} from './doctrineMaturityEngine';
 import { advanceDanxiaMedicine, resolveDanxiaMedicineAction } from './danxiaMedicineEngine';
@@ -869,6 +870,7 @@ export function advanceWorldTick(
   for (const event of newEvents) witnessEvent(nextState, event);
   openFurnaceTurn(nextState);
   beginClinicDutyTurn(nextState);
+  recordRegionalEarlyPromotions(nextState,prevState);
   const regionalTurn=beginRegionalSimulationTurn(nextState);
 
   for (const cultivator of [...nextState.cultivators]) {
@@ -1015,6 +1017,8 @@ export function advanceWorldTick(
       witnessEvent(nextState, event);
     });
     if (decision.chosenAction === 'EXPLORE' && cultivator.currentAction === 'EXPLORE' && previousLocation !== cultivator.locationId) {
+      recordRegionalActorReturn(nextState,regionalTurn,cultivator,previousLocation,decision.chosenAction,evt);
+      renewRegionalProtectionAfterEvent(regionalTurn);
       const lodging = recordSeasonalHousingMovement(nextState,cultivator,previousLocation);
       if (lodging) { newEvents.push(lodging); witnessEvent(nextState,lodging); }
     }
@@ -1070,6 +1074,7 @@ export function advanceWorldTick(
     newEvents.push(event);
     witnessEvent(nextState,event);
   }
+  recordRegionalLatePromotions(nextState,prevState,newEvents);
   advanceCivicMemorials(nextState);
   advanceChronicleErrata(nextState);
   for (const actor of nextState.cultivators) if (actor.alive) noteTerrainVisit(nextState, actor);

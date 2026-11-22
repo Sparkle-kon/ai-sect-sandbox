@@ -5,6 +5,7 @@ import { validateMentorTransfers } from './storageMentorTransferValidation';
 import { sameGeneratedWorld } from './worldIdentity';
 import {validateAuthoredEraHistory} from './storageAuthoredEraValidation';
 import {validateRegionalSimulation} from './storageRegionalSimulationValidation';
+import {validateRegionalPromotions} from './storageRegionalPromotionValidation';
 import {validateEraDesignDraft} from './eraDesignSchema';
 import { createAlignedWeatherState } from './alignedWeatherEngine';
 import { alignedWeatherPinnedRuns } from './alignedWeatherTerms';
@@ -918,6 +919,19 @@ const shape = structure({
   scenarioOrigin:optional(structure({version:one(1,2,3),ruleset:one(1),id:strings(100,1),endTick:num(1,120,true)})),
   regionalSimulation:optional(structure({
     version:one(1),focusSiteId:id,
+    promotions:optional(arr(SAVE_COLLECTION_LIMIT,(value,path)=>{
+      const base={observedTick:tick,startsTick:tick,throughTick:tick,sourceId:id,
+        fromRegionId:one('west','center','east'),toRegionId:one('west','center','east')};
+      const row=value as {kind?:unknown}|null;
+      if(row?.kind==='courier_crossed'||row?.kind==='escort_crossed'){
+        const crossing={...base,startIndex:tick,endIndex:tick,crossedTileIds:arr(32,id),actorId:id};
+        if(row.kind==='escort_crossed')return structure({...crossing,kind:one('escort_crossed'),shipmentId:id})(value,path);
+        return structure({...crossing,kind:one('courier_crossed')})(value,path);
+      }
+      const arriving={...base,sourceSiteId:id,destinationSiteId:id};
+      if(row?.kind==='siege_arrived')return structure({...arriving,kind:one('siege_arrived'),eventId:id,actorId:id})(value,path);
+      return structure({...arriving,kind:one('actor_returned'),eventId:oid,witnessIds:ids})(value,path);
+    })),
     registrations:arr(SAVE_COLLECTION_LIMIT,structure({kind:one('actor','site','settlement'),id,
       originRegionId:one('west','center','east'),registeredTick:tick})),
     routes:arr(SAVE_COLLECTION_LIMIT,structure({kind:one('road','courier','escort','relocation','pilgrimage','village_supply','danxia_medicine','boundary_relief','expedition_rescue'),
@@ -3061,6 +3075,7 @@ function verifyWorld(value: unknown): WorldState {
   validateEraHistory(w,fail);
   validateAuthoredEraHistory(w,fail);
   validateRegionalSimulation(w,fail);
+  validateRegionalPromotions(w,fail);
   w.coldHistory = freezeColdHistory(w.coldHistory);
   return w;
 }
