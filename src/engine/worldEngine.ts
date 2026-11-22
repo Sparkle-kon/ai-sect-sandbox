@@ -1,3 +1,6 @@
+import {availableMercyReunionActions,isPrivateMercyReunionEvent,mercyReunionAidActed,mercyReunionAidPendingHold,recordMercyReunionMovement,
+  recordMercySpared,resolveMercyReunionAction} from './mercyReunion';
+import {conditionalMercyChoices,exactStoryMercyDecision,lawfulConditionalMercy} from './mercyReunionCognition';
 import { availableFrontierGorgeActions, isPrivateFrontierGorgeEvent, resolveFrontierGorgeAction } from './frontierGorge';
 import { exactFrontierGorgeDecision } from './frontierGorgeCognition';
 import { advancePavilionFires, availablePavilionFireActions, isPrivatePavilionFireEvent, resolvePavilionFireAction } from './pavilionFire';
@@ -255,8 +258,8 @@ function closeInterruptedTrial(actor: Cultivator, tick: number): void {
 
 function recordAuxiliaryActionEvent(world: WorldState, event: WorldEvent, emit?: (value: WorldEvent) => void): void {
   if (emit) { emit(event); return; }
-  witnessEvent(world, event);
-  archiveChronicleEvents(world, [event]);
+  if(!isPrivateMercyReunionEvent(event))witnessEvent(world,event);
+  archiveChronicleEvents(world,[event]);
   world.events = [event, ...world.events].slice(0, 120);
 }
 
@@ -330,7 +333,10 @@ function settleNativeDuel(world:WorldState,cultivator:Cultivator,defender:Cultiv
   };
   const loserBeforeHp = loser.hp;
   const winnerBeforeHp = winner.hp;
-  loser.hp = Math.max(context?.activation.lastStand && context.contact.ownerId === loser.id ? 1 : 0, loser.hp - sufferedByLoser);
+  const spared=decision.duelMercy==='spare'&&decision.targetCultivatorId===defender.id&&
+    !authorizedBountyTargetId&&!context&&!beastGuardContact&&!formModifier&&winner===cultivator&&loser===defender&&
+    lawfulConditionalMercy(world,winner,loser)&&sufferedByLoser>=loserBeforeHp;
+  loser.hp = Math.max(spared||context?.activation.lastStand&&context.contact.ownerId===loser.id ? 1 : 0, loser.hp-sufferedByLoser);
   winner.hp = Math.max(1, winner.hp - sufferedByWinner);
   if(guarded&&beastGuardContact)
     recordAuxiliaryActionEvent(world,beastDuelGuardEvent(world,beastGuardContact,guarded,loser),emit);
@@ -402,15 +408,19 @@ function settleNativeDuel(world:WorldState,cultivator:Cultivator,defender:Cultiv
     year: world.year,
     month: world.month,
     title: `惊天斗法：${cultivator.name}激战${defender.name}`,
-    description: `${cultivator.name}于【${location?.name ?? '秘境'}】向${defender.name}悍然出手！一番激斗后，${winner.name}占据上风，${loser.name}受创（-${loserBeforeHp - loser.hp} HP）${guarded?'，仍立在此处。':'化作血光遁走。'}`,
+    description: `${cultivator.name}于【${location?.name ?? '秘境'}】向${defender.name}悍然出手！一番激斗后，${winner.name}占据上风，${loser.name}受创（-${loserBeforeHp - loser.hp} HP）${spared?'，最后一剑收回，仍在原处。':guarded?'，仍立在此处。':'化作血光遁走。'}`,
     category: 'combat',
     actorIds: [cultivator.id, defender.id],
     duelWinnerId: winner.id,
     damage,
-    dialogue: scriptedDialogue('combat', cultivator, defender, `${winner.name}占得上风，${loser.name}${guarded?'仍在此处。':'负伤离去。'}`, decision.spokenLine),
+    dialogue: scriptedDialogue('combat', cultivator, defender, `${winner.name}占得上风，${loser.name}${spared?'尚存一息，未离此地。':guarded?'仍在此处。':'负伤离去。'}`, decision.spokenLine),
     locationId: cultivator.locationId,
   };
   if (divineArtProse) duelEvent.description += divineArtProse + '。';
+  if(spared){
+    const receipt=recordMercySpared(world,winner,loser,loserBeforeHp,sufferedByLoser,duelEvent);
+    if(receipt)recordAuxiliaryActionEvent(world,receipt,emit);
+  }
   return finishDuel(attachForbiddenOutcome(duelEvent),daoPaid);
 }
 
@@ -864,6 +874,24 @@ export function applyCultivatorBrainDecision(
     case 'GRAND_SIEGE_HERO':
       // The native attack round, not this individual turn, owns actual array and resource settlement.
       return null;
+    case 'MERCY_REUNION': {
+      if(modelInput&&activeAvatar(world)===cultivator)return null;
+      const exact=exactStoryMercyDecision(decision,availableMercyReunionActions(cultivator,world,world.tick),true);
+      if(!exact)return null;
+      const event=resolveMercyReunionAction(world,cultivator,exact,target=>applyCultivatorBrainDecision(world,cultivator,{
+        chosenAction:'DUEL',targetCultivatorId:target.id,innerMonologue:'只与真正眼前的旧人交锋。',
+      },rng,undefined,emit),proof=>recordAuxiliaryActionEvent(world,proof,emit));
+      if(event){
+        cultivator.currentAction='MERCY_REUNION';
+        if((exact.mercyReunionMove==='stand_down'||exact.mercyReunionMove==='accept_aid')&&event.witnessScope==='participants'&&
+          event.actorIds[0]===cultivator.id&&event.actorIds.length===2){
+          const link=world.relationships.find(row=>(row.fromId===cultivator.id&&row.toId===event.actorIds[1])||
+            (row.toId===cultivator.id&&row.fromId===event.actorIds[1]));
+          if(link)link.affinity=clamp(link.affinity+(exact.mercyReunionMove==='accept_aid'?6:3),-100,100);
+        }
+      }
+      return event;
+    }
     case 'PAVILION_FIRE': {
       if(modelInput&&activeAvatar(world)===cultivator)return null;
       const exact=exactPavilionFireDecision(decision,availablePavilionFireActions(cultivator,world,world.tick),true);
@@ -1186,6 +1214,8 @@ export function applyCultivatorBrainDecision(
       if (!defender || forbiddenDuelForParticipant(world,defender) || forbiddenDuelForParticipant(world,cultivator)||beastDuelContactForParticipant(world,defender)||
           beastDuelContactForParticipant(world,cultivator)||schoolFormDuelForParticipant(world,cultivator)||
           schoolFormDuelForParticipant(world,defender)) return null;
+      if(decision.duelMercy!==undefined&&(decision.duelMercy!=='spare'||decision.targetCultivatorId!==defender.id||
+        authorizedBountyTargetId!==undefined||!lawfulConditionalMercy(world,cultivator,defender)))return null;
       const ward = interceptSanctuaryDuel(world, cultivator, defender);
       if (ward?.blocked) return ward.event;
       if (ward) recordAuxiliaryActionEvent(world, ward.event, emit);
@@ -1193,7 +1223,9 @@ export function applyCultivatorBrainDecision(
       if(allowForbiddenDuel&&authorizedBountyTargetId===undefined&&
           (cultivator.hp<.25*cultivator.maxHp||defender.hp<.25*defender.maxHp)){
         const threat=measureNativeDuel(world,cultivator,defender,rolls,undefined,previewDaoDuelIntents(world,cultivator,defender));
-        if(threat.loser.hp<.25*threat.loser.maxHp&&
+        // A valid conditional restraint never requires the incoming defender to pay for separate self-protection.
+        const intendedRestraint=decision.duelMercy==='spare'&&threat.winner===cultivator&&threat.loser===defender;
+        if(!intendedRestraint&&threat.loser.hp<.25*threat.loser.maxHp&&
           previewSectArrayDamage(world,threat.loser,threat.winner,threat.hitLoser)>=threat.loser.hp){
           const contact=openForbiddenDuelContact(world,cultivator,defender,threat.loser,rolls);
           if(contact)return {
@@ -1205,7 +1237,7 @@ export function applyCultivatorBrainDecision(
           if(beastContact)return openBeastDuelEvent(world,beastContact);
         }
       }
-      if(allowForbiddenDuel&&authorizedBountyTargetId===undefined&&decision.targetCultivatorId===defender.id){
+      if(allowForbiddenDuel&&decision.duelMercy===undefined&&authorizedBountyTargetId===undefined&&decision.targetCultivatorId===defender.id){
         const school=openSchoolFormDuel(world,cultivator,defender,rolls);
         if(school)return schoolFormPrivateEvent(world,school,'noticed');
       }
@@ -1434,7 +1466,12 @@ export function advanceWorldTick(
       continue;
     }
 
-    if(finishedDuelActors.has(cultivator.id))continue;
+    if(finishedDuelActors.has(cultivator.id)||mercyReunionAidActed(nextState,cultivator))continue;
+    if(mercyReunionAidPendingHold(nextState,cultivator)){
+      cultivator.currentAction='MERCY_REUNION';
+      cultivator.innerMonologue='先前提议护这一程，如今仍只在原处等对方自己应下。';
+      continue;
+    }
     const school=schoolFormDuelForParticipant(nextState,cultivator);
     if(school){
       if(school.attackerId!==cultivator.id||school.openedTick>=nextState.tick)continue;
@@ -1606,6 +1643,15 @@ export function advanceWorldTick(
       if(!before||activeAvatar(prevState)===before||!exactCampaignAssemblyDecision(native,
         availableCampaignAssemblyActions(before,prevState,nextState.tick).filter(row=>
           row.kind!=='guard'&&row.siegeId===targetCampaignAssemblySiegeId),true)) {
+        provided=undefined;
+        modelOrdinaryReplaced=true;
+      }
+    }
+    if(modelProposal&&!avatarDecision&&(modelProposal.chosenAction==='MERCY_REUNION'||modelProposal.duelMercy!==undefined)){
+      const before=prevState.cultivators.find(row=>row.id===cultivator.id);
+      const menu=before&&(modelProposal.chosenAction==='MERCY_REUNION'
+        ?availableMercyReunionActions(before,prevState,nextState.tick):conditionalMercyChoices(prevState,before,nextState.tick));
+      if(!before||activeAvatar(prevState)===before||!menu||!exactStoryMercyDecision(modelProposal,menu,true)){
         provided=undefined;
         modelOrdinaryReplaced=true;
       }
@@ -1903,7 +1949,7 @@ export function advanceWorldTick(
     const ordinaryBefore = snapshotOrdinaryAction(cultivator, decision);
     const evt = applyCultivatorBrainDecision(nextState, cultivator, decision, rng, undefined, (event) => {
       newEvents.push(event);
-      if(!isTaughtSwordPracticeEvent(event)&&!isPrivateSchoolFormEvent(event))witnessEvent(nextState, event);
+      if(!isTaughtSwordPracticeEvent(event)&&!isPrivateSchoolFormEvent(event)&&!isPrivateMercyReunionEvent(event))witnessEvent(nextState,event);
     }, avatarDecision, chosenByModel || Boolean(traceOptions?.replayHeartModelActors?.has(cultivator.id)));
     if (decision.chosenAction === 'EXPLORE' && cultivator.currentAction === 'EXPLORE' && previousLocation !== cultivator.locationId) {
       recordRegionalActorReturn(nextState,regionalTurn,cultivator,previousLocation,decision.chosenAction,evt);
@@ -1914,8 +1960,11 @@ export function advanceWorldTick(
       if(encounter)newEvents.push(encounter);
       const scarReturn=recordBattlefieldReturn(nextState,cultivator,previousLocation);
       if(scarReturn)newEvents.push(scarReturn);
+      const mercyMeeting=recordMercyReunionMovement(nextState,cultivator,previousLocation);
+      if(mercyMeeting)newEvents.push(mercyMeeting);
     }
-    if (evt && (decision.chosenAction === 'DUEL' || decision.chosenAction === 'SOCIALIZE' || decision.chosenAction === 'BREAKTHROUGH'))
+    if (evt && (decision.chosenAction === 'DUEL' || decision.chosenAction === 'SOCIALIZE' || decision.chosenAction === 'BREAKTHROUGH' ||
+      decision.chosenAction==='MERCY_REUNION'&&evt.duelWinnerId!==undefined))
       captureWitnessedPersonalScene(nextState, evt);
     // Capture only the actual emitted source after native bounty/scheme/duel wrappers have settled scope.
     if (evt && evt.actorIds.length === 2 && evt.witnessScope === undefined &&
@@ -1948,7 +1997,7 @@ export function advanceWorldTick(
         if (receipt && evt.id === `evt-${receipt.id}`) recordReliefCompetition(nextState, receipt);
       }
       newEvents.push(evt);
-      if(!isBattlefieldRevisitEvent(evt)&&!isPrivateCalamityArrayEvent(evt)&&!isTaughtSwordPracticeEvent(evt)&&!isPrivateSchoolFormEvent(evt)&&!isPrivateWitnessInquiryEvent(evt)&&!isPrivatePavilionFireEvent(evt)&&!(evt.witnessScope==='participants'&&evt.id.endsWith('-study-technique-fire')))witnessEvent(nextState, evt);
+      if(!isBattlefieldRevisitEvent(evt)&&!isPrivateCalamityArrayEvent(evt)&&!isTaughtSwordPracticeEvent(evt)&&!isPrivateSchoolFormEvent(evt)&&!isPrivateWitnessInquiryEvent(evt)&&!isPrivatePavilionFireEvent(evt)&&!isPrivateMercyReunionEvent(evt)&&!(evt.witnessScope==='participants'&&evt.id.endsWith('-study-technique-fire')))witnessEvent(nextState, evt);
       if(decision.chosenAction==='SOCIALIZE'&&cultivator.currentAction==='SOCIALIZE'){
         const after=recordTournamentBanquetAfterTalk(nextState,evt);
         if(after&&!newEvents.some(row=>row.id===after.id))newEvents.push(after);

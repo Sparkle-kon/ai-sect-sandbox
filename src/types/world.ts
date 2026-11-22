@@ -1,3 +1,4 @@
+import type { MercyReunionMove, MercyReunionState } from './mercyReunion';
 import type { PavilionFireMove, PavilionFireState } from './pavilionFire';
 import type { FrontierNightHuntMove } from './frontierNightHunt';
 import type { SchoolFormDuelChoice, SchoolFormDuelContact } from './schoolFormDuel';
@@ -137,6 +138,7 @@ export type ActionType =
   | 'CALAMITY_ARRAY'
   | 'WITNESS_INQUIRY'
   | 'PAVILION_FIRE'
+  | 'MERCY_REUNION'
   | 'FRONTIER_NIGHT_HUNT'
   | 'FRONTIER_GORGE'
   | 'AUDIENCE_PLEDGE'
@@ -605,6 +607,9 @@ export interface LLMDecisionPayload {
   witnessInquiryMove?: 'inspect'|'ask';
   pavilionFireMove?: PavilionFireMove;
   targetPavilionFireId?: string;
+  duelMercy?: 'spare';
+  mercyReunionMove?: MercyReunionMove;
+  targetMercyReunionId?: string;
   targetCampaignAssemblySiegeId?: string;
   targetBattlefieldSiegeId?: string;
   grandSiegeHeroMove?: GrandSiegeHeroMove;
@@ -3665,6 +3670,7 @@ export interface WorldState {
   beastDuelContacts?:BeastDuelContact[];
   schoolFormDuels?: SchoolFormDuelContact[];
   pavilionFires?: PavilionFireState;
+  mercyReunions?: MercyReunionState;
   scribeCommissions?: ScribeCommissionState;
   waypostMeals?: WaypostMealState;
   disasterShelter?: DisasterShelterState;

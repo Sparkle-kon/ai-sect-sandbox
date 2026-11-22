@@ -1,3 +1,5 @@
+import {availableMercyReunionActions} from './mercyReunion';
+import {conditionalMercyChoices,exactStoryMercyDecision,storyMercyCommand} from './mercyReunionCognition';
 import { availableFrontierGorgeActions } from './frontierGorge';
 import { exactFrontierGorgeDecision,frontierGorgeCommand } from './frontierGorgeCognition';
 import { availablePavilionFireActions } from './pavilionFire';
@@ -1409,6 +1411,14 @@ export function computeHeuristicDecision(
       if (exact) return exact;
     }
   }
+  if(activeAvatar(world)!==cultivator&&world.mercyReunions?.cases.length){
+    const menu=availableMercyReunionActions(cultivator,world,world.tick);
+    const choice=menu.find(row=>row.mercyReunionMove==='accept_aid')??
+      menu.find(row=>row.mercyReunionMove==='aid'&&(cultivator.personality==='刚正'||cultivator.personality==='逍遥'))??
+      menu.find(row=>row.mercyReunionMove==(cultivator.personality==='嗜血'?'challenge':'stand_down'));
+    const exact=choice&&exactStoryMercyDecision(storyMercyCommand(choice),menu);
+    if(exact)return exact;
+  }
   if(activeAvatar(world)!==cultivator&&world.pavilionFires?.cases.length){
     const fire=availablePavilionFireActions(cultivator,world,world.tick);
     const mode=cultivator.hp<cultivator.maxHp*.45?'leave':cultivator.personality==='刚正'?'ward':'salvage';
@@ -2582,6 +2592,17 @@ export async function requestCultivatorLLMDecision(
         exactBeastDuelResponse(parsed,beastContact.id,availableBeastDuelChoices(world,cultivator)):undefined,160);
   }
 
+  const quoteMercy=()=>[...availableMercyReunionActions(cultivator,world,requestTick),
+    ...conditionalMercyChoices(world,cultivator,requestTick)];
+  const mercy=quoteMercy();
+  if(mercy.length){
+    if(requestTick!==world.tick+1||activeAvatar(world)===cultivator)return undefined;
+    return requestDecisionPrompt(config,requestTick,options,
+      '只抄写一项当下授权动作。收锋必须由实战结算，护送须另一人亲自接受。不填伤害、胜负、恩仇或表态：'+
+        JSON.stringify(mercy.map(storyMercyCommand)),
+      parsed=>requestTick===world.tick+1&&activeAvatar(world)!==cultivator&&exactStoryMercyDecision(parsed,mercy)
+        ?exactStoryMercyDecision(parsed,quoteMercy()):undefined,165);
+  }
   const fire=availablePavilionFireActions(cultivator,world,requestTick);
   if(fire.length){
     if(requestTick!==world.tick+1||activeAvatar(world)===cultivator)return undefined;

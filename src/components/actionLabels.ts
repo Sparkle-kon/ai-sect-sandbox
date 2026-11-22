@@ -10,6 +10,7 @@ const ACTION_LABELS = {
   CALAMITY_ARRAY: '守阵避瘴',
   WITNESS_INQUIRY: '查问坊间指证',
   PAVILION_FIRE: '火中守卷',
+  MERCY_REUNION: '旧刃重逢',
   FRONTIER_NIGHT_HUNT: '雪岭查迹',
   FRONTIER_GORGE: '峡口避风',
   SCHOOL_FORM_DUEL: '剑锋相对',
