@@ -59,3 +59,18 @@ describe('actually crossed gorge section',()=>{
       .not.toContain('实经一段');
   });
 });
+
+describe('anonymous paid waterfront lamp',()=>{
+  const lamp={chartId:chart.chartId,tileId:'n11'};
+  it('shows only the lamp in its exact admitted known land tile',()=>{
+    const html=renderToStaticMarkup(<FrontierChart chart={chart} lamp={lamp}/>);
+    expect(html).toContain('此处已知的泉眼 · 第 2 行，第 2 列 · 此处实点了一盏灯');
+    expect(html).not.toMatch(/n11|亡者|祭奠人/);
+  });
+  it('omits unprovided, unknown, foreign-chart or sea lamps',()=>{
+    const maritime:FrontierChartData={...chart,tiles:chart.tiles.map(tile=>tile.tileId===lamp.tileId?{...tile,surface:'sea'}:tile)};
+    for(const [data,mark] of [[chart,undefined],[chart,{...lamp,chartId:'elsewhere'}],[chart,{...lamp,tileId:'n-out'}],[maritime,lamp]] as const){
+      expect(renderToStaticMarkup(<FrontierChart chart={data} lamp={mark}/>)).not.toContain('实点了一盏灯');
+    }
+  });
+});

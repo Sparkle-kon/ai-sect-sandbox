@@ -1,3 +1,5 @@
+import {availableFarewellLandingActions} from './farewellLanding';
+import {exactFarewellLandingDecision,farewellLandingCommand} from './farewellLandingCognition';
 import {availableMercyReunionActions} from './mercyReunion';
 import {conditionalMercyChoices,exactStoryMercyDecision,storyMercyCommand} from './mercyReunionCognition';
 import { availableFrontierGorgeActions } from './frontierGorge';
@@ -816,6 +818,11 @@ export function computeHeuristicDecision(
   if (ascensionDutyActive(world, cultivator)) return utilityAscensionDecision(cultivator, world) ?? ascensionQuietWait();
   if(cultivator.positionPlane==='frontier'){
     if(activeAvatar(world)!==cultivator){
+      const lamps=availableFarewellLandingActions(cultivator,world,world.tick);
+      const wantLight=cultivator.personality==='痴情'||cultivator.personality==='刚正';
+      const lamp=lamps.find(row=>row.farewellLandingMove===(wantLight?'keep_light':'farewell'))??lamps[0];
+      const ownedLamp=lamp&&exactFarewellLandingDecision(farewellLandingCommand(lamp),lamps);
+      if(ownedLamp)return ownedLamp;
       const gorge=availableFrontierGorgeActions(cultivator,world,world.tick);
       const choice=(cultivator.hp>=cultivator.maxHp*.55?gorge.find(row=>row.frontierGorgeMove==='detour'):undefined)??
         gorge.find(row=>row.frontierGorgeMove==='wait');
@@ -2418,6 +2425,14 @@ export async function requestCultivatorLLMDecision(
     }, 165);
   }
   if(cultivator.positionPlane==='frontier'){
+    const lamps=availableFarewellLandingActions(cultivator,world,requestTick);
+    if(lamps.length){
+      if(requestTick!==world.tick+1||activeAvatar(world)===cultivator)return undefined;
+      return requestDecisionPrompt(config,requestTick,options,
+        '只原样抄写本人可行的一项泊岸作别。不要填写亡者私语、灵验、舟船、花费或结局：'+JSON.stringify(lamps.map(farewellLandingCommand)),
+        parsed=>requestTick===world.tick+1&&activeAvatar(world)!==cultivator&&exactFarewellLandingDecision(parsed,lamps)
+          ?exactFarewellLandingDecision(parsed,availableFarewellLandingActions(cultivator,world,requestTick)):undefined,155);
+    }
     const gorge=availableFrontierGorgeActions(cultivator,world,requestTick);
     if(gorge.length){
       if(requestTick!==world.tick+1||activeAvatar(world)===cultivator)return undefined;

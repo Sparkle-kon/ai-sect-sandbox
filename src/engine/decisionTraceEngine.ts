@@ -119,6 +119,7 @@ export function recordDecisionTrace(world: WorldState, actorId: string, candidat
     decision.chosenAction==='MERCY_REUNION'||decision.duelMercy!==undefined||decision.targetMercyReunionId!==undefined||
     decision.chosenAction==='PAVILION_FIRE'||decision.targetPavilionFireId!==undefined||decision.pavilionFireMove!==undefined||
     decision.targetCampaignAssemblySiegeId !== undefined || decision.chosenAction === 'WITNESS_INQUIRY' || decision.witnessInquiryMove !== undefined ||
+    decision.chosenAction==='FAREWELL_LANDING'||decision.targetFarewellDeceasedId!==undefined||decision.farewellLandingMove!==undefined||
     decision.chosenAction === 'FRONTIER_GORGE' || decision.frontierGorgeMove!==undefined ||
     decision.chosenAction === 'FRONTIER_NIGHT_HUNT' || decision.frontierNightHuntMove !== undefined ||
     decision.chosenAction === 'SCHOOL_FORM_DUEL' || decision.schoolFormChoice !== undefined || decision.targetSchoolFormContactId !== undefined ||
@@ -178,7 +179,7 @@ export function createDecisionReplayTape(base: WorldState, councilMode: ReplayCo
 }
 
 const MECHANICAL_FIELDS = [
-  'targetHeartDemonAftermathId', 'targetCampaignAssemblySiegeId','pavilionFireMove','targetPavilionFireId','duelMercy','mercyReunionMove','targetMercyReunionId',
+  'targetHeartDemonAftermathId','farewellLandingMove','targetFarewellDeceasedId', 'targetCampaignAssemblySiegeId','pavilionFireMove','targetPavilionFireId','duelMercy','mercyReunionMove','targetMercyReunionId',
   'targetLocationId', 'targetCultivatorId', 'rumorIntent', 'proposedScheme', 'targetTuitionId', 'targetOathId', 'oathTerm', 'marketGood',
   'marketQuantity', 'marketLimitPrice', 'targetMarketOrderId', 'targetSettlementId', 'civicMemorialMove', 'targetCivicDeedId', 'targetCivicMemorialId', 'targetVolunteerId', 'targetWitnessEventId',
   'targetWitnessClaimId', 'targetEstateId', 'targetTechniqueId', 'targetHerbId', 'seedMove', 'targetSeedLotId', 'targetSeedPlotId', 'targetPillId', 'targetArtifactId', 'forgeTier',

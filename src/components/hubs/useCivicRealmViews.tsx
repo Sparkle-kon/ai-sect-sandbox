@@ -1,3 +1,4 @@
+import {projectFarewellLanding} from '../../engine/farewellLanding';
 import {projectFrontierGorge} from '../../engine/frontierGorge';
 import { projectFrontierNightHunt } from '../../engine/frontierNightHunt';
 import React, { type ReactNode } from 'react';
@@ -391,8 +392,10 @@ export function useCivicRealmViews({
     ?{chartId:frontierView.chartId,tileId:visibleNightHunt.siteId}:undefined;
   const confirmedGorgeCrossing=frontierView?.scope==='frontier'&&selectedCultivator
     ?projectFrontierGorge(visibleWorld,selectedCultivator)?.crossing:undefined;
+  const localFarewellLamp=frontierView?.scope==='frontier'&&selectedCultivator
+    ?projectFarewellLanding(visibleWorld,selectedCultivator)?.light:undefined;
   const frontierRealmView=frontierView&&<React.Suspense fallback={<p role="status">查验亲到的地界…</p>}>
-    <FrontierPanel view={frontierView} nightTrail={nightTrail} gorgeCrossing={confirmedGorgeCrossing} production={frontierProduction} trade={frontierTrade} controls={frontierControls}
+    <FrontierPanel view={frontierView} nightTrail={nightTrail} gorgeCrossing={confirmedGorgeCrossing} farewellLamp={localFarewellLamp} production={frontierProduction} trade={frontierTrade} controls={frontierControls}
       host={frontierHost} tradeCandidates={frontierCandidates}
       portPanel={portLocal||portTrades.length||portChoices.length?
         <FrontierPortPanel movement={frontierView} local={portLocal} trades={portTrades}

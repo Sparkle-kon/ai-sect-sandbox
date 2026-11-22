@@ -9,6 +9,7 @@ export interface FrontierChartData {
   chartId:string;name:string;rows:number;cols:number;
   currentTileId:string;tiles:readonly FrontierChartCell[];
 }
+export interface FrontierChartLamp {chartId:string;tileId:string}
 export interface FrontierChartTrail {chartId:string;tileId:string}
 export interface FrontierChartCrossing {chartId:string;fromTileId:string;toTileId:string}
 type Blueprint={tiles:FrontierChartCell[];cols:number;rows:number;active:FrontierChartCell};
@@ -52,10 +53,11 @@ export function frontierChartCrossing(geometry:Blueprint,crossing?:FrontierChart
 }
 
 const WIDTH=480,HEIGHT=270;
-export function paintFrontierChart(ctx:CanvasRenderingContext2D,blueprint:Blueprint,trail?:FrontierChartTrail,crossing?:FrontierChartCrossing){
+export function paintFrontierChart(ctx:CanvasRenderingContext2D,blueprint:Blueprint,trail?:FrontierChartTrail,crossing?:FrontierChartCrossing,lamp?:FrontierChartLamp){
   const {tiles,cols,rows,active}=blueprint;
   const ink=frontierChartInk(active.chartId);
   const marked=frontierChartTrail(blueprint,trail);
+  const lit=frontierChartTrail(blueprint,lamp);
   const size=Math.min((WIDTH-30)/cols,(HEIGHT-24)/rows);
   const left=(WIDTH-cols*size)/2,top=(HEIGHT-rows*size)/2;
   ctx.clearRect(0,0,WIDTH,HEIGHT);
@@ -71,6 +73,14 @@ export function paintFrontierChart(ctx:CanvasRenderingContext2D,blueprint:Bluepr
       ctx.beginPath();ctx.moveTo(mx,my-side);ctx.lineTo(mx+side,my);
       ctx.lineTo(mx,my+side);ctx.lineTo(mx-side,my);ctx.closePath();
       ctx.fillStyle='#f9d28c';ctx.fill();ctx.strokeStyle='#18222a';ctx.lineWidth=1.5;ctx.stroke();
+    }
+    if(lit===tile){
+      const unit=Math.min(3,size*.08),lx=x+size-2*unit-5,ly=y+size-3*unit-5;
+      ctx.save();
+      ctx.lineWidth=2;ctx.strokeStyle='#282028';ctx.fillStyle='#f4cf82';
+      ctx.fillRect(lx-unit,ly,unit*2,unit*2.5);ctx.strokeRect(lx-unit,ly,unit*2,unit*2.5);
+      ctx.beginPath();ctx.moveTo(lx-unit*1.5,ly);ctx.lineTo(lx,ly-unit*1.8);ctx.lineTo(lx+unit*1.5,ly);
+      ctx.closePath();ctx.fill();ctx.stroke();ctx.restore();
     }
     ctx.strokeStyle='#080e16';ctx.lineWidth=2.5;
     ctx.fillStyle=current?'#fef3c7':'#e2eff3';
@@ -93,17 +103,18 @@ export function paintFrontierChart(ctx:CanvasRenderingContext2D,blueprint:Bluepr
   }
 }
 
-export function FrontierChart({chart,trail,crossing}:{chart:FrontierChartData;trail?:FrontierChartTrail;crossing?:FrontierChartCrossing}){
+export function FrontierChart({chart,trail,crossing,lamp}:{chart:FrontierChartData;trail?:FrontierChartTrail;crossing?:FrontierChartCrossing;lamp?:FrontierChartLamp}){
   const geometry=useMemo(()=>frontierChartGeometry(chart),[chart]);
   const canvas=useRef<HTMLCanvasElement>(null);
   const caption=useId();
   useEffect(()=>{
     const ctx=geometry&&canvas.current?.getContext('2d');
-    if(ctx&&geometry)paintFrontierChart(ctx,geometry,trail,crossing);
-  },[geometry,trail,crossing]);
+    if(ctx&&geometry)paintFrontierChart(ctx,geometry,trail,crossing,lamp);
+  },[geometry,trail,crossing,lamp]);
   if(!geometry)return null;
   const {active,tiles}=geometry;
   const marked=frontierChartTrail(geometry,trail);
+  const lit=frontierChartTrail(geometry,lamp);
   const crossed=frontierChartCrossing(geometry,crossing);
   return <figure className="min-w-0 space-y-1" aria-labelledby={caption}>
     <figcaption id={caption} className="text-sm text-emerald-100">此处脚下：{active.name&&`${active.name} · `}{frontierCoordinate(active)}。</figcaption>
@@ -117,6 +128,7 @@ export function FrontierChart({chart,trail,crossing}:{chart:FrontierChartData;tr
           {tile.name&&`${tile.name} · `}{frontierCoordinate(tile)}{tile.heading&&` · ${tile.heading}`}
           {tile.tileId===active.tileId&&' · 此人所在'}
           {tile===marked&&' · 此处曾查见足迹'}
+          {tile===lit&&' · 此处实点了一盏灯'}
         </li>)}
       </ol>
     </details>

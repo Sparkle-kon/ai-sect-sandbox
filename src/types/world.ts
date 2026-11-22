@@ -1,3 +1,4 @@
+import type { FarewellLandingMove, FarewellLandingState } from './farewellLanding';
 import type { MercyReunionMove, MercyReunionState } from './mercyReunion';
 import type { PavilionFireMove, PavilionFireState } from './pavilionFire';
 import type { FrontierNightHuntMove } from './frontierNightHunt';
@@ -141,6 +142,7 @@ export type ActionType =
   | 'MERCY_REUNION'
   | 'FRONTIER_NIGHT_HUNT'
   | 'FRONTIER_GORGE'
+  | 'FAREWELL_LANDING'
   | 'AUDIENCE_PLEDGE'
   | 'CULTIVATE'
   | 'BREAKTHROUGH'
@@ -604,6 +606,8 @@ export interface LLMDecisionPayload {
   targetCalamityHazardId?: string;
   frontierNightHuntMove?: FrontierNightHuntMove;
   frontierGorgeMove?: 'detour'|'wait';
+  farewellLandingMove?: FarewellLandingMove;
+  targetFarewellDeceasedId?: string;
   witnessInquiryMove?: 'inspect'|'ask';
   pavilionFireMove?: PavilionFireMove;
   targetPavilionFireId?: string;
@@ -3671,6 +3675,7 @@ export interface WorldState {
   schoolFormDuels?: SchoolFormDuelContact[];
   pavilionFires?: PavilionFireState;
   mercyReunions?: MercyReunionState;
+  farewellLandings?: FarewellLandingState;
   scribeCommissions?: ScribeCommissionState;
   waypostMeals?: WaypostMealState;
   disasterShelter?: DisasterShelterState;

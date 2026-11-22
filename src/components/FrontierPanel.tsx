@@ -6,7 +6,7 @@ import type {FrontierTradeOption,FrontierTradeView} from '../engine/frontierTrad
 import {FRONTIER_CHARTS,FRONTIER_ENTER_ROOTS,FRONTIER_ENTER_STONES,FRONTIER_SETTLE_ROOTS,FRONTIER_SETTLE_STONES,
   frontierSite} from '../engine/frontierTerms';
 import {FRONTIER_TRADE_AMOUNT,FRONTIER_TRADE_WINTER_REEDS} from '../engine/frontierTradeTerms';
-import {FrontierChart,type FrontierChartTrail,type FrontierChartCrossing} from './FrontierChart';
+import {FrontierChart,type FrontierChartTrail,type FrontierChartCrossing,type FrontierChartLamp} from './FrontierChart';
 import {FrontierProductionRead} from './FrontierProductionRead';
 import {FrontierTradeRead} from './FrontierTradeRead';
 
@@ -30,6 +30,7 @@ export interface FrontierHostControls {
 interface Props {
   nightTrail?:FrontierChartTrail;
   gorgeCrossing?:FrontierChartCrossing;
+  farewellLamp?:FrontierChartLamp;
   view?:FrontierMovementView;
   production?:FrontierProductionView;
   trade?:readonly FrontierTradeView[];
@@ -229,7 +230,7 @@ export function FrontierPanel(props:Props){
   const localProduction=production?.regionId===view.regionId&&production.siteId===place.id?production:undefined;
   return <section className={`${shell} p-3`} aria-label={chart.name}>
     <h2 className="text-base font-semibold text-emerald-100">{chart.name}</h2>
-    <FrontierChart chart={chartData} trail={props.nightTrail} crossing={props.gorgeCrossing}/>
+    <FrontierChart chart={chartData} trail={props.nightTrail} crossing={props.gorgeCrossing} lamp={props.farewellLamp}/>
     <p className="text-xs text-slate-300">格子靠近不等于眼下路通；按此人此月能走的路复核。</p>
     <p>{view.residence?'已在本地实缴并登记驻住。':'此人是访客，尚未驻住。'}</p>
     {view.visit&&<p className="text-xs text-slate-300">入关实账：第 {view.visit.enteredTick} 轮实付 {view.visit.paidStones} 灵石、{view.visit.paidRoots} 份地根。</p>}

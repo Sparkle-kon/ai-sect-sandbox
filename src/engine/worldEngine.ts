@@ -1,3 +1,5 @@
+import {availableFarewellLandingActions,isPrivateFarewellLandingEvent,resolveFarewellLandingAction} from './farewellLanding';
+import {exactFarewellLandingDecision} from './farewellLandingCognition';
 import {availableMercyReunionActions,isPrivateMercyReunionEvent,mercyReunionAidActed,mercyReunionAidPendingHold,recordMercyReunionMovement,
   recordMercySpared,resolveMercyReunionAction} from './mercyReunion';
 import {conditionalMercyChoices,exactStoryMercyDecision,lawfulConditionalMercy} from './mercyReunionCognition';
@@ -458,6 +460,13 @@ export function applyCultivatorBrainDecision(
     return event;
   }
   if(cultivator.positionPlane==='frontier'){
+    if(decision.chosenAction==='FAREWELL_LANDING'){
+      if(activeAvatar(world)===cultivator&&(modelInput||isProviderPersonaDecision(decision)))return null;
+      const exact=exactFarewellLandingDecision(decision,availableFarewellLandingActions(cultivator,world,world.tick),true);
+      const result=exact&&resolveFarewellLandingAction(world,cultivator,exact);
+      if(result&&exact){cultivator.currentAction='FAREWELL_LANDING';cultivator.innerMonologue=exact.innerMonologue;}
+      return result??null;
+    }
     if(decision.chosenAction==='FRONTIER_GORGE'){
       if(activeAvatar(world)===cultivator&&(modelInput||isProviderPersonaDecision(decision)))return null;
       const exact=exactFrontierGorgeDecision(decision,availableFrontierGorgeActions(cultivator,world,world.tick),true);
@@ -1199,6 +1208,7 @@ export function applyCultivatorBrainDecision(
       };
     }
 
+    case 'FAREWELL_LANDING':
     case 'FRONTIER_GORGE':
     case 'FRONTIER_NIGHT_HUNT':
     case 'SCHOOL_FORM_DUEL':
@@ -1390,6 +1400,11 @@ export function advanceWorldTick(
       let decisionDraws=0;
       const fromModel=Boolean(!explicit&&supplied&&traceOptions?.modelActors?.has(cultivator.id));
       let requested=explicit??supplied;
+      if(fromModel&&requested?.chosenAction==='FAREWELL_LANDING'){
+        const earlier=prevState.cultivators.find(actor=>actor.id===cultivator.id);
+        if(!earlier||activeAvatar(prevState)===earlier||!exactFarewellLandingDecision(requested,
+          availableFarewellLandingActions(earlier,prevState,nextState.tick),true))requested=undefined;
+      }
       if(fromModel&&requested?.chosenAction==='FRONTIER_GORGE'){
         const earlier=prevState.cultivators.find(actor=>actor.id===cultivator.id);
         if(!earlier||activeAvatar(prevState)===earlier||!exactFrontierGorgeDecision(requested,
@@ -1411,13 +1426,13 @@ export function advanceWorldTick(
       const result=applyCultivatorBrainDecision(nextState,cultivator,decision,rng,undefined,event=>{
         newEvents.push(event);witnessEvent(nextState,event);
       },explicit,Boolean(fromModel&&requested));
-      const applied=(decision.chosenAction==='UPPER_PASSAGE'||decision.chosenAction==='FRONTIER_NIGHT_HUNT'||decision.chosenAction==='FRONTIER_GORGE'||
+      const applied=(decision.chosenAction==='UPPER_PASSAGE'||decision.chosenAction==='FRONTIER_NIGHT_HUNT'||decision.chosenAction==='FRONTIER_GORGE'||decision.chosenAction==='FAREWELL_LANDING'||
         isFrontierAction(decision.chosenAction)||isUpperArrayFieldAction(decision.chosenAction))&&result!==null;
       if(supplied)recordDecisionEffect?.(cultivator.id,!explicit&&requested===supplied&&applied);
       traceOptions?.onActor?.(cultivator.id,candidates,applied);
       if(capture)recordDecisionTrace(nextState,cultivator.id,candidates,decision,explicit?'avatar':
         supplied&&traceOptions?.modelActors?.has(cultivator.id)?'model':'utility',applied);
-      if(result){newEvents.push(result);if(decision.chosenAction!=='FRONTIER_GORGE'&&!isPrivateFrontierNightHuntEvent(result)&&!isPrivateFrontierGorgeEvent(result))witnessEvent(nextState,result);}
+      if(result){newEvents.push(result);if(decision.chosenAction!=='FRONTIER_GORGE'&&!isPrivateFrontierNightHuntEvent(result)&&!isPrivateFrontierGorgeEvent(result)&&!isPrivateFarewellLandingEvent(result))witnessEvent(nextState,result);}
       continue;
     }
 
