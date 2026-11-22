@@ -1,3 +1,4 @@
+import {FastForwardCapacityNotice,campaignFrameBlocksStart} from './FastForwardCapacityNotice';
 import { useEffect, useRef, useState } from 'react';
 import type { TimelineSnapshot, WorldTimeline } from '../engine/timelineEngine';
 import type { WorldState } from '../types/world';
@@ -125,7 +126,8 @@ export function FastForwardPanel({ controls, timeline, branchLimit, blocked }: {
   const observedBinding = useRef(binding);
   const alreadyStarted = useRef<Prepare>();
   const validPreflight = preflight && sameFastForwardBinding(preflight.binding, binding) ? preflight : undefined;
-  const mayStart = validPreflight?.phase === 'measured';
+  const campaignPlan=!!controls.campaignAvailable&&!!datePlan?.ok&&(datePlan.months>FAST_FORWARD_MAX_TICKS||!!stop);
+  const mayStart=validPreflight?.phase==='measured'&&!campaignFrameBlocksStart(campaignPlan,validPreflight.report.bytes);
   useEffect(() => {
     return () => { serial.current++; };
   }, []);
@@ -176,7 +178,7 @@ export function FastForwardPanel({ controls, timeline, branchLimit, blocked }: {
       {sourceMismatch && !blocked && !isActive && <p className="text-amber-200">实时状态与分支最新记录的轮次或日期不一致，暂不能预检。</p>}
       {!isActive && <form className="space-y-1.5" onSubmit={(event) => {
         event.preventDefault();
-        if (validPreflight?.phase !== 'measured' || alreadyStarted.current === validPreflight ||
+        if (!mayStart || validPreflight?.phase !== 'measured' || alreadyStarted.current === validPreflight ||
           !sameFastForwardBinding(validPreflight.binding,activeBinding.current)) return;
         alreadyStarted.current = validPreflight;
         const checked = validPreflight.binding;
@@ -219,8 +221,7 @@ export function FastForwardPanel({ controls, timeline, branchLimit, blocked }: {
             {validPreflight.binding.target && `，目标${dateLabel(validPreflight.binding.target)}`}。</p>
           <p>单个世界 JSON 导出：{validPreflight.report.bytes} 字节（UTF-8）。文件上限 {validPreflight.report.limit} 字节（8 MiB）。</p>
           <p>当前时间线：{validPreflight.report.branches} 条分支合计 {validPreflight.report.snapshots} 个快照引用（{validPreflight.report.uniqueSnapshots} 份不同快照），当前分支 {validPreflight.report.branchSnapshots} 份。</p>
-          <p>快照份数不是内存用量，也不是人口上限；文件上限本身不阻止独立快进。</p>
-          {validPreflight.report.bytes > validPreflight.report.limit && <p role="status" className="text-amber-200">当前 JSON 超过文件上限，不能直接导出并重新导入。你仍可自行决定是否开始快进。</p>}
+          <FastForwardCapacityNotice campaign={campaignPlan} currentBytes={validPreflight.report.bytes} ordinaryLimit={validPreflight.report.limit}/>
         </div>}
       </form>}
       {phase !== 'idle' && <p role="status" className="font-medium text-violet-200">{phaseLabel[phase]}{controls.notice && ` · ${controls.notice}`}</p>}

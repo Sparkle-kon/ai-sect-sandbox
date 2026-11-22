@@ -1,4 +1,3 @@
-import {expect} from 'vitest';
 import {createInitialWorld} from '../../src/data/initialWorld';
 import {knownMapLocations} from '../../src/engine/terrainEngine';
 import {advanceWorldTick,applyCultivatorBrainDecision} from '../../src/engine/worldEngine';
@@ -9,6 +8,9 @@ import {granaryAt} from '../../src/engine/villageGranaryEngine';
 import {NORTH_MINING_MARKET,NORTH_MINING_SETTLEMENT,NORTH_MINING_SITE} from '../../src/engine/northMiningCharterTerms';
 import type {LLMDecisionPayload,NorthMiningStance,WorldState} from '../../src/types/world';
 
+function requireFixture(condition:unknown,message:string):asserts condition {
+  if(!condition)throw new Error(`北井原生夹具不成立：${message}`);
+}
 const elder='elder-danxia-1', miner='npc-6';
 const actor=(world:WorldState,id=elder)=>world.cultivators.find(item=>item.id===id)!;
 const a=(chosenAction:LLMDecisionPayload['chosenAction'],extra:Partial<LLMDecisionPayload>={}):LLMDecisionPayload=>
@@ -28,11 +30,11 @@ function nativeVisit(world:WorldState,id:string,target:string){
   const candidates=unknown.length?unknown:world.locations.filter(row=>row.id!==person.locationId&&
     !(row.type==='secret_realm'&&row.expeditionOmenId!==undefined));
   const index=candidates.findIndex(row=>row.id===target);
-  expect(has||index>=0).toBe(true);
+  requireFixture(has||index>=0,'行程无可选目的地');
   let draw=0;
   applyCultivatorBrainDecision(world,person,a('EXPLORE',has?{targetLocationId:target}:{}),
     ()=>!has&&draw++===0?(index+.2)/candidates.length:.99);
-  expect(person.locationId).toBe(target);
+  requireFixture(person.locationId===target,'原生游历未到目标');
 }
 function source(seed=1){
   let world=createInitialWorld(seed,'spirit-bloom');
@@ -44,16 +46,19 @@ function source(seed=1){
   const lot=world.seedCulture.lots[0];
   world=step(world,{[elder]:a('SEED_CULTURE',{seedMove:'test',targetSeedLotId:lot.id})});
   world=step(world,{[elder]:a('SEED_CULTURE',{seedMove:'plant',targetSeedLotId:lot.id})});
-  expect(world.villageWorks.projects[0]).toMatchObject({status:'completed',settledTick:5,laborTotal:4});
+  const well=world.villageWorks.projects[0];
+  requireFixture(well?.status==='completed'&&well.settledTick===5&&well.laborTotal===4,'实井未按期完成');
   world=step(world,{[elder]:water('open')});world=step(world);world=step(world);
-  expect(world.seedCulture.plots[0].weather[2]).toMatchObject({tick:10,waterDeficit:3});
+  const sample=world.seedCulture.plots[0]?.weather[2];
+  requireFixture(sample?.tick===10&&sample.waterDeficit===3,'缺水田尺未记录');
   nativeVisit(world,miner,NORTH_MINING_SITE);
-  const recruit=availableSettlementActions(actor(world),world).find(row=>row.action==='RECRUIT_SETTLER')!;
-  expect(recruit).toBeDefined();
+  const recruit=availableSettlementActions(actor(world),world).find(row=>row.action==='RECRUIT_SETTLER');
+  requireFixture(recruit,'原户未提供真实招募选项');
   world=step(world,{[elder]:a('RECRUIT_SETTLER',recruit),[miner]:water('mine')});
   const house=`recruit-${recruit.targetVolunteerId}`;
-  expect(actor(world,house).alive).toBe(true);
-  expect(world.coldWaterVein?.mining[0]).toMatchObject({id:'water-mine-11-npc-6',actorId:miner,units:1});
+  requireFixture(actor(world,house)?.alive,'原户招募未形成在世身份');
+  const mining=world.coldWaterVein?.mining[0];
+  requireFixture(mining?.id==='water-mine-11-npc-6'&&mining.actorId===miner&&mining.units===1,'实采收据不符');
   return {world,house};
 }
 function bargain(baseline:ReturnType<typeof source>,stance:NorthMiningStance,delay=false){
@@ -62,9 +67,10 @@ function bargain(baseline:ReturnType<typeof source>,stance:NorthMiningStance,del
   if(delay)world=step(world);
   world=step(world,{[house]:charter('propose',stance)});
   const id=world.northMiningCharters!.charters[0].id;
-  expect(world.northMiningCharters?.charters[0]).toMatchObject({stance,status:'proposed',signatures:[],fieldDeficit:3,
-    plotId:'seed-plot-1',openingId:'water-gate-8',wellProjectId:'village-work-1'});
-  expect(availableNorthMiningCharterActions(actor(world,miner),world,world.tick+1)).toEqual([]);
+  const proposal=world.northMiningCharters?.charters[0];
+  requireFixture(proposal?.stance===stance&&proposal.status==='proposed'&&!proposal.signatures.length&&proposal.fieldDeficit===3&&
+    proposal.plotId==='seed-plot-1'&&proposal.openingId==='water-gate-8'&&proposal.wellProjectId==='village-work-1','原提案凭据不符');
+  requireFixture(!availableNorthMiningCharterActions(actor(world,miner),world,world.tick+1).length,'矿席越序');
   world=step(world,{[house]:charter('sign',id)});
   world=step(world,{[miner]:charter('sign',id)});
   return {world,id,house};
@@ -80,17 +86,17 @@ function prepareFreight(start:WorldState){
   nativeVisit(world,right,NORTH_MINING_SITE);
   world=step(world,{[left]:a('GATHER_HERBS',{targetHerbId:'earth_root'}),
     [right]:a('VILLAGE_GRANARY',{granaryMove:'donate_stones',targetSettlementId:NORTH_MINING_SETTLEMENT})});
-  expect(actor(world,left).herbs.earth_root).toBeGreaterThanOrEqual(4);
+  requireFixture(actor(world,left).herbs.earth_root>=4,'实采玄土根不足');
   nativeVisit(world,left,'loc-market');
   world=step(world,{[left]:a('VILLAGE_GRANARY',{granaryMove:'donate_roots',targetSettlementId:NORTH_MINING_MARKET}),
     [right]:a('VILLAGE_GRANARY',{granaryMove:'donate_stones',targetSettlementId:NORTH_MINING_SETTLEMENT})});
   world=step(world,{[left]:a('VILLAGE_GRANARY',{granaryMove:'donate_roots',targetSettlementId:NORTH_MINING_MARKET})});
-  expect(granaryAt(world,NORTH_MINING_MARKET)?.roots).toBe(4);
-  expect(granaryAt(world,NORTH_MINING_SETTLEMENT)?.stones).toBe(16);
+  requireFixture(granaryAt(world,NORTH_MINING_MARKET)?.roots===4,'原仓入根数量不符');
+  requireFixture(granaryAt(world,NORTH_MINING_SETTLEMENT)?.stones===16,'北仓入石数量不符');
   world=step(world,{[left]:a('VILLAGE_SUPPLY',{villageSupplyMove:'offer',targetSettlementId:NORTH_MINING_SETTLEMENT})});
   const offered=world.villageSupply.agreements[0];
-  expect(offered).toMatchObject({status:'offered'});
-  expect(availableVillageSupplyActions(actor(world,right),world,world.tick+1)).toContainEqual(expect.objectContaining({villageSupplyMove:'accept'}));
+  requireFixture(offered?.status==='offered','未提出真实互运');
+  requireFixture(availableVillageSupplyActions(actor(world,right),world,world.tick+1).some(row=>row.villageSupplyMove==='accept'),'真实商货未可签收');
   world=step(world,{[right]:a('VILLAGE_SUPPLY',{villageSupplyMove:'accept',targetVillageSupplyId:offered.id})});
   return {world,offered,left};
 }
@@ -103,9 +109,10 @@ export function prepareNorthWellHistoricalSource(){
  let {world}=prepareFreight(ratified);
  while(world.villageSupply.agreements[0].status!=='completed'&&world.tick<36)world=step(world);
  const row=world.northMiningCharters!.charters[0];
- expect(world.tick).toBe(34);
- expect(row.id).toBe('north-mining-charter-12');
- expect(row.firstPassage).toMatchObject({tick:23,tileId:'tile-13-2'});
- expect(world.villageSupply.agreements[0].legs?.map(leg=>leg.phase)).toEqual(['delivered','delivered']);
+ requireFixture(world.tick===34,'验收源线未抵真实 T34');
+ requireFixture(row.id==='north-mining-charter-12','原采契 ID 不符');
+ requireFixture(row.firstPassage?.tick===23&&row.firstPassage.tileId==='tile-13-2','未实际走过独有绕道');
+ const legs=world.villageSupply.agreements[0].legs;
+ requireFixture(legs?.length===2&&legs.every(leg=>leg.phase==='delivered'),'双向真实货物尚未送达');
  return {world,actorId:elder,charterId:row.id};
 }
