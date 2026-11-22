@@ -1,3 +1,5 @@
+import {drawMapCultivatorToken} from './mapCultivatorTokens';
+import {drawMapLandmarkGlyph} from './mapLandmarkGlyphs';
 import {makeMapNamePills,drawMapNamePills,measureMapNamePill} from './mapCanvasNamePills';
 import {projectMapSitePins} from './mapSitePinLayout';
 import {buildAscensionMapVfx,drawAscensionMapVfx} from './ascensionSceneVfx';
@@ -585,6 +587,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     let sitePins=projectMapSitePins(seenLocations,isCurrentLocation,camera,markerSize);
     let namePillCache:{markers:ReturnType<typeof planActorMarkers>;plan:ReturnType<typeof makeMapNamePills>}|undefined;
     const siteById=new Map(seenLocations.map(site=>[site.id,site]));
+    const sectColors=new Map(world.sects.map(sect=>[sect.id,sect.color]));
     const shiftStationary=(points:typeof actorPositions)=>sitePins.size?points.map(point=>{
       const id=point.actor.locationId,from=siteById.get(id),pin=sitePins.get(id);
       return from&&pin&&!mapView.trailPositions.has(point.actor.id)&&!presentation.routes.has(point.actor.id)?
@@ -703,38 +706,13 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           ctx.fill();
           continue;
         }
-        const ownerSect = world.sects.find((s) => s.id === loc.ownerSectId);
-        const baseColor = ownerSect?.color ?? '#fbbf24';
+        const ownerColor=loc.ownerSectId?sectColors.get(loc.ownerSectId):undefined;
 
         if(pin){
           ctx.save();ctx.strokeStyle='rgba(217,193,123,.5)';ctx.lineWidth=logicalPerCssPixel;
           ctx.beginPath();ctx.moveTo(location.x,location.y);ctx.lineTo(pin.x,pin.y);ctx.stroke();ctx.restore();
         }
-        // Aura glow proportional to spiritQi
-        const auraRadius = 28 + (loc.spiritQi / 100) * 26;
-        const aura = ctx.createRadialGradient(
-          loc.x,
-          loc.y,
-          5,
-          loc.x,
-          loc.y,
-          auraRadius
-        );
-        aura.addColorStop(0, `${baseColor}44`);
-        aura.addColorStop(1, 'rgba(0,0,0,0)');
-        ctx.fillStyle = aura;
-        ctx.beginPath();
-        ctx.arc(loc.x, loc.y, auraRadius, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Core node circle
-        ctx.fillStyle = '#0f172a';
-        ctx.strokeStyle = baseColor;
-        ctx.lineWidth = 2.5;
-        ctx.beginPath();
-        ctx.arc(loc.x, loc.y, 18, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
+        drawMapLandmarkGlyph(ctx,loc,ownerColor);
 
         const arenaRound=arenaMarks.get(loc.id);
         if(arenaRound!==undefined)drawTournamentArenaMark(ctx,loc.x,loc.y,arenaRound);
@@ -814,8 +792,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
             continue;
           }
           const { actor: cultivator, x: cx, y: cy } = marker.point;
-          const sect = world.sects.find((s) => s.id === cultivator.sectId);
-          const color = sect?.color ?? '#38bdf8';
+          const color=sectColors.get(cultivator.sectId)??'#7db8c2';
           const isSelected = cultivator.id === selectedCultivatorId;
 
           // Static bolt only, so it stays legible without flashing or motion.
@@ -846,15 +823,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
             }
           }
 
-          ctx.fillStyle = color;
-          ctx.beginPath();
-          ctx.arc(cx, cy, 12, 0, Math.PI * 2);
-          ctx.fill();
-
-          ctx.strokeStyle = '#020617';
-          ctx.lineWidth = 2;
-          ctx.stroke();
-
+          drawMapCultivatorToken(ctx,cx,cy,cultivator.realm,color);
       }
       if(markerSize.width>0&&markerSize.height>0){
         ctx.save();
