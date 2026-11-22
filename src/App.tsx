@@ -412,8 +412,8 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   useEffect(() => {
     if (trail) backRef.current?.focus({ preventScroll: true });
   }, [trail]);
-  const {immersive,atlasExtras}=useCivicRealmViews({
-    simulation,selectedCultivator,cockpitOpen,dashboardOpen,workspace,onSelectCultivator:setSelectedCultivatorId,
+  const {immersive,atlasExtras,passageScene}=useCivicRealmViews({
+    simulation,selectedCultivator,cockpitOpen,dashboardOpen,storyEntryOpen,workspace,onSelectCultivator:setSelectedCultivatorId,
     onClearAvatarNotice:()=>setAvatarNotice(undefined),
   });
   const inspect=(section:'profile'|'cultivation'|'mind')=><CultivatorInspectorBridge world={visibleWorld}
@@ -640,7 +640,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   const clearWorldPulse=(token:number)=>setPulseFocus(current=>current?.token===token?undefined:current);
   const pulseStrip=worldPulse&&<WorldPulseBar view={worldPulse} historical={Boolean(preview)}
     canFocus={!immersive} onFocusAlert={focusWorldPulse}/>;
-  if(cockpitOpen)return <PanoramicCockpitView world={visibleWorld} titleRef={cockpitHeading} exit={cockpitSwitch} statusStrip={pulseStrip} stageOverride={featuredStoryCard} subplot={guidance.subplot} branchScene={flightCard}
+  if(cockpitOpen)return <PanoramicCockpitView world={visibleWorld} titleRef={cockpitHeading} exit={cockpitSwitch} statusStrip={pulseStrip} stageOverride={featuredStoryCard} subplot={guidance.subplot} branchScene={flightCard??passageScene}
     time={{historical:Boolean(preview),running:isRunning,busy:cockpitBusy||storyDecisionPending,onStep:()=>void handleStepTick(),
       onToggleAutoplay:toggleStoryAutoplay,onReturnLive:()=>handleTimelinePreview(null),onOpenTimeline:()=>{
         openWorkspace('chronicle');rememberFold('chronicle','timeline');setStoryEntryOpen(false);
@@ -674,7 +674,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
       revision={world} busy={isStepping||fastForwardLocked} onBack={()=>setStoryEntryOpen(false)} onTools={openDashboard}
       openings={<HighDramaPresetPicker scopeKey={viewScopeKey} revision={world} disabled={dramaticOpening.disabled} onStart={dramaticOpening.start}/>}
       onFollow={storyHome.lead?followCurrentLead:undefined} onEnter={enterCurrentLead} onOrder={orderCurrentStoryAvatar} />:
-      <StoryFirstHome scene={storyHome.scene} subplot={guidance.subplot} branchScene={flightCard??<DeferredGrandSiegeMapScene world={world} viewer={activeAvatar(world)} fog personalOnly visible witnessScopeKey={viewScopeKey}/>} leadName={storyHome.lead?.name} playerName={activeAvatar(world)?.name}
+      <StoryFirstHome scene={storyHome.scene} subplot={guidance.subplot} branchScene={flightCard??passageScene??<DeferredGrandSiegeMapScene world={world} viewer={activeAvatar(world)} fog personalOnly visible witnessScopeKey={viewScopeKey}/>} leadName={storyHome.lead?.name} playerName={activeAvatar(world)?.name}
         busy={isStepping} moreRef={storyMoreRef} notice={storyNotice} calendar={storyHome.calendar} opening={dramaticOpening.opening}
         outcome={storyOutcome?.world===world?storyOutcome.text:undefined} onContinue={advanceStory} onMore={openStoryEntry} />)}
   </main>;
@@ -721,7 +721,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
       </header>
       {pulseStrip&&<div className="mx-auto w-full max-w-[76rem] px-2.5 pt-2 sm:px-4">{pulseStrip}</div>}
 
-      {(featuredStoryCard??flightCard)&&<div className="mx-auto w-full max-w-2xl px-3 pt-3">{featuredStoryCard??flightCard}</div>}
+      {(featuredStoryCard??flightCard??passageScene)&&<div className="mx-auto w-full max-w-2xl px-3 pt-3">{featuredStoryCard??flightCard??passageScene}</div>}
       <SandboxWorkspace active={workspace} onChange={openWorkspace} autoFocusTab={!(trail || chronicleReturn)}
         hideActiveContent={Boolean(trail && !focusTarget)} panelLead={trail && <div className="mb-2 flex min-w-0 flex-wrap items-center gap-2">
           <button type="button" data-control-dock="back" ref={backRef} onClick={returnToChronicle} className={`${action} bg-slate-800 text-amber-100`}>返回原纪事</button>

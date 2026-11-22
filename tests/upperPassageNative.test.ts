@@ -1,5 +1,6 @@
 import {describe,expect,it} from 'vitest';
 import {createInitialWorld} from '../src/data/initialWorld';
+import {projectUpperPassageScroll} from '../src/engine/upperPassageScroll';
 import {knownMapLocations} from '../src/engine/terrainEngine';
 import {advanceWorldTick,applyCultivatorBrainDecision} from '../src/engine/worldEngine';
 
@@ -83,6 +84,7 @@ function stageUpper(world:WorldState){
   world=step(world,requested(world,'advance')); // T14 arrival even though the independently scheduled lower aperture has shut
   expect(actor(world)).toMatchObject({locationId:'realm-upper-gate',positionPlane:'upper'});
   expect(world.locations.some(row=>row.id===actor(world).locationId)).toBe(false);
+  expect(projectUpperPassageScroll(world,actor(world))).toMatchObject({kind:'arrived',nodeId:'realm-upper-gate',tick:14});
   world=step(world,requested(world,'advance'));
   world=step(world,requested(world,'read'));
   world=step(world,requested(world,'advance'));
@@ -97,6 +99,8 @@ describe('exact independent E3-7 physical path and ledger',()=>{
     // Explicit low-balance test precondition, never part of the historical control.
     actor(poor).spiritStones=7;
     expect(projectUpperPassage(poor,actor(poor))).toMatchObject({blocked:'fee',options:[]});
+    expect(projectUpperPassageScroll(poor,actor(poor))).toBeUndefined();
+    expect(projectUpperPassageScroll(local,actor(local))).toEqual({kind:'eligible',nodeId:WATER_VEIN_SITE,tick:11});
     const entry=requested(local,'enter'), stones=actor(local).spiritStones, herbs=actor(local).herbs;
     expect(resolveUpperPassageAction(poor,actor(poor),entry)).toBeNull();
     expect(actor(poor).spiritStones).toBe(7);
@@ -107,12 +111,27 @@ describe('exact independent E3-7 physical path and ledger',()=>{
     expect(threshold.cultivators.filter(row=>row.id===elderId)).toHaveLength(1);
     expect(threshold.resourceFlow.months.at(-1)?.entries).toContainEqual(expect.objectContaining({reason:'realm_passage_paid',amount:8}));
     expect(projectUpperPassage(threshold,actor(threshold,spectatorId))).toBeUndefined();
+    const admission={kind:'threshold',nodeId:'realm-passage-lower-step',tick:12,
+      sourceId:`evt-upper-passage-12-${elderId}-enter-12`};
+    expect(projectUpperPassageScroll(threshold,actor(threshold))).toEqual(admission);
+    expect(projectUpperPassageScroll(threshold,actor(threshold),spectatorId)).toBeUndefined();
+    expect(projectUpperPassageScroll(threshold,{...actor(threshold)})).toBeUndefined();
+    const duplicate={...threshold,events:[...threshold.events,...threshold.events.filter(row=>row.id===admission.sourceId)]};
+    expect(projectUpperPassageScroll(duplicate,actor(duplicate))).toBeUndefined();
+    const hiddenFee=structuredClone(threshold);
+    hiddenFee.resourceFlow.months.at(-1)!.entries=hiddenFee.resourceFlow.months.at(-1)!.entries
+      .filter(row=>row.reason!=='realm_passage_paid');
+    expect(projectUpperPassageScroll(hiddenFee,actor(hiddenFee))).toBeUndefined();
     const saved=roundTrip(threshold);
+    expect(projectUpperPassageScroll(saved,actor(saved))).toEqual(admission);
     const returned=step(saved,requested(saved,'turnback'));
     expect(actor(returned)).toMatchObject({locationId:WATER_VEIN_SITE,spiritStones:stones-8,herbs});
     expect(actor(returned).positionPlane).toBeUndefined();
     expect(returned.upperPassage?.journeys[0]).toMatchObject({returnedTick:13,direction:'inbound',
       steps:[{tick:12,nodeId:'realm-passage-lower-step'},{tick:13,nodeId:WATER_VEIN_SITE}]});
+    expect(projectUpperPassageScroll(returned,actor(returned))).toMatchObject({kind:'returned',nodeId:WATER_VEIN_SITE,tick:13});
+    const later=step(returned);
+    expect(projectUpperPassageScroll(later,actor(later))?.kind).not.toBe('returned');
     roundTrip(returned);
     const straight=step(structuredClone(threshold),requested(threshold,'turnback'));
     expect(encodeEraWorldSave(straight)).toBe(encodeEraWorldSave(returned));
@@ -162,10 +181,13 @@ describe('exact independent E3-7 physical path and ledger',()=>{
     expect(relief.resourceFlow.months.at(-1)?.entries).toContainEqual(expect.objectContaining({reason:'upper_array_fund_paid',amount:4,
       to:{kind:'upper_passage',id:'realm-upper-council'}}));
     relief=step(relief,requested(relief,'turnback'));
+    expect(projectUpperPassageScroll(relief,actor(relief))).toMatchObject({kind:'turning',nodeId:'realm-upper-array',tick:19});
     relief=step(relief,requested(relief,'advance'));
     relief=step(relief,requested(relief,'advance'));
     expect(relief.tick).toBe(21);
     expect(projectUpperPassage(relief,actor(relief))).toMatchObject({nodeId:'realm-passage-upper-step',direction:'inbound',blocked:'closed',options:[]});
+    const originalCheckpoint=projectUpperPassageScroll(relief,actor(relief));
+    expect(originalCheckpoint).toMatchObject({kind:'walking',nodeId:'realm-passage-upper-step',tick:21});
     const stalled=roundTrip(relief), oldStones=actor(stalled).spiritStones, upperFunds=stalled.upperPassage?.upperReserve;
     nativeLaterReopener(stalled);
     relief=advanceWorldTick(stalled,Object.fromEntries(stalled.cultivators.map(row=>[row.id,row.id===spectatorId?water('open'):
@@ -174,13 +196,19 @@ describe('exact independent E3-7 physical path and ledger',()=>{
     expect(relief.coldWaterVein?.openings.at(-1)).toMatchObject({id:'water-gate-22',openerId:spectatorId,paidStones:40});
     expect(actor(relief)).toMatchObject({locationId:'realm-passage-upper-step',spiritStones:oldStones});
     expect(relief.upperPassage?.upperReserve).toBe(upperFunds);
+    expect(projectUpperPassageScroll(relief,actor(relief))).toEqual(originalCheckpoint);
     relief=step(relief,requested(relief,'advance'));
+    expect(projectUpperPassageScroll(relief,actor(relief))).toMatchObject({kind:'walking',nodeId:'realm-passage-lower-step',tick:23});
+    const counterfeit=structuredClone(relief);
+    counterfeit.upperPassage!.journeys[0].steps.at(-1)!.crossingOpeningId='water-gate-8';
+    expect(projectUpperPassageScroll(counterfeit,actor(counterfeit))).toBeUndefined();
     relief=step(relief,requested(relief,'advance'));
     expect(actor(relief)).toMatchObject({locationId:WATER_VEIN_SITE,spiritStones:oldStones});
     expect(actor(relief).positionPlane).toBeUndefined();
     expect(relief.upperPassage?.journeys[0]).toMatchObject({returnedTick:24,
       steps:expect.arrayContaining([expect.objectContaining({tick:13,crossingOpeningId:'water-gate-8'}),
         expect.objectContaining({tick:23,crossingOpeningId:'water-gate-22'})])});
+    expect(projectUpperPassageScroll(relief,actor(relief))).toMatchObject({kind:'returned',nodeId:WATER_VEIN_SITE,tick:24});
     roundTrip(relief);
     expect(ordinary.upperPassage?.journeys[0].returnedTick).toBeUndefined();
   });

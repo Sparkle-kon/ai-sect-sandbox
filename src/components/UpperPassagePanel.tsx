@@ -1,4 +1,6 @@
 import {useId,useState} from 'react';
+import type {UpperPassageScrollView} from '../engine/upperPassageScroll';
+import {UpperPassageScroll} from './UpperPassageScroll';
 import type {UpperPassageOption,UpperPassageView} from '../engine/upperPassageEngine';
 import {UPPER_PASSAGE_FEE,UPPER_PASSAGE_NODE_NAMES,UPPER_PASSAGE_PATH,UPPER_PASSAGE_RELIEF_PETITION,UPPER_PASSAGE_STANDARD_PETITION,
   upperPassagePlane,type UpperPassageNodeId,type UpperPassageMove} from '../engine/upperPassageTerms';
@@ -101,9 +103,17 @@ function PassageOrders({controls,view}:{controls:UpperPassageControls;view:Upper
   </>;
 }
 
-export function UpperPassagePanel({view,controls,host}:{view:UpperPassageView;controls?:UpperPassageControls;host?:UpperPassageHostControls}) {
+export function UpperPassagePanel({view,controls,host,scroll,scrollScopeKey,animateScroll}:{
+  view:UpperPassageView;controls?:UpperPassageControls;host?:UpperPassageHostControls;
+  scroll?:UpperPassageScrollView;scrollScopeKey?:string;animateScroll?:boolean;
+}) {
   const plane=upperPassagePlane(view.nodeId);
+  const matchingScroll=scroll?.nodeId===view.nodeId?scroll:undefined;
+  const artwork=matchingScroll&&<UpperPassageScroll key={JSON.stringify([scrollScopeKey,matchingScroll.sourceId,matchingScroll.tick,matchingScroll.kind])}
+    view={matchingScroll} animate={animateScroll}/>;
+  const returned=matchingScroll?.kind==='returned';
   const body=<div className="space-y-2">
+    {!returned&&artwork}
     <PassageFacts view={view}/>
     {plane&&host&&<UpperPassageHost key={host.scopeKey} {...host}/>}
     {controls&&<PassageOrders key={controls.scopeKey} controls={controls} view={view}/>}
@@ -111,10 +121,13 @@ export function UpperPassagePanel({view,controls,host}:{view:UpperPassageView;co
   return plane?<section className="min-w-0 space-y-2 rounded border border-violet-800/70 bg-slate-950 p-3 text-sm [overflow-wrap:anywhere]">
     <h2 className="font-semibold text-violet-100">{plane==='upper'?'上界所在':'界隙脚下'}</h2>
     {body}
-  </section>:<details className="min-w-0 rounded border border-violet-900/70 bg-slate-950/40 p-2 [overflow-wrap:anywhere]">
-    <summary className="flex min-h-11 cursor-pointer items-center font-semibold text-violet-100">看井边门槛</summary>
-    {body}
-  </details>;
+  </section>:<>
+    {returned&&artwork}
+    <details className="min-w-0 rounded border border-violet-900/70 bg-slate-950/40 p-2 [overflow-wrap:anywhere]">
+      <summary className="flex min-h-11 cursor-pointer items-center font-semibold text-violet-100">看井边门槛</summary>
+      {body}
+    </details>
+  </>;
 }
 
 

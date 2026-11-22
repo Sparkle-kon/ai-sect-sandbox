@@ -21,6 +21,8 @@ import type {NorthWellRevisitControls} from '../NorthWellRevisitPanel';
 import type {UpperPassageControls,UpperPassageHostControls} from '../UpperPassagePanel';
 import {availableUpperPassageActions,projectUpperPassage} from '../../engine/upperPassageEngine';
 import {upperPassagePlane} from '../../engine/upperPassageTerms';
+import {projectUpperPassageScroll} from '../../engine/upperPassageScroll';
+import {useUpperPassageScrollMotion} from '../useUpperPassageScrollMotion';
 import type {FrontierControls,FrontierHostControls} from '../FrontierPanel';
 import type {FrontierPortControls} from '../FrontierPortPanel';
 import type {FrontierDrylandControls} from '../FrontierDrylandPanel';
@@ -49,6 +51,7 @@ const UpperArrayFieldPanel=React.lazy(async()=>({default:(await import('../Upper
 const UpperArrayFieldWellPanel=React.lazy(async()=>({default:(await import('../UpperArrayFieldPanel')).UpperArrayFieldWellPanel}));
 const UpperArrayFieldCarrierRead=React.lazy(async()=>({default:(await import('../UpperArrayFieldPanel')).UpperArrayFieldCarrierRead}));
 const UpperPassagePanel = React.lazy(async () => ({default:(await import('../UpperPassagePanel')).UpperPassagePanel}));
+const UpperPassageScroll = React.lazy(async () => ({default:(await import('../UpperPassageScroll')).UpperPassageScroll}));
 const NorthWellRevisitPanel = React.lazy(async () => ({default:(await import('../NorthWellRevisitPanel')).NorthWellRevisitPanel}));
 const NorthMiningCharterPanel = React.lazy(async () => ({ default: (await import('../NorthMiningCharterPanel')).NorthMiningCharterPanel }));
 const ColdWaterVeinPanel = React.lazy(async () => ({ default: (await import('../ColdWaterVeinPanel')).ColdWaterVeinPanel }));
@@ -62,6 +65,7 @@ interface CivicRealmViewOptions {
   selectedCultivator?: Cultivator;
   cockpitOpen: boolean;
   dashboardOpen: boolean;
+  storyEntryOpen?: boolean;
   workspace: WorkspaceId;
   onSelectCultivator: (actorId: string) => void;
   onClearAvatarNotice?: () => void;
@@ -69,8 +73,8 @@ interface CivicRealmViewOptions {
 
 /** One realm projection supplies the World hub and both map surfaces. */
 export function useCivicRealmViews({
-  simulation, selectedCultivator, cockpitOpen, dashboardOpen, workspace, onSelectCultivator, onClearAvatarNotice,
-}: CivicRealmViewOptions): { immersive: ReactNode; atlasExtras: ReactNode } {
+  simulation, selectedCultivator, cockpitOpen, dashboardOpen, storyEntryOpen, workspace, onSelectCultivator, onClearAvatarNotice,
+}: CivicRealmViewOptions): { immersive: ReactNode; atlasExtras: ReactNode; passageScene: ReactNode } {
   const {
     world, visibleWorld, timeline, preview, viewScopeKey, saveContextVersion,
     isRunning, isStepping, fastForwardLocked, browsing, stepInFlight, fastForwardRun, campaignGuard,
@@ -169,6 +173,19 @@ export function useCivicRealmViews({
   const upperPassageView=upperPassageActive?projectUpperPassage(visibleWorld,selectedCultivator):undefined;
   const upperPassageAway=upperPassageView&&upperPassagePlane(upperPassageView.nodeId);
   const upperPassageAtWell=workspace==='world'&&upperPassageView&&!upperPassageAway;
+  const passageStory=!cockpitOpen&&!dashboardOpen&&!storyEntryOpen&&!preview;
+  const passageActor=passageStory?activeAvatar(visibleWorld):upperPassageActive?selectedCultivator:undefined;
+  const passageRead=passageActor?projectUpperPassageScroll(visibleWorld,passageActor):undefined;
+  const passageScope=`${viewScopeKey}:${cockpitOpen?'cockpit':dashboardOpen?workspace:'story'}`;
+  const animatePassage=useUpperPassageScrollMotion(passageActor?{
+    scope:passageScope,actorId:passageActor.id,tick:visibleWorld.tick,snapshot:visibleWorld,historical:Boolean(preview),
+    sourceId:passageRead?.tick===visibleWorld.tick?passageRead.sourceId:undefined,
+  }:undefined);
+  // A return leaves the immersive realm. Keep the fresh same-body receipt near the normal story/map.
+  const passageScene=passageRead&&(passageRead.kind==='returned'||passageStory&&passageRead.kind!=='eligible')?
+    <React.Suspense fallback={null}><UpperPassageScroll
+      key={JSON.stringify([passageScope,passageActor?.id,passageRead.sourceId])} view={passageRead} animate={animatePassage}/>
+    </React.Suspense>:undefined;
   const upperPassageAvatar=upperPassageView&&!preview&&selectedCultivator&&
     activeAvatar(world)?.id===selectedCultivator.id?selectedCultivator:undefined;
   const upperPassageControls:UpperPassageControls|undefined=upperPassageAvatar&&upperPassageView?{
@@ -377,7 +394,9 @@ export function useCivicRealmViews({
           controls={drylandControls} tradeCandidates={drylandCandidates} nowTick={visibleWorld.tick}/>:undefined}/>
   </React.Suspense>;
   const realmView=(upperPassageView||arrayFieldView)&&<React.Suspense fallback={<p role="status">查验脚下界路…</p>}>
-    {!arrayFieldAway&&upperPassageView&&<UpperPassagePanel view={upperPassageView} controls={upperPassageControls} host={upperPassageHost}/>}
+    {!arrayFieldAway&&upperPassageView&&<UpperPassagePanel view={upperPassageView} controls={upperPassageControls} host={upperPassageHost}
+      scroll={passageRead?.kind==='returned'?undefined:passageRead} scrollScopeKey={`${passageScope}:${passageActor?.id??''}`}
+      animateScroll={animatePassage}/>}
     {arrayFieldView&&<UpperArrayFieldPanel movement={arrayFieldView} local={arrayFieldLocal} trades={arrayFieldTrades}
       controls={arrayFieldControls} host={arrayFieldHost} tradeCandidates={arrayFieldCandidates} nowTick={visibleWorld.tick}/>}
     {!arrayFieldAway&&upperPassageAway&&arrayFieldTrades.length>0&&
@@ -398,5 +417,5 @@ export function useCivicRealmViews({
     </ColdWaterVeinPanel></React.Suspense>}
     {frontierView?.scope==='anchor'&&frontierRealmView}
   </>;
-  return { immersive, atlasExtras };
+  return { immersive, atlasExtras, passageScene };
 }
