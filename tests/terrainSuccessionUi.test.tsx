@@ -4,7 +4,7 @@ import { App } from '../src/App';
 import { observedRouteTargets, proveObservedTerrainRoute } from '../src/components/observedRouteProof';
 import { TerrainRouteReceipt, TerrainSuccessionPanel } from '../src/components/TerrainSuccessionPanel';
 import { createTerrainMapView } from '../src/components/terrainMapView';
-import { drawTerrain } from '../src/components/terrainMapDraw';
+import { drawTerrain, EXPLORED_TERRAIN_SHADE } from '../src/components/terrainMapDraw';
 import { createInitialWorld } from '../src/data/initialWorld';
 import { terrainTileAt } from '../src/engine/terrainEngine';
 import type { MapTile, TerrainSuccessionCell } from '../src/types/world';
@@ -97,6 +97,6 @@ describe('observed bounded terrain recovery and actual route proofs', () => {
     far.biome = far.biome === '魔渊' ? '坊市' : '魔渊';
     far.spiritQi = 1;
     expect(draw()).toEqual(before);
-    expect(before).toHaveLength(2);
+    expect(before).toEqual([EXPLORED_TERRAIN_SHADE]);
   });
 });

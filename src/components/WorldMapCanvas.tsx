@@ -617,7 +617,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       ctx.fillRect(0, 0, width, height);
 
       // 2. Terrain, spirit qi overlay and sect boundaries.
-      drawTerrain(ctx, world, mapView.tileState, heat, phase, territorySemantics, logicalPerCssPixel);
+      drawTerrain(ctx, world, mapView.tileState, heat, phase, territorySemantics, logicalPerCssPixel,
+        {showGrid:!!armedBrush||camera.zoom>=2.5});
       if(cachedRelief)ctx.drawImage(cachedRelief.canvas,0,0);
       else drawCanvasBiomeRelief(ctx,scenicRelief);
       // Native combat/travel may ask for faster repaints; ambient motion stays on its own lower cadence.
@@ -1191,7 +1192,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       </div>
 
       <p id={keyboardHelp} className="sr-only">{'方向键平移，加号或减号缩放，Home 复位，F 定位所选修士。山河索引可定位，亦可检视眼前修士和地点。'}{atlasDrawing.borders.length>0?'当前可见的域界与跨界路标也可在山河索引的路径与行程中定位。':''}</p>
-      <div className="relative">
+      <div className="relative" data-map-canvas-frame="">
         <canvas
         ref={canvasRef}
         width={MAP_WIDTH}
@@ -1221,9 +1222,9 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           data={inspected} anchor={currentInspection.anchor} pinned={currentInspection.pinned} readOnly={fog||!onEntityIntervention}
           actions={currentInspection.pinned&&!fog&&onEntityIntervention?availableMapEntityActions(world,mapView,currentInspection.target):[]}
           onClose={dismissal} onFocus={focusInspection} onCommit={commitInspection}/>}
-        <StrategicMinimap world={world} view={mapView} camera={camera} strategic={strategic}
-          compact={compact} onToggle={toggleStrategy} onPoint={locateMiniMap}/>
       </div>
+      <StrategicMinimap world={world} view={mapView} camera={camera} strategic={strategic}
+        onToggle={toggleStrategy} onPoint={locateMiniMap}/>
       {Boolean(selectedBadgeFact?.statuses.length)&&<p className="sr-only">所选修士状态：{selectedBadgeFact?.statuses.map(kind=>ACTOR_BADGE_LABELS[kind]).join('、')}。</p>}
       {selectedBadgeFact?.quote&&<p className="sr-only">所选修士本月公开斗法对白：{selectedBadgeFact.quote}</p>}
       {letters.length>0&&<p className="sr-only">所选修士本月确收飞剑传书，舆图只示两地，不公开内容。</p>}

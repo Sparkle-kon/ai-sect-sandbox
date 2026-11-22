@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { WorldMapCanvas } from '../src/components/WorldMapCanvas';
-import { drawTerrain } from '../src/components/terrainMapDraw';
+import { drawTerrain, INK_TERRAIN_FILL } from '../src/components/terrainMapDraw';
 import { createTerrainMapView, mapActorPositions } from '../src/components/terrainMapView';
 import { createInitialWorld } from '../src/data/initialWorld';
 import { terrainTileAt } from '../src/engine/terrainEngine';
@@ -22,7 +22,7 @@ function setup() {
   return { world, viewer, partner, traveler, unseen, here, remembered, remote, hereTile, rememberedTile, remoteTile };
 }
 
-function recordTerrain(world: ReturnType<typeof setup>['world'], classified: (tile: MapTile) => 'visible' | 'explored' | 'hidden', heat: boolean, phase: number) {
+function recordTerrain(world: ReturnType<typeof setup>['world'], classified: (tile: MapTile) => 'visible' | 'explored' | 'hidden', heat: boolean, phase: number, showGrid=false) {
   const fills: string[] = [];
   const strokes: string[] = [];
   const context = {
@@ -32,7 +32,7 @@ function recordTerrain(world: ReturnType<typeof setup>['world'], classified: (ti
     stroke() { strokes.push(this.strokeStyle); },
     strokeRect() {}, beginPath() {}, moveTo() {}, lineTo() {}, save() {}, restore() {},
   };
-  drawTerrain(context as unknown as CanvasRenderingContext2D, world, classified, heat, phase);
+  drawTerrain(context as unknown as CanvasRenderingContext2D, world, classified, heat, phase, undefined, 1, {showGrid});
   return { fills, strokes };
 }
 
@@ -80,6 +80,16 @@ describe('terrain map presentation', () => {
     expect(warm.strokes).toContain(world.sects[0].color);
     expect(warm.strokes).not.toContain(world.sects[1].color);
     expect(warm.strokes).not.toContain(world.sects[2].color);
+  });
+
+  it('uses quiet terrain by default and an explicit coordinate grid for map tools',()=>{
+    const {world}=setup();
+    const quiet=recordTerrain(world,()=> 'visible',false,0);
+    const tools=recordTerrain(world,()=> 'visible',false,0,true);
+    expect(quiet.fills).toEqual(world.terrain.tiles.map(tile=>INK_TERRAIN_FILL[tile.biome]));
+    expect(quiet.strokes).not.toContain('rgba(203,213,225,.27)');
+    expect(tools.fills).toEqual(quiet.fills);
+    expect(tools.strokes.filter(color=>color==='rgba(203,213,225,.27)')).toHaveLength(1);
   });
 
   it('exposes default perspective controls and keyboard-readable terrain information', () => {

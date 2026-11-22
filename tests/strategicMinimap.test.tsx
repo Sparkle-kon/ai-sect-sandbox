@@ -2,7 +2,8 @@ import {renderToStaticMarkup} from 'react-dom/server';
 import {describe,expect,it} from 'vitest';
 import {createInitialWorld} from '../src/data/initialWorld';
 import {terrainTileAt} from '../src/engine/terrainEngine';
-import {createTerrainMapView} from '../src/components/terrainMapView';
+import {BIOME_PALETTE,createTerrainMapView} from '../src/components/terrainMapView';
+import {WorldMapCanvas} from '../src/components/WorldMapCanvas';
 import {DEFAULT_CAMERA} from '../src/components/mapCamera';
 import {StrategicMinimap,strategicMinimapKeyboardPoint,strategicMinimapPointerPoint,strategicMinimapViewport}
   from '../src/components/StrategicMinimap';
@@ -13,15 +14,36 @@ describe('strategic minimap on the original chart',()=>{
   it('supplies one touch-sized mode toggle on narrow and retains the exact old keyboard locator name',()=>{
     const world=createInitialWorld(9),view=createTerrainMapView(world,world.cultivators[0],true);
     const local=renderToStaticMarkup(<StrategicMinimap world={world} view={view} camera={DEFAULT_CAMERA}
-      strategic={false} compact onToggle={noop} onPoint={noop}/>);
+      strategic={false} onToggle={noop} onPoint={noop}/>);
     const broad=renderToStaticMarkup(<StrategicMinimap world={world} view={view} camera={DEFAULT_CAMERA}
       strategic onToggle={noop} onPoint={noop}/>);
     expect(local.match(/aria-label="小地图：点击定位"/g)).toHaveLength(1);
     expect(local).toMatch(/aria-label="切换全景视图" aria-pressed="false"[^>]*min-h-11 min-w-11/);
-    expect(local).toContain('hidden sm:block');
+    expect(local).toMatch(/<details class="group[^"]*"><summary class="[^"]*min-h-11/);
+    expect(local).not.toMatch(/<details[^>]*open(?:=| |>)/);
+    expect(local).toContain('舆图罗盘');
+    expect(local).not.toMatch(/\babsolute\b|\bfixed\b|hidden sm:block/);
     expect(local).toContain('viewBox="0 0 1000 600"');
     expect(broad).toMatch(/aria-label="返回本域视图" aria-pressed="true"/);
     expect(broad).not.toContain('hidden sm:block');
+  });
+
+  it('keeps expandable navigation and the mode switch outside the painted Canvas frame on both layouts',()=>{
+    const world=createInitialWorld(9);
+    for(const compact of [true,false]){
+      const html=renderToStaticMarkup(<WorldMapCanvas world={world} selectedCultivatorId={world.cultivators[0].id}
+        onSelectCultivator={noop} compact={compact}/>);
+      const canvas=html.indexOf('data-map-canvas-frame');
+      const dock=html.indexOf('data-map-navigation-dock');
+      expect(canvas).toBeGreaterThan(-1);
+      expect(dock).toBeGreaterThan(canvas);
+      expect(html.slice(canvas,dock)).toMatch(/<\/canvas><\/div><div $/);
+      const navigation=html.slice(dock,html.indexOf('</details>',dock));
+      expect(navigation).toContain('舆图罗盘');
+      expect(navigation).toContain('小地图：点击定位');
+      expect(navigation).not.toMatch(/\babsolute\b|\bfixed\b/);
+      expect(html.match(/aria-label="切换全景视图"/g)).toHaveLength(1);
+    }
   });
 
   it('draws the true camera rectangle but never reads historical or hidden biome values',()=>{
@@ -37,9 +59,16 @@ describe('strategic minimap on the original chart',()=>{
     const html=renderToStaticMarkup(<StrategicMinimap world={world} view={view} camera={camera}
       strategic={false} onToggle={noop} onPoint={noop}/>);
     expect(html).toContain('x="104" y="54" width="492" height="292"');
-    expect(html).toContain('fill="#192238"');
-    expect(html).toContain('fill="#070c19"');
-    expect(html.match(/<rect /g)).toHaveLength(world.terrain.tiles.length+1);
+    expect(html).toContain('fill="#202833"');
+    expect(html).toContain('fill="#0b1016"');
+    expect(html.match(/<rect /g)).toHaveLength(1);
+    const terrainPaths=[...html.matchAll(/<path fill="([^"]+)" d="([^"]+)"/g)];
+    const oldColors=new Set(Object.values(BIOME_PALETTE).map(row=>row.swatch));
+    expect(terrainPaths.length).toBeLessThanOrEqual(8);
+    expect(terrainPaths.every(([,ink])=>!oldColors.has(ink))).toBe(true);
+    const area=terrainPaths.flatMap(([,,path])=>[...path.matchAll(/M[\d.]+ [\d.]+h([\d.]+)v([\d.]+)h-[\d.]+Z/g)])
+      .reduce((sum,[,w,h])=>sum+Number(w)*Number(h),0);
+    expect(area).toBe(1000*600);
   });
 
   it('converts exact client coordinates and never sends the camera to a hidden pointer or keyboard destination',()=>{

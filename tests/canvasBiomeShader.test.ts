@@ -10,7 +10,11 @@ function recordingContext(){
   const methods={save:record('save'),restore:record('restore'),beginPath:record('begin'),rect:record('rect'),
     clip:record('clip'),translate:record('translate'),scale:record('scale'),moveTo:record('move'),lineTo:record('line'),
     closePath:record('close'),arc:record('arc'),quadraticCurveTo:record('quad'),bezierCurveTo:record('curve'),
-    stroke:record('stroke'),fill:record('fill')};
+    stroke:record('stroke'),fill:record('fill'),fillRect:record('fillRect'),
+    createLinearGradient(x:number,y:number,endX:number,endY:number){
+      record('gradient')(x,y,endX,endY);
+      return {addColorStop:record('stop')};
+    }};
   return {ctx:methods as unknown as CanvasRenderingContext2D,operations};
 }
 const actual=(world:ReturnType<typeof createInitialWorld>)=>createTerrainMapView(world,undefined,false);
@@ -23,6 +27,10 @@ describe('static canvas ink relief',()=>{
     expect(all.landmarks.map(({siteId,motif})=>[siteId,motif])).toEqual([
       ['loc-taixu','peaks'],['loc-blood','gorge'],['loc-danxia','terraces'],['loc-tianji','stars'],['loc-vein-north','frost'],
     ]);
+    const {columns,rows}=world.terrain;
+    expect(all.contours!.length).toBeLessThanOrEqual(Math.ceil(columns/3)*Math.ceil(rows/3));
+    expect(all.contours!.some(mark=>mark.coverage.length>1)).toBe(true);
+    expect(all.contours!.every(mark=>mark.coverage.every(tile=>tile.biome===mark.biome))).toBe(true);
     expect(all.tiles.every(row=>row.x>=0&&row.y>=0&&row.x+row.width<=1000&&row.y+row.height<=600)).toBe(true);
     expect(buildCanvasBiomeRelief(world,actual(world))).toEqual(all);
     expect(JSON.stringify(world)).toBe(before);
@@ -41,6 +49,11 @@ describe('static canvas ink relief',()=>{
     expect(clipped.landmarks.map(row=>row.siteId)).toContain('loc-taixu');
     expect(clipped.landmarks.map(row=>row.siteId)).not.toContain('loc-tianji');
     expect(clipped.landmarks.every(row=>fog.isCurrentLocation(row.siteId))).toBe(true);
+    expect(clipped.contours!.every(mark=>mark.coverage.every(tile=>fog.current?.has(tile.tileId)))).toBe(true);
+    for(const seam of clipped.seams!){
+      const {x,y,width,height}=seam;
+      expect(clipped.tiles.some(tile=>x>=tile.x&&y>=tile.y&&x+width<=tile.x+tile.width&&y+height<=tile.y+tile.height)).toBe(true);
+    }
   });
 
   it('clips every layer to its verified cell and uses genuinely different brush traces',()=>{
@@ -57,7 +70,7 @@ describe('static canvas ink relief',()=>{
     expect(new Set(fingerprints).size).toBe(6);
     const {ctx,operations}=recordingContext();
     drawCanvasBiomeRelief(ctx,all);
-    expect(operations.filter(op=>op==='clip')).toHaveLength(all.tiles.length+all.landmarks.length);
+    expect(operations.filter(op=>op==='clip')).toHaveLength(all.contours!.length+all.landmarks.length);
     expect(operations.filter(op=>op==='save').length).toBe(operations.filter(op=>op==='restore').length);
   });
 });

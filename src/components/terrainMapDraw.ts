@@ -1,72 +1,76 @@
-import type { MapTile, WorldState } from '../types/world';
+import type { MapTile, TerrainBiome, WorldState } from '../types/world';
 import type { MapTerritoryMarker,MapTerritorySemantics } from './mapTerritorySemantics';
-import { BIOME_PALETTE } from './terrainMapView';
 
 export const EXPLORED_TERRAIN_SHADE = '#192238';
+export const INK_TERRAIN_FILL: Readonly<Record<TerrainBiome,string>> = {
+  灵山:'#15282a', 毒沼:'#192a29', 剑冢:'#1d2838',
+  荒漠:'#302d32', 魔渊:'#282233', 坊市:'#332b30',
+};
+export interface TerrainDrawingOptions {
+  /** Coordinate grid is for close inspection and tools, not the normal landscape. */
+  readonly showGrid?:boolean;
+}
 
 type Classification = (tile: MapTile) => 'visible' | 'explored' | 'hidden';
 
 export function drawTerrain(
   ctx: CanvasRenderingContext2D, world: WorldState, classify: Classification, heat: boolean, phase: number,
-  territory?:MapTerritorySemantics, logicalPerCssPixel=1,
+  territory?:MapTerritorySemantics, logicalPerCssPixel=1, options?:TerrainDrawingOptions,
 ) {
-  const { columns, rows, tiles, seed } = world.terrain;
+  const { columns, rows, tiles } = world.terrain;
   const width = ctx.canvas.width;
   const height = ctx.canvas.height;
   const cellW = width / columns;
   const cellH = height / rows;
-  const indexed = new Map(tiles.map((tile) => [tile.row * columns + tile.col, tile]));
+  const classified = tiles.map(tile=>({tile,state:classify(tile)}));
+  const visibleOwners = new Map<number,string>();
+  for(const {tile,state} of classified){
+    if(state==='visible'&&tile.ownerSectId)visibleOwners.set(tile.row*columns+tile.col,tile.ownerSectId);
+  }
   const sectColors = new Map(world.sects.map(({ id, color }) => [id, color]));
 
   ctx.save();
-  for (const tile of tiles) {
-    const state = classify(tile);
+  for (const {tile,state} of classified) {
     const x = tile.col * cellW;
     const y = tile.row * cellH;
     if (state !== 'visible') {
-      // Exploration remembers tile position, not an authoritative update to mutable biome.
+      // Memory establishes where a tile is, not what is currently on it.
       ctx.fillStyle = state === 'hidden' ? '#070c19' : EXPLORED_TERRAIN_SHADE;
-      ctx.fillRect(x, y, cellW + 0.5, cellH + 0.5);
-      ctx.strokeStyle = '#10172a';
-      ctx.lineWidth = 0.5;
-      ctx.strokeRect(x, y, cellW, cellH);
+      ctx.fillRect(x, y, cellW, cellH);
       continue;
     }
-    const palette = BIOME_PALETTE[tile.biome];
-    ctx.fillStyle = palette.base;
-    ctx.fillRect(x, y, cellW + 0.5, cellH + 0.5);
-    // Seeded strokes create texture without changing between renders.
-    const grain = Math.abs(Math.imul(tile.col + 11, 92821) ^ Math.imul(tile.row + 17, 68917) ^ Number(seed));
-    const stampX = x + cellW * (0.15 + (grain % 11) / 30);
-    const stampY = y + cellH * (0.18 + ((grain >>> 3) % 11) / 30);
-    ctx.strokeStyle = palette.detail;
-    ctx.globalAlpha = 0.30;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(stampX, stampY + cellH * 0.12);
-    ctx.lineTo(stampX + cellW * 0.12, stampY);
-    ctx.lineTo(stampX + cellW * 0.26, stampY + cellH * 0.10);
-    ctx.stroke();
-    ctx.globalAlpha = 1;
+    ctx.fillStyle = INK_TERRAIN_FILL[tile.biome];
+    ctx.fillRect(x, y, cellW, cellH);
     if (heat) {
       const qi = Math.min(100, Math.max(0, tile.spiritQi)) / 100;
       const pulse = 0.96 + 0.04 * Math.sin(phase + (tile.col + tile.row) * 0.24);
       ctx.fillStyle = `hsla(${Math.round(191 - qi * 159)},88%,58%,${(0.12 + qi * 0.41) * pulse})`;
-      ctx.fillRect(x, y, cellW + 0.5, cellH + 0.5);
+      ctx.fillRect(x, y, cellW, cellH);
     }
-    ctx.strokeStyle = 'rgba(203,213,225,0.09)';
-    ctx.lineWidth = 0.5;
-    ctx.strokeRect(x, y, cellW, cellH);
+  }
+
+  if(options?.showGrid){
+    ctx.strokeStyle='rgba(203,213,225,.27)';
+    ctx.lineWidth=Math.max(.35,logicalPerCssPixel*.65);
+    ctx.beginPath();
+    for(let column=1;column<columns;column++){
+      const x=column*cellW;
+      ctx.moveTo(x,0);ctx.lineTo(x,height);
+    }
+    for(let row=1;row<rows;row++){
+      const y=row*cellH;
+      ctx.moveTo(0,y);ctx.lineTo(width,y);
+    }
+    ctx.stroke();
   }
 
   // Borders use today’s ownership only where the viewpoint can see it.
   const ownerAt = (row: number, col: number) => {
     if (row < 0 || row >= rows || col < 0 || col >= columns) return undefined;
-    const neighbor = indexed.get(row * columns + col);
-    return neighbor && classify(neighbor) === 'visible' ? neighbor.ownerSectId : undefined;
+    return visibleOwners.get(row*columns+col);
   };
-  for (const tile of tiles) {
-    if (!tile.ownerSectId || classify(tile) !== 'visible') continue;
+  for (const {tile,state} of classified) {
+    if (state !== 'visible' || !tile.ownerSectId) continue;
     const color = sectColors.get(tile.ownerSectId);
     if (!color) continue;
     const { row, col } = tile;
@@ -82,8 +86,6 @@ export function drawTerrain(
     const inset=accent?Math.min(cellW*.2,cellH*.2,1.9*scale):.8;
     if (territory) ctx.setLineDash([]);
     ctx.strokeStyle = color;
-    ctx.lineWidth = accent ? 3*scale : 1.6;
-    ctx.globalAlpha = 0.82;
     ctx.beginPath();
     if (top) {
       ctx.moveTo(x, y + inset); ctx.lineTo(x + cellW, y + inset);
@@ -97,19 +99,27 @@ export function drawTerrain(
     if (right) {
       ctx.moveTo(x + cellW - inset, y); ctx.lineTo(x + cellW - inset, y + cellH);
     }
+    // Broad translucent tincture behind a trace, not a neon border or invented ownership.
+    ctx.lineWidth=accent?Math.min(7,4*scale):3.8;
+    ctx.globalAlpha=.16;
     ctx.stroke();
     if (accent) {
       ctx.strokeStyle='#0b1220';
-      ctx.globalAlpha=.96;
-      ctx.lineWidth=2.4*scale;
+      ctx.globalAlpha=.70;
+      ctx.lineWidth=1.55*scale;
       ctx.setLineDash([]);
       ctx.stroke();
       ctx.strokeStyle='#f8fafc';
-      ctx.lineWidth=1.25*scale;
+      ctx.globalAlpha=options?.showGrid ? .98 : .62;
+      ctx.lineWidth=(options?.showGrid?1.15:.82)*scale;
       ctx.lineCap=accent.pattern==='dotted'?'round':'butt';
       ctx.setLineDash(accent.dash.map(dash=>dash*scale));
       ctx.stroke();
       ctx.lineCap='butt';
+    }else{
+      ctx.lineWidth=1.15;
+      ctx.globalAlpha=.48;
+      ctx.stroke();
     }
   }
   ctx.restore();

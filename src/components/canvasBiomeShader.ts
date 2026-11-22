@@ -1,4 +1,5 @@
-import {terrainTileAt} from '../engine/terrainEngine';
+import {isScopedExpeditionGate} from '../engine/expeditionOmenTerms';
+import {INK_TERRAIN_FILL} from './terrainMapDraw';
 import type {TerrainBiome,WorldState} from '../types/world';
 import {MAP_HEIGHT,MAP_WIDTH} from './mapCamera';
 import type {createTerrainMapView} from './terrainMapView';
@@ -15,9 +16,15 @@ type Motif=(typeof oldLandmarks)[keyof typeof oldLandmarks];
 export interface CanvasBiomeReliefLandmark extends ReliefCell {
   readonly siteId:keyof typeof oldLandmarks;readonly motif:Motif;readonly anchorX:number;readonly anchorY:number;
 }
+interface WashSeam extends ReliefCell {readonly color:string;readonly axis:'x'|'y';readonly reverse:boolean}
+export interface InkContour extends ReliefCell {
+  readonly biome:TerrainBiome;readonly grain:number;readonly coverage:readonly CanvasBiomeReliefTile[];
+}
 export interface CanvasBiomeReliefPlan {
   readonly tiles:readonly CanvasBiomeReliefTile[];
   readonly landmarks:readonly CanvasBiomeReliefLandmark[];
+  readonly seams?:readonly WashSeam[];
+  readonly contours?:readonly InkContour[];
 }
 
 const mix=(seed:number,row:number,col:number)=>{
@@ -34,31 +41,78 @@ export function buildCanvasBiomeRelief(world:WorldState,view:ReturnType<typeof c
   const width=MAP_WIDTH/columns,height=MAP_HEIGHT/rows;
   const tiles:CanvasBiomeReliefTile[]=[];
   const byTile=new Map<string,CanvasBiomeReliefTile>();
+  const byGrid=new Map<number,CanvasBiomeReliefTile>();
+  const grid=new Map<CanvasBiomeReliefTile,readonly [number,number]>();
   for(const tile of world.terrain.tiles){
     if(view.tileState(tile)!=='visible')continue;
     const {id:tileId,col,row,biome}=tile;
-    if(!Number.isSafeInteger(col)||col<0||col>=columns||!Number.isSafeInteger(row)||row<0||row>=rows||byTile.has(tileId))continue;
+    if(!Number.isSafeInteger(col)||col<0||col>=columns||!Number.isSafeInteger(row)||row<0||row>=rows||byTile.has(tileId)||byGrid.has(row*columns+col))continue;
     const relief={tileId,biome,grain:mix(seed,row,col),x:col*width,y:row*height,width,height};
-    byTile.set(tileId,relief);tiles.push(relief);
+    byTile.set(tileId,relief);byGrid.set(row*columns+col,relief);grid.set(relief,[row,col]);tiles.push(relief);
   }
   const landmarks:CanvasBiomeReliefLandmark[]=[];
   for(const siteId of Object.keys(oldLandmarks) as Array<keyof typeof oldLandmarks>){
     const sources=world.locations.filter(location=>location.id===siteId);
     const [site]=sources;
-    if(sources.length!==1||!site||site.expeditionOmenId!==undefined||!view.seenLocations.includes(site)||
+    if(sources.length!==1||!site||isScopedExpeditionGate(site)||!view.seenLocations.includes(site)||
       !view.isCurrentLocation(siteId)||!finiteCoordinate(site.x,MAP_WIDTH)||!finiteCoordinate(site.y,MAP_HEIGHT))continue;
-    const tile=terrainTileAt(world,site.x,site.y);
+    const tile=view.locationTile.get(site.id);
     const relief=tile&&byTile.get(tile.id);
     if(relief)landmarks.push({siteId,motif:oldLandmarks[siteId],anchorX:site.x,anchorY:site.y,
       x:relief.x,y:relief.y,width,height});
   }
-  return {tiles,landmarks};
+  const lookup=(row:number,col:number)=>row>=0&&col>=0&&row<rows&&col<columns?byGrid.get(row*columns+col):undefined;
+  const seams:WashSeam[]=[];
+  const regionSeeds=new Map<string,CanvasBiomeReliefTile>();
+  for(const [tile,[row,col]] of grid){
+    // A feather touches only two physically adjacent, currently visible patches.
+    for(const [dr,dc] of [[0,1],[1,0]] as const){
+      const neighbor=lookup(row+dr,col+dc);
+      if(!neighbor||neighbor.biome===tile.biome)continue;
+      const seamWidth=width*.23,seamHeight=height*.23;
+      if(dc){
+        seams.push({x:neighbor.x-seamWidth,y:tile.y,width:seamWidth,height,color:INK_TERRAIN_FILL[neighbor.biome],axis:'x',reverse:false},
+          {x:neighbor.x,y:neighbor.y,width:seamWidth,height,color:INK_TERRAIN_FILL[tile.biome],axis:'x',reverse:true});
+      }else{
+        seams.push({x:tile.x,y:neighbor.y-seamHeight,width,height:seamHeight,color:INK_TERRAIN_FILL[neighbor.biome],axis:'y',reverse:false},
+          {x:neighbor.x,y:neighbor.y,width,height:seamHeight,color:INK_TERRAIN_FILL[tile.biome],axis:'y',reverse:true});
+      }
+    }
+    // At most one landscape ink motif per 3×3 patch; no repeated decorative icon in every cell.
+    const key=`${Math.floor(row/3)}:${Math.floor(col/3)}`;
+    const existing=regionSeeds.get(key);
+    if(!existing||existing.grain<tile.grain)regionSeeds.set(key,tile);
+  }
+  const contours:InkContour[]=[];
+  for(const seedTile of regionSeeds.values()){
+    const origin=grid.get(seedTile);
+    if(!origin)continue;
+    const [row,col]=origin;
+    const coverage=[seedTile],seen=new Set([seedTile]);
+    for(let index=0;index<coverage.length;index++){
+      const current=grid.get(coverage[index]);
+      if(!current)continue;
+      const [r,c]=current;
+      for(const [dr,dc] of [[-1,0],[0,-1],[0,1],[1,0]] as const){
+        if(Math.abs(r+dr-row)>1||Math.abs(c+dc-col)>1)continue;
+        const neighbor=lookup(r+dr,c+dc);
+        if(neighbor&&neighbor.biome===seedTile.biome&&!seen.has(neighbor)){
+          seen.add(neighbor);coverage.push(neighbor);
+        }
+      }
+    }
+    // For thin terrain strips, scale only along the true connected footprint.
+    const x=Math.min(...coverage.map(tile=>tile.x)),y=Math.min(...coverage.map(tile=>tile.y));
+    const right=Math.max(...coverage.map(tile=>tile.x+tile.width)),bottom=Math.max(...coverage.map(tile=>tile.y+tile.height));
+    contours.push({biome:seedTile.biome,grain:seedTile.grain,x,y,width:right-x,height:bottom-y,coverage});
+  }
+  return tiles.length?{tiles,landmarks,seams,contours}:{tiles,landmarks};
 }
 
 const tones:Record<TerrainBiome,{light:string;dark:string}> = {
-  灵山:{light:'#b4d9aa',dark:'#102831'}, 毒沼:{light:'#a6c077',dark:'#142426'},
-  剑冢:{light:'#adcded',dark:'#121a25'}, 荒漠:{light:'#d6ab6f',dark:'#392638'},
-  魔渊:{light:'#db7b92',dark:'#181221'}, 坊市:{light:'#efbc79',dark:'#2f2027'},
+  灵山:{light:'#5e8877',dark:'#0d242a'}, 毒沼:{light:'#6f8873',dark:'#142426'},
+  剑冢:{light:'#7486a1',dark:'#121a25'}, 荒漠:{light:'#b09581',dark:'#292334'},
+  魔渊:{light:'#946780',dark:'#191321'}, 坊市:{light:'#ad897a',dark:'#2a2027'},
 };
 type Point=readonly [number,number];
 function path(ctx:CanvasRenderingContext2D,points:readonly Point[],closed=false){
@@ -98,14 +152,10 @@ function marsh(ctx:CanvasRenderingContext2D,skew:number){
   line(ctx,[[.69,.52],[.68,.18+skew],[.71,.36],[.78,.26]]);
 }
 function swords(ctx:CanvasRenderingContext2D,skew:number){
-  ctx.globalAlpha=.28;
-  line(ctx,[[.02,.92],[.28,.77],[.62,.79],[.96,.67]]);
-  ctx.globalAlpha=.54;
-  path(ctx,[[.27,.71],[.41,.21+skew],[.49,.15+skew],[.51,.3+skew],[.33,.74]],true);ctx.stroke();
-  line(ctx,[[.22,.68],[.39,.74],[.34,.84]]);
-  ctx.globalAlpha=.32;
-  line(ctx,[[.56,.87],[.77,.46],[.85,.36+skew],[.83,.51],[.62,.89]]);
-  line(ctx,[[.59,.75],[.72,.81]]);
+  ctx.globalAlpha=.34;
+  line(ctx,[[-.04,.86],[.20,.67],[.36,.72],[.52,.28+skew],[.64,.62],[.77,.57],[1.02,.77]]);
+  ctx.globalAlpha=.26;
+  line(ctx,[[.12,.91],[.34,.81],[.49,.64],[.59,.75],[.88,.78]]);
 }
 function dunes(ctx:CanvasRenderingContext2D,skew:number){
   ctx.globalAlpha=.45;
@@ -127,12 +177,11 @@ function gorge(ctx:CanvasRenderingContext2D,skew:number){
   line(ctx,[[.05,.39],[.22,.42+skew],[.36,.49]]);
 }
 function market(ctx:CanvasRenderingContext2D,skew:number){
-  ctx.globalAlpha=.39;
-  for(const [x,y] of [[.18,.24+skew],[.51,.4+skew],[.28,.63],[.69,.68]] as const){
-    line(ctx,[[x-.08,y+.09],[x+.08,y],[x+.25,y+.1]]);
-    line(ctx,[[x-.03,y+.085],[x-.03,y+.23],[x+.18,y+.23],[x+.18,y+.087]]);
-    line(ctx,[[x+.08,y+.16],[x+.08,y+.23]]);
-  }
+  ctx.globalAlpha=.32;
+  ctx.beginPath();ctx.moveTo(-.08,.73);
+  ctx.bezierCurveTo(.24,.48+skew,.54,.69,.74,.51);ctx.quadraticCurveTo(.89,.51,1.05,.6);ctx.stroke();
+  ctx.globalAlpha=.18;
+  line(ctx,[[.08,.84],[.26,.76+skew],[.51,.81],[.77,.67+skew],[.95,.74]]);
 }
 const brushes:Record<TerrainBiome,(ctx:CanvasRenderingContext2D,skew:number)=>void>={
   灵山:mountains,毒沼:marsh,剑冢:swords,荒漠:dunes,魔渊:gorge,坊市:market,
@@ -172,18 +221,28 @@ function landmarkGlyph(ctx:CanvasRenderingContext2D,motif:Motif){
 export function drawCanvasBiomeRelief(ctx:CanvasRenderingContext2D,plan:CanvasBiomeReliefPlan):void{
   ctx.save();
   ctx.lineCap='round';ctx.lineJoin='round';
-  for(const tile of plan.tiles){
-    const ink=tones[tile.biome];
+  for(const seam of plan.seams??[]){
+    const [x,y]=[seam.x,seam.y];
+    const east=seam.axis==='x';
+    const grad=ctx.createLinearGradient(x,y,x+(east?seam.width:0),y+(east?0:seam.height));
+    grad.addColorStop(seam.reverse?1:0,`${seam.color}00`);
+    grad.addColorStop(seam.reverse?0:1,`${seam.color}88`);
+    ctx.fillStyle=grad;ctx.fillRect(x,y,seam.width,seam.height);
+  }
+  // The fallback supports legacy isolated brush tests; actual map plans always bring verified sparse contours.
+  const contours=plan.contours??plan.tiles.map(tile=>({...tile,coverage:[tile]}));
+  for(const mark of contours){
+    const ink=tones[mark.biome];
     ctx.save();
-    clipCell(ctx,tile);
-    ctx.translate(tile.x,tile.y);ctx.scale(tile.width,tile.height);
-    ctx.lineWidth=.028;ctx.strokeStyle=ink.light;ctx.fillStyle=ink.dark;
-    brushes[tile.biome](ctx,((tile.grain&15)-7.5)/110);
-    ctx.globalAlpha=.26;ctx.fillStyle=ink.light;
-    for(let i=0;i<4;i++){
-      const a=(tile.grain>>>(i*6))&63,b=(tile.grain>>>(i*5+5))&63;
-      dot(ctx,.10+.80*a/63,.10+.80*b/63,.012+i*.002);
-    }
+    ctx.beginPath();
+    for(const tile of mark.coverage)ctx.rect(tile.x,tile.y,tile.width,tile.height);
+    ctx.clip();
+    ctx.translate(mark.x,mark.y);ctx.scale(mark.width,mark.height);
+    ctx.lineWidth=.022;ctx.strokeStyle=ink.light;ctx.fillStyle=ink.dark;
+    brushes[mark.biome](ctx,((mark.grain&15)-7.5)/110);
+    ctx.globalAlpha=.14;ctx.fillStyle=ink.light;
+    const a=(mark.grain>>>9)&63,b=(mark.grain>>>15)&63;
+    dot(ctx,.10+.80*a/63,.10+.80*b/63,.015);
     ctx.restore();
   }
   for(const landmark of plan.landmarks){
