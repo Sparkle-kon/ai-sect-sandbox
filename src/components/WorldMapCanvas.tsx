@@ -1,5 +1,6 @@
 import { drawSiegeFormationVfx, SIEGE_FORMATION_LIFETIME_MS } from './siegeFormationVfxDraw';
-import { projectSiegeFormationVfx } from './siegeFormationVfxPlan';
+import {buildScopedMapScene} from './scopedMapScene';
+import {createMapFrameClock} from './mapFrameClock';
 import {buildProtagonistFlightEdges,drawProtagonistFlightEdges,withoutReplacedProtagonistFlightTrajectory} from './protagonistFlightMap';
 import {projectProtagonistFlight} from '../engine/protagonistFlightEngine';
 import {resolveMapDossierFocus,type MapDossierFocusRequest} from './mapDossierFocus';
@@ -56,19 +57,17 @@ import {buildQiFlowPlan,drawQiFlow} from './qiFlowCanvas';
 import {mapScenicAnimationAllowed,mapScenicFrameDelay} from './mapScenicScheduler';
 import { drawTerrain } from './terrainMapDraw';
 import { drawMapConvoys, mapTransitActorIds, visibleMapConvoys, visibleMapEscort } from './mapConvoyView';
-import { buildMapPresentation, MAP_EFFECT_LABELS, MOTION_MS } from './mapPresentationView';
+import { MAP_EFFECT_LABELS, MOTION_MS } from './mapPresentationView';
 import {visibleMapFlyingSwords} from './mapFlyingSwordView';
 import {buildMapTravelTrajectory} from './mapTravelTrajectory';
 import {drawMapTrajectoryVfx} from './trajectoryVfxDraw';
 import {compileCanvasFlights} from './mapPresentationDraw';
-import {buildMapCombatVfxPlan} from './mapCombatVfxView';
 import {drawMapCombatVfx} from './mapCombatVfxDraw';
 import {mapBattlefieldSummary} from './mapBattlefieldView';
-import {buildProtectiveArrayDomes} from './protectiveArrayDomeView';
 import {drawProtectiveArrayDomes} from './protectiveArrayDomeDraw';
 import {StrategicMinimap} from './StrategicMinimap';
 import {isStrategicCameraModeCurrent,toggleStrategicCameraMode,type StrategicCameraMode} from './strategicCameraMode';
-import {buildMapActorBadgeView,type MapActorBadgeKind} from './mapActorBadgeView';
+import type {MapActorBadgeKind} from './mapActorBadgeView';
 import {planMapActorBadgeLayout} from './mapActorBadgeLayout';
 import {drawMapActorBadges,MAP_ACTOR_BUBBLE_FONT} from './mapActorBadgeDraw';
 import { projectMapTerritories } from './mapTerritorySemantics';
@@ -205,12 +204,14 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const explorerSummary = useRef<HTMLElement | null>(null);
   const keyboardHelp = useId();
   const cameraRef = useRef(camera);
-  const pulseCameraFrame=useRef<number>();
+  const frameClockRef=useRef<ReturnType<typeof createMapFrameClock>>();
+  const frameClock=frameClockRef.current??=(createMapFrameClock({
+    request:callback=>window.requestAnimationFrame(callback),
+    cancel:handle=>window.cancelAnimationFrame(handle),
+    now:()=>performance.now(),
+  }));
   const pulseConsumed=useRef<number>();
-  const cancelPulseCamera=()=>{
-    if(pulseCameraFrame.current!==undefined)cancelAnimationFrame(pulseCameraFrame.current);
-    pulseCameraFrame.current=undefined;
-  };
+  const cancelPulseCamera=()=>frameClock.stop('camera');
   const updateCamera = (next: MapCamera) => {
     const previous = cameraRef.current;
     if (previous.x !== next.x || previous.y !== next.y || previous.zoom !== next.zoom) {
@@ -444,21 +445,10 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     }
     updateCamera(focusMapPoint(cameraRef.current, { x: followedX, y: followedY }));
   }, [followsSelection, followedActorId, followedX, followedY]);
-  const motionSnapshot=useMemo(()=>buildMapPresentation(world,mapView,actorPositions),[world,mapView,actorPositions]);
-  const combatVfx=useMemo(()=>buildMapCombatVfxPlan(world,mapView,motionSnapshot),[world,mapView,motionSnapshot]);
-  const battlefieldBySite=useMemo(()=>new Map(combatVfx.battlefields?.map(row=>[row.location.id,row])),[combatVfx]);
-  const domes=useMemo(()=>buildProtectiveArrayDomes(world,mapView,combatVfx),[world,mapView,combatVfx]);
-  const domesBySite=useMemo(()=>new Map(domes.map(dome=>[dome.location.id,dome])),[domes]);
+  const {combatVfx,battlefieldBySite,domes,domesBySite,actorBadgeFacts,hasBadgeQuote,presentation,formationFrames}=
+    useMemo(()=>buildScopedMapScene(world,mapView,actorPositions,Boolean(historical)),[world,mapView,actorPositions,historical]);
   const selectedDome=selected?domes.find(dome=>dome.sectId===selected.sectId):undefined;
-  const actorBadgeFacts=useMemo(()=>buildMapActorBadgeView(world,mapView,combatVfx,!historical),[world,mapView,combatVfx,historical]);
-  const hasBadgeQuote=useMemo(()=>[...actorBadgeFacts.values()].some(fact=>!!fact.quote),[actorBadgeFacts]);
   const selectedBadgeFact=selectedCultivatorId?actorBadgeFacts.get(selectedCultivatorId):undefined;
-  // The canvas, keyboard index, and text summary all use the same authorized combat evidence.
-  const presentation=useMemo(()=>({routes:motionSnapshot.routes,effects:combatVfx.effects}),[motionSnapshot,combatVfx]);
-  const formationFrames=useMemo(()=>projectSiegeFormationVfx(
-    world,new Map(seenLocations.map(location=>[location.id,location])),isCurrentLocation,
-    actorPositions.filter(({actor})=>!mapView.trailPositions.has(actor.id)&&!presentation.routes.has(actor.id)),
-  ),[world,seenLocations,isCurrentLocation,actorPositions,mapView.trailPositions,presentation.routes]);
   const canvasFlights=useMemo(()=>compileCanvasFlights(actorPositions,presentation.routes,actor=>flightAlignments.get(actor.sectId)),
     [actorPositions,presentation.routes,flightAlignments]);
   const routeWarningMarks=useMemo(()=>world.routeWarnings.notices.length ? paintedRouteWarningGeometry(world,
@@ -609,7 +599,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     let markerSize: MarkerViewport = canvas.getBoundingClientRect();
     let staticMarkers: ReturnType<typeof planActorMarkers> | undefined;
     let badgeLayoutCache:{markers:ReturnType<typeof planActorMarkers>;layout:ReturnType<typeof planMapActorBadgeLayout>}|undefined;
-    let sitePins=projectMapSitePins(seenLocations,isCurrentLocation,camera,markerSize);
+    let paintedCamera=camera;
+    let sitePins=projectMapSitePins(seenLocations,isCurrentLocation,paintedCamera,markerSize);
     let namePillCache:{markers:ReturnType<typeof planActorMarkers>;plan:ReturnType<typeof makeMapNamePills>}|undefined;
     const siteById=new Map(seenLocations.map(site=>[site.id,site]));
     const sectColors=new Map(world.sects.map(sect=>[sect.id,sect.color]));
@@ -621,19 +612,26 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
 
 
     const hasMotion=ascensionMarks.length>0||daoMarks.length>0||alchemyMarks.length>0||presentation.routes.size>0||combatVfx.hasTransient||letters.length>0||travel.hasMotion||hasBadgeQuote;
+    const epoch=frameClock.now();
     if (playback.current?.source !== world.mapPresentation) {
-      playback.current = { source: world.mapPresentation, start: performance.now() };
+      playback.current = { source: world.mapPresentation, start: epoch };
     }
-    const motionStart = playback.current?.start ?? performance.now();
+    const motionStart = playback.current?.start ?? epoch;
     const formationScope=formationFrames.length?JSON.stringify([clusterScope,formationFrames.map(frame=>frame.sourceId)]):'';
     if(formationPlayback.current?.scope!==formationScope)formationPlayback.current={
-      scope:formationScope,start:performance.now(),
+      scope:formationScope,start:epoch,
     };
     const formationStart=formationPlayback.current?.start??motionStart;
     const animateFormation=!historical&&preview.length===0;
     const movingAt=(now:number)=>hasMotion&&now-motionStart<MOTION_MS||
       animateFormation&&formationFrames.length>0&&now-formationStart<SIEGE_FORMATION_LIFETIME_MS;
-    const draw = (phase: number, elapsed: number, animate: boolean) => {
+    const draw = (phase: number, elapsed: number, animate: boolean, timestamp: number) => {
+      const camera=cameraRef.current;
+      if(camera!==paintedCamera){
+        paintedCamera=camera;
+        sitePins=projectMapSitePins(seenLocations,isCurrentLocation,camera,markerSize);
+        staticMarkers=undefined;
+      }
       const logicalPerCssPixel = width / (markerSize.width || width) / camera.zoom;
       ctx.save();
       ctx.clearRect(0, 0, width, height);
@@ -775,7 +773,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           for(const {x,y,width:spanWidth,height:spanHeight} of qiFlow.clip)ctx.rect(x,y,spanWidth,spanHeight);
           ctx.clip();
           drawMapCombatVfx(ctx,combatVfx,elapsed,animate,logicalPerCssPixel,scenicPhase,camera);
-          if(formationFrames.length)drawSiegeFormationVfx(ctx,formationFrames,performance.now()-formationStart,animate&&animateFormation,logicalPerCssPixel);
+          if(formationFrames.length)drawSiegeFormationVfx(ctx,formationFrames,timestamp-formationStart,animate&&animateFormation,logicalPerCssPixel);
           if(ascensionMarks.length)drawAscensionMapVfx(ctx,ascensionMarks,elapsed,animate,logicalPerCssPixel);
           if(daoMarks.length)drawDaoIntentMapVfx(ctx,daoMarks,elapsed,animate,logicalPerCssPixel);
           if(alchemyMarks.length)drawHeavenlyAlchemyMapVfx(ctx,alchemyMarks,elapsed,animate,logicalPerCssPixel);
@@ -900,31 +898,31 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     };
 
     const preference = typeof window.matchMedia === 'function' ? window.matchMedia('(prefers-reduced-motion: reduce)') : undefined;
-    let frame: number | undefined;
+    let stopFrame:(()=>void)|undefined;
     let previous=0;
     let wasMoving=false;
-    const active=()=>mapScenicAnimationAllowed({reducedMotion:preference?.matches,pageVisible:!document.hidden,
+    const active=()=>!historical&&mapScenicAnimationAllowed({reducedMotion:preference?.matches,pageVisible:!document.hidden,
       surfaceActive:inspectionEnabled,width:markerSize.width,height:markerSize.height});
     const run = (now: number) => {
-      if(!active()){frame=undefined;return;}
+      if(!active())return false;
       const elapsed=now-motionStart;
       const moving=movingAt(now);
       const delay=mapScenicFrameDelay({moving,heat,ambient:qiFlow.hasMotion,width:markerSize.width});
       if(now-previous>=delay||wasMoving&&!moving){
-        draw(now/1350,elapsed,true);
+        draw(now/1350,elapsed,true,now);
         previous=now;
       }
       wasMoving=moving;
-      frame=heat||moving||qiFlow.hasMotion?window.requestAnimationFrame(run):undefined;
+      return heat||moving||qiFlow.hasMotion;
     };
     const stopOrStart = () => {
-      if(frame!==undefined)window.cancelAnimationFrame(frame);
-      frame=undefined;
-      const now=performance.now(),animate=active();
+      stopFrame?.();
+      stopFrame=undefined;
+      const now=frameClock.now(),animate=active();
       previous=now;
       wasMoving=movingAt(now);
-      draw(0,now-motionStart,animate);
-      if(animate&&(heat||wasMoving||qiFlow.hasMotion))frame=window.requestAnimationFrame(run);
+      draw(0,now-motionStart,animate,now);
+      if(animate&&(heat||wasMoving||qiFlow.hasMotion))stopFrame=frameClock.start('scene',run);
     };
     preference?.addEventListener?.('change',stopOrStart);
     document.addEventListener('visibilitychange',stopOrStart);
@@ -933,14 +931,15 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       const next = canvas.getBoundingClientRect();
       if (next.width === markerSize.width && next.height === markerSize.height) return;
       markerSize = next;
-      sitePins=projectMapSitePins(seenLocations,isCurrentLocation,camera,markerSize);
+      paintedCamera=cameraRef.current;
+      sitePins=projectMapSitePins(seenLocations,isCurrentLocation,paintedCamera,markerSize);
       staticMarkers = undefined;
       stopOrStart();
     }) : undefined;
     resize?.observe(canvas);
     return () => {
       resize?.disconnect();
-      if (frame !== undefined) window.cancelAnimationFrame(frame);
+      stopFrame?.();
       preference?.removeEventListener?.('change',stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
@@ -1059,7 +1058,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   };
   const startGesture = (event: React.PointerEvent<HTMLCanvasElement>) => {
     if (event.button !== 0 && gesture.current.phase === 'idle') return;
-    if(strategic&&pulseCameraFrame.current!==undefined)setStrategicMode(undefined);
+    if(strategic&&frameClock.active('camera'))setStrategicMode(undefined);
     cancelPulseCamera();
     const canvas = event.currentTarget;
     if(currentInspection&&!currentInspection.pinned)setInspection(undefined);
@@ -1126,17 +1125,16 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     if(!animate||from.zoom===target.zoom&&from.x===target.x&&from.y===target.y){
       updateCamera(target);setFocusMessage(message);return;
     }
-    const start=performance.now();
-    const frame=(now:number)=>{
+    const start=frameClock.now();
+    frameClock.start('camera',(now:number)=>{
       const elapsed=now-start;
       if(elapsed>=WORLD_PULSE_CAMERA_DURATION_MS||preference?.matches||document.hidden){
-        updateCamera(target);pulseCameraFrame.current=undefined;
-        setFocusMessage(message);return;
+        updateCamera(target);
+        setFocusMessage(message);return false;
       }
       updateCamera(interpolatePulseCamera(from,target,elapsed));
-      pulseCameraFrame.current=requestAnimationFrame(frame);
-    };
-    pulseCameraFrame.current=requestAnimationFrame(frame);
+      return true;
+    });
   };
   const toggleStrategy=()=>{
     const focus=selectedPoint??seenLocations.find(site=>isCurrentLocation(site.id));

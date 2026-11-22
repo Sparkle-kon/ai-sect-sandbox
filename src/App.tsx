@@ -1,3 +1,4 @@
+import {projectScopedPublicChronicle,projectScopedPersonalChronicle,projectScopedCausalChronicle} from './components/scopedChronicleRead';
 import {MapSidebarDossier} from './components/MapSidebarDossier';
 import {projectMapSidebarDossier} from './components/mapSidebarDossierModel';
 import type {MapDossierFocusRequest} from './components/mapDossierFocus';
@@ -24,12 +25,8 @@ import {useTournamentBanquetScene} from './components/useTournamentBanquetScene'
 import {useCivicRealmViews} from './components/hubs/useCivicRealmViews';
 import { useWorldSimulationController } from './controllers/useWorldSimulationController';
 import {findVisibleCampaignStopOption,visibleCampaignStopOptions} from './components/campaignStopOptions';
-import { projectRosterFocalId, projectRosterStoryRead, readSelectedRosterScene, resolveRosterStoryRead, sameRosterScene,
+import { projectRosterFocalId, projectRosterStoryRead, resolveRosterStoryRead, sameRosterScene,
   type ActorRosterScene } from './components/rosterStoryRead';
-import { projectWitnessedPersonalStory } from './engine/witnessedPersonalStory';
-import { createPublicDialogueResolver } from './engine/publicDialogueProvenance';
-import { projectEarnedChronicleLead, projectProtagonistSuccession } from './engine/protagonistSuccession';
-import { projectChronicleLead, publicChronicleSceneEvents } from './engine/chronicleLead';
 import { applyWatchMutation } from './engine/watchlistEngine';
 import type { WatchlistCommand, WatchlistMutationResult } from './engine/watchlistEngine';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -67,7 +64,6 @@ import { CHRONICLE_FOCUS_UNAVAILABLE, createChronicleFocusResolver } from './eng
 import type { ChronicleFocusRequest } from './engine/chronicleFocusEngine';
 import type { ChronicleCategoryFilter, ChronicleFeedPosition, ChronicleFeedReturn } from './components/ChronicleFeed';
 import type { ChronicleReadingContext } from './engine/chronicleReadingMark';
-import { visibleCausalChronicle } from './engine/chronicleCausalityEngine';
 
 const WorldMapCanvas = React.lazy(async () => ({ default: (await import('./components/WorldMapCanvas')).WorldMapCanvas }));
 const MentorshipPanel = React.lazy(async () => ({ default: (await import('./components/MentorshipPanel')).MentorshipPanel }));
@@ -290,15 +286,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
     },
   });
   const storyHome = React.useMemo(() => dashboardOpen ? undefined : projectStoryHomepage(world), [dashboardOpen,world]);
-  const chronicleScenes = React.useMemo(() => showingChronicle ? publicChronicleSceneEvents(visibleWorld) : [], [showingChronicle,visibleWorld]);
-  const publicDialogue = React.useMemo(() => showingChronicle ? createPublicDialogueResolver(visibleWorld) : undefined, [showingChronicle,visibleWorld]);
-  const succession = React.useMemo(() => showingChronicle &&
-    visibleWorld.protagonistSuccession.lastEvaluatedTick !== undefined ? projectProtagonistSuccession(visibleWorld) : undefined,
-    [showingChronicle,visibleWorld]);
-  const chronicleLead = React.useMemo(() => showingChronicle ?
-    visibleWorld.protagonistSuccession.lastEvaluatedTick === undefined ? projectChronicleLead(visibleWorld) :
-      projectEarnedChronicleLead(visibleWorld,chronicleScenes,visibleWorld.tick) : undefined,
-    [showingChronicle,visibleWorld,chronicleScenes]);
+  const publicRead=useMemo(()=>showingChronicle?projectScopedPublicChronicle(visibleWorld):undefined,[showingChronicle,visibleWorld]);
   const selectedCultivator = resolveWorkspaceActor(visibleWorld, selectedCultivatorId);
   const campaignStopOptions=useMemo(()=>readingChronicle&&campaign.available&&!preview?
     visibleCampaignStopOptions(visibleWorld,selectedCultivator):[],[readingChronicle,campaign.available,preview,visibleWorld,selectedCultivator]);
@@ -360,10 +348,9 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   const personalStoryActive = mayReadPersonal && personalStoryChoice?.actorId === activeActorId &&
     personalStoryChoice?.scope === viewScopeKey;
   const selectedRosterEvent = personalStoryActive ? personalStoryChoice?.eventId : undefined;
-  const personalStory = React.useMemo(() => readingChronicle && personalStoryActive && activeActorId ?
-    (selectedRosterEvent ? readSelectedRosterScene(visibleWorld, activeActorId, selectedRosterEvent) :
-      projectWitnessedPersonalStory(visibleWorld,activeActorId)) : undefined,
-    [readingChronicle,personalStoryActive,activeActorId,selectedRosterEvent,visibleWorld]);
+  const personalStory=useMemo(()=>readingChronicle&&personalStoryActive?
+    projectScopedPersonalChronicle(visibleWorld,selectedCultivator,selectedRosterEvent):undefined,
+    [readingChronicle,personalStoryActive,selectedCultivator,selectedRosterEvent,visibleWorld]);
   useEffect(() => {
     setPersonalStoryChoice((previous) => previous && mayReadPersonal && previous.actorId === activeActorId &&
       previous.scope === viewScopeKey ? previous : undefined);
@@ -391,9 +378,8 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   const scopedSupplyLinks=useMemo(()=>readingChronicle&&!chronicleReturn&&selectedCultivator?
     projectFrontierSupplyLinks(visibleWorld,selectedCultivator,{limit:3}):[],
   [readingChronicle,chronicleReturn,visibleWorld,selectedCultivator]);
-  const chronicleCauses = useMemo(() => workspace === 'chronicle'
-    ? new Map(visibleCausalChronicle(visibleWorld, activeActorId, 120).map((row) => [row.entry.eventId, row]))
-    : undefined, [visibleWorld, activeActorId, workspace]);
+  const chronicleCauses=useMemo(()=>workspace==='chronicle'?projectScopedCausalChronicle(visibleWorld,activeActorId):undefined,
+    [visibleWorld,activeActorId,workspace]);
   const currentFocusScope = focusTrail?.scope === viewScopeKey && focusTrail.revision === saveContextVersion.current;
   const trail = currentFocusScope ? focusTrail : undefined;
   const resolver = useMemo(() => workspace === 'chronicle' || trail
@@ -664,8 +650,8 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
         onSelectCultivator={setSelectedCultivatorId}/>
     </React.Suspense>}
     chronicle={<React.Suspense fallback={<p role="status">载入纪事…</p>}>
-      <ChronicleFeed events={chronicleScenes} lead={chronicleLead} succession={succession}
-        resolvePublicDialogue={publicDialogue?.event} category={chronicleFilter} onCategoryChange={setChronicleFilter}/>
+      <ChronicleFeed events={publicRead?.events??[]} lead={publicRead?.lead} succession={publicRead?.succession}
+        resolvePublicDialogue={publicRead?.dialogue.event} category={chronicleFilter} onCategoryChange={setChronicleFilter}/>
     </React.Suspense>}/>;
 
   if (storyHome) return <main data-story-home data-story-turn={storyHome.calendar.tick} className="min-h-dvh bg-slate-950 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
@@ -796,7 +782,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
         </div>,
         chronicle:<ChronicleArchiveHub simulation={simulation} selectedCultivator={selectedCultivator}
           active={readingChronicle} initialOpen={opened('chronicle','feed')} {...fold('chronicle')}
-          feed={{events:chronicleScenes,lead:chronicleLead,succession,resolvePublicDialogue:publicDialogue?.event,
+          feed={{events:publicRead?.events??[],lead:publicRead?.lead,succession:publicRead?.succession,resolvePublicDialogue:publicRead?.dialogue.event,
             category:chronicleFilter,onCategoryChange:setChronicleFilter,focusOptions:resolver?.build,
             causality:eventId=>chronicleCauses?.get(eventId),
             reading:readingContext&&!chronicleReturn?{context:readingContext,saveOrigin:readingSaveOrigin,
