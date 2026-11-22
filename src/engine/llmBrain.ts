@@ -34,6 +34,8 @@ import { availableProbationActions, probationReliefTargets } from './probationEn
 import { availableRelicExhibitActions } from './relicExhibitEngine';
 import { availableWorkshopActions, availableWorkshopCapacityActions, availableWorkshopReleaseActions,
   type WorkshopReleaseOption } from './workshopEngine';
+import { craftTrainingProviderOptions, craftTrainingTargets, decodeCraftTrainingDecision,
+  utilityCraftTrainingDecision } from './craftTrainingCognition';
 import { decodeWorkshopEstateDecision, utilityWorkshopEstateDecision, workshopEstateProviderOptions } from './workshopEstateCognition';
 import { decodeScribeCommissionDecision, scribeCommissionProviderOptions, scribeCommissionTargets,
   utilityScribeCommissionDecision } from './scribeCommissionCognition';
@@ -852,6 +854,8 @@ export function computeHeuristicDecision(
       return workshopReleaseDecision(failed[0], '头一件未过验。且问原订人肯不肯停做余件，不擅动款料。');
     }
   }
+  const training = utilityCraftTrainingDecision(cultivator, world);
+  if (training) return training;
   const estateCraft = utilityWorkshopEstateDecision(cultivator, world);
   if (estateCraft) return estateCraft;
   const scribeDuty = utilityScribeCommissionDecision(cultivator, world);
@@ -1890,6 +1894,7 @@ export async function requestCultivatorLLMDecision(
   const probationOptions = availableProbationActions(cultivator, world);
   const exhibitOptions = availableRelicExhibitActions(cultivator, world);
   const workshopOptions = availableWorkshopActions(cultivator, world, true, requestTick);
+  const trainingOptions = craftTrainingProviderOptions(cultivator, world, requestTick);
   const estateCraftOptions = workshopEstateProviderOptions(cultivator, world, requestTick);
   const scribeOptions = scribeCommissionProviderOptions(cultivator, world, requestTick);
   const workshopReleaseOptions = possessedForWorkshopRelease(cultivator, world, requestTick)
@@ -2019,6 +2024,7 @@ ${waterVeinOptions.length ? `- 本人在场的水线许可，只抄 waterVeinMov
 - 工坊委制只复制现有许可；须双方同意，按实际加工与质量交付：${JSON.stringify(workshopOptions)}${mayAcceptCharteredWorkshop ?
     '\n- 本人可接受的一份章程内委制：如这座旧工坊实际因迁宗撤并，实余资财退原委托人，已付或已耗不重算；新址不自动接约。这不是另一个行动。' : ''}
 - 余件释约只照抄本人列表中的 propose、accept、decline；提议不是暂停，同意才清剩余托管，不填写钱物或交割结果：${JSON.stringify(workshopReleasePromptOptions)}
+- 合练只复制本人本炉所列许可：offer 复制两位实际工序人，其他仅所列 targetCraftTrainingId，不自填材料、署名、品质或结果。本人的选项：${JSON.stringify(trainingOptions.map(craftTrainingTargets))}
 - 遗托续制只抄本人现在合法的 offer、accept 或 decline 与 targetWorkshopId；不得填继承人、工钱、余料、工序或结果：${JSON.stringify(estateCraftOptions.map(({workshopEstateMove,targetWorkshopId})=>({workshopEstateMove,targetWorkshopId})))}
 - 掌卷书约只复制本人列表的动作和编号，不填写稿文、他人原话、金额或交付结果：${JSON.stringify(scribeOptions.map(scribeCommissionTargets))}
 - 工坊容量调整只抄自己可用的 offer 或 accept 和 targetWorkshopId。停炉后已起工的仍记原账，未起工余项只由原委托人本人另行同意释放；不得填写款料、期限、数量、人物、炉况或假称已交付：${JSON.stringify(capacityOptions)}
@@ -2200,6 +2206,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'WORKSHOP_RELEASE',
             'WORKSHOP_ESTATE',
             'WAYPOST_MEAL',
+            'CRAFT_TRAINING',
             'SCRIBE_COMMISSION',
             'FURNACE_RESERVATION',
             'FURNACE_SAFETY',
@@ -2420,6 +2427,9 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
                 targetToolLoanId: legalToolLoan.targetToolLoanId, innerMonologue };
           }
           if (chosenAction === 'SCRIBE_COMMISSION') return decodeScribeCommissionDecision(parsed, cultivator, scribeOptions);
+          if (chosenAction === 'CRAFT_TRAINING') return decodeCraftTrainingDecision(parsed, cultivator, trainingOptions);
+          if (parsed.craftTrainingMove !== undefined || parsed.targetCraftTraineeId !== undefined ||
+              parsed.targetCraftTrainingId !== undefined) return undefined;
           if (chosenAction === 'WORKSHOP_ESTATE') return decodeWorkshopEstateDecision(parsed, cultivator, estateCraftOptions);
           if (chosenAction === 'WORKSHOP_RELEASE') {
             const exact = workshopReleaseOptions.find((item) => item.workshopReleaseMove === parsed.workshopReleaseMove &&

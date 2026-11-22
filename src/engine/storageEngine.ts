@@ -1,3 +1,5 @@
+import {availableCraftTrainingActions} from './craftTrainingEngine';
+import {validateCraftTraining} from './storageCraftTrainingValidation';
 import {availableWaypostMealActions} from './waypostMealEngine';
 import {validateWaypostMeals} from './storageWaypostMealValidation';
 import {availableWorkshopEstateActions,availableWorkshopReleaseActions} from './workshopEngine';
@@ -233,7 +235,7 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT SALVAGE_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE DOCTRINE_FOUNDING DOCTRINE_MATURITY RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE WAYPOST_MEAL CHRONICLE_ERRATA HABITAT INFIRMARY CARE_FOLLOWUP DANXIA_MEDICINE DANXIA_REVIEW FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER COURIER_HANDOFF SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP WORKSHOP_ESTATE WORKSHOP_RELEASE SCRIBE_COMMISSION FURNACE_RESERVATION FURNACE_SAFETY DAMAGE_ASSURANCE SPARRING EXPEDITION_RESCUE SHORT_SHIFT BOUNDARY_RELIEF MENTOR_TRANSFER APPRENTICE_COHORT SEASONAL_HOUSING HOUSEHOLD_NAME CARAVAN_RESTITUTION VILLAGE_GRANARY VILLAGE_SUPPLY ROUTE_WARNING PAVILION_LOAN WORKSHOP_CAPACITY CIVIC_MEMORIAL VILLAGE_FAIR SECT_STIPEND SEED_CULTURE WATER_VEIN NORTH_MINING_CHARTER NORTH_WELL_REVIEW UPPER_PASSAGE UPPER_ARRAY_FIELD UPPER_ARRAY_FIELD_LOCAL UPPER_ARRAY_FIELD_TRADE NORTH_GATE_RENEWAL FRONTIER FRONTIER_PRODUCTION FRONTIER_TRADE FRONTIER_PORT FRONTIER_PORT_TRADE FRONTIER_DRYLAND FRONTIER_DRYLAND_TRADE TOOL_LOAN RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY ALIGNED_WEATHER SEASON_REVIEW REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT SALVAGE_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE DOCTRINE_FOUNDING DOCTRINE_MATURITY RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE WAYPOST_MEAL CHRONICLE_ERRATA HABITAT INFIRMARY CARE_FOLLOWUP DANXIA_MEDICINE DANXIA_REVIEW FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER COURIER_HANDOFF SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP CRAFT_TRAINING WORKSHOP_ESTATE WORKSHOP_RELEASE SCRIBE_COMMISSION FURNACE_RESERVATION FURNACE_SAFETY DAMAGE_ASSURANCE SPARRING EXPEDITION_RESCUE SHORT_SHIFT BOUNDARY_RELIEF MENTOR_TRANSFER APPRENTICE_COHORT SEASONAL_HOUSING HOUSEHOLD_NAME CARAVAN_RESTITUTION VILLAGE_GRANARY VILLAGE_SUPPLY ROUTE_WARNING PAVILION_LOAN WORKSHOP_CAPACITY CIVIC_MEMORIAL VILLAGE_FAIR SECT_STIPEND SEED_CULTURE WATER_VEIN NORTH_MINING_CHARTER NORTH_WELL_REVIEW UPPER_PASSAGE UPPER_ARRAY_FIELD UPPER_ARRAY_FIELD_LOCAL UPPER_ARRAY_FIELD_TRADE NORTH_GATE_RENEWAL FRONTIER FRONTIER_PRODUCTION FRONTIER_TRADE FRONTIER_PORT FRONTIER_PORT_TRADE FRONTIER_DRYLAND FRONTIER_DRYLAND_TRADE TOOL_LOAN RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY ALIGNED_WEATHER SEASON_REVIEW REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const waypostPoint=structure({x:num(0,1000),y:num(0,600)});
 const waypostVisit=structure({journeyId:id,organizerId:id,companionId:id,spentByEach:one(PILGRIMAGE_LEG_COST,2*PILGRIMAGE_LEG_COST),
@@ -243,7 +245,7 @@ const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foun
 const flowGood = one('stone','jade_seed','frost_dose','ward_reed','frontier_water','reef_salt','port_rigging','rift_salt','stormstone','upper_lattice','jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const flowMeasure = num(0,Number.MAX_SAFE_INTEGER);
 const flowSerial = num(1,Number.MAX_SAFE_INTEGER,true);
-const flowAccount = structure({kind:one('actor','site','sect','order','shipment','oath','relocation','workshop','salvage','granary','village_supply','village_fair','seed_lot','seed_plot','danxia_medicine','upper_passage','frontier_store','upper_array_store','scribe_commission','waypost_meal'),id,
+const flowAccount = structure({kind:one('actor','site','sect','order','shipment','oath','relocation','workshop','salvage','granary','village_supply','village_fair','seed_lot','seed_plot','danxia_medicine','upper_passage','frontier_store','upper_array_store','scribe_commission','waypost_meal','craft_training'),id,
   pocket:optional(one('payment','collateral'))});
 const granaryReceipt: Validator = (value, path) => {
   const kind = (value as { kind?: unknown } | null)?.kind;
@@ -311,7 +313,8 @@ const technique = structure({id:oid,authorId:oid,createdTick:otick,name:id,spiri
 const editionKind = one('gloss','misread','corrected');
 const relicSet = one('star-balance');
 const workshopArtifactOrigin = structure({orderId:id,piece:one(1,2),makerId:id,siteId:id,blankTick:tick,finishedTick:tick});
-const artifact = structure({workshopOrigin:optional(workshopArtifactOrigin),relicSetId:optional(relicSet),relicFragmentIds:optional(arr(2,id)),id:oid,tier:optional(one('法器','灵器','法宝','通天灵宝')),durability:optional(wealth),maxDurability:optional(wealth),boundTo:oid,
+const craftTrainingOrigin=structure({projectId:id,blankId:id,siteId:id,keeperId:id,firstTraineeId:id,secondTraineeId:id,blankTick:tick,finishedTick:tick});
+const artifact = structure({craftTrainingOrigin:optional(craftTrainingOrigin),workshopOrigin:optional(workshopArtifactOrigin),relicSetId:optional(relicSet),relicFragmentIds:optional(arr(2,id)),id:oid,tier:optional(one('法器','灵器','法宝','通天灵宝')),durability:optional(wealth),maxDurability:optional(wealth),boundTo:oid,
   soul:optional(structure({name:id,experience:percentage})),resonance:optional(percentage),name:id,spiritRoot:spirit});
 const eligibility = { actorId:id,basis:one('nomination','bond','sect'),strength:num(0,10_000) };
 const memory = structure({id,tick,content:text,importance:num(1,10),emotionalValence:num(-5,5),decayRate:num(0,10),
@@ -561,6 +564,18 @@ const shape = structure({
     closeReason:optional(one('declined','withdrawn','offer_expired','item_unavailable','owner_died',
       'recalled','host_closed','term_complete','host_breach')),custody:optional(artifact)
   }))}),
+  craftTraining:optional(structure({version:one(1),nextId:num(1,Number.MAX_SAFE_INTEGER,true),
+    projects:arr(SAVE_COLLECTION_LIMIT,structure({
+      id,siteId:id,sectId:id,keeperId:id,traineeIds:arr(2,id),offeredTick:tick,offerExpiresTick:tick,
+      status:one('offered','funded','blank','completed','failed','declined','withdrawn','expired','unavailable'),
+      firstJoinedTick:otick,secondJoinedTick:otick,fundedTick:otick,workExpiresTick:otick,closedTick:otick,closedById:oid,
+      unavailableReason:optional(one('keeper','site','trainee')),escrowStones:count,escrowRoots:count,refundedStones:count,refundedRoots:count,
+      blank:optional(structure({id,tick,actorId:id,stonesUsed:count,rootsUsed:one(1),slot:one(1,2,3),
+        masteryBefore:percentage,masteryAfter:percentage})),
+      finish:optional(structure({blankId:id,tick,actorId:id,stonesUsed:count,rootsUsed:one(1),slot:one(1,2,3),masteryBefore:percentage,masteryAfter:percentage,
+        furnaceGrade:one(1,2,3),rootMatched:bool,strained:bool,qualityScore:num(0,100,true),grade:one('failed','standard','fine'),artifactId:oid})),
+    })),
+  })),
   workshops:structure({nextId:num(1,100_000_000,true),orders:arr(SAVE_COLLECTION_LIMIT,structure({
     estateContinuation:optional(structure({
       estateId:id,heldTick:tick,heldStones:count,heldHerbs:count,phase:one('held','offered','resumed','released','completed'),
@@ -1258,6 +1273,12 @@ const shape = structure({
           ?structure({...fields,scribeCommissionMove:one('offer'),targetCultivatorId:id,targetChronicleSourceId:id})(value,path)
           :structure({...fields,scribeCommissionMove:one('accept','decline','withdraw','verify','deliver'),targetScribeCommissionId:id})(value,path);
       }
+      if(order?.action==='CRAFT_TRAINING'){
+        const fields={...fixed,action:one('CRAFT_TRAINING')};
+        return 'craftTrainingMove' in order&&order.craftTrainingMove==='offer'
+          ?structure({...fields,craftTrainingMove:one('offer'),targetCultivatorId:id,targetCraftTraineeId:id})(value,path)
+          :structure({...fields,craftTrainingMove:one('join','decline','blank','finish','withdraw'),targetCraftTrainingId:id})(value,path);
+      }
       if(order?.action==='WAYPOST_MEAL'){
         const fields={...fixed,action:one('WAYPOST_MEAL')};
         return 'waypostMealMove' in order&&order.waypostMealMove==='offer'
@@ -1890,6 +1911,7 @@ function verifyWorld(value: unknown): WorldState {
   validateDamageAssuranceHistory(w, actor, fail);
   let previousFlowTick = -1;
   let previousFlowId = 0;
+  validateCraftTraining(w,fail);
   for (const book of w.resourceFlow.months) {
     if (book.tick <= previousFlowTick || book.tick > w.tick || (book.tick === w.tick && (book.year !== w.year || book.month !== w.month)) ||
         book.entries.length !== Math.min(book.totalEntries, RESOURCE_FLOW_DETAIL_LIMIT)) fail('resourceFlow.months.window');
@@ -2705,6 +2727,18 @@ function verifyWorld(value: unknown): WorldState {
           return option.scribeCommissionMove===localWaterOrder.scribeCommissionMove&&option.targetScribeCommissionId===localWaterOrder.targetScribeCommissionId;
         return false;
       }))fail('playerAvatar.scribeCommissionOrder');
+  }
+  if(localWaterOrder?.action==='CRAFT_TRAINING'){
+    const ordered=w.cultivators.find(row=>row.id===localWaterOrder.actorId);
+    if(localWaterOrder.queuedTick!==w.tick||(w.playerAvatar.possessionUntilTick??0)<=w.tick+1||
+      w.playerAvatar.possessedId!==localWaterOrder.actorId||!ordered||
+      !availableCraftTrainingActions(ordered,w,w.tick+1).some(option=>{
+        if(option.craftTrainingMove==='offer'&&localWaterOrder.craftTrainingMove==='offer')
+          return option.targetCultivatorId===localWaterOrder.targetCultivatorId&&option.targetCraftTraineeId===localWaterOrder.targetCraftTraineeId;
+        if(option.craftTrainingMove!=='offer'&&localWaterOrder.craftTrainingMove!=='offer')
+          return option.craftTrainingMove===localWaterOrder.craftTrainingMove&&option.targetCraftTrainingId===localWaterOrder.targetCraftTrainingId;
+        return false;
+      }))fail('playerAvatar.craftTrainingOrder');
   }
   if(localWaterOrder?.action==='WAYPOST_MEAL'){
     const ordered=w.cultivators.find(row=>row.id===localWaterOrder.actorId);
@@ -3522,9 +3556,9 @@ function serializeWorldSave(world: WorldState): string {
   try {
     // A native turn may first attach either optional ledger after a hot-world clone.
     // Normalize that bounded extension order, leaving every pre-extension byte intact.
-    if (world.eraHeritage !== undefined || world.mortalAgeTrackingSinceTick !== undefined || world.coldWaterVein !== undefined || world.northMiningCharters !== undefined || world.northWellRevisitLaw !== undefined || world.northWellRevisitReviews !== undefined || world.upperPassage !== undefined || world.northGateRenewal !== undefined || world.frontier !== undefined || world.upperArrayField !== undefined || world.scribeCommissions !== undefined || world.waypostMeals !== undefined) {
-      const {eraHeritage,mortalAgeTrackingSinceTick,coldWaterVein,northMiningCharters,northWellRevisitLaw,northWellRevisitReviews,upperPassage,northGateRenewal,frontier,upperArrayField,scribeCommissions,waypostMeals,...legacy}=world;
-      return JSON.stringify({format:FORMAT,version:VERSION,world:{...legacy,eraHeritage,mortalAgeTrackingSinceTick,coldWaterVein,northMiningCharters,northWellRevisitLaw,northWellRevisitReviews,upperPassage,northGateRenewal,frontier,upperArrayField,scribeCommissions,waypostMeals}});
+    if (world.eraHeritage !== undefined || world.mortalAgeTrackingSinceTick !== undefined || world.coldWaterVein !== undefined || world.northMiningCharters !== undefined || world.northWellRevisitLaw !== undefined || world.northWellRevisitReviews !== undefined || world.upperPassage !== undefined || world.northGateRenewal !== undefined || world.frontier !== undefined || world.upperArrayField !== undefined || world.scribeCommissions !== undefined || world.waypostMeals !== undefined || world.craftTraining !== undefined) {
+      const {eraHeritage,mortalAgeTrackingSinceTick,coldWaterVein,northMiningCharters,northWellRevisitLaw,northWellRevisitReviews,upperPassage,northGateRenewal,frontier,upperArrayField,scribeCommissions,waypostMeals,craftTraining,...legacy}=world;
+      return JSON.stringify({format:FORMAT,version:VERSION,world:{...legacy,eraHeritage,mortalAgeTrackingSinceTick,coldWaterVein,northMiningCharters,northWellRevisitLaw,northWellRevisitReviews,upperPassage,northGateRenewal,frontier,upperArrayField,scribeCommissions,waypostMeals,craftTraining}});
     }
     return JSON.stringify({ format: FORMAT, version: VERSION, world });
   } catch { throw new WorldSaveError('json', '当前世界不能序列化为 JSON。'); }

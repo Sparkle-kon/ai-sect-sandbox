@@ -1,3 +1,4 @@
+import {availableCraftTrainingActions,type CraftTrainingOption} from './craftTrainingEngine';
 import {availableWaypostMealActions,type WaypostMealOption} from './waypostMealEngine';
 import {availableWorkshopEstateActions,type WorkshopEstateOption} from './workshopEngine';
 import {availableScribeCommissionActions,type ScribeCommissionOption} from './scribeCommissionEngine';
@@ -323,6 +324,18 @@ export function queueAvatarWaypostMeal(world:WorldState,actorId:string,choice:Wa
   return true;
 }
 
+export function queueAvatarCraftTraining(world:WorldState,actorId:string,choice:CraftTrainingOption):boolean {
+  const host=activeAvatar(world);
+  if(!host||!onLowerPlane(host)||!canQueueAvatarSalvage(world,actorId)||choice.action!=='CRAFT_TRAINING')return false;
+  const options=availableCraftTrainingActions(host,world,world.tick+1).filter(option=>
+    option.craftTrainingMove===choice.craftTrainingMove&&option.targetCultivatorId===choice.targetCultivatorId&&
+    option.targetCraftTraineeId===choice.targetCraftTraineeId&&option.targetCraftTrainingId===choice.targetCraftTrainingId);
+  if(options.length!==1)return false;
+  world.playerAvatar.essence-=AVATAR_ORDER_COST;
+  world.playerAvatar.pendingOrder={actorId,queuedTick:world.tick,...options[0]};
+  return true;
+}
+
 export function consumeAvatarOrder(world: WorldState): { actorId: string; decision: LLMDecisionPayload } | undefined {
   const state = world.playerAvatar;
   const order = state?.pendingOrder;
@@ -337,6 +350,11 @@ export function consumeAvatarOrder(world: WorldState): { actorId: string; decisi
     ...(order.scribeCommissionMove==='offer'?
       {targetChronicleSourceId:order.targetChronicleSourceId,targetCultivatorId:order.targetCultivatorId}:
       {targetScribeCommissionId:order.targetScribeCommissionId})}};
+  if(order.action==='CRAFT_TRAINING')return {actorId:order.actorId,decision:{
+    chosenAction:order.action,innerMonologue:'只由原签学员照自己的真实炉前工序行事。',craftTrainingMove:order.craftTrainingMove,
+    ...(order.craftTrainingMove==='offer'?
+      {targetCultivatorId:order.targetCultivatorId,targetCraftTraineeId:order.targetCraftTraineeId}:
+      {targetCraftTrainingId:order.targetCraftTrainingId})}};
   if(order.action==='WAYPOST_MEAL')return {actorId:order.actorId,decision:{
     chosenAction:order.action,innerMonologue:'只在实到的山驿，与原同行人分茶。',waypostMealMove:order.waypostMealMove,
     ...(order.waypostMealMove==='offer'?{targetCultivatorId:order.targetCultivatorId}:{targetWaypostMealId:order.targetWaypostMealId})}};

@@ -1,3 +1,5 @@
+import {availableCraftTrainingActions} from './engine/craftTrainingEngine';
+import type {CraftTrainingControls} from './components/CraftTrainingRead';
 import {availableWaypostMealActions} from './engine/waypostMealEngine';
 import type {WaypostMealControls} from './components/WaypostMealRead';
 import type {WorkshopEstateControls} from './components/WorkshopEstateRead';
@@ -7,7 +9,7 @@ import {availableWorkshopReleaseActions,availableWorkshopEstateActions,type Work
 import type {WorkshopReleaseControls} from './components/WorkshopReleaseRead';
 import {AuthoredEraChronicle} from './components/AuthoredEraChronicle';
 import {useAuthoredEraLaunch} from './components/useAuthoredEraLaunch';
-import {activeAvatar,canQueueAvatarSalvage,queueAvatarDanxiaMedicine,queueAvatarDanxiaReview,queueAvatarDoctrineFounding,queueAvatarDoctrineMaturity,queueAvatarWorkshopRelease,queueAvatarWorkshopEstate,queueAvatarScribeCommission,queueAvatarWaypostMeal} from './engine/avatarEngine';
+import {activeAvatar,canQueueAvatarSalvage,queueAvatarDanxiaMedicine,queueAvatarDanxiaReview,queueAvatarDoctrineFounding,queueAvatarDoctrineMaturity,queueAvatarWorkshopRelease,queueAvatarWorkshopEstate,queueAvatarScribeCommission,queueAvatarWaypostMeal,queueAvatarCraftTraining} from './engine/avatarEngine';
 import {availableDanxiaMedicineActions,type DanxiaMedicineOption} from './engine/danxiaMedicineEngine';
 import type {DanxiaMedicineControlsProps} from './components/DanxiaMedicineControls';
 import {availableDanxiaReviewActions,type DanxiaReviewOption} from './engine/danxiaSeasonReviewEngine';
@@ -1392,11 +1394,27 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
       return updated!==world;
     }
   }:undefined;
+  const craftTrainingControls:CraftTrainingControls|undefined=workshopAvatar?{
+    scopeKey:`${viewScopeKey}:${workshopAvatar.id}`,revisionKey:world,disabled:isStepping||fastForwardLocked,
+    choices:canQueueAvatarSalvage(world,workshopAvatar.id)?availableCraftTrainingActions(workshopAvatar,world,world.tick+1):[],
+    pending:world.playerAvatar.pendingOrder?.action==='CRAFT_TRAINING'?world.playerAvatar.pendingOrder:undefined,
+    onQueue:(choice,revision)=>{
+      if(revision!==world||browsing.current||stepInFlight.current||fastForwardRun.current||campaignGuard.current||
+        history.current!==timeline||authority.current!==world||saveContextVersion.current!==medicineContextVersion)return false;
+      const updated=updateWorld(current=>{
+        const clone=structuredClone(current);
+        return queueAvatarCraftTraining(clone,workshopAvatar.id,choice)?clone:current;
+      });
+      if(updated!==world)setIsRunning(false);
+      return updated!==world;
+    }
+  }:undefined;
   const inspect = (workspaceSection: 'profile' | 'cultivation' | 'mind' | 'sect') => <React.Suspense fallback={<p role="status">载入修士档案…</p>}>
     <AgentInspector world={visibleWorld} cultivator={selectedCultivator} onSelectCultivator={setSelectedCultivatorId} workspaceSection={workspaceSection} medicineControls={workspaceSection==='sect'?medicineControls:undefined}
       seasonReviewControls={workspaceSection==='sect'?seasonReviewControls:undefined}
       workshopReleaseControls={workspaceSection==='sect'?workshopReleaseControls:undefined}
       workshopEstateControls={workspaceSection==='sect'?workshopEstateControls:undefined}
+      craftTrainingControls={workspaceSection==='sect'?craftTrainingControls:undefined}
       artifactSalvage={{ scopeKey:viewScopeKey, busy:isStepping || fastForwardLocked, readOnly:!!preview, onConfirm:queueSelectedSalvage }} />
   </React.Suspense>;
   const openWorkspace = (next: WorkspaceId) => {

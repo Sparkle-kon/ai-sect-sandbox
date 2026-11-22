@@ -81,6 +81,9 @@ export function ArtifactPanel({ cultivator, cultivators, world, salvage }: {
             const isEquipped = artifact === equipped;
             const option = artifact.id && byItem.get(artifact.id);
             const staged = review?.item === artifact ? review : undefined;
+            const origin = exactActor === cultivator ? artifact.craftTrainingOrigin : undefined;
+            const blankMaker = origin && names.get(origin.firstTraineeId);
+            const finisher = origin && names.get(origin.secondTraineeId);
             return (
               <li key={artifact.id ?? `${artifact.name}-${index}`} className="space-y-1 rounded border border-slate-700 bg-slate-800/50 px-2 py-1.5">
                 <div className="flex flex-wrap items-center gap-1.5 text-slate-200">
@@ -99,6 +102,9 @@ export function ArtifactPanel({ cultivator, cultivators, world, salvage }: {
                   {artifact.resonance !== undefined && <span>共鸣 {artifact.resonance}</span>}
                   {artifact.soul && <span>器灵：{artifact.soul.name} · 经验 {artifact.soul.experience}</span>}
                 </div>
+                {origin && blankMaker && finisher && <p className="text-slate-400 [overflow-wrap:anywhere]">
+                  合练原器：{blankMaker}制坯，{finisher}成器。
+                </p>}
                 {staged && stamp && salvage ? <ArtifactSalvageReview name={artifact.name} tier={tier} durability={staged.durability}
                   maximum={staged.maximum} site={world?.locations.find(({ id }) => id === staged.command.targetLocationId)?.name ?? '此处炉点'}
                   onConfirm={() => {

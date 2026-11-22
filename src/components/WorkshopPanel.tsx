@@ -1,3 +1,5 @@
+import {CraftTrainingRead,type CraftTrainingControls} from './CraftTrainingRead';
+import {visibleCraftTraining} from '../engine/craftTrainingEngine';
 import {WorkshopEstateRead,type WorkshopEstateControls} from './WorkshopEstateRead';
 import {WorkshopReleaseRead,type WorkshopReleaseControls} from './WorkshopReleaseRead';
 import { visibleWorkshopOrders, workshopTerms } from '../engine/workshopEngine';
@@ -70,13 +72,14 @@ function CapacityReceipt({ order, tick, patron, receipts }: {
   </div>;
 }
 
-export function WorkshopPanel({ world, cultivator, releaseControls, estateControls }: { world: WorldState; cultivator: Cultivator; releaseControls?:WorkshopReleaseControls; estateControls?:WorkshopEstateControls }) {
+export function WorkshopPanel({ world, cultivator, releaseControls, estateControls, trainingControls }: { world: WorldState; cultivator: Cultivator; releaseControls?:WorkshopReleaseControls; estateControls?:WorkshopEstateControls; trainingControls?:CraftTrainingControls }) {
   const actor = world.cultivators.includes(cultivator)?cultivator:undefined;
   if (!actor) return null;
   const orders = visibleWorkshopOrders(world, actor).filter(({ offeredTick })=>offeredTick<=world.tick)
     .sort((a, b) => (b.settledTick ?? b.offeredTick) - (a.settledTick ?? a.offeredTick));
   const toolLoans = projectToolLoans(world, actor);
-  if (!orders.length && !toolLoans.length) return null;
+  const training=visibleCraftTraining(world,actor);
+  if(!orders.length&&!toolLoans.length&&!training.length&&!trainingControls?.choices.length&&!trainingControls?.pending)return null;
   const people = new Map(world.cultivators.map(({ id, name }) => [id, name]));
   const known = new Map(knownMapLocations(world, actor).map(({ id, name }) => [id, name]));
 
@@ -85,6 +88,7 @@ export function WorkshopPanel({ world, cultivator, releaseControls, estateContro
       <summary className="min-h-11 cursor-pointer break-words px-3 py-2.5 text-xs font-semibold text-indigo-200">工坊委制与品质交割</summary>
       <div className="space-y-2 px-3 pb-3 text-xs leading-relaxed text-slate-300">
         <ToolLoanReceipts receipts={toolLoans} />
+        <CraftTrainingRead key={trainingControls?.scopeKey??actor.id} world={world} viewer={actor} rows={training} controls={trainingControls}/>
         {orders.length > 0 && <p>此处只查本人参与的订单。订单完成不表示每件都达标；实际验收入库、未达标及未用材料退款分别记录。</p>}
         {orders.length > 0 && <ol aria-label="本角色可查的工坊委制" className="max-h-[27rem] space-y-2 overflow-y-auto">
           {orders.map((order) => {

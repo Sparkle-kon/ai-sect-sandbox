@@ -52,6 +52,7 @@ export default defineConfig({
           'old-well-source': ['./src/engine/northWellRevisitTerms.ts','./src/engine/northWellRevisitEvidence.ts'],
           'upper-positions': ['./src/engine/upperPassageTerms.ts','./src/engine/upperPassageIsolation.ts',
             './src/engine/upperArrayFieldTerms.ts','./src/engine/upperArrayFieldLocalTerms.ts','./src/engine/upperArrayFieldTradeTerms.ts'],
+          'upper-movement': ['./src/engine/upperArrayFieldMovementEngine.ts'],
           // Geography and economic terms are shared leaves, not the live engine/ledger graph.
           'frontier-region-terms': ['./src/engine/frontierTerms.ts','./src/engine/frontierProductionTerms.ts',
             './src/engine/frontierTradeTerms.ts','./src/engine/frontierPortTerms.ts','./src/engine/frontierPortTradeTerms.ts',
@@ -61,6 +62,7 @@ export default defineConfig({
           'household-register': ['./src/engine/householdNameEngine.ts','./src/engine/mortalAgeCohorts.ts'],
           'rural-governance': ['./src/engine/householdEngine.ts','./src/engine/seasonalHousingEngine.ts',
             './src/engine/sharedCommonsEngine.ts','./src/engine/civicMemorialEngine.ts','./src/engine/villageFairEngine.ts'],
+          'furnace-damage': ['./src/engine/damageAssuranceEngine.ts'],
           'institution-terms': ['./src/engine/sectActivity.ts','./src/engine/sectCreditTerms.ts'],
           'institution-rules': ['./src/engine/estateEngine.ts', './src/engine/sectCreditEngine.ts', './src/engine/serviceRetirementEngine.ts', './src/engine/relicExhibitEngine.ts'],
           // Both native settlement and portable scenario verification use the same small leaf proofs.

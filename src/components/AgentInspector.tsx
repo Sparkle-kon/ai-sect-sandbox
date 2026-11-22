@@ -1,3 +1,4 @@
+import type {CraftTrainingControls} from './CraftTrainingRead';
 import type {WorkshopEstateControls} from './WorkshopEstateRead';
 import type {WorkshopReleaseControls} from './WorkshopReleaseRead';
 import type {DanxiaMedicineControlsProps} from './DanxiaMedicineControls';
@@ -45,6 +46,7 @@ interface AgentInspectorProps {
   artifactSalvage?: ArtifactSalvageControls;
   workshopReleaseControls?:WorkshopReleaseControls;
   workshopEstateControls?:WorkshopEstateControls;
+  craftTrainingControls?:CraftTrainingControls;
 }
 
 export const AgentInspector: React.FC<AgentInspectorProps> = ({
@@ -55,6 +57,7 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
   seasonReviewControls,
   workshopReleaseControls,
   workshopEstateControls,
+  craftTrainingControls,
 }) => {
   if (!cultivator) {
     return (
@@ -219,7 +222,7 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
           </div>
         </div>
         <ArtifactPanel world={world} cultivator={cultivator} cultivators={world.cultivators} salvage={artifactSalvage} />
-        <WorkshopPanel world={world} cultivator={cultivator} releaseControls={workshopReleaseControls} estateControls={workshopEstateControls} />
+        <WorkshopPanel world={world} cultivator={cultivator} releaseControls={workshopReleaseControls} estateControls={workshopEstateControls} trainingControls={craftTrainingControls} />
         <FurnaceReservationPanel world={world} cultivator={cultivator} />
         {showsRelic && <React.Suspense fallback={<p role="status" className="text-xs text-slate-400">载入套装记录…</p>}>
           <RelicSetPanel world={world} actor={cultivator} />
