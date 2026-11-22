@@ -62,6 +62,7 @@ export default defineConfig({
           'household-register': ['./src/engine/householdNameEngine.ts','./src/engine/mortalAgeCohorts.ts'],
           'rural-governance': ['./src/engine/householdEngine.ts','./src/engine/seasonalHousingEngine.ts',
             './src/engine/sharedCommonsEngine.ts','./src/engine/civicMemorialEngine.ts','./src/engine/villageFairEngine.ts'],
+          'living-landscape': ['./src/engine/habitatEngine.ts','./src/engine/watchlistEngine.ts'],
           'furnace-damage': ['./src/engine/damageAssuranceEngine.ts'],
           'institution-terms': ['./src/engine/sectActivity.ts','./src/engine/sectCreditTerms.ts'],
           'institution-rules': ['./src/engine/estateEngine.ts', './src/engine/sectCreditEngine.ts', './src/engine/serviceRetirementEngine.ts', './src/engine/relicExhibitEngine.ts'],

@@ -1,3 +1,5 @@
+import {DisasterShelterRead,type DisasterShelterControls} from './DisasterShelterRead';
+import {projectDisasterShelters} from '../engine/disasterShelterEngine';
 import { projectSeasonalHousing } from '../engine/seasonalHousingEngine';
 import { SeasonalHousingReceipts } from './SeasonalHousingReceipts';
 import {
@@ -25,7 +27,7 @@ const PEOPLE_LABELS: Record<RecordEntry['kind'], string> = {
   disaster: '遇难', old_age:'寿终', migration: '迁出', relief: '受益', recruitment: '自愿入门', growth: '新生',
 };
 
-export function MortalVillagesPanel({ world, cultivator }: { world: WorldState; cultivator: Cultivator | undefined }) {
+export function MortalVillagesPanel({ world, cultivator, shelterControls }: { world: WorldState; cultivator: Cultivator | undefined; shelterControls?:DisasterShelterControls }) {
   const terrain = createTerrainMapView(world, cultivator, true);
   const knownLocations = new Set(terrain.seenLocations.map(({ id }) => id));
   const villages = (world.settlements?.villages ?? []).filter(({ locationId }) => knownLocations.has(locationId));
@@ -35,6 +37,8 @@ export function MortalVillagesPanel({ world, cultivator }: { world: WorldState; 
   const nativeStock = projectVillageGranary(world, cultivator);
   const worksView = cultivator && visible.size > 0 ? visibleVillageWorks(world, cultivator) : [];
   const householdView = cultivator && visible.size > 0 ? visibleHouseholds(world, cultivator) : undefined;
+  const shelterViewer=cultivator&&world.cultivators.includes(cultivator)?cultivator:undefined;
+  const shelterRows=shelterViewer?projectDisasterShelters(world,shelterViewer):[];
   const personalHousing = projectSeasonalHousing(world,cultivator);
   const householdCensuses = new Map(householdView?.censuses.map((census) => [census.settlementId, census]));
   const options = cultivator?.alive && world.settlements ? availableSettlementActions(cultivator, world) : [];
@@ -50,9 +54,11 @@ export function MortalVillagesPanel({ world, cultivator }: { world: WorldState; 
           {cultivator ? `${cultivator.name}的已知村镇 · 当前观察 ${visible.size} 处` : '选择修士后查看其已知村镇。'}
         </p>
         <p className="text-xs text-slate-400">
-          此处只查看。可招募仅指当前满足条件的成年自愿者，不代表必定加入。村名后的斜线表示实有人口／本村承载，不是修士人数或世界人口上限。
+          村镇记录供查阅。可招募仅指当前满足条件的成年自愿者，不代表必定加入。村名后的斜线表示实有人口／本村承载，不是修士人数或世界人口上限。
         </p>
       </header>
+      {shelterViewer&&<DisasterShelterRead key={shelterControls?.scopeKey??shelterViewer.id} world={world}
+        viewer={shelterViewer} rows={shelterRows} controls={shelterControls}/>}
       {villages.length === 0 ? <p className="text-xs text-slate-400">{cultivator ? '未探索到村镇。' : '未选中修士，无地方观察。'}</p> : (
         <div className="max-h-[28rem] space-y-1.5 overflow-y-auto">
           {villages.map((village) => {

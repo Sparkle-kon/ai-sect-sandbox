@@ -1,3 +1,5 @@
+import {availableDisasterShelterActions} from './engine/disasterShelterEngine';
+import type {DisasterShelterControls} from './components/DisasterShelterRead';
 import {availableCraftTrainingActions} from './engine/craftTrainingEngine';
 import type {CraftTrainingControls} from './components/CraftTrainingRead';
 import {availableWaypostMealActions} from './engine/waypostMealEngine';
@@ -9,7 +11,7 @@ import {availableWorkshopReleaseActions,availableWorkshopEstateActions,type Work
 import type {WorkshopReleaseControls} from './components/WorkshopReleaseRead';
 import {AuthoredEraChronicle} from './components/AuthoredEraChronicle';
 import {useAuthoredEraLaunch} from './components/useAuthoredEraLaunch';
-import {activeAvatar,canQueueAvatarSalvage,queueAvatarDanxiaMedicine,queueAvatarDanxiaReview,queueAvatarDoctrineFounding,queueAvatarDoctrineMaturity,queueAvatarWorkshopRelease,queueAvatarWorkshopEstate,queueAvatarScribeCommission,queueAvatarWaypostMeal,queueAvatarCraftTraining} from './engine/avatarEngine';
+import {activeAvatar,canQueueAvatarSalvage,queueAvatarDanxiaMedicine,queueAvatarDanxiaReview,queueAvatarDoctrineFounding,queueAvatarDoctrineMaturity,queueAvatarWorkshopRelease,queueAvatarWorkshopEstate,queueAvatarScribeCommission,queueAvatarWaypostMeal,queueAvatarCraftTraining,queueAvatarDisasterShelter} from './engine/avatarEngine';
 import {availableDanxiaMedicineActions,type DanxiaMedicineOption} from './engine/danxiaMedicineEngine';
 import type {DanxiaMedicineControlsProps} from './components/DanxiaMedicineControls';
 import {availableDanxiaReviewActions,type DanxiaReviewOption} from './engine/danxiaSeasonReviewEngine';
@@ -1409,6 +1411,23 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
       return updated!==world;
     }
   }:undefined;
+  const shelterAvatar=!preview&&dashboardOpen&&workspace==='world'&&foldPreferences.sections.world==='villages'&&selectedCultivator&&
+    activeAvatar(world)?.id===selectedCultivator.id?selectedCultivator:undefined;
+  const disasterShelterControls:DisasterShelterControls|undefined=shelterAvatar?{
+    scopeKey:`${viewScopeKey}:${shelterAvatar.id}`,revisionKey:world,disabled:isStepping||fastForwardLocked,
+    choices:canQueueAvatarSalvage(world,shelterAvatar.id)?availableDisasterShelterActions(shelterAvatar,world,world.tick+1):[],
+    pending:world.playerAvatar.pendingOrder?.action==='DISASTER_SHELTER'?world.playerAvatar.pendingOrder:undefined,
+    onQueue:(choice,revision)=>{
+      if(revision!==world||browsing.current||stepInFlight.current||fastForwardRun.current||campaignGuard.current||
+        history.current!==timeline||authority.current!==world||saveContextVersion.current!==medicineContextVersion)return false;
+      const updated=updateWorld(current=>{
+        const clone=structuredClone(current);
+        return queueAvatarDisasterShelter(clone,shelterAvatar.id,choice)?clone:current;
+      });
+      if(updated!==world)setIsRunning(false);
+      return updated!==world;
+    }
+  }:undefined;
   const inspect = (workspaceSection: 'profile' | 'cultivation' | 'mind' | 'sect') => <React.Suspense fallback={<p role="status">载入修士档案…</p>}>
     <AgentInspector world={visibleWorld} cultivator={selectedCultivator} onSelectCultivator={setSelectedCultivatorId} workspaceSection={workspaceSection} medicineControls={workspaceSection==='sect'?medicineControls:undefined}
       seasonReviewControls={workspaceSection==='sect'?seasonReviewControls:undefined}
@@ -1877,7 +1896,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
             </div>
             : <p className="text-xs text-slate-300">从人物名册选择实际修士后查看坊市。</p> },
           { id: 'villages', label: '凡人村镇与赈济', content: <div className="space-y-2.5">
-            <React.Suspense fallback={<p role="status">载入世界记录…</p>}><MortalVillagesPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense>
+            <React.Suspense fallback={<p role="status">载入世界记录…</p>}><MortalVillagesPanel world={visibleWorld} cultivator={selectedCultivator} shelterControls={disasterShelterControls} /></React.Suspense>
             {selectedCultivator && selectedSettlementId &&
               <>
                 <React.Suspense fallback={null}><HouseholdNamePanel world={visibleWorld} cultivator={selectedCultivator} settlementId={selectedSettlementId} /></React.Suspense>

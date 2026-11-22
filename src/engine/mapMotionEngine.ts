@@ -1,3 +1,4 @@
+import {disasterShelterCheckpoint} from './disasterShelterCheckpoint';
 import {isUpperPassageEvent,onLowerPlane} from './upperPassageIsolation';
 import type { MapEffect, MapPoint, MapPresentation, MapTile, TerrainBiome, WorldEvent, WorldState } from '../types/world';
 import { terrainTileAt } from './terrainEngine';
@@ -82,17 +83,23 @@ export function deriveMapPresentation(prev: WorldState, next: WorldState, events
     .flatMap(({ arrivedIds }) => arrivedIds ?? []));
   const actualReliefArrivals = new Set(next.boundaryReliefs.cases.filter(({ closedTick, status }) =>
     closedTick === next.tick && status === 'completed').map(({ incomingId }) => incomingId));
+  const shelterSteps=new Set(next.disasterShelter?.cases.filter(row=>row.steps.at(-1)?.tick===next.tick)
+    .map(row=>row.guest.actorId));
+  const shelterTraveler=(id:string)=>{
+    const a=after.get(id),b=before.get(id);
+    return !!(a&&disasterShelterCheckpoint(next,a)||b&&disasterShelterCheckpoint(prev,b));
+  };
   for (const entry of events) {
     if (entry.tick !== next.tick || isUpperPassageEvent(entry) || entry.actorIds.some(id=>aboveIds.has(id))) continue;
     const first = entry.actorIds[0] ? after.get(entry.actorIds[0]) : undefined;
-    const loc = entry.locationId ?? first?.locationId;
+    const loc = entry.locationId ?? (first&&!shelterTraveler(first.id)?first.locationId:undefined);
     if (entry.duelWinnerId || entry.id.endsWith('-duel') || entry.id.endsWith('-kill')) put(`${entry.id}-clash`, 'clash', loc, entry.actorIds);
     if (entry.id.includes('-tribulation-wave-') || entry.id.startsWith('evt-god-strike-') || (entry.id.includes('-tribulation-failure') && entry.description.includes('劫雷')) ||
       (entry.category === 'heavenly' && /劫雷|天劫降临/.test(entry.title))) put(`${entry.id}-lightning`, 'lightning', loc, entry.actorIds, entry.title);
     for (const hit of entry.damage ?? []) {
       if (!Number.isFinite(hit.amount) || hit.amount <= 0) continue;
       damaged.add(hit.cultivatorId);
-      put(`${entry.id}-damage-${hit.cultivatorId}`, 'damage', loc ?? after.get(hit.cultivatorId)?.locationId,
+      put(`${entry.id}-damage-${hit.cultivatorId}`, 'damage', loc ?? (shelterTraveler(hit.cultivatorId)?undefined:after.get(hit.cultivatorId)?.locationId),
         [hit.cultivatorId], `−${hit.amount} HP`);
     }
   }
@@ -100,7 +107,7 @@ export function deriveMapPresentation(prev: WorldState, next: WorldState, events
     const previous = before.get(actor.id);
     if (!previous || !onLowerPlane(actor) || !onLowerPlane(previous)) continue;
     if (previous.locationId !== actor.locationId && actor.alive && !pilgrimsMoved.has(actor.id) && !couriersMoved.has(actor.id) &&
-        !realRescueArrivals.has(actor.id) && !actualReliefArrivals.has(actor.id) &&
+        !realRescueArrivals.has(actor.id) && !actualReliefArrivals.has(actor.id) && !shelterSteps.has(actor.id) &&
         !expeditionRescueCheckpoint(prev, previous) && !boundaryReliefCheckpoint(prev, previous)) {
       const origin = prevSites.get(previous.locationId) ?? nextSites.get(previous.locationId);
       const dest = nextSites.get(actor.locationId);
@@ -115,7 +122,7 @@ export function deriveMapPresentation(prev: WorldState, next: WorldState, events
     if (actor.alive && previous.alive && (previous.realm !== actor.realm || previous.realmStage < actor.realmStage)) {
       put(`evt-${next.tick}-${actor.id}-map-breakthrough`, 'breakthrough', actor.locationId, [actor.id], `${actor.realm}${actor.realmStage}层`);
     }
-    if (previous.hp > actor.hp && !damaged.has(actor.id) && actor.alive && previous.alive) {
+    if (previous.hp > actor.hp && !damaged.has(actor.id) && !shelterTraveler(actor.id) && actor.alive && previous.alive) {
       put(`evt-${next.tick}-${actor.id}-map-damage`, 'damage', actor.locationId, [actor.id], `−${previous.hp - actor.hp} HP`);
     }
   }

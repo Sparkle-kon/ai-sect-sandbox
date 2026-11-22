@@ -1,3 +1,5 @@
+import {disasterShelterCheckpoint} from './disasterShelterCheckpoint';
+import {reconcileDisasterShelterDeaths} from './disasterShelterEngine';
 import { advanceProbation } from './probationEngine';
 import { damageFurnacesFromBeastTide } from './furnaceSafetyEngine';
 import { advanceRelicExhibits } from './relicExhibitEngine';
@@ -38,7 +40,7 @@ function peopleAtTile(world: WorldState, tileId: string): Cultivator[] {
   return world.cultivators.filter((person) => {
     if (!person.alive || person.hp <= 0) return false;
     const convoy = activeRelocationForActor(world, person) ?? activeEscortForActor(world, person);
-    const checkpoint = expeditionRescueCheckpoint(world, person) ?? boundaryReliefCheckpoint(world, person) ?? convoy?.path[convoy.pathIndex] ??
+    const checkpoint = expeditionRescueCheckpoint(world, person) ?? boundaryReliefCheckpoint(world, person) ?? disasterShelterCheckpoint(world,person) ?? convoy?.path[convoy.pathIndex] ??
       pilgrimageCheckpoint(world, person) ?? courierCheckpoint(world, person);
     return checkpoint ? terrainTileAt(world, checkpoint.x, checkpoint.y)?.id === tileId : matching.has(person.locationId);
   });
@@ -131,7 +133,7 @@ export function applyMapBrush(prev: WorldState, kind: GodBrushKind, points: MapP
       actorIds: hits.map(({ cultivatorId }) => cultivatorId), locationId, ...(hits.length ? { damage: hits } : {}),
     });
   }
-  brushEvents.push(...advanceSanctuaries(world), ...advanceResearch(world), ...advancePilgrimages(world), ...reconcileCourierDeaths(world), ...advanceHouseholds(world), ...advanceWorkshops(world), ...advanceRelicExhibits(world), ...advanceProbation(world), ...advanceToolLoans(world), ...advanceEstates(world));
+  brushEvents.push(...advanceSanctuaries(world), ...advanceResearch(world), ...advancePilgrimages(world), ...reconcileCourierDeaths(world), ...reconcileDisasterShelterDeaths(world), ...advanceHouseholds(world), ...advanceWorkshops(world), ...advanceRelicExhibits(world), ...advanceProbation(world), ...advanceToolLoans(world), ...advanceEstates(world));
   reconcileRelicCustody(world);
   recordNewDeathsForReincarnation(prev, world, brushEvents);
   archiveChronicleEvents(world, brushEvents);
@@ -153,6 +155,9 @@ export function advanceMapHazards(world: WorldState): WorldEvent[] {
     if (world.events.some((entry) => entry.id === id)) continue;
     const people = peopleAtTile(world, hazard.tileId);
     const intensity = clamp(hazard.intensity, 1, 3);
+    const first=people[0];
+    const locationId=first&&disasterShelterCheckpoint(world,first)?
+      world.locations.find(site=>terrainTileAt(world,site.x,site.y)?.id===hazard.tileId)?.id:first?.locationId;
     const damage = hurt(world, people, (person) => Math.max(1, Math.round(person.maxHp *
       (hazard.kind === 'beast_tide' ? .06 + intensity * .025 : .035 + intensity * .022))), BRUSH_TITLES[hazard.kind],
       hazard.kind === 'beast_tide');
@@ -161,7 +166,7 @@ export function advanceMapHazards(world: WorldState): WorldEvent[] {
     events.push({ id, tick: world.tick, year: world.year, month: world.month, title: BRUSH_TITLES[hazard.kind],
       description: `${hazard.kind === 'beast_tide' ? '兽群扑向当地修士' : '瘴气侵蚀当地修士'}，${damage.length}人受创${defeated ? '，有人陨落' : ''}。`,
       category: defeated ? 'death' : 'heavenly', actorIds: damage.map(({ cultivatorId }) => cultivatorId),
-      damage, locationId: people[0]?.locationId });
+      damage, locationId });
   }
   return [...events, ...structuralEvents];
 }

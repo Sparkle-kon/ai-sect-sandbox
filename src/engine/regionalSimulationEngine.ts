@@ -149,6 +149,9 @@ function activeParties(world:WorldState):Set<string> {
       estate.deceasedId===row.patronId&&estate.status==='settled')?.beneficiaryId;
     add(row.patronId,row.makerId,adjudicated);
   }
+  for(const row of world.disasterShelter?.cases??[])
+    if(row.status==='offered'||row.status==='reserved'||row.status==='outbound'||row.status==='occupied'||
+      row.status==='returning'||row.status==='stranded'&&row.pathIndex>0&&row.pathIndex<row.path.length-1)add(row.host.actorId,row.guest.actorId);
   for(const row of world.craftTraining?.projects??[])
     if(row.status==='offered'||row.status==='funded'||row.status==='blank')add(row.keeperId,...row.traineeIds);
   for(const row of world.scribeCommissions?.commissions??[])

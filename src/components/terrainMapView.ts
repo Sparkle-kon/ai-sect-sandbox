@@ -4,6 +4,7 @@ import { courierCheckpoint } from '../engine/sealedCourierEngine';
 import { pilgrimageCheckpoint } from '../engine/pilgrimageEngine';
 import { expeditionRescueCheckpoint } from '../engine/expeditionRescueCheckpoint';
 import { boundaryReliefCheckpoint } from '../engine/boundaryReliefCheckpoint';
+import {disasterShelterCheckpoint} from '../engine/disasterShelterCheckpoint';
 import type { Cultivator, LocationNode, MapPoint, MapTile, TerrainBiome, WorldState } from '../types/world';
 import { currentVisibleTileIds, terrainTileAt } from '../engine/terrainEngine';
 import { canSeeOccasion, canSeeOccasionLocation } from '../engine/expeditionOmenEngine';
@@ -42,6 +43,7 @@ export function createTerrainMapView(world: WorldState, viewer: Cultivator | und
   const boundaryPositions = new Map<string, MapPoint>();
   const guardedTravelTiles = world.expeditionRescues.requests.some(({ status, pathIndex }) =>
     status === 'extracting' || status === 'interrupted' && pathIndex > 0) ||
+    world.disasterShelter?.cases.some(({status})=>status==='outbound'||status==='returning'||status==='stranded') ||
     world.boundaryReliefs.cases.some(({ status }) => status === 'travelling' || status === 'returning')
     ? (current ?? (viewer?.alive ? currentVisibleTileIds(world, viewer) : new Set<string>())) : undefined;
   const liveActors = world.cultivators.filter((actor) => {
@@ -56,9 +58,13 @@ export function createTerrainMapView(world: WorldState, viewer: Cultivator | und
     }
     const rescue = guardedTravelTiles && expeditionRescueCheckpoint(world, actor);
     const relief = guardedTravelTiles && boundaryReliefCheckpoint(world, actor);
-    const checkpoint = rescue ?? relief ?? courierCheckpoint(world, actor) ?? pilgrimageCheckpoint(world, actor);
+    const shelter = disasterShelterCheckpoint(world,actor);
+    if (shelter && (!viewer || !world.cultivators.includes(viewer) ||
+      !world.disasterShelter?.cases.some(({guest,host,status})=>guest.actorId===actor.id &&
+        (status==='outbound'||status==='returning'||status==='stranded') && (guest.actorId===viewer.id||host.actorId===viewer.id)))) return false;
+    const checkpoint = rescue ?? relief ?? shelter ?? courierCheckpoint(world, actor) ?? pilgrimageCheckpoint(world, actor);
     if (!checkpoint) return isCurrentLocation(actor.locationId);
-    const tiles = rescue || relief ? guardedTravelTiles : current;
+    const tiles = rescue || relief || shelter ? guardedTravelTiles : current;
     if (tiles && !tiles.has(terrainTileAt(world, checkpoint.x, checkpoint.y)?.id ?? '')) return false;
     trailPositions.set(actor.id, checkpoint);
     if (rescue) extractionPositions.set(actor.id, rescue);

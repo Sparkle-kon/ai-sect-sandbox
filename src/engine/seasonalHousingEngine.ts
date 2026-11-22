@@ -3,6 +3,7 @@ import {routeWarningHazardValid} from './routeWarningProof';
 import {courierActedThisTick} from './sealedCourierEngine';
 import {knownMapLocations,terrainTileAt} from './terrainEngine';
 import {presentAtVillageGranary} from './villageGranaryEngine';
+import {disasterShelterRoomHeld} from './disasterShelterCheckpoint';
 import {VILLAGE_WORK_RULES} from './villageWorksEngine';
 
 export const createSeasonalHousingState=():SeasonalHousingState=>({claims:[],nextId:1});
@@ -54,18 +55,21 @@ function hasRoute(world:WorldState,actor:Cultivator,tick:number){
 }
 const settled=(world:WorldState,actor:Cultivator,tick:number)=>!!publicSite(world,actor.locationId)&&
   actor.tribulation?.stage!=='lightning'&&actor.tribulation?.stage!=='heart_demon'&&!hasRoute(world,actor,tick);
-function vacantCapacity(world:WorldState,villageId:string,tick:number){
+export function housingVacantCapacity(world:WorldState,villageId:string,tick:number){
   const village=world.settlements.villages.find(row=>row.id===villageId);
   if(!village||village.population<1||!publicSite(world,village.locationId))return 0;
   const maintained=world.villageWorks.projects.filter(row=>eligibleProject(row,villageId,tick)).length*VILLAGE_WORK_RULES.shelter.capacityGain;
   return Math.max(0,Math.min(maintained,village.capacity-village.population));
 }
-const holding=(row:HousingClaim,tick:number)=>usesRoom(row)&&tick<row.seasonEndTick&&
+export const seasonalHousingRoomHeld=(row:HousingClaim,tick:number)=>usesRoom(row)&&tick<row.seasonEndTick&&
   (row.status==='occupied'||row.arriveByTick!==undefined&&tick<row.arriveByTick);
 function roomAvailable(world:WorldState,claim:Pick<HousingClaim,'guestId'|'householdId'|'settlementId'>,tick:number){
-  const holds=world.seasonalHousing.claims.filter(row=>holding(row,tick));
+  const holds=world.seasonalHousing.claims.filter(row=>seasonalHousingRoomHeld(row,tick));
+  const disasters=world.disasterShelter?.cases.filter(disasterShelterRoomHeld)??[];
+  if(disasters.some(row=>row.guest.actorId===claim.guestId))return false;
   return !holds.some(row=>row.guestId===claim.guestId||row.householdId===claim.householdId)&&
-    holds.filter(row=>row.settlementId===claim.settlementId).length<vacantCapacity(world,claim.settlementId,tick);
+    holds.filter(row=>row.settlementId===claim.settlementId).length+
+    disasters.filter(row=>row.host.settlementId===claim.settlementId).length<housingVacantCapacity(world,claim.settlementId,tick);
 }
 function canSponsor(world:WorldState,row:HousingClaim,tick:number){
   const host=actorAt(world,row.hostId);
@@ -181,6 +185,8 @@ export function recordSeasonalHousingMovement(world:WorldState,actor:Cultivator,
 /** May run early after settlement/hazards and late after native routes; status gates make it idempotent. */
 export function advanceSeasonalHousing(world:WorldState):WorldEvent[]{
   const events:WorldEvent[]=[],tick=world.tick,used=new Map<string,number>();
+  for(const row of world.disasterShelter?.cases??[])if(disasterShelterRoomHeld(row))
+    used.set(row.host.settlementId,(used.get(row.host.settlementId)??0)+1);
   const booked=[...world.seasonalHousing.claims].sort((a,b)=>(a.acceptedTick??Infinity)-(b.acceptedTick??Infinity));
   for(const row of booked){
     if(!open(row))continue;
@@ -198,7 +204,7 @@ export function advanceSeasonalHousing(world:WorldState):WorldEvent[]{
       (guest.locationId!==row.siteId||hasRoute(world,guest,tick)))reason='route_interrupted';
     else if(usesRoom(row)){
       const current=used.get(row.settlementId)??0;
-      if(current>=vacantCapacity(world,row.settlementId,tick))reason='no_spare_room';
+      if(current>=housingVacantCapacity(world,row.settlementId,tick))reason='no_spare_room';
       else used.set(row.settlementId,current+1);
     }
     if(reason){

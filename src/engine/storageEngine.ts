@@ -1,3 +1,6 @@
+import {availableDisasterShelterActions} from './disasterShelterEngine';
+import {DISASTER_SHELTER_HISTORY,DISASTER_SHELTER_MAX_OPEN,DISASTER_SHELTER_MAX_PATH} from './disasterShelterCheckpoint';
+import {validateDisasterShelter} from './storageDisasterShelterValidation';
 import {availableCraftTrainingActions} from './craftTrainingEngine';
 import {validateCraftTraining} from './storageCraftTrainingValidation';
 import {availableWaypostMealActions} from './waypostMealEngine';
@@ -235,7 +238,7 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT SALVAGE_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE DOCTRINE_FOUNDING DOCTRINE_MATURITY RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE WAYPOST_MEAL CHRONICLE_ERRATA HABITAT INFIRMARY CARE_FOLLOWUP DANXIA_MEDICINE DANXIA_REVIEW FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER COURIER_HANDOFF SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP CRAFT_TRAINING WORKSHOP_ESTATE WORKSHOP_RELEASE SCRIBE_COMMISSION FURNACE_RESERVATION FURNACE_SAFETY DAMAGE_ASSURANCE SPARRING EXPEDITION_RESCUE SHORT_SHIFT BOUNDARY_RELIEF MENTOR_TRANSFER APPRENTICE_COHORT SEASONAL_HOUSING HOUSEHOLD_NAME CARAVAN_RESTITUTION VILLAGE_GRANARY VILLAGE_SUPPLY ROUTE_WARNING PAVILION_LOAN WORKSHOP_CAPACITY CIVIC_MEMORIAL VILLAGE_FAIR SECT_STIPEND SEED_CULTURE WATER_VEIN NORTH_MINING_CHARTER NORTH_WELL_REVIEW UPPER_PASSAGE UPPER_ARRAY_FIELD UPPER_ARRAY_FIELD_LOCAL UPPER_ARRAY_FIELD_TRADE NORTH_GATE_RENEWAL FRONTIER FRONTIER_PRODUCTION FRONTIER_TRADE FRONTIER_PORT FRONTIER_PORT_TRADE FRONTIER_DRYLAND FRONTIER_DRYLAND_TRADE TOOL_LOAN RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY ALIGNED_WEATHER SEASON_REVIEW REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT SALVAGE_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE DOCTRINE_FOUNDING DOCTRINE_MATURITY RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE WAYPOST_MEAL DISASTER_SHELTER CHRONICLE_ERRATA HABITAT INFIRMARY CARE_FOLLOWUP DANXIA_MEDICINE DANXIA_REVIEW FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER COURIER_HANDOFF SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP CRAFT_TRAINING WORKSHOP_ESTATE WORKSHOP_RELEASE SCRIBE_COMMISSION FURNACE_RESERVATION FURNACE_SAFETY DAMAGE_ASSURANCE SPARRING EXPEDITION_RESCUE SHORT_SHIFT BOUNDARY_RELIEF MENTOR_TRANSFER APPRENTICE_COHORT SEASONAL_HOUSING HOUSEHOLD_NAME CARAVAN_RESTITUTION VILLAGE_GRANARY VILLAGE_SUPPLY ROUTE_WARNING PAVILION_LOAN WORKSHOP_CAPACITY CIVIC_MEMORIAL VILLAGE_FAIR SECT_STIPEND SEED_CULTURE WATER_VEIN NORTH_MINING_CHARTER NORTH_WELL_REVIEW UPPER_PASSAGE UPPER_ARRAY_FIELD UPPER_ARRAY_FIELD_LOCAL UPPER_ARRAY_FIELD_TRADE NORTH_GATE_RENEWAL FRONTIER FRONTIER_PRODUCTION FRONTIER_TRADE FRONTIER_PORT FRONTIER_PORT_TRADE FRONTIER_DRYLAND FRONTIER_DRYLAND_TRADE TOOL_LOAN RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY ALIGNED_WEATHER SEASON_REVIEW REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const waypostPoint=structure({x:num(0,1000),y:num(0,600)});
 const waypostVisit=structure({journeyId:id,organizerId:id,companionId:id,spentByEach:one(PILGRIMAGE_LEG_COST,2*PILGRIMAGE_LEG_COST),
@@ -297,6 +300,8 @@ const doctrineMaturity=structure({
   })),
 });
 const supplyCheckpoint = num(0,VILLAGE_SUPPLY_MAX_ROUTE_TILES-1,true);
+const disasterShelterParty=structure({actorId:id,householdId:id,volunteerId:id,settlementId:id,siteId:id});
+const disasterShelterIndex=num(0,DISASTER_SHELTER_MAX_PATH-1,true);
 const routeWarningObservation = structure({
   id,actorId:id,journeyId:id,partyIds:arr(2,id),legIndex:tick,fromPathIndex:tick,toPathIndex:tick,fromTileId:id,toTileId:id,
   exitTileId:oid,exitPathIndex:otick,observedTick:tick,hazard:villageSupplyHazard,
@@ -906,6 +911,19 @@ const shape = structure({
     retellings:arr(SAVE_COLLECTION_LIMIT,structure({id,sourceEventId:id,authorId:id,tick,reading:chronicleReading})),
     corrections:arr(SAVE_COLLECTION_LIMIT,structure({id,sourceEventId:id,editorId:id,tick,reading:chronicleReading,
       contestedRetellingIds:arr(CHRONICLE_ERRATA_MAX_RETELLINGS,id)}))}),
+  disasterShelter:optional(structure({nextId:num(1,Number.MAX_SAFE_INTEGER,true),
+    cases:arr(120+DISASTER_SHELTER_HISTORY+2*DISASTER_SHELTER_MAX_OPEN,structure({
+      id,host:disasterShelterParty,guest:disasterShelterParty,shelterProjectId:id,agreementId:id,deliveredTick:tick,
+      disasterRecordId:id,disasterTick:tick,hazard:villageSupplyHazard,path:arr(DISASTER_SHELTER_MAX_PATH,id),
+      offeredTick:tick,expiresTick:tick,status:one('offered','reserved','outbound','occupied','returning','returned',
+        'declined','withdrawn','expired','stranded','lost'),
+      pathIndex:disasterShelterIndex,steps:arr(2*(DISASTER_SHELTER_MAX_PATH-1),structure({
+        tick,pathIndex:disasterShelterIndex,tileId:id,direction:one('outbound','return'),
+      })),
+      acceptedTick:otick,departedTick:otick,arrivedTick:otick,returnRequestedTick:otick,returnDepartedTick:otick,
+      returnedTick:otick,closedTick:otick,closeReason:optional(one('declined','withdrawn','expired','party_unavailable','site_unavailable')),
+    })),
+  })),
   waypostMeals:optional(structure({version:one(1),nextId:num(1,Number.MAX_SAFE_INTEGER,true),
     meals:arr(SAVE_COLLECTION_LIMIT,structure({
       id,hostId:id,guestId:id,hostVisit:waypostVisit,guestVisit:waypostVisit,tileId:id,point:waypostPoint,
@@ -1278,6 +1296,12 @@ const shape = structure({
         return 'craftTrainingMove' in order&&order.craftTrainingMove==='offer'
           ?structure({...fields,craftTrainingMove:one('offer'),targetCultivatorId:id,targetCraftTraineeId:id})(value,path)
           :structure({...fields,craftTrainingMove:one('join','decline','blank','finish','withdraw'),targetCraftTrainingId:id})(value,path);
+      }
+      if(order?.action==='DISASTER_SHELTER'){
+        const fields={...fixed,action:one('DISASTER_SHELTER')};
+        return 'disasterShelterMove' in order&&order.disasterShelterMove==='offer'
+          ?structure({...fields,disasterShelterMove:one('offer'),targetCultivatorId:id})(value,path)
+          :structure({...fields,disasterShelterMove:one('accept','decline','withdraw','return'),targetDisasterShelterId:id})(value,path);
       }
       if(order?.action==='WAYPOST_MEAL'){
         const fields={...fixed,action:one('WAYPOST_MEAL')};
@@ -2502,6 +2526,7 @@ function verifyWorld(value: unknown): WorldState {
     }
   }
   validateWaypostMeals(w,fail);
+  validateDisasterShelter(w,fail);
   unique(w.credit.loans, ({ id }) => id, 'credit.loans.id');
   unique(w.credit.loans.filter(({ status }) => status === 'offered' || status === 'active'),
     ({ borrowerSectId }) => borrowerSectId, 'credit.loans.active_borrower');
@@ -2739,6 +2764,18 @@ function verifyWorld(value: unknown): WorldState {
           return option.craftTrainingMove===localWaterOrder.craftTrainingMove&&option.targetCraftTrainingId===localWaterOrder.targetCraftTrainingId;
         return false;
       }))fail('playerAvatar.craftTrainingOrder');
+  }
+  if(localWaterOrder?.action==='DISASTER_SHELTER'){
+    const ordered=w.cultivators.find(row=>row.id===localWaterOrder.actorId);
+    if(localWaterOrder.queuedTick!==w.tick||(w.playerAvatar.possessionUntilTick??0)<=w.tick+1||
+      w.playerAvatar.possessedId!==localWaterOrder.actorId||!ordered||
+      !availableDisasterShelterActions(ordered,w,w.tick+1).some(option=>{
+        if(option.disasterShelterMove==='offer'&&localWaterOrder.disasterShelterMove==='offer')
+          return option.targetCultivatorId===localWaterOrder.targetCultivatorId;
+        if(option.disasterShelterMove!=='offer'&&localWaterOrder.disasterShelterMove!=='offer')
+          return option.disasterShelterMove===localWaterOrder.disasterShelterMove&&option.targetDisasterShelterId===localWaterOrder.targetDisasterShelterId;
+        return false;
+      }))fail('playerAvatar.disasterShelterOrder');
   }
   if(localWaterOrder?.action==='WAYPOST_MEAL'){
     const ordered=w.cultivators.find(row=>row.id===localWaterOrder.actorId);
@@ -3556,9 +3593,9 @@ function serializeWorldSave(world: WorldState): string {
   try {
     // A native turn may first attach either optional ledger after a hot-world clone.
     // Normalize that bounded extension order, leaving every pre-extension byte intact.
-    if (world.eraHeritage !== undefined || world.mortalAgeTrackingSinceTick !== undefined || world.coldWaterVein !== undefined || world.northMiningCharters !== undefined || world.northWellRevisitLaw !== undefined || world.northWellRevisitReviews !== undefined || world.upperPassage !== undefined || world.northGateRenewal !== undefined || world.frontier !== undefined || world.upperArrayField !== undefined || world.scribeCommissions !== undefined || world.waypostMeals !== undefined || world.craftTraining !== undefined) {
-      const {eraHeritage,mortalAgeTrackingSinceTick,coldWaterVein,northMiningCharters,northWellRevisitLaw,northWellRevisitReviews,upperPassage,northGateRenewal,frontier,upperArrayField,scribeCommissions,waypostMeals,craftTraining,...legacy}=world;
-      return JSON.stringify({format:FORMAT,version:VERSION,world:{...legacy,eraHeritage,mortalAgeTrackingSinceTick,coldWaterVein,northMiningCharters,northWellRevisitLaw,northWellRevisitReviews,upperPassage,northGateRenewal,frontier,upperArrayField,scribeCommissions,waypostMeals,craftTraining}});
+    if (world.eraHeritage !== undefined || world.mortalAgeTrackingSinceTick !== undefined || world.coldWaterVein !== undefined || world.northMiningCharters !== undefined || world.northWellRevisitLaw !== undefined || world.northWellRevisitReviews !== undefined || world.upperPassage !== undefined || world.northGateRenewal !== undefined || world.frontier !== undefined || world.upperArrayField !== undefined || world.scribeCommissions !== undefined || world.waypostMeals !== undefined || world.craftTraining !== undefined || world.disasterShelter !== undefined) {
+      const {eraHeritage,mortalAgeTrackingSinceTick,coldWaterVein,northMiningCharters,northWellRevisitLaw,northWellRevisitReviews,upperPassage,northGateRenewal,frontier,upperArrayField,scribeCommissions,waypostMeals,craftTraining,disasterShelter,...legacy}=world;
+      return JSON.stringify({format:FORMAT,version:VERSION,world:{...legacy,eraHeritage,mortalAgeTrackingSinceTick,coldWaterVein,northMiningCharters,northWellRevisitLaw,northWellRevisitReviews,upperPassage,northGateRenewal,frontier,upperArrayField,scribeCommissions,waypostMeals,craftTraining,disasterShelter}});
     }
     return JSON.stringify({ format: FORMAT, version: VERSION, world });
   } catch { throw new WorldSaveError('json', '当前世界不能序列化为 JSON。'); }

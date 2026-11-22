@@ -1,3 +1,4 @@
+import {disasterShelterCheckpoint} from './disasterShelterCheckpoint';
 import type {
   Cultivator, LLMDecisionPayload, MortalSettlement, VillageGranariesState, VillageGranary, VillageGranaryMove,
   VillageGranaryReceipt, WorldEvent, WorldState,
@@ -45,7 +46,7 @@ export const granaryAt = (world: WorldState, villageId: string) =>
   world.villageGranaries.granaries.find(item => item.settlementId === villageId);
 
 function presentAt(world: WorldState,actor: Cultivator,tick: number): MortalSettlement|undefined {
-  if (!live(actor) || actor.tribulation?.stage === 'lightning' || actor.tribulation?.stage === 'heart_demon') return undefined;
+  if (!live(actor) || disasterShelterCheckpoint(world,actor) || actor.tribulation?.stage === 'lightning' || actor.tribulation?.stage === 'heart_demon') return undefined;
   const village = world.settlements.villages.find(item => item.locationId === actor.locationId);
   if (!village || !world.locations.some(site => site.id === village.locationId &&
     site.type !== 'abyss' && site.type !== 'secret_realm')) return undefined;

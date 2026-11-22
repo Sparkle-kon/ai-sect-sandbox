@@ -15,6 +15,8 @@ import type { ScribeCommissionMove, ScribeCommissionState } from './scribeCommis
 
 import type { WaypostMealMove, WaypostMealState, WaypostMealWitness } from './waypostMeal';
 
+import type { DisasterShelterMove, DisasterShelterState } from './disasterShelter';
+
 import type { CraftTrainingMove, CraftTrainingOrigin, CraftTrainingState } from './craftTraining';
 
 export type SpiritRoot = '金' | '木' | '水' | '火' | '土' | '雷' | '暗' | '天灵根';
@@ -163,6 +165,7 @@ export type ActionType =
   | 'SEASON_REVIEW'
   | 'PROBATION'
   | 'SCRIBE_COMMISSION'
+  | 'DISASTER_SHELTER'
   | 'CRAFT_TRAINING'
   | 'WAYPOST_MEAL'
   | 'WORKSHOP_ESTATE'
@@ -646,6 +649,8 @@ export interface LLMDecisionPayload {
   workshopReleaseMove?: WorkshopReleaseMove;
   workshopEstateMove?: WorkshopEstateMove;
   waypostMealMove?: WaypostMealMove;
+  disasterShelterMove?: DisasterShelterMove;
+  targetDisasterShelterId?: string;
   craftTrainingMove?: CraftTrainingMove;
   targetCraftTraineeId?: string;
   targetCraftTrainingId?: string;
@@ -1083,6 +1088,8 @@ export type AvatarInteractionCommand = AvatarInteractionRequest;
 export type AvatarOrder = 'REST' | 'CULTIVATE';
 export type AvatarPendingOrder = { actorId: string; queuedTick: number } & (
   | { action: AvatarOrder }
+  | {action:'DISASTER_SHELTER';disasterShelterMove:'offer';targetCultivatorId:string;targetDisasterShelterId?:never}
+  | {action:'DISASTER_SHELTER';disasterShelterMove:'accept'|'decline'|'withdraw'|'return';targetDisasterShelterId:string;targetCultivatorId?:never}
   | {action:'CRAFT_TRAINING';craftTrainingMove:'offer';targetCultivatorId:string;targetCraftTraineeId:string;targetCraftTrainingId?:never}
   | {action:'CRAFT_TRAINING';craftTrainingMove:'join'|'decline'|'blank'|'finish'|'withdraw';targetCraftTrainingId:string;targetCultivatorId?:never;targetCraftTraineeId?:never}
   | {action:'WAYPOST_MEAL';waypostMealMove:'offer';targetCultivatorId:string;targetWaypostMealId?:never}
@@ -3513,6 +3520,7 @@ export interface NorthWellRevisitReviewState {
 export interface WorldState {
   scribeCommissions?: ScribeCommissionState;
   waypostMeals?: WaypostMealState;
+  disasterShelter?: DisasterShelterState;
   craftTraining?: CraftTrainingState;
   upperPassage?:UpperPassageState;
   upperArrayField?:UpperArrayFieldState;

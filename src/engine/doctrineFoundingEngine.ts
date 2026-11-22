@@ -1,3 +1,4 @@
+import {disasterShelterCheckpoint} from './disasterShelterCheckpoint';
 import type { Cultivator, DoctrineFounding, DoctrineFoundingMove, DoctrineFoundingsState, DoctrineSchool, LLMDecisionPayload,
   LocationNode, RelocationPlan, Sect, WorldEvent, WorldState } from '../types/world';
 import { DOCTRINE_LABELS } from './doctrineEngine';
@@ -29,6 +30,7 @@ const siteBy=(world:WorldState,id:string)=>world.locations.find(row=>row.id===id
 export function doctrineFoundingPhysicallyAt(world:WorldState,actor:Cultivator,siteId:string,tick:number) {
   const duty=actor.guardAssignment;
   return alive(actor)&&actor.locationId===siteId&&!isRetiredFromService(actor)&&!isTribulationActive(actor)&&
+    !disasterShelterCheckpoint(world,actor)&&
     !activeRelocationForActor(world,actor)&&!activeEscortForActor(world,actor)&&!activePilgrimageForActor(world,actor)&&
     !activeCourierForActor(world,actor)&&!activeOccasionForActor(world,actor)&&!activeSiegeForActor(world,actor)&&
     !activeDanxiaMedicineEscort(world,actor)&&!(duty&&duty.expiresTick>tick&&duty.locationId!==siteId)&&

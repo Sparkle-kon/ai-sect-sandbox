@@ -1,3 +1,5 @@
+import {availableDisasterShelterActions} from './disasterShelterEngine';
+import type {DisasterShelterOption} from '../types/disasterShelter';
 import {availableCraftTrainingActions,type CraftTrainingOption} from './craftTrainingEngine';
 import {availableWaypostMealActions,type WaypostMealOption} from './waypostMealEngine';
 import {availableWorkshopEstateActions,type WorkshopEstateOption} from './workshopEngine';
@@ -336,6 +338,18 @@ export function queueAvatarCraftTraining(world:WorldState,actorId:string,choice:
   return true;
 }
 
+export function queueAvatarDisasterShelter(world:WorldState,actorId:string,choice:DisasterShelterOption):boolean {
+  const host=activeAvatar(world);
+  if(!host||!onLowerPlane(host)||!canQueueAvatarSalvage(world,actorId)||choice.action!=='DISASTER_SHELTER')return false;
+  const options=availableDisasterShelterActions(host,world,world.tick+1).filter(option=>
+    option.disasterShelterMove===choice.disasterShelterMove&&option.targetCultivatorId===choice.targetCultivatorId&&
+    option.targetDisasterShelterId===choice.targetDisasterShelterId);
+  if(options.length!==1)return false;
+  world.playerAvatar.essence-=AVATAR_ORDER_COST;
+  world.playerAvatar.pendingOrder={actorId,queuedTick:world.tick,...options[0]};
+  return true;
+}
+
 export function consumeAvatarOrder(world: WorldState): { actorId: string; decision: LLMDecisionPayload } | undefined {
   const state = world.playerAvatar;
   const order = state?.pendingOrder;
@@ -350,6 +364,9 @@ export function consumeAvatarOrder(world: WorldState): { actorId: string; decisi
     ...(order.scribeCommissionMove==='offer'?
       {targetChronicleSourceId:order.targetChronicleSourceId,targetCultivatorId:order.targetCultivatorId}:
       {targetScribeCommissionId:order.targetScribeCommissionId})}};
+  if(order.action==='DISASTER_SHELTER')return {actorId:order.actorId,decision:{
+    chosenAction:order.action,innerMonologue:'只照原户籍、实际行路和本人答复续办。',disasterShelterMove:order.disasterShelterMove,
+    ...(order.disasterShelterMove==='offer'?{targetCultivatorId:order.targetCultivatorId}:{targetDisasterShelterId:order.targetDisasterShelterId})}};
   if(order.action==='CRAFT_TRAINING')return {actorId:order.actorId,decision:{
     chosenAction:order.action,innerMonologue:'只由原签学员照自己的真实炉前工序行事。',craftTrainingMove:order.craftTrainingMove,
     ...(order.craftTrainingMove==='offer'?

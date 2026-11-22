@@ -27,6 +27,8 @@ import { availableCivicMemorialActions } from './civicMemorialEngine';
 import { availableVillageSupplyActions } from './villageSupplyEngine';
 import { availableBoundaryReliefActions } from './boundaryReliefEngine';
 import { boundaryReliefCheckpoint } from './boundaryReliefCheckpoint';
+import {disasterShelterCheckpoint} from './disasterShelterCheckpoint';
+import {decodeDisasterShelterDecision,disasterShelterProviderOptions,disasterShelterTargets,utilityDisasterShelterDecision} from './disasterShelterCognition';
 import { availableOathArbitrationActions } from './oathArbitrationEngine';
 import { availableVillageCensusActions } from './villageCensusEngine';
 import { availableRoadActions } from './roadEngine';
@@ -197,6 +199,8 @@ export function requiredBeforeOrdinaryDecision(actor:Cultivator,world:WorldState
   }
   const rescue=utilityExpeditionRescueDecision(actor,world);
   if(rescue)return rescue;
+  const shelter=utilityDisasterShelterDecision(actor,world,false);
+  if(shelter)return shelter;
   const refuge=urgentOrdinaryRefuge(actor,world);
   if(refuge)return refuge;
 
@@ -440,6 +444,8 @@ export function computeHeuristicDecision(
       innerMonologue: tribulationStance === 'focus' ? '抱守道心，不为幻象所动。' : '雷云不散，且运转护身法诀抵挡。',
     };
   }
+  const disasterShelter = utilityDisasterShelterDecision(cultivator,world);
+  if(disasterShelter)return disasterShelter;
   const boundaryRow = world.boundaryReliefs.cases.find((row) => row.incomingId === cultivator.id &&
     (row.status === 'offered' || row.status === 'travelling' || row.status === 'returning'));
   if (boundaryRow) {
@@ -946,7 +952,7 @@ export function computeHeuristicDecision(
     (c) =>
       c.alive &&
       c.id !== cultivator.id &&
-      c.locationId === cultivator.locationId && !activeDanxiaMedicineEscort(world,c) && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) && !courierCheckpoint(world, c) && !boundaryReliefCheckpoint(world, c)
+      c.locationId === cultivator.locationId && !activeDanxiaMedicineEscort(world,c) && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) && !courierCheckpoint(world, c) && !boundaryReliefCheckpoint(world, c) && !disasterShelterCheckpoint(world,c)
   );
 
   const refuge=urgentOrdinaryRefuge(cultivator,world);
@@ -1809,6 +1815,7 @@ export async function requestCultivatorLLMDecision(
       ({ routeWarningMove, targetRouteWarningId, targetRouteObservationId }));
   const routeWarningGuide = `驿路警示只在真实停站时复制已有许可：post 只填本人一次亲历的 targetRouteObservationId；corroborate 同填另一趟独立见闻和现有警示编号；retract 只填本人警示的 targetRouteWarningId。不能填路线、坐标、地名、灾害、期限或新事实；没有许可不得编造。选项：${JSON.stringify(routeWarningOptions)}`;
   if (onPilgrimagePath && !pilgrimageOptions.length && !mealOptions.length) return undefined;
+  if(disasterShelterCheckpoint(world,cultivator))return undefined;
   const boundaryReliefOptions = availableBoundaryReliefActions(cultivator, world, requestTick);
   const boundaryReliefOnly = Boolean(boundaryReliefCheckpoint(world, cultivator));
   if (boundaryReliefOnly && !boundaryReliefOptions.length) return undefined;
@@ -1825,7 +1832,7 @@ export async function requestCultivatorLLMDecision(
     (c) =>
       c.alive &&
       c.id !== cultivator.id &&
-      c.locationId === cultivator.locationId && !activeDanxiaMedicineEscort(world,c) && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) && !courierCheckpoint(world, c) && !boundaryReliefCheckpoint(world, c)
+      c.locationId === cultivator.locationId && !activeDanxiaMedicineEscort(world,c) && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) && !courierCheckpoint(world, c) && !boundaryReliefCheckpoint(world, c) && !disasterShelterCheckpoint(world,c)
   );
   const recalled = recallMemories(cultivator, world.tick).map((m) => ({
     tick: m.tick,
@@ -1895,6 +1902,7 @@ export async function requestCultivatorLLMDecision(
   const exhibitOptions = availableRelicExhibitActions(cultivator, world);
   const workshopOptions = availableWorkshopActions(cultivator, world, true, requestTick);
   const trainingOptions = craftTrainingProviderOptions(cultivator, world, requestTick);
+  const disasterShelterOptions = disasterShelterProviderOptions(cultivator,world,requestTick);
   const estateCraftOptions = workshopEstateProviderOptions(cultivator, world, requestTick);
   const scribeOptions = scribeCommissionProviderOptions(cultivator, world, requestTick);
   const workshopReleaseOptions = possessedForWorkshopRelease(cultivator, world, requestTick)
@@ -2024,6 +2032,7 @@ ${waterVeinOptions.length ? `- 本人在场的水线许可，只抄 waterVeinMov
 - 工坊委制只复制现有许可；须双方同意，按实际加工与质量交付：${JSON.stringify(workshopOptions)}${mayAcceptCharteredWorkshop ?
     '\n- 本人可接受的一份章程内委制：如这座旧工坊实际因迁宗撤并，实余资财退原委托人，已付或已耗不重算；新址不自动接约。这不是另一个行动。' : ''}
 - 余件释约只照抄本人列表中的 propose、accept、decline；提议不是暂停，同意才清剩余托管，不填写钱物或交割结果：${JSON.stringify(workshopReleasePromptOptions)}
+- 临灾借泊只复制本人许可。offer 填列出的 targetCultivatorId，其他只填 targetDisasterShelterId。不能填写家口、路线、实到、寝位或回乡结论：${JSON.stringify(disasterShelterOptions.map(disasterShelterTargets))}
 - 合练只复制本人本炉所列许可：offer 复制两位实际工序人，其他仅所列 targetCraftTrainingId，不自填材料、署名、品质或结果。本人的选项：${JSON.stringify(trainingOptions.map(craftTrainingTargets))}
 - 遗托续制只抄本人现在合法的 offer、accept 或 decline 与 targetWorkshopId；不得填继承人、工钱、余料、工序或结果：${JSON.stringify(estateCraftOptions.map(({workshopEstateMove,targetWorkshopId})=>({workshopEstateMove,targetWorkshopId})))}
 - 掌卷书约只复制本人列表的动作和编号，不填写稿文、他人原话、金额或交付结果：${JSON.stringify(scribeOptions.map(scribeCommissionTargets))}
@@ -2206,6 +2215,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'WORKSHOP_RELEASE',
             'WORKSHOP_ESTATE',
             'WAYPOST_MEAL',
+            'DISASTER_SHELTER',
             'CRAFT_TRAINING',
             'SCRIBE_COMMISSION',
             'FURNACE_RESERVATION',
@@ -2427,6 +2437,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
                 targetToolLoanId: legalToolLoan.targetToolLoanId, innerMonologue };
           }
           if (chosenAction === 'SCRIBE_COMMISSION') return decodeScribeCommissionDecision(parsed, cultivator, scribeOptions);
+          if (chosenAction === 'DISASTER_SHELTER') return decodeDisasterShelterDecision(parsed,cultivator,disasterShelterOptions);
           if (chosenAction === 'CRAFT_TRAINING') return decodeCraftTrainingDecision(parsed, cultivator, trainingOptions);
           if (parsed.craftTrainingMove !== undefined || parsed.targetCraftTraineeId !== undefined ||
               parsed.targetCraftTrainingId !== undefined) return undefined;
