@@ -1,3 +1,5 @@
+import type {TournamentWagerState} from './tournamentWager';
+import type {TournamentArena} from './tournamentArena';
 import type {RingAudienceState} from './ringAudience';
 import type { DramaticBondState } from './dramaticBond';
 import type { GrandSiegeHeroMove, GrandSiegeTheatre } from './grandSiege';
@@ -812,6 +814,7 @@ export interface ExpeditionResult {
 }
 
 export interface WorldOccasion {
+  arena?: TournamentArena;
   omenId?: string;
   anchorSiteId?: string;
   id: string;
@@ -3688,6 +3691,7 @@ export interface WorldState {
   sieges: SectSiege[];
   tributeDemands: SectTribute[];
   occasions: WorldOccasion[];
+  tournamentWagers?: TournamentWagerState;
   bounties: BountyEntry[];
   locations: LocationNode[];
   terrain: WorldTerrain;

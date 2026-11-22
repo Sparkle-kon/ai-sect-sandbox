@@ -1,3 +1,6 @@
+import {finishTournamentArena,openTournamentArena,recordTournamentArenaRound,tournamentArenaRoster} from './tournamentArenaEngine';
+import {settleTournamentWagers} from './tournamentWagerSettlement';
+import type {TournamentArenaBout} from '../types/tournamentArena';
 import { recordTournamentChampion, recordTournamentRound } from './competitionEngine';
 import { grantExpeditionRelic } from './relicEngine';
 import type { Cultivator, LLMDecisionPayload, WorldEvent, WorldOccasion, WorldState } from '../types/world';
@@ -13,7 +16,8 @@ import { advanceExpeditionRescues, expireOccasionRescues, hasOpenExpeditionRescu
 import { advanceExpeditionOmenRetention, canJoinOmenExpedition, eligibleExpeditionOmen, presentAtExpeditionAnchor,
   recordExpeditionOpening } from './expeditionOmenEngine';
 
-const CAPACITY = 8;
+const EXPEDITION_CAPACITY = 8;
+const TOURNAMENT_CAPACITY = 16;
 const alive = (person: Cultivator) => person.alive && person.hp > 0;
 const active = (occasion: WorldOccasion) => occasion.status === 'registration' || occasion.status === 'running';
 const playerList = (world: WorldState, ids: string[]) => ids.map((id) => world.cultivators.find((person) => person.id === id))
@@ -29,7 +33,7 @@ export function activeOccasionForActor(world: WorldState, actor: Cultivator): Wo
 export function availableOccasionJoins(actor: Cultivator, world: WorldState, executionTick=world.tick): Array<{ action: 'JOIN_OCCASION'; targetOccasionId: string }> {
   if (!alive(actor) || activeOccasionForActor(world, actor) || activeSiegeForActor(world, actor) || isTribulationActive(actor)) return [];
   return world.occasions.filter((occasion) => occasion.status === 'registration' && executionTick < occasion.registrationClosesTick &&
-    canJoinOmenExpedition(world, actor, occasion, executionTick) && occasion.participantIds.length < CAPACITY && world.locations.some(({ id }) => id === occasion.locationId))
+    canJoinOmenExpedition(world, actor, occasion, executionTick) && occasion.participantIds.length < (occasion.kind==='tournament'?TOURNAMENT_CAPACITY:EXPEDITION_CAPACITY) && world.locations.some(({ id }) => id === occasion.locationId))
     .map(({ id }) => ({ action: 'JOIN_OCCASION', targetOccasionId: id }));
 }
 
@@ -124,9 +128,15 @@ function finish(world: WorldState, occasion: WorldOccasion, cancelled = false): 
 export function advanceOccasions(world: WorldState, rng: () => number): WorldEvent[] {
   // Actual route progression precedes the ordinary gate roll and any removal of its origin.
   const results: WorldEvent[] = advanceExpeditionRescues(world);
-  const close = (occasion: WorldOccasion, cancelled = false) => {
+  const close = (occasion: WorldOccasion, cancelled = false, allAbsent = false) => {
     if (occasion.kind === 'expedition') results.push(...expireOccasionRescues(world, occasion.id));
-    results.push(finish(world, occasion, cancelled));
+    const terminal=finish(world, occasion, cancelled);
+    results.push(terminal);
+    if(cancelled&&occasion.arena){
+      if(allAbsent)recordTournamentArenaRound(world,occasion,terminal,[],[]);
+      finishTournamentArena(world,occasion,terminal);
+      settleTournamentWagers(world,occasion,terminal);
+    }
   };
   if (world.tick > 0 && world.tick % 60 === 0 && world.expeditionOmens.lastCalendarTick !== world.tick && !world.occasions.some((occasion) => occasion.kind === 'tournament' && (active(occasion) || occasion.startedTick === world.tick))) {
     world.expeditionOmens.lastCalendarTick = world.tick;
@@ -153,14 +163,17 @@ export function advanceOccasions(world: WorldState, rng: () => number): WorldEve
       occasion.status = 'running';
       occasion.remainingIds = entrants.sort((a, b) => power(b) - power(a) || a.id.localeCompare(b.id)).map(({ id }) => id);
       for (const person of entrants) person.locationId = occasion.locationId;
-      results.push(event(world, occasion, 'commence', `${occasion.title}正式开始`, `${entrants.length}名修士已到场。`));
+      const commenced=event(world, occasion, 'commence', `${occasion.title}正式开始`, `${entrants.length}名修士已到场。`);
+      openTournamentArena(world,occasion,commenced);
+      results.push(commenced);
       continue;
     }
-    const roster = playerList(world, occasion.remainingIds);
+    const roster = occasion.arena?tournamentArenaRoster(world,occasion):playerList(world, occasion.remainingIds);
     if (occasion.kind === 'tournament') {
       occasion.round++;
-      if (!roster.length) { close(occasion, true); continue; }
+      if (!roster.length) { close(occasion, true, true); continue; }
       const winners: Cultivator[] = [];
+      const arenaBouts:TournamentArenaBout[]=[];
       // Pair high and low seeds; deterministic bye when a bracket is odd.
       for (let i = 0; i < Math.ceil(roster.length / 2); i++) {
         const first = roster[i];
@@ -168,16 +181,20 @@ export function advanceOccasions(world: WorldState, rng: () => number): WorldEve
         if (first.id === second.id) {
           winners.push(first);
           occasion.bouts.push({ round: occasion.round, firstId: first.id, winnerId: first.id });
+          if(occasion.arena)arenaBouts.push({firstId:first.id,winnerId:first.id,firstDamage:0});
           continue;
         }
         const winner = power(first) * (.8 + rng() * .4) >= power(second) * (.8 + rng() * .4) ? first : second;
         const loser = winner.id === first.id ? second : first;
-        winner.hp = Math.max(1, winner.hp - Math.round(winner.maxHp * .07));
-        loser.hp = Math.max(1, loser.hp - Math.round(loser.maxHp * .14));
+        const firstHp=first.hp,secondHp=second.hp;
+        winner.hp = Math.max(occasion.arena?Math.min(1,winner.hp):1, winner.hp - Math.round(winner.maxHp * .07));
+        loser.hp = Math.max(occasion.arena?Math.min(1,loser.hp):1, loser.hp - Math.round(loser.maxHp * .14));
         wearArtifact(winner, true); wearArtifact(loser, false);
         winners.push(winner);
         const bout = { round: occasion.round, firstId: first.id, secondId: second.id, winnerId: winner.id };
         occasion.bouts.push(bout);
+        if(occasion.arena)arenaBouts.push({firstId:first.id,secondId:second.id,winnerId:winner.id,
+          firstDamage:firstHp-first.hp,secondDamage:secondHp-second.hp});
         recordTournamentRound(world, occasion, bout);
       }
       if (winners.length === 1) {
@@ -188,12 +205,21 @@ export function advanceOccasions(world: WorldState, rng: () => number): WorldEve
         if (sect) sect.reputation = Math.min(100, sect.reputation + 8);
         const description = `${champion.name}夺得大比魁首，赢得220灵石与宗门声望。`;
         recordMemory(champion, world.tick, description, 9, 'combat', 5);
-        results.push(event(world, occasion, 'champion', '大比魁首揭晓', description, [champion.id]));
+        const crowned=event(world, occasion, 'champion', '大比魁首揭晓', description, [champion.id]);
+        if(occasion.arena)recordTournamentArenaRound(world,occasion,crowned,roster,arenaBouts);
+        results.push(crowned);
         close(occasion);
+        if(occasion.arena){
+          finishTournamentArena(world,occasion,crowned);
+          if(occasion.arena.prize)crowned.description+='擂台依实赛颁「百年论剑魁首」称号与通天灵宝「万宗照夜印」。';
+          settleTournamentWagers(world,occasion,crowned);
+        }
         recordTournamentChampion(world, occasion);
       } else {
         occasion.remainingIds = winners.map(({ id }) => id);
-        results.push(event(world, occasion, 'round', `大比第${occasion.round}轮`, `${winners.length}名修士晋级下一轮。`));
+        const completed=event(world, occasion, 'round', `大比第${occasion.round}轮`, `${winners.length}名修士晋级下一轮。`);
+        if(occasion.arena)recordTournamentArenaRound(world,occasion,completed,roster,arenaBouts);
+        results.push(completed);
       }
       continue;
     }

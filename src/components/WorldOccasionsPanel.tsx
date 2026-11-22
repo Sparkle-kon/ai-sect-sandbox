@@ -1,3 +1,5 @@
+import {TournamentArenaRead,type TournamentArenaControls} from './TournamentArenaRead';
+import {projectTournamentArena} from '../engine/tournamentArenaEngine';
 import type { Cultivator, WorldState } from '../types/world';
 import { canSeeOccasion, projectExpeditionOmens, type ExpeditionOmenView } from '../engine/expeditionOmenEngine';
 import { isOpenOccasion, OCCASION_KIND, OCCASION_STATUS } from './occasionLabels';
@@ -35,7 +37,7 @@ function OmenReceipts({ rows }: { rows: readonly ExpeditionOmenView[] }) {
 }
 
 
-export function WorldOccasionsPanel({ world, cultivator }: { world: WorldState; cultivator: Cultivator }) {
+export function WorldOccasionsPanel({ world, cultivator, arenaControls }: { world: WorldState; cultivator: Cultivator; arenaControls?:TournamentArenaControls }) {
   const names = new Map(world.cultivators.map(({ id, name }) => [id, name]));
   const places = new Map(world.locations.map(({ id, name }) => [id, name]));
   const named = (id: string) => names.get(id) ?? '修士未详';
@@ -54,6 +56,9 @@ export function WorldOccasionsPanel({ world, cultivator }: { world: WorldState; 
           <summary className="min-h-11 cursor-pointer py-2 text-xs text-slate-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300">查看盛会 · 活跃 {open.length} 场 · 近期结案 {recent.length} 场</summary>
           <ul className="mt-2 space-y-2">
             {[...open, ...recent].map((occasion) => {
+              const arena=occasion.kind==='tournament'?projectTournamentArena(world,occasion.id):undefined;
+              if(arena)return <li key={occasion.id}><TournamentArenaRead arena={arena} named={named}
+                siteName={places.get(arena.siteId)} championName={occasion.championId?named(occasion.championId):undefined} controls={arenaControls}/></li>;
               const linkedOmen = occasion.omenId !== undefined;
               const expeditionResults = linkedOmen
                 ? occasion.expeditions.filter(({ cultivatorId }) => cultivatorId === viewer?.id)

@@ -1,3 +1,4 @@
+import { validateTournamentArenaHistory } from './storageTournamentArenaValidation';
 import { isBuiltinScenarioOrigin } from './highDramaPresetTerms';
 import { validateBuiltinScenarioOrigin } from './storageBuiltinScenarioValidation';
 import { validatePublicAlchemyPractice } from './storagePublicAlchemyValidation';
@@ -521,7 +522,21 @@ const forbiddenContact=structure({id,attackerId:id,defenderId:id,ownerId:id,arti
   rolls:arr(4,num(0,1)),guided:bool,
   queued:optional(structure({choice:one(...FORBIDDEN_ART_IDS,'decline'),tick}))});
 
+const tournamentArena=structure({openedTick:tick,seededIds:arr(16,id),
+  rounds:arr(4,structure({round:num(1,4,true),tick,eventId:id,absentIds:arr(16,id),
+    bouts:arr(8,structure({firstId:id,secondId:oid,winnerId:id,firstDamage:wealth,secondDamage:optional(wealth)}))})),
+  prize:optional(structure({tick,actorId:id,artifactId:id,title:one('百年论剑魁首')})),
+  terminal:optional(structure({tick,status:one('completed','cancelled'),eventId:id})),
+});
+
+const tournamentWagers=structure({tickets:arr(32,structure({
+  id,arenaId:id,siteId:id,spectatorId:id,contenderId:id,stake:one(5,10,20),placedTick:tick,
+  status:one('open','won','lost','refunded','forfeited'),
+  settlement:optional(structure({tick,eventId:id,payout:num(0,40,true),award:num(0,20,true),winnerId:oid})),
+}))});
+
 const shape = structure({
+  tournamentWagers:optional(tournamentWagers),
   dramaticBonds:optional(structure({facts:arr(DRAMATIC_BOND_FACTS_MAX,structure({
     kind:one(...DRAMATIC_BOND_FACT_KINDS),sourceEventId:id,tick,year:tick,month,siteId:id,venueKindAtSource:one('market','sect_hq'),actorIds:arr(2,id),
     witnessIds:optional(arr(DRAMATIC_BOND_WITNESSES_MAX,id)),
@@ -578,7 +593,7 @@ const shape = structure({
     status:one('registration','running','completed','cancelled'),participantIds:ids,remainingIds:ids,
     bouts:arr(30,structure({round:count,firstId:id,secondId:oid,winnerId:id})),
     expeditions:arr(30,structure({cultivatorId:id,tick,outcome:one('loot','wounded','death','escaped'),description:text})),round:count,championId:oid,lastResolvedTick:otick,
-    omenId:oid,anchorSiteId:oid})),
+    omenId:oid,anchorSiteId:oid,arena:optional(tournamentArena)})),
   expeditionOmens:structure({lastCalendarTick:otick,rows:arr(SAVE_COLLECTION_LIMIT,structure({
     id,siteId:id,operatorId:id,openedTick:tick,measuredTick:tick,measuredQi:num(0,150),reading:fieldReading,
     windowStartsTick:tick,windowEndsTick:tick,relay:optional(structure({recipientId:id,tick})),
@@ -3727,6 +3742,7 @@ function verifyWorld(value: unknown): WorldState {
   validateDramaticBondHistory(w,fail);
   validateRingAudienceHistory(w,fail);
   validatePublicAlchemyPractice(w,fail);
+  validateTournamentArenaHistory(w,fail);
   validateEraHistory(w,fail);
   validateAuthoredEraHistory(w,fail);
   validateRegionalSimulation(w,fail);
@@ -3822,9 +3838,9 @@ function serializeWorldSave(world: WorldState): string {
   try {
     // A native turn may first attach either optional ledger after a hot-world clone.
     // Normalize that bounded extension order, leaving every pre-extension byte intact.
-    if (world.eraHeritage !== undefined || world.mortalAgeTrackingSinceTick !== undefined || world.coldWaterVein !== undefined || world.northMiningCharters !== undefined || world.northWellRevisitLaw !== undefined || world.northWellRevisitReviews !== undefined || world.upperPassage !== undefined || world.northGateRenewal !== undefined || world.frontier !== undefined || world.upperArrayField !== undefined || world.scribeCommissions !== undefined || world.waypostMeals !== undefined || world.craftTraining !== undefined || world.disasterShelter !== undefined || world.roguelikeEncounters !== undefined || world.forbiddenDuels !== undefined || world.dramaticBonds !== undefined || world.builtinScenarioOrigin !== undefined) {
-      const {eraHeritage,mortalAgeTrackingSinceTick,coldWaterVein,northMiningCharters,northWellRevisitLaw,northWellRevisitReviews,upperPassage,northGateRenewal,frontier,upperArrayField,scribeCommissions,waypostMeals,craftTraining,disasterShelter,roguelikeEncounters,forbiddenDuels,dramaticBonds,builtinScenarioOrigin,...legacy}=world;
-      return JSON.stringify({format:FORMAT,version:VERSION,world:{...legacy,eraHeritage,mortalAgeTrackingSinceTick,coldWaterVein,northMiningCharters,northWellRevisitLaw,northWellRevisitReviews,upperPassage,northGateRenewal,frontier,upperArrayField,scribeCommissions,waypostMeals,craftTraining,disasterShelter,roguelikeEncounters,forbiddenDuels,dramaticBonds,builtinScenarioOrigin}});
+    if (world.eraHeritage !== undefined || world.mortalAgeTrackingSinceTick !== undefined || world.coldWaterVein !== undefined || world.northMiningCharters !== undefined || world.northWellRevisitLaw !== undefined || world.northWellRevisitReviews !== undefined || world.upperPassage !== undefined || world.northGateRenewal !== undefined || world.frontier !== undefined || world.upperArrayField !== undefined || world.scribeCommissions !== undefined || world.waypostMeals !== undefined || world.craftTraining !== undefined || world.disasterShelter !== undefined || world.roguelikeEncounters !== undefined || world.forbiddenDuels !== undefined || world.dramaticBonds !== undefined || world.builtinScenarioOrigin !== undefined || world.tournamentWagers !== undefined) {
+      const {eraHeritage,mortalAgeTrackingSinceTick,coldWaterVein,northMiningCharters,northWellRevisitLaw,northWellRevisitReviews,upperPassage,northGateRenewal,frontier,upperArrayField,scribeCommissions,waypostMeals,craftTraining,disasterShelter,roguelikeEncounters,forbiddenDuels,dramaticBonds,builtinScenarioOrigin,tournamentWagers,...legacy}=world;
+      return JSON.stringify({format:FORMAT,version:VERSION,world:{...legacy,eraHeritage,mortalAgeTrackingSinceTick,coldWaterVein,northMiningCharters,northWellRevisitLaw,northWellRevisitReviews,upperPassage,northGateRenewal,frontier,upperArrayField,scribeCommissions,waypostMeals,craftTraining,disasterShelter,roguelikeEncounters,forbiddenDuels,dramaticBonds,builtinScenarioOrigin,tournamentWagers}});
     }
     return JSON.stringify({ format: FORMAT, version: VERSION, world });
   } catch { throw new WorldSaveError('json', '当前世界不能序列化为 JSON。'); }
