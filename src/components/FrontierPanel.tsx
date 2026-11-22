@@ -35,6 +35,7 @@ interface Props {
   controls?:FrontierControls;
   host?:FrontierHostControls;
   portPanel?:ReactNode;
+  drylandPanel?:ReactNode;
 }
 type Review={choice:FrontierOrder;revision:object};
 type OrderGroup='FRONTIER'|'FRONTIER_PRODUCTION'|'FRONTIER_TRADE';
@@ -195,7 +196,7 @@ function Host({host}: {host:FrontierHostControls}){
 
 const shell='min-w-0 space-y-2 rounded border border-emerald-800/70 bg-slate-950 px-2 pb-2 text-sm text-slate-100 [overflow-wrap:anywhere]';
 export function FrontierPanel(props:Props){
-  const {view,host,controls,production,trade=[],portPanel}=props;
+  const {view,host,controls,production,trade=[],portPanel,drylandPanel}=props;
   const choices=frontierScopedOrders(props);
   const movement=<Orders key={`walk:${controls?.scopeKey}`} props={props} choices={choices} group="FRONTIER"/>;
   const workshop=<Orders key={`work:${controls?.scopeKey}`} props={props} choices={choices} group="FRONTIER_PRODUCTION"/>;
@@ -215,6 +216,7 @@ export function FrontierPanel(props:Props){
       {movement}
       {tradePanel}
       {portPanel}
+      {drylandPanel}
     </details>;
   }
   const chart=FRONTIER_CHARTS[view.regionId],place=view.site;
@@ -234,5 +236,6 @@ export function FrontierPanel(props:Props){
     {localProduction&&<FrontierProductionRead view={localProduction}>{workshop}</FrontierProductionRead>}
     {tradePanel}
     {portPanel}
+    {drylandPanel}
   </section>;
 }

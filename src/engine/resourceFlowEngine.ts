@@ -124,7 +124,8 @@ export function projectResourceFlowMonth(world: WorldState, tick: number,
   const closed = tick < world.tick;
   if(scope.kind==='observer'&&world.frontier&&(
     world.frontier.visits.some(visit=>visit.enteredTick<=tick)||world.frontier.trade?.agreements.some(row=>row.offeredTick<=tick)||
-    world.frontier.port?.trade?.agreements.some(row=>row.offeredTick<=tick))){
+    world.frontier.port?.trade?.agreements.some(row=>row.offeredTick<=tick)||
+    world.frontier.drylands?.trade?.agreements.some(row=>row.offeredTick<=tick))){
     // Do not infer private frontier stocks or movements from all-world totals, omitted rows, or ID gaps.
     const rows=month.entries.filter(row=>row.mechanism!=='frontier'&&row.mechanism!=='care_followup')
       .map((row,index)=>({...row,id:index+1}));

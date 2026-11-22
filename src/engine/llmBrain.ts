@@ -395,7 +395,8 @@ export function computeHeuristicDecision(
     // No Utility signature, fee-bearing travel or escrow without an explicit choice.
     const option=availableFrontierProviderActions(cultivator,world).find(row=>row.action==='FRONTIER_PRODUCTION'&&
       (row.frontierProductionMove==='harvest'||row.frontierProductionMove==='draw_tide')||
-      row.action==='FRONTIER_PORT'&&row.frontierPortMove==='gather'&&cultivator.herbs.earth_root>=2&&cultivator.hp>cultivator.maxHp/2);
+      row.action==='FRONTIER_PORT'&&row.frontierPortMove==='gather'&&cultivator.herbs.earth_root>=2&&cultivator.hp>cultivator.maxHp/2||
+      row.action==='FRONTIER_DRYLAND'&&row.frontierDrylandMove==='draw_water');
     return option?{...frontierCommand(option),innerMonologue:'只料理当月亲到的地物。'}:
       {chosenAction:'REST',innerMonologue:'且在眼前地界歇脚，不替旁人签契。'};
   }
@@ -2048,6 +2049,8 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'FRONTIER_TRADE',
             'FRONTIER_PORT',
             'FRONTIER_PORT_TRADE',
+            'FRONTIER_DRYLAND',
+            'FRONTIER_DRYLAND_TRADE',
             'BREW_PILL',
             'USE_PILL',
             'FORGE_ARTIFACT',
@@ -2166,7 +2169,8 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
           if(isFrontierAction(chosenAction))return exactFrontierDecision(parsed,frontierOptions);
           if(parsed.frontierMove!==undefined||parsed.frontierProductionMove!==undefined||parsed.frontierTradeMove!==undefined||
             parsed.targetFrontierSiteId!==undefined||parsed.targetFrontierTradeId!==undefined||parsed.frontierPortMove!==undefined||
-            parsed.frontierPortTradeMove!==undefined||parsed.targetFrontierPortTradeId!==undefined)return undefined;
+            parsed.frontierPortTradeMove!==undefined||parsed.targetFrontierPortTradeId!==undefined||parsed.frontierDrylandMove!==undefined||
+            parsed.frontierDrylandFeed!==undefined||parsed.frontierDrylandTradeMove!==undefined||parsed.targetFrontierDrylandTradeId!==undefined)return undefined;
           if(chosenAction==='NORTH_GATE_RENEWAL')return decodeNorthGateRenewal(parsed,renewalOptions);
           if(parsed.northGateRenewalMove!==undefined||parsed.targetNorthGateRenewalId!==undefined)return undefined;
           if((parsed.upperPassageMove!==undefined||parsed.targetUpperPassageNodeId!==undefined)&&

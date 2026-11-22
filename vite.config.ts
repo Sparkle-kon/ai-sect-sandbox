@@ -50,7 +50,8 @@ export default defineConfig({
           'upper-positions': ['./src/engine/upperPassageTerms.ts','./src/engine/upperPassageIsolation.ts'],
           // Geography and economic terms are shared leaves, not the live engine/ledger graph.
           'frontier-region-terms': ['./src/engine/frontierTerms.ts','./src/engine/frontierProductionTerms.ts',
-            './src/engine/frontierTradeTerms.ts','./src/engine/frontierPortTerms.ts','./src/engine/frontierPortTradeTerms.ts'],
+            './src/engine/frontierTradeTerms.ts','./src/engine/frontierPortTerms.ts','./src/engine/frontierPortTradeTerms.ts',
+            './src/engine/frontierDrylandTerms.ts','./src/engine/frontierDrylandTradeTerms.ts'],
           'terrain-ecology': ['./src/engine/terrainSuccessionEngine.ts','./src/engine/weatherEngine.ts'],
           'civic-works': ['./src/engine/villageWorksEngine.ts'],
           'household-register': ['./src/engine/householdNameEngine.ts','./src/engine/mortalAgeCohorts.ts'],
@@ -61,6 +62,9 @@ export default defineConfig({
           // Both native settlement and portable scenario verification use the same small leaf proofs.
           'danxia-review-proof': ['./src/engine/danxiaSeasonTerms.ts','./src/engine/danxiaMedicineTerms.ts',
             './src/engine/danxiaShortageTerms.ts','./src/engine/settlementReliefTerms.ts'],
+          'chronicle-evidence': ['./src/engine/eraHistoryIndex.ts','./src/engine/campaignStopCondition.ts',
+            './src/engine/chronicleCausalityEngine.ts','./src/engine/chronicleFocusEngine.ts','./src/engine/witnessedPersonalStory.ts'],
+          'village-ecology': ['./src/engine/villageEvolutionEngine.ts','./src/engine/villageEvolutionTerms.ts'],
           'archive-rules': ['./src/engine/coldHistoryEngine.ts', './src/engine/memoryEngine.ts', './src/engine/scenarioObjectiveEngine.ts', './src/engine/chronicleScene.ts',
             './src/engine/chronicleLead.ts', './src/engine/protagonistSuccession.ts', './src/engine/novelGenerator.ts',
             './src/engine/publicDialogueProvenance.ts', './src/engine/chroniclePublicProse.ts'],

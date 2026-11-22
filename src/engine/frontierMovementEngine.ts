@@ -1,10 +1,10 @@
-import type {Cultivator,LLMDecisionPayload,WorldEvent,WorldState} from '../types/world';
+import type {Cultivator,LLMDecisionPayload,LocationNode,WorldEvent,WorldState} from '../types/world';
 import {doctrineFoundingPhysicallyAt} from './doctrineFoundingEngine';
 import {flowActor,recordResourceFlow} from './resourceFlowEngine';
 import {terrainTileAt} from './terrainEngine';
 import {FRONTIER_CHARTS,FRONTIER_EDGES,FRONTIER_ENTER_ROOTS,FRONTIER_ENTER_STONES,FRONTIER_REGIONS,FRONTIER_SETTLE_ROOTS,
   FRONTIER_SETTLE_STONES,FRONTIER_SITES,frontierEdge,frontierResidenceId,frontierSeaEdge,frontierSite,frontierStepMonth,frontierVisitId,
-  frontierWinter,type FrontierAnchorId,type FrontierChartId,type FrontierMovementMove,type FrontierRegionId,type FrontierResidence,
+  frontierWinter,isFrontierDrylandAnchorType,isFrontierDrylandRegion,type FrontierAnchorId,type FrontierChartId,type FrontierMovementMove,type FrontierRegionId,type FrontierResidence,
   type FrontierSite,type FrontierSiteId,type FrontierState,type FrontierVisit} from './frontierTerms';
 
 export type FrontierMovementOption={action:'FRONTIER'}&(
@@ -39,9 +39,18 @@ export function frontierAnchor(world:WorldState,regionId:FrontierRegionId){
   const rows=world.locations.filter(location=>location.id===chart.anchorId);
   const place=rows.length===1?rows[0]:undefined;
   if(!place||terrainTileAt(world,place.x,place.y)?.id!==chart.anchorTileId)return undefined;
+  if(isFrontierDrylandRegion(regionId))return isFrontierDrylandAnchorType(place.type)?place:undefined;
   if(regionId==='north-snow'?(place.type!=='spirit_vein'&&place.type!=='sect_hq')||place.spiritRoot!=='水':place.type!=='market')return undefined;
   if(place.ownerSectId&&!world.sects.some(sect=>sect.id===place.ownerSectId))return undefined;
   return place;
+}
+/** Admission follows the current title, independently of geometry and already paid passage. */
+function mayEnterFrontierAnchor(world:WorldState,actor:Cultivator,regionId:FrontierRegionId,place:LocationNode):boolean {
+  if(!isFrontierDrylandRegion(regionId))return !place.ownerSectId||place.ownerSectId===actor.sectId;
+  if(!place.ownerSectId)return place.type==='spirit_vein';
+  const issuer=world.sects.find(sect=>sect.id===place.ownerSectId);
+  return !!issuer&&issuer.inactiveSinceTick===undefined&&issuer.id===actor.sectId&&
+    (place.type!=='sect_hq'||issuer.headquartersId===place.id);
 }
 function baseScene(world:WorldState,actor:Cultivator,tick:number){
   if(actor.positionPlane!==undefined||!represented(world,actor)||!appropriateTick(world,tick))return undefined;
@@ -69,7 +78,7 @@ export function availableFrontierMovementActions(actor:Cultivator,world:WorldSta
   if(actor.positionPlane===undefined){
     const scene=baseScene(world,actor,executionTick);
     if(!scene||activeFrontierVisit(world,actor.id)||actor.guardAssignment&&actor.guardAssignment.expiresTick>executionTick||
-      scene.place.ownerSectId&&scene.place.ownerSectId!==actor.sectId||!wallet(actor,FRONTIER_ENTER_STONES,FRONTIER_ENTER_ROOTS))return [];
+      !mayEnterFrontierAnchor(world,actor,scene.regionId,scene.place)||!wallet(actor,FRONTIER_ENTER_STONES,FRONTIER_ENTER_ROOTS))return [];
     return [option('enter',FRONTIER_CHARTS[scene.regionId].gateId)];
   }
   const site=frontierPhysicalSite(world,actor,executionTick);
@@ -162,7 +171,7 @@ export function projectFrontierMovement(world:WorldState,actor?:Cultivator):Fron
   const chart=FRONTIER_CHARTS[regionId],options=availableFrontierMovementActions(actor,world,world.tick+1);
   const common={regionId,chartId:chart.id,anchorId:chart.anchorId,gateId:chart.gateId,options};
   if(!site&&scene){
-    const blocked=!options.length?(scene.place.ownerSectId&&scene.place.ownerSectId!==actor.sectId?'title':
+    const blocked=!options.length?(!mayEnterFrontierAnchor(world,actor,scene.regionId,scene.place)?'title':
       !wallet(actor,FRONTIER_ENTER_STONES,FRONTIER_ENTER_ROOTS)?'fee':'duty'):undefined;
     return {scope:'anchor',...common,visibleSites:[],...(scene.place.ownerSectId?{anchorOwnerSectId:scene.place.ownerSectId}:{}),
       ...(blocked?{blocked}:{})};

@@ -1,16 +1,23 @@
+import type {FrontierDrylandsState} from './frontierDrylandTerms';
 import type {FrontierProductionState} from './frontierProductionTerms';
 import type {FrontierTradeState} from './frontierTradeTerms';
 import type {FrontierPortState} from './frontierPortTerms';
 
 export const FRONTIER_FARM_REGIONS=['north-snow','south-marsh'] as const;
 export type FrontierFarmRegionId=typeof FRONTIER_FARM_REGIONS[number];
-export const FRONTIER_REGIONS=[...FRONTIER_FARM_REGIONS,'east-offshore'] as const;
+export const FRONTIER_DRYLAND_REGIONS=['western-saltwell','plateau-thunderridge'] as const;
+export type FrontierDrylandRegionId=typeof FRONTIER_DRYLAND_REGIONS[number];
+export const isFrontierDrylandRegion=(value:unknown):value is FrontierDrylandRegionId=>
+  value==='western-saltwell'||value==='plateau-thunderridge';
+export const FRONTIER_REGIONS=[...FRONTIER_FARM_REGIONS,'east-offshore',...FRONTIER_DRYLAND_REGIONS] as const;
 export const isFrontierFarmRegion=(value:unknown):value is FrontierFarmRegionId=>value==='north-snow'||value==='south-marsh';
 export type FrontierRegionId=typeof FRONTIER_REGIONS[number];
 export type FrontierPositionPlane='frontier';
 export type FrontierFarmChartId='chart-north-snow'|'chart-south-marsh';
-export type FrontierChartId=FrontierFarmChartId|'chart-east-offshore';
-export type FrontierAnchorId='loc-vein-north'|'loc-market'|'loc-market-east';
+export type FrontierDrylandChartId='chart-western-saltwell'|'chart-plateau-thunderridge';
+export type FrontierChartId=FrontierFarmChartId|FrontierDrylandChartId|'chart-east-offshore';
+export const FRONTIER_ANCHOR_IDS=['loc-vein-north','loc-market','loc-market-east','loc-taixu','loc-tianji'] as const;
+export type FrontierAnchorId=typeof FRONTIER_ANCHOR_IDS[number];
 export type FrontierMovementMove='enter'|'travel'|'exit'|'settle';
 export const FRONTIER_ENTER_STONES=8;
 export const FRONTIER_ENTER_ROOTS=1;
@@ -22,13 +29,19 @@ export const FRONTIER_SITE_IDS=[
   'frontier-south-gate','frontier-south-crossway','frontier-south-home','frontier-south-sluice','frontier-south-field-west','frontier-south-field-east',
   'frontier-east-gate','frontier-east-causeway','frontier-east-home','frontier-east-dock','frontier-east-boatyard',
   'frontier-east-tideflat','frontier-east-warehouse','frontier-east-outer',
+  'frontier-west-gate','frontier-west-trail','frontier-west-home','frontier-west-well',
+  'frontier-west-saltbed','frontier-west-trial','frontier-west-warehouse',
+  'frontier-ridge-gate','frontier-ridge-saddle','frontier-ridge-home','frontier-ridge-pasture',
+  'frontier-ridge-quarry','frontier-ridge-ward','frontier-ridge-warehouse',
 ] as const;
 export type FrontierSiteId=typeof FRONTIER_SITE_IDS[number];
 export interface FrontierSite {
   id:FrontierSiteId;regionId:FrontierRegionId;chartId:FrontierChartId;col:number;row:number;name:string;
-  role:'gate'|'pass'|'home'|'spring'|'winter-plot'|'bypass'|'sluice'|'field'|'dock'|'boatyard'|'tideflat'|'warehouse'|'sea';
+  role:'gate'|'pass'|'home'|'spring'|'winter-plot'|'bypass'|'sluice'|'field'|'dock'|'boatyard'|'tideflat'|'warehouse'|'sea'|
+    'well'|'saltbed'|'trial'|'pasture'|'quarry'|'ward';
 }
 const north='north-snow',south='south-marsh',east='east-offshore',nc='chart-north-snow',sc='chart-south-marsh',ec='chart-east-offshore';
+const west='western-saltwell',ridge='plateau-thunderridge',wc='chart-western-saltwell',rc='chart-plateau-thunderridge';
 export const FRONTIER_SITES:readonly FrontierSite[]=[
   {id:'frontier-north-lee-west',regionId:north,chartId:nc,col:0,row:0,name:'西背风台',role:'bypass'},
   {id:'frontier-north-lee-mid',regionId:north,chartId:nc,col:1,row:0,name:'背风石脊',role:'bypass'},
@@ -52,6 +65,20 @@ export const FRONTIER_SITES:readonly FrontierSite[]=[
   {id:'frontier-east-tideflat',regionId:east,chartId:ec,col:1,row:2,name:'低潮滩',role:'tideflat'},
   {id:'frontier-east-warehouse',regionId:east,chartId:ec,col:2,row:2,name:'验货仓',role:'warehouse'},
   {id:'frontier-east-outer',regionId:east,chartId:ec,col:0,row:0,name:'外海潮口',role:'sea'},
+  {id:'frontier-west-gate',regionId:west,chartId:wc,col:0,row:1,name:'漠关',role:'gate'},
+  {id:'frontier-west-trail',regionId:west,chartId:wc,col:1,row:1,name:'旱驿',role:'pass'},
+  {id:'frontier-west-home',regionId:west,chartId:wc,col:2,row:1,name:'西井聚落',role:'home'},
+  {id:'frontier-west-well',regionId:west,chartId:wc,col:1,row:0,name:'持秤井',role:'well'},
+  {id:'frontier-west-saltbed',regionId:west,chartId:wc,col:2,row:0,name:'盐滩',role:'saltbed'},
+  {id:'frontier-west-trial',regionId:west,chartId:wc,col:1,row:2,name:'冲境台',role:'trial'},
+  {id:'frontier-west-warehouse',regionId:west,chartId:wc,col:2,row:2,name:'封盐仓',role:'warehouse'},
+  {id:'frontier-ridge-gate',regionId:ridge,chartId:rc,col:0,row:1,name:'雷脊关',role:'gate'},
+  {id:'frontier-ridge-saddle',regionId:ridge,chartId:rc,col:1,row:1,name:'风鞍口',role:'pass'},
+  {id:'frontier-ridge-home',regionId:ridge,chartId:rc,col:2,row:1,name:'雷脊牧居',role:'home'},
+  {id:'frontier-ridge-pasture',regionId:ridge,chartId:rc,col:1,row:0,name:'牧场',role:'pasture'},
+  {id:'frontier-ridge-quarry',regionId:ridge,chartId:rc,col:2,row:0,name:'雷石坳',role:'quarry'},
+  {id:'frontier-ridge-ward',regionId:ridge,chartId:rc,col:1,row:2,name:'避雷桩',role:'ward'},
+  {id:'frontier-ridge-warehouse',regionId:ridge,chartId:rc,col:2,row:2,name:'牧料仓',role:'warehouse'},
 ];
 interface FrontierChart {id:FrontierChartId;name:string;columns:3;rows:3;anchorId:FrontierAnchorId;anchorTileId:string;gateId:FrontierSiteId;homeId:FrontierSiteId}
 export const FRONTIER_CHARTS={
@@ -61,7 +88,13 @@ export const FRONTIER_CHARTS={
   gateId:'frontier-south-gate',homeId:'frontier-south-home'},
  [east]:{id:ec,name:'东海外港',columns:3,rows:3,anchorId:'loc-market-east',anchorTileId:'tile-19-4',
   gateId:'frontier-east-gate',homeId:'frontier-east-home'},
+ [west]:{id:wc,name:'西漠盐井',columns:3,rows:3,anchorId:'loc-taixu',anchorTileId:'tile-4-3',
+  gateId:'frontier-west-gate',homeId:'frontier-west-home'},
+ [ridge]:{id:rc,name:'高原雷脊',columns:3,rows:3,anchorId:'loc-tianji',anchorTileId:'tile-19-3',
+  gateId:'frontier-ridge-gate',homeId:'frontier-ridge-home'},
 } as const satisfies Readonly<Record<FrontierRegionId,FrontierChart>>;
+
+export const isFrontierDrylandAnchorType=(type:string):boolean=>type==='sect_hq'||type==='spirit_vein';
 export interface FrontierEdge {from:FrontierSiteId;to:FrontierSiteId;winterClosed?:true}
 export const FRONTIER_EDGES:readonly FrontierEdge[]=[
  {from:'frontier-north-gate',to:'frontier-north-pass',winterClosed:true},
@@ -87,6 +120,20 @@ export const FRONTIER_EDGES:readonly FrontierEdge[]=[
  {from:'frontier-east-causeway',to:'frontier-east-tideflat'},
  {from:'frontier-east-tideflat',to:'frontier-east-warehouse'},
  {from:'frontier-east-warehouse',to:'frontier-east-home'},
+ {from:'frontier-west-gate',to:'frontier-west-trail'},
+ {from:'frontier-west-trail',to:'frontier-west-home'},
+ {from:'frontier-west-trail',to:'frontier-west-well'},
+ {from:'frontier-west-well',to:'frontier-west-saltbed'},
+ {from:'frontier-west-saltbed',to:'frontier-west-home'},
+ {from:'frontier-west-trail',to:'frontier-west-trial'},
+ {from:'frontier-west-trial',to:'frontier-west-warehouse'},
+ {from:'frontier-ridge-gate',to:'frontier-ridge-saddle'},
+ {from:'frontier-ridge-saddle',to:'frontier-ridge-home'},
+ {from:'frontier-ridge-saddle',to:'frontier-ridge-pasture'},
+ {from:'frontier-ridge-pasture',to:'frontier-ridge-quarry'},
+ {from:'frontier-ridge-quarry',to:'frontier-ridge-home'},
+ {from:'frontier-ridge-saddle',to:'frontier-ridge-ward'},
+ {from:'frontier-ridge-ward',to:'frontier-ridge-warehouse'},
 ];
 /** These cells are a water route only, not a shortcut in ordinary residence movement. */
 export const FRONTIER_EAST_SEA_EDGES:readonly FrontierEdge[]=[
@@ -118,7 +165,7 @@ export interface FrontierResidence {
 }
 export interface FrontierState {
   version:1;visits:FrontierVisit[];residences:FrontierResidence[];
-  production?:FrontierProductionState;trade?:FrontierTradeState;port?:FrontierPortState;
+  production?:FrontierProductionState;trade?:FrontierTradeState;port?:FrontierPortState;drylands?:FrontierDrylandsState;
 }
 export const frontierVisitId=(tick:number,actorId:string)=>`frontier-visit-${tick}-${actorId}`;
 export const frontierResidenceId=(tick:number,actorId:string)=>`frontier-home-${tick}-${actorId}`;

@@ -267,7 +267,7 @@ export function consumeAvatarOrder(world: WorldState): { actorId: string; decisi
   delete state.pendingOrder;
   if (world.tick !== order.queuedTick + 1 || activeAvatar(world)?.id !== order.actorId) return undefined;
   if(order.action==='FRONTIER'||order.action==='FRONTIER_PRODUCTION'||order.action==='FRONTIER_TRADE'||
-    order.action==='FRONTIER_PORT'||order.action==='FRONTIER_PORT_TRADE')
+    order.action==='FRONTIER_PORT'||order.action==='FRONTIER_PORT_TRADE'||order.action==='FRONTIER_DRYLAND'||order.action==='FRONTIER_DRYLAND_TRADE')
     return {actorId:order.actorId,decision:{...frontierCommand(order),innerMonologue:'按确切的另图安排前行。'}};
   const targets = order.action === 'NORTH_GATE_RENEWAL' ?
     {northGateRenewalMove:order.northGateRenewalMove,targetNorthGateRenewalId:order.targetNorthGateRenewalId} :

@@ -84,12 +84,16 @@ import {availableUpperPassageActions,projectUpperPassage} from './engine/upperPa
 import {upperPassagePlane} from './engine/upperPassageTerms';
 import type {FrontierControls,FrontierHostControls} from './components/FrontierPanel';
 import type {FrontierPortControls} from './components/FrontierPortPanel';
+import type {FrontierDrylandControls} from './components/FrontierDrylandPanel';
+import {projectFrontierDrylandLocal} from './engine/frontierDrylandLocalEngine';
+import {projectFrontierDrylandTrade} from './engine/frontierDrylandTradeEngine';
+import {isFrontierDrylandRegion} from './engine/frontierDrylandTerms';
 import {projectFrontierPort} from './engine/frontierPortLocalEngine';
 import {projectFrontierPortTrade} from './engine/frontierPortTradeEngine';
 import {projectFrontierMovement} from './engine/frontierMovementEngine';
 import {projectFrontierProduction} from './engine/frontierProductionEngine';
 import {projectFrontierTrade} from './engine/frontierTradeEngine';
-import {availableFrontierActions,isFrontierLandOption,isFrontierSeaOption,type FrontierOption} from './engine/frontierActions';
+import {availableFrontierActions,isFrontierDrylandOption,isFrontierLandOption,isFrontierSeaOption,type FrontierOption} from './engine/frontierActions';
 import type {NorthGateRenewalControls} from './components/NorthGateRenewalPanel';
 import {availableNorthGateRenewalActions,projectNorthGateRenewal} from './engine/northGateRenewalEngine';
 import {northWellPanelEvidence} from './components/northWellRevisitView';
@@ -140,6 +144,7 @@ const ExpeditionRescuePanel = React.lazy(async () => ({ default: (await import('
 const BoundaryReliefPanel = React.lazy(async () => ({ default: (await import('./components/BoundaryReliefPanel')).BoundaryReliefPanel }));
 const NorthGateRenewalPanel = React.lazy(async()=>({default:(await import('./components/NorthGateRenewalPanel')).NorthGateRenewalPanel}));
 const FrontierPortPanel=React.lazy(async()=>({default:(await import('./components/FrontierPortPanel')).FrontierPortPanel}));
+const FrontierDrylandPanel=React.lazy(async()=>({default:(await import('./components/FrontierDrylandPanel')).FrontierDrylandPanel}));
 const FrontierPanel=React.lazy(async()=>({default:(await import('./components/FrontierPanel')).FrontierPanel}));
 const UpperPassagePanel = React.lazy(async () => ({default:(await import('./components/UpperPassagePanel')).UpperPassagePanel}));
 const NorthWellRevisitPanel = React.lazy(async () => ({default:(await import('./components/NorthWellRevisitPanel')).NorthWellRevisitPanel}));
@@ -1085,7 +1090,8 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
     availableFrontierActions(frontierActor,world,world.tick+1):[];
   const frontierPending=frontierActor&&waterVeinPending?.actorId===frontierActor.id&&(
     waterVeinPending.action==='FRONTIER'||waterVeinPending.action==='FRONTIER_PRODUCTION'||waterVeinPending.action==='FRONTIER_TRADE'||
-    waterVeinPending.action==='FRONTIER_PORT'||waterVeinPending.action==='FRONTIER_PORT_TRADE')?waterVeinPending:undefined;
+    waterVeinPending.action==='FRONTIER_PORT'||waterVeinPending.action==='FRONTIER_PORT_TRADE'||
+    waterVeinPending.action==='FRONTIER_DRYLAND'||waterVeinPending.action==='FRONTIER_DRYLAND_TRADE')?waterVeinPending:undefined;
   const queueFrontierChoice=(option:FrontierOption,revision:object)=>{
     if(!frontierActor||!frontierCurrent(revision))return false;
     return updateWorld(current=>{
@@ -1114,6 +1120,22 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
     const actor=visibleWorld.cultivators.find(row=>row.id===option.targetCultivatorId);
     return actor?[[actor.id,actor.name]]:[];
   }));
+  const drylandLocal=frontierView?.scope==='frontier'&&isFrontierDrylandRegion(frontierView.regionId)?
+    projectFrontierDrylandLocal(visibleWorld,selectedCultivator):undefined;
+  const drylandTrades=frontierView&&(isFrontierDrylandRegion(frontierView.regionId)||
+    frontierView.scope==='anchor'&&frontierView.anchorId==='loc-market')?
+    projectFrontierDrylandTrade(visibleWorld,selectedCultivator):[];
+  const drylandChoices=allFrontierChoices.filter(isFrontierDrylandOption);
+  const drylandControls:FrontierDrylandControls|undefined=frontierControls?{
+    scopeKey:frontierControls.scopeKey,revisionKey:visibleWorld,choices:drylandChoices,
+    pending:frontierPending&&isFrontierDrylandOption(frontierPending)?frontierPending:undefined,
+    disabled:frontierDisabled,onQueue:queueFrontierChoice,
+  }:undefined;
+  const drylandCandidates=Object.fromEntries(drylandChoices.flatMap(option=>{
+    if(option.action!=='FRONTIER_DRYLAND_TRADE'||option.frontierDrylandTradeMove!=='propose')return [];
+    const actor=visibleWorld.cultivators.find(row=>row.id===option.targetCultivatorId);
+    return actor?[[actor.id,actor.name]]:[];
+  }));
   const frontierHostActor=frontierView?.scope==='frontier'&&!preview&&selectedCultivator&&
     canPossessFrontierAvatar(world,selectedCultivator.id)?selectedCultivator:undefined;
   const frontierHost:FrontierHostControls|undefined=frontierHostActor&&frontierView?{
@@ -1138,7 +1160,10 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
       host={frontierHost} tradeCandidates={frontierCandidates}
       portPanel={portLocal||portTrades.length||portChoices.length?
         <FrontierPortPanel movement={frontierView} local={portLocal} trades={portTrades}
-          controls={portControls} tradeCandidates={portCandidates}/>:undefined}/>
+          controls={portControls} tradeCandidates={portCandidates}/>:undefined}
+      drylandPanel={drylandLocal||drylandTrades.length||drylandChoices.length?
+        <FrontierDrylandPanel movement={frontierView} local={drylandLocal} trades={drylandTrades}
+          controls={drylandControls} tradeCandidates={drylandCandidates} nowTick={visibleWorld.tick}/>:undefined}/>
   </React.Suspense>;
   const realmView=upperPassageView&&<React.Suspense fallback={<p role="status">查验脚下界路…</p>}>
     <UpperPassagePanel view={upperPassageView} controls={upperPassageControls} host={upperPassageHost}/>

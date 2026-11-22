@@ -1,7 +1,7 @@
 import type {WorldState} from '../types/world';
 import {terrainTileAt} from './terrainEngine';
 import {FRONTIER_CHARTS,FRONTIER_ENTER_ROOTS,FRONTIER_ENTER_STONES,FRONTIER_SETTLE_ROOTS,FRONTIER_SETTLE_STONES,
-  frontierEdge,frontierResidenceId,frontierSite,frontierVisitId,frontierWinter,type FrontierVisit}
+  frontierEdge,frontierResidenceId,frontierSite,frontierVisitId,frontierWinter,isFrontierDrylandAnchorType,isFrontierDrylandRegion,type FrontierVisit}
   from './frontierTerms';
 
 export function validateFrontierMovement(world:WorldState,fail:(path:string)=>never):void {
@@ -14,7 +14,8 @@ export function validateFrontierMovement(world:WorldState,fail:(path:string)=>ne
       fail('frontier.missing');
     return;
   }
-  if(!state.visits.length&&!state.trade?.agreements.length&&!state.port?.trade?.agreements.length)fail('frontier.noNativeEntry');
+  if(!state.visits.length&&!state.trade?.agreements.length&&!state.port?.trade?.agreements.length&&
+    !state.drylands?.trade?.agreements.length)fail('frontier.noNativeEntry');
   const byId=new Map<string,FrontierVisit>(),latest=new Map<string,FrontierVisit>();
   const time=(tick:number)=>Number.isSafeInteger(tick)&&tick>=1&&tick<=world.tick;
   const atMonth=(tick:number)=>((world.month-1-(world.tick-tick))%12+12)%12+1;
@@ -25,9 +26,11 @@ export function validateFrontierMovement(world:WorldState,fail:(path:string)=>ne
   let entered=0;
   for(const visit of state.visits){
     const first=visit.steps[0],last=visit.steps.at(-1),chart=FRONTIER_CHARTS[visit.regionId];
-    const anchor=world.locations.find(row=>row.id===visit.anchorId);
+    const anchors=world.locations.filter(row=>row.id===visit.anchorId);
+    const anchor=anchors.length===1?anchors[0]:undefined;
     const previous=latest.get(visit.actorId);
     if(!chart||!anchor||chart.anchorId!==visit.anchorId||terrainTileAt(world,anchor.x,anchor.y)?.id!==chart.anchorTileId||
+      (isFrontierDrylandRegion(visit.regionId)&&!isFrontierDrylandAnchorType(anchor.type))||
       !identities.has(visit.actorId)||byId.has(visit.id)||!time(visit.enteredTick)||visit.enteredTick<entered||
       visit.id!==frontierVisitId(visit.enteredTick,visit.actorId)||visit.paidStones!==FRONTIER_ENTER_STONES||visit.paidRoots!==FRONTIER_ENTER_ROOTS||
       !first||!last||first.tick!==visit.enteredTick||first.siteId!==chart.gateId||
