@@ -114,6 +114,7 @@ export function recordDecisionTrace(world: WorldState, actorId: string, candidat
     decision.targetForbiddenDuelId !== undefined || decision.forbiddenArtChoice !== undefined ||
     decision.chosenAction === 'GRAND_SIEGE_HERO' || decision.targetGrandSiegeId !== undefined || decision.grandSiegeHeroMove !== undefined ||
     decision.chosenAction === 'BEAST_DUEL_RESPONSE' || decision.targetBeastDuelId !== undefined || decision.beastDuelChoice !== undefined ||
+    decision.chosenAction==='PAVILION_FIRE'||decision.targetPavilionFireId!==undefined||decision.pavilionFireMove!==undefined||
     decision.targetCampaignAssemblySiegeId !== undefined || decision.chosenAction === 'WITNESS_INQUIRY' || decision.witnessInquiryMove !== undefined ||
     decision.chosenAction === 'FRONTIER_NIGHT_HUNT' || decision.frontierNightHuntMove !== undefined ||
     decision.chosenAction === 'SCHOOL_FORM_DUEL' || decision.schoolFormChoice !== undefined || decision.targetSchoolFormContactId !== undefined ||
@@ -173,7 +174,7 @@ export function createDecisionReplayTape(base: WorldState, councilMode: ReplayCo
 }
 
 const MECHANICAL_FIELDS = [
-  'targetHeartDemonAftermathId', 'targetCampaignAssemblySiegeId',
+  'targetHeartDemonAftermathId', 'targetCampaignAssemblySiegeId','pavilionFireMove','targetPavilionFireId',
   'targetLocationId', 'targetCultivatorId', 'rumorIntent', 'proposedScheme', 'targetTuitionId', 'targetOathId', 'oathTerm', 'marketGood',
   'marketQuantity', 'marketLimitPrice', 'targetMarketOrderId', 'targetSettlementId', 'civicMemorialMove', 'targetCivicDeedId', 'targetCivicMemorialId', 'targetVolunteerId', 'targetWitnessEventId',
   'targetWitnessClaimId', 'targetEstateId', 'targetTechniqueId', 'targetHerbId', 'seedMove', 'targetSeedLotId', 'targetSeedPlotId', 'targetPillId', 'targetArtifactId', 'forgeTier',

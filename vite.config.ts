@@ -34,6 +34,7 @@ export default defineConfig({
           'interface-icons': ['lucide-react'],
           'resource-journal': ['./src/engine/resourceFlowEngine.ts'],
           'scripture-circulation': ['./src/engine/pavilionLoanEngine.ts','./src/engine/scriptureEngine.ts','./src/engine/techniqueEngine.ts'],
+          'pavilion-fire-scenes': ['./src/engine/pavilionFire.ts'],
           'village-supply-rules': ['./src/engine/villageGranaryEngine.ts', './src/engine/villageSupplyAccounting.ts',
             './src/engine/villageSupplyEngine.ts'],
           'agreement-rules': ['./src/engine/oathEngine.ts', './src/engine/oathArbitrationEngine.ts'],

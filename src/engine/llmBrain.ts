@@ -1,3 +1,5 @@
+import { availablePavilionFireActions } from './pavilionFire';
+import { exactPavilionFireDecision,pavilionFireCommand } from './pavilionFireCognition';
 import { availableCampaignAssemblyActions } from './campaignAssembly';
 import { exactCampaignAssemblyDecision, tagCampaignAssemblyDecision } from './campaignAssemblyCognition';
 import { availableWitnessInquiryActions } from './witnessInquiry';
@@ -1400,6 +1402,14 @@ export function computeHeuristicDecision(
       if (exact) return exact;
     }
   }
+  if(activeAvatar(world)!==cultivator&&world.pavilionFires?.cases.length){
+    const fire=availablePavilionFireActions(cultivator,world,world.tick);
+    const mode=cultivator.hp<cultivator.maxHp*.45?'leave':cultivator.personality==='刚正'?'ward':'salvage';
+    const candidate=fire.find(row=>row.pavilionFireMove==='secure')??fire.find(row=>row.pavilionFireMove===mode)??
+      fire.find(row=>row.pavilionFireMove==='leave');
+    const exact=candidate&&exactPavilionFireDecision(pavilionFireCommand(candidate),fire);
+    if(exact)return exact;
+  }
   const refuge=urgentOrdinaryRefuge(cultivator,world);
   if(refuge)return refuge;
   const alchemy = availableAlchemy(cultivator, world);
@@ -2557,6 +2567,14 @@ export async function requestCultivatorLLMDecision(
         exactBeastDuelResponse(parsed,beastContact.id,availableBeastDuelChoices(world,cultivator)):undefined,160);
   }
 
+  const fire=availablePavilionFireActions(cultivator,world,requestTick);
+  if(fire.length){
+    if(requestTick!==world.tick+1||activeAvatar(world)===cultivator)return undefined;
+    return requestDecisionPrompt(config,requestTick,options,
+      '只原样抄写本人此刻能做的一项火中行止，不填卷名、路、人物、伤势或结果：'+JSON.stringify(fire.map(pavilionFireCommand)),
+      parsed=>requestTick===world.tick+1&&activeAvatar(world)!==cultivator&&exactPavilionFireDecision(parsed,fire)
+        ?exactPavilionFireDecision(parsed,availablePavilionFireActions(cultivator,world,requestTick)):undefined,160);
+  }
   const inquiries=availableWitnessActions(cultivator,world,false).length?[]:
     availableWitnessInquiryActions(cultivator,world,requestTick);
   if(inquiries.length){

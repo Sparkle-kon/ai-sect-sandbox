@@ -1,3 +1,4 @@
+import type { PavilionFireMove, PavilionFireState } from './pavilionFire';
 import type { FrontierNightHuntMove } from './frontierNightHunt';
 import type { SchoolFormDuelChoice, SchoolFormDuelContact } from './schoolFormDuel';
 import type { TaughtSwordPractice } from './taughtSwordForm';
@@ -135,6 +136,7 @@ export type ActionType =
   | 'BATTLEFIELD_REVISIT'
   | 'CALAMITY_ARRAY'
   | 'WITNESS_INQUIRY'
+  | 'PAVILION_FIRE'
   | 'FRONTIER_NIGHT_HUNT'
   | 'AUDIENCE_PLEDGE'
   | 'CULTIVATE'
@@ -599,6 +601,8 @@ export interface LLMDecisionPayload {
   targetCalamityHazardId?: string;
   frontierNightHuntMove?: FrontierNightHuntMove;
   witnessInquiryMove?: 'inspect'|'ask';
+  pavilionFireMove?: PavilionFireMove;
+  targetPavilionFireId?: string;
   targetCampaignAssemblySiegeId?: string;
   targetBattlefieldSiegeId?: string;
   grandSiegeHeroMove?: GrandSiegeHeroMove;
@@ -3658,6 +3662,7 @@ export interface WorldState {
   forbiddenDuels?: ForbiddenDuelContact[];
   beastDuelContacts?:BeastDuelContact[];
   schoolFormDuels?: SchoolFormDuelContact[];
+  pavilionFires?: PavilionFireState;
   scribeCommissions?: ScribeCommissionState;
   waypostMeals?: WaypostMealState;
   disasterShelter?: DisasterShelterState;

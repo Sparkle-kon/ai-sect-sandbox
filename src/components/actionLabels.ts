@@ -9,6 +9,7 @@ const ACTION_LABELS = {
   BATTLEFIELD_REVISIT: '重访旧战场',
   CALAMITY_ARRAY: '守阵避瘴',
   WITNESS_INQUIRY: '查问坊间指证',
+  PAVILION_FIRE: '火中守卷',
   FRONTIER_NIGHT_HUNT: '雪岭查迹',
   SCHOOL_FORM_DUEL: '剑锋相对',
   AUDIENCE_PLEDGE: '践行密议',

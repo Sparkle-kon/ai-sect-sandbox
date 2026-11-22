@@ -1,3 +1,4 @@
+import { activeBurningShelfCopy, securedPavilionFireCopies } from './pavilionFireCustody';
 import {onLowerPlane} from './upperPassageIsolation';
 import { registerScriptureOriginal, scriptureEditionModifiers } from './scriptureEngine';
 import type { Cultivator, PersonalityTrait, Technique, WorldEvent, WorldState } from '../types/world';
@@ -28,7 +29,7 @@ export function masteryMultiplier(actor: Cultivator, purpose: 'combat' | 'cultiv
 export interface TechniqueOption {
   id: string;
   scripture: Technique;
-  source: 'pavilion' | 'inheritance';
+  source: 'pavilion' | 'inheritance' | 'fire_recovery';
 }
 
 export function availableTechniques(actor: Cultivator, world: WorldState): TechniqueOption[] {
@@ -44,7 +45,8 @@ export function availableTechniques(actor: Cultivator, world: WorldState): Techn
     }
   };
   if (place) add(place.inheritanceScrolls, 'inheritance');
-  if (sect && actor.locationId === sect.headquartersId) add(sect.pavilion, 'pavilion');
+  if (sect && actor.locationId === sect.headquartersId) add(sect.pavilion.filter(scroll=>!activeBurningShelfCopy(world,sect.id,scroll.id)), 'pavilion');
+  add(securedPavilionFireCopies(world,actor),'fire_recovery');
   return choices;
 }
 
@@ -98,7 +100,7 @@ export function studyTechnique(actor: Cultivator, world: WorldState, techniqueId
   if (!techniqueId || !actor.alive) return null;
   const option = availableTechniques(actor, world).find((entry) => entry.id === techniqueId);
   if (!option) return null;
-  if (!registerScriptureOriginal(world, option.scripture, option.source, actor.locationId,
+  if (option.source!=='fire_recovery'&&!registerScriptureOriginal(world, option.scripture, option.source, actor.locationId,
     option.source === 'pavilion' ? actor.sectId || undefined : undefined)) return null;
   delete actor.activeEdition;
   actor.technique = { ...option.scripture };
@@ -109,9 +111,12 @@ export function studyTechnique(actor: Cultivator, world: WorldState, techniqueId
     const location = world.locations.find((item) => item.id === actor.locationId);
     if (location) location.inheritanceScrolls = location.inheritanceScrolls.filter((item) => item.id !== techniqueId);
   }
-  const description = `${actor.name}从${option.source === 'inheritance' ? '遗落传承' : '本宗藏经阁'}研习【${option.scripture.name}】。`;
+  const recovered=option.source==='fire_recovery';
+  const from=recovered?'亲手救藏的一册':option.source==='inheritance'?'遗落传承':'本宗藏经阁';
+  const description = `${actor.name}从${from}研习【${option.scripture.name}】。`;
   recordMemory(actor, world.tick, description, 7, 'cultivation', 3);
-  return scriptureEvent(world, actor, 'study-technique', `${actor.name}研习新法`, description);
+  const event=scriptureEvent(world, actor, recovered?'study-technique-fire':'study-technique', `${actor.name}研习新法`, description);
+  return recovered?{...event,witnessScope:'participants'}:event;
 }
 
 export function dropInheritance(actor: Cultivator, world: WorldState): void {

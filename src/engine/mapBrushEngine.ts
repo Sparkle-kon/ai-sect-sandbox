@@ -1,3 +1,4 @@
+import { openPavilionFire } from './pavilionFire';
 import { resolveCalamityArrayProtection } from './calamityArray';
 import {reconcileAscensionInterruptions} from './ascensionEngine';
 import { interruptStoryChoicesOnDeath } from './interruptedStoryChoices';
@@ -108,6 +109,7 @@ export function applyMapBrush(prev: WorldState, kind: GodBrushKind, points: MapP
     const sites = kind === 'paint_vein' ? paintVein(world, tile) : nodesIn(world, tile.id);
     if (kind === 'paint_vein') rebaselineTerrainPaint(world, tile.id);
     let hits: Hit[] = [];
+    let strike:MapHazard|undefined;
     if (kind !== 'paint_vein') {
       const prior = world.mapHazards.find((item) => item.tileId === tile.id && item.kind === kind && world.tick < item.expiresTick);
       const intensity = Math.min(3, (prior?.intensity ?? 0) + 1);
@@ -116,6 +118,7 @@ export function applyMapBrush(prev: WorldState, kind: GodBrushKind, points: MapP
       world.mapHazards = world.mapHazards.filter((item) => item.tileId !== tile.id || item.kind !== kind);
       world.mapHazards.push(hazard);
       if (kind === 'meteor') {
+        strike=hazard;
         tile.spiritQi = clamp(tile.spiritQi - 24, 5, 100);
         tile.biome = '荒漠';
         recordTerrainMeteor(world, tile.id, beforeTerrain);
@@ -126,12 +129,15 @@ export function applyMapBrush(prev: WorldState, kind: GodBrushKind, points: MapP
     const locationId = sites[0]?.id;
     const details = kind === 'paint_vein' ? `灵气上升至${tile.spiritQi}。` :
       kind === 'meteor' ? `地脉灵气下降，${hits.length}名修士受波及。` : '灾变将持续数轮，进入受影响地块的修士也会遭遇。';
-    brushEvents.push({
+    const event:WorldEvent={
       id: `evt-brush-${sequence}-${tile.id}`, tick: world.tick, year: world.year, month: world.month,
       title: BRUSH_TITLES[kind], description: `地块(${tile.col + 1}, ${tile.row + 1})：${details}`,
       category: hits.some(({ cultivatorId }) => world.cultivators.some((person) => person.id === cultivatorId && !person.alive)) ? 'death' : 'heavenly',
       actorIds: hits.map(({ cultivatorId }) => cultivatorId), locationId, ...(hits.length ? { damage: hits } : {}),
-    });
+    };
+    brushEvents.push(event);
+    const fire=strike&&openPavilionFire(world,strike,event);
+    if(fire)brushEvents.push(fire);
   }
   brushEvents.push(...advanceSanctuaries(world), ...advanceResearch(world), ...advancePilgrimages(world), ...reconcileCourierDeaths(world), ...reconcileDisasterShelterDeaths(world), ...advanceHouseholds(world), ...advanceWorkshops(world), ...advanceRelicExhibits(world), ...advanceProbation(world), ...advanceToolLoans(world), ...advanceEstates(world));
   reconcileRelicCustody(world);

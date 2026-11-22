@@ -1,3 +1,5 @@
+import { advancePavilionFires, availablePavilionFireActions, isPrivatePavilionFireEvent, resolvePavilionFireAction } from './pavilionFire';
+import { exactPavilionFireDecision } from './pavilionFireCognition';
 import { availableCampaignAssemblyActions } from './campaignAssembly';
 import { exactCampaignAssemblyDecision } from './campaignAssemblyCognition';
 import { availableWitnessInquiryActions, isPrivateWitnessInquiryEvent, resolveWitnessInquiry } from './witnessInquiry';
@@ -853,6 +855,11 @@ export function applyCultivatorBrainDecision(
     case 'GRAND_SIEGE_HERO':
       // The native attack round, not this individual turn, owns actual array and resource settlement.
       return null;
+    case 'PAVILION_FIRE': {
+      if(modelInput&&activeAvatar(world)===cultivator)return null;
+      const exact=exactPavilionFireDecision(decision,availablePavilionFireActions(cultivator,world,world.tick),true);
+      return exact?resolvePavilionFireAction(world,cultivator,exact):null;
+    }
     case 'WITNESS_INQUIRY': {
       if (modelInput && activeAvatar(world)===cultivator) return null;
       const exact=exactWitnessInquiryDecision(decision,availableWitnessInquiryActions(cultivator,world,world.tick),true);
@@ -1588,6 +1595,14 @@ export function advanceWorldTick(
         modelOrdinaryReplaced=true;
       }
     }
+    if(modelProposal?.chosenAction==='PAVILION_FIRE'&&!avatarDecision){
+      const before=prevState.cultivators.find(row=>row.id===cultivator.id);
+      if(!before||activeAvatar(prevState)===before||!exactPavilionFireDecision(modelProposal,
+        availablePavilionFireActions(before,prevState,nextState.tick),true)){
+        provided=undefined;
+        modelOrdinaryReplaced=true;
+      }
+    }
     if (modelProposal?.chosenAction === 'WITNESS_INQUIRY' && !avatarDecision) {
       const before=prevState.cultivators.find(row=>row.id===cultivator.id);
       if(!before||activeAvatar(prevState)===before||
@@ -1918,7 +1933,7 @@ export function advanceWorldTick(
         if (receipt && evt.id === `evt-${receipt.id}`) recordReliefCompetition(nextState, receipt);
       }
       newEvents.push(evt);
-      if(!isBattlefieldRevisitEvent(evt)&&!isPrivateCalamityArrayEvent(evt)&&!isTaughtSwordPracticeEvent(evt)&&!isPrivateSchoolFormEvent(evt)&&!isPrivateWitnessInquiryEvent(evt))witnessEvent(nextState, evt);
+      if(!isBattlefieldRevisitEvent(evt)&&!isPrivateCalamityArrayEvent(evt)&&!isTaughtSwordPracticeEvent(evt)&&!isPrivateSchoolFormEvent(evt)&&!isPrivateWitnessInquiryEvent(evt)&&!isPrivatePavilionFireEvent(evt)&&!(evt.witnessScope==='participants'&&evt.id.endsWith('-study-technique-fire')))witnessEvent(nextState, evt);
       if(decision.chosenAction==='SOCIALIZE'&&cultivator.currentAction==='SOCIALIZE'){
         const after=recordTournamentBanquetAfterTalk(nextState,evt);
         if(after&&!newEvents.some(row=>row.id===after.id))newEvents.push(after);
@@ -1938,6 +1953,10 @@ export function advanceWorldTick(
     if (yearly) cultivator.reflections = synthesizeReflections(cultivator, nextState.tick);
   }
 
+  for(const event of advancePavilionFires(nextState)){
+    newEvents.push(event);
+    if(event.witnessScope===undefined)witnessEvent(nextState,event);
+  }
   advanceUpperArrayFieldTrade(nextState);
   for(const event of [...advanceFrontierTrade(nextState),...advanceFrontierPortTrade(nextState),...advanceFrontierDrylandTrade(nextState)]){
     newEvents.push(event);
