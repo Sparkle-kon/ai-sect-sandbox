@@ -1,17 +1,11 @@
-import {useAscensionChime} from './components/useAscensionChime';
-import {useAscensionControls} from './components/useAscensionControls';
-import {useCultivationClanControls} from './components/useCultivationClanControls';
-import {useDaoPathControls} from './components/useDaoPathControls';
-import {useHeavenlyAlchemyControls} from './components/useHeavenlyAlchemyControls';
+import {useCultivatorGuidancePanels} from './components/useCultivatorGuidancePanels';
+import {CultivatorInspectorBridge} from './components/CultivatorInspectorBridge';
 import {HighDramaPresetPicker} from './components/HighDramaPresetPicker';
 import {useHighDramaOpening} from './components/useHighDramaOpening';
 import {useRingAudienceControls} from './components/useRingAudienceControls';
-import {useDramaticBondRead} from './components/useDramaticBondRead';
-import {GrandSiegeMapScene} from './components/GrandSiegeMapScene';
-import {availableWaypostMealActions} from './engine/waypostMealEngine';
-import type {WaypostMealControls} from './components/WaypostMealRead';
+import {DeferredGrandSiegeMapScene} from './components/DeferredGrandSiegeMapScene';
 import {useAuthoredEraLaunch} from './components/useAuthoredEraLaunch';
-import { activeAvatar, canQueueAvatarSalvage, queueAvatarWaypostMeal } from './engine/avatarEngine';
+import { activeAvatar } from './engine/avatarEngine';
 import { StoryFirstHome } from './components/StoryFirstHome';
 import {useFeaturedStoryDecision} from './components/useFeaturedStoryDecision';
 import { PlayerStoryEntry } from './components/PlayerStoryEntry';
@@ -63,9 +57,8 @@ import type {WorldPulseFocusRequest} from './components/mapPulseFocus';
 import {applyScopedMapEntityIntervention,type MapEntityPopoverBinding} from './components/mapEntityPopoverWrite';
 import type {MapEntityAction} from './components/mapEntityPopoverModel';
 import {createTerrainMapView} from './components/terrainMapView';
-import { possessAvatar, queueAvatarOrder, queueAvatarSalvage } from './engine/avatarEngine';
+import { possessAvatar, queueAvatarOrder } from './engine/avatarEngine';
 import {projectFrontierSupplyLinks} from './engine/frontierSupplyLinks';
-import type { ArtifactSalvageControls } from './components/ArtifactPanel';
 import { resolveAvatarSnapshot } from './engine/avatarRuntime';
 import { CHRONICLE_FOCUS_UNAVAILABLE, createChronicleFocusResolver } from './engine/chronicleFocusEngine';
 import type { ChronicleFocusRequest } from './engine/chronicleFocusEngine';
@@ -73,7 +66,6 @@ import type { ChronicleCategoryFilter, ChronicleFeedPosition, ChronicleFeedRetur
 import type { ChronicleReadingContext } from './engine/chronicleReadingMark';
 import { visibleCausalChronicle } from './engine/chronicleCausalityEngine';
 
-const AgentInspector = React.lazy(async () => ({ default: (await import('./components/AgentInspector')).AgentInspector }));
 const WorldMapCanvas = React.lazy(async () => ({ default: (await import('./components/WorldMapCanvas')).WorldMapCanvas }));
 const MentorshipPanel = React.lazy(async () => ({ default: (await import('./components/MentorshipPanel')).MentorshipPanel }));
 const ApprenticeCohortPanel = React.lazy(async () => ({ default: (await import('./components/ApprenticeCohortPanel')).ApprenticeCohortPanel }));
@@ -305,11 +297,6 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
       projectEarnedChronicleLead(visibleWorld,chronicleScenes,visibleWorld.tick) : undefined,
     [showingChronicle,visibleWorld,chronicleScenes]);
   const selectedCultivator = resolveWorkspaceActor(visibleWorld, selectedCultivatorId);
-  const heavenlyAlchemyControls=useHeavenlyAlchemyControls(simulation,selectedCultivator);
-  const daoPathControls=useDaoPathControls(simulation,selectedCultivator);
-  const clanControls=useCultivationClanControls(simulation,selectedCultivator);
-  const ascensionControls=useAscensionControls(simulation,selectedCultivator);
-  const onListenAscension=useAscensionChime(simulation,selectedCultivator);
   const campaignStopOptions=useMemo(()=>readingChronicle&&campaign.available&&!preview?
     visibleCampaignStopOptions(visibleWorld,selectedCultivator):[],[readingChronicle,campaign.available,preview,visibleWorld,selectedCultivator]);
   const campaignSelectedStop=campaign.active&&campaign.record?.stopCondition?{
@@ -317,9 +304,10 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   }:undefined;
   const aliveCount = visibleWorld.cultivators.filter((c) => c.alive).length;
   const activeActorId = selectedCultivator?.id ?? null;
-  const bonds=useDramaticBondRead(visibleWorld,selectedCultivator,mapFog,{
-    story:cockpitOpen||!dashboardOpen&&!storyEntryOpen,dossier:cockpitOpen||dashboardOpen&&workspace==='people',
-    allowPersonal:!preview&&visibleWorld===world,
+  const guidance=useCultivatorGuidancePanels(simulation,selectedCultivator,{
+    fog:mapFog,story:cockpitOpen||!dashboardOpen&&!storyEntryOpen,dossier:cockpitOpen||dashboardOpen&&workspace==='people',
+    showPilgrimage:dashboardOpen&&workspace==='people'&&foldPreferences.sections.people==='pilgrimage',
+    onClearAvatarNotice:()=>setAvatarNotice(undefined),
   });
   const {card:featuredStoryCard,pending:storyDecisionPending}=useFeaturedStoryDecision(simulation);
   const toggleStoryAutoplay=()=>{if(!storyDecisionPending||isRunning)toggleAutoplay();};
@@ -403,47 +391,12 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
     if (trail) backRef.current?.focus({ preventScroll: true });
   }, [trail]);
   const characterLocation = visibleWorld.locations.find((site) => site.id === selectedCultivator?.locationId);
-  const queueSelectedSalvage: ArtifactSalvageControls['onConfirm'] = (command, stamp) => {
-    if (browsing.current || stepInFlight.current || fastForwardRun.current ||
-        history.current.activeBranchId !== timeline.activeBranchId || stamp.scopeKey !== viewScopeKey ||
-        stamp.actorId !== activeActorId || stamp.world !== authority.current) return false;
-    const next = updateWorld((current) => {
-      const candidate = structuredClone(current);
-      return queueAvatarSalvage(candidate, stamp.actorId, command.targetArtifactId, command.targetLocationId) ? candidate : current;
-    });
-    if (next === stamp.world) return false;
-    setIsRunning(false);
-    setAvatarNotice(undefined);
-    return true;
-  };
   const {immersive,atlasExtras}=useCivicRealmViews({
     simulation,selectedCultivator,cockpitOpen,dashboardOpen,workspace,onSelectCultivator:setSelectedCultivatorId,
     onClearAvatarNotice:()=>setAvatarNotice(undefined),
   });
-  const journeyContextVersion=saveContextVersion.current;
-  const mealAvatar=!preview&&dashboardOpen&&workspace==='people'&&foldPreferences.sections.people==='pilgrimage'&&selectedCultivator&&
-    activeAvatar(world)?.id===selectedCultivator.id?selectedCultivator:undefined;
-  const waypostMealControls:WaypostMealControls|undefined=mealAvatar?{
-    scopeKey:`${viewScopeKey}:${mealAvatar.id}`,revisionKey:world,disabled:isStepping||fastForwardLocked,
-    choices:canQueueAvatarSalvage(world,mealAvatar.id)?availableWaypostMealActions(mealAvatar,world,world.tick+1):[],
-    pending:world.playerAvatar.pendingOrder?.action==='WAYPOST_MEAL'?world.playerAvatar.pendingOrder:undefined,
-    onQueue:(choice,revision)=>{
-      if(revision!==world||browsing.current||stepInFlight.current||fastForwardRun.current||campaignGuard.current||
-        history.current!==timeline||authority.current!==world||saveContextVersion.current!==journeyContextVersion)return false;
-      const updated=updateWorld(current=>{
-        const clone=structuredClone(current);
-        return queueAvatarWaypostMeal(clone,mealAvatar.id,choice)?clone:current;
-      });
-      if(updated!==world)setIsRunning(false);
-      return updated!==world;
-    }
-  }:undefined;
-  const inspect = (workspaceSection: 'profile' | 'cultivation' | 'mind') => <React.Suspense fallback={<p role="status">载入修士档案…</p>}>
-    <AgentInspector world={visibleWorld} cultivator={selectedCultivator} heavenlyAlchemyControls={heavenlyAlchemyControls} daoPathControls={daoPathControls} clanControls={clanControls} ascensionControls={ascensionControls} onListenAscension={onListenAscension} onSelectCultivator={setSelectedCultivatorId}
-      workspaceSection={workspaceSection} allowPersonalThought={!preview&&visibleWorld===world}
-      publicBonds={workspaceSection==='profile'?bonds.publicArcs:undefined} personalBonds={workspaceSection==='profile'?bonds.personal:undefined}
-      artifactSalvage={{scopeKey:viewScopeKey,busy:isStepping||fastForwardLocked,readOnly:!!preview,onConfirm:queueSelectedSalvage}}/>
-  </React.Suspense>;
+  const inspect=(section:'profile'|'cultivation'|'mind')=><CultivatorInspectorBridge world={visibleWorld}
+    cultivator={selectedCultivator} onSelectCultivator={setSelectedCultivatorId} section={section} panels={guidance.inspector}/>;
   const openWorkspace = (next: WorkspaceId) => {
     if (workspace !== next) {
       setFocusTrail(undefined);
@@ -665,7 +618,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   const clearWorldPulse=(token:number)=>setPulseFocus(current=>current?.token===token?undefined:current);
   const pulseStrip=worldPulse&&<WorldPulseBar view={worldPulse} historical={Boolean(preview)}
     canFocus={!immersive} onFocusAlert={focusWorldPulse}/>;
-  if(cockpitOpen)return <PanoramicCockpitView world={visibleWorld} titleRef={cockpitHeading} exit={cockpitSwitch} statusStrip={pulseStrip} stageOverride={featuredStoryCard} subplot={bonds.subplot}
+  if(cockpitOpen)return <PanoramicCockpitView world={visibleWorld} titleRef={cockpitHeading} exit={cockpitSwitch} statusStrip={pulseStrip} stageOverride={featuredStoryCard} subplot={guidance.subplot}
     time={{historical:Boolean(preview),running:isRunning,busy:cockpitBusy||storyDecisionPending,onStep:()=>void handleStepTick(),
       onToggleAutoplay:toggleStoryAutoplay,onReturnLive:()=>handleTimelinePreview(null),onOpenTimeline:()=>{
         openWorkspace('chronicle');rememberFold('chronicle','timeline');setStoryEntryOpen(false);
@@ -678,7 +631,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
           fogEnabled={mapFog} onFogChange={setMapFog} pulseFocus={pulseFocus} pulseFocusActive={canInspectMap}
           onPulseFocusHandled={clearWorldPulse}
           onSelectCultivator={setSelectedCultivatorId} onBrushStroke={preview?undefined:handleBrushStroke}/>
-        <GrandSiegeMapScene world={visibleWorld} viewer={selectedCultivator} fog={mapFog} visible={!featuredStoryCard}/>
+        <DeferredGrandSiegeMapScene world={visibleWorld} viewer={selectedCultivator} fog={mapFog} visible={!featuredStoryCard}/>
       </React.Suspense>}
     inspector={<>{inspect('profile')}{inspect('mind')}</>}
     relationships={<React.Suspense fallback={<p role="status">载入关系图…</p>}>
@@ -696,7 +649,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
       revision={world} busy={isStepping||fastForwardLocked} onBack={()=>setStoryEntryOpen(false)} onTools={openDashboard}
       openings={<HighDramaPresetPicker scopeKey={viewScopeKey} revision={world} disabled={dramaticOpening.disabled} onStart={dramaticOpening.start}/>}
       onFollow={storyHome.lead?followCurrentLead:undefined} onEnter={enterCurrentLead} onOrder={orderCurrentStoryAvatar} />:
-      <StoryFirstHome scene={storyHome.scene} subplot={bonds.subplot} leadName={storyHome.lead?.name} playerName={activeAvatar(world)?.name}
+      <StoryFirstHome scene={storyHome.scene} subplot={guidance.subplot} leadName={storyHome.lead?.name} playerName={activeAvatar(world)?.name}
         busy={isStepping} moreRef={storyMoreRef} notice={storyNotice} calendar={storyHome.calendar} opening={dramaticOpening.opening}
         outcome={storyOutcome?.world===world?storyOutcome.text:undefined} onContinue={advanceStory} onMore={openStoryEntry} />)}
   </main>;
@@ -761,7 +714,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
               className={`${action} bg-slate-800 text-emerald-100 sm:hidden`}><Play aria-hidden="true" className="h-4 w-4" />自动推演</button> : undefined}
             chronicleFocus={trail?.request.kind === 'site' && focusTarget ? trail : undefined} onChronicleFocusUnavailable={reportMapFocusFailure}
             onSelectCultivator={setSelectedCultivatorId} onBrushStroke={preview ? undefined : handleBrushStroke} />
-            <GrandSiegeMapScene world={visibleWorld} viewer={selectedCultivator} fog={mapFog}
+            <DeferredGrandSiegeMapScene world={visibleWorld} viewer={selectedCultivator} fog={mapFog}
               visible={workspace==='map'&&!featuredStoryCard}/>
           </React.Suspense></div>
           <aside className={`${panel} min-w-0`} aria-label="当前修士">
@@ -804,7 +757,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
             </div> },
             ...(workspace === 'people' && selectedCultivator && visiblePilgrimages(visibleWorld, selectedCultivator).length > 0 ? [{
               id: 'pilgrimage', label: '朝山巡礼与共愿', content: <React.Suspense fallback={<p role="status">载入巡礼记录…</p>}>
-                <PilgrimagePanel world={visibleWorld} cultivator={selectedCultivator} mealControls={waypostMealControls} />
+                <PilgrimagePanel world={visibleWorld} cultivator={selectedCultivator} mealControls={guidance.waypostMealControls} />
               </React.Suspense>,
             }] : []),
             { id: 'trace', label: '天机溯因与单回合复盘', content: <React.Suspense fallback={<p role="status">载入决策纪要…</p>}>

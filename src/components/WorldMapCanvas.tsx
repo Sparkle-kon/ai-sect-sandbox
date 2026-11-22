@@ -51,7 +51,7 @@ import { buildMapPresentation, MAP_EFFECT_LABELS, MOTION_MS } from './mapPresent
 import {visibleMapFlyingSwords} from './mapFlyingSwordView';
 import {buildMapTravelTrajectory} from './mapTravelTrajectory';
 import {drawMapTrajectoryVfx} from './trajectoryVfxDraw';
-import {drawFlights} from './mapPresentationDraw';
+import {compileCanvasFlights} from './mapPresentationDraw';
 import {buildMapCombatVfxPlan} from './mapCombatVfxView';
 import {drawMapCombatVfx} from './mapCombatVfxDraw';
 import {mapBattlefieldSummary} from './mapBattlefieldView';
@@ -431,6 +431,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const selectedBadgeFact=selectedCultivatorId?actorBadgeFacts.get(selectedCultivatorId):undefined;
   // The canvas, keyboard index, and text summary all use the same authorized combat evidence.
   const presentation=useMemo(()=>({routes:motionSnapshot.routes,effects:combatVfx.effects}),[motionSnapshot,combatVfx]);
+  const canvasFlights=useMemo(()=>compileCanvasFlights(actorPositions,presentation.routes,actor=>flightAlignments.get(actor.sectId)),
+    [actorPositions,presentation.routes,flightAlignments]);
   const routeWarningMarks=useMemo(()=>world.routeWarnings.notices.length ? paintedRouteWarningGeometry(world,
     visiblePublicRouteWarnings(world,mapView.current ??
       (selected?.alive ? currentVisibleTileIds(world,selected) : new Set<string>()))) : [],[world,mapView.current,selected]);
@@ -919,9 +921,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           if(daoMarks.length)drawDaoIntentMapVfx(ctx,daoMarks,elapsed,animate,logicalPerCssPixel);
           if(alchemyMarks.length)drawHeavenlyAlchemyMapVfx(ctx,alchemyMarks,elapsed,animate,logicalPerCssPixel);
           if(letters.length||travel.markers.length)drawMapTrajectoryVfx(ctx,letters,travel.markers,elapsed,animate,logicalPerCssPixel);
-          return presentation.routes.size
-            ?drawFlights(ctx,actorPositions,presentation.routes,elapsed,animate,actor=>flightAlignments.get(actor.sectId))
-            :actorPositions;
+          return canvasFlights.draw(ctx,elapsed,animate);
         } finally {ctx.restore();}
       })();
       const markers = frameActors === actorPositions
@@ -1100,7 +1100,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener?.('change',stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, atlasDrawing, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, observedSalvageSites, localGranary, villageMapLabels, civicObservation, usedVillageSegments, furnaceShift, localPavilionDesk, localMemorial, localVillageFair, localStipend, localSeedCulture, localToolLoans, localAlignedWeather, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope, scenicRelief, qiFlow, inspectionEnabled, letters, travel, flightAlignments, combatVfx, actorBadgeFacts, hasBadgeQuote, domes, strategic, arenaMarks, dungeonMark, alchemyMarks, daoMarks, auctionMark, realmHalos, clanCeremonies, ascensionMarks]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, atlasDrawing, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, observedSalvageSites, localGranary, villageMapLabels, civicObservation, usedVillageSegments, furnaceShift, localPavilionDesk, localMemorial, localVillageFair, localStipend, localSeedCulture, localToolLoans, localAlignedWeather, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope, scenicRelief, qiFlow, inspectionEnabled, letters, travel, canvasFlights, combatVfx, actorBadgeFacts, hasBadgeQuote, domes, strategic, arenaMarks, dungeonMark, alchemyMarks, daoMarks, auctionMark, realmHalos, clanCeremonies, ascensionMarks]);
 
   useEffect(() => {
     const canvas = canvasRef.current;

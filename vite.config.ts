@@ -105,7 +105,8 @@ export default defineConfig({
           'dramatic-bond-proof': ['./src/types/dramaticBond.ts', './src/engine/dramaticBondTerms.ts', './src/engine/storageDramaticBondValidation.ts'],
           'dramatic-bond-story': ['./src/engine/dramaticBondEngine.ts', './src/components/DramaticBondRead.tsx',
             './src/components/useDramaticBondRead.ts', './src/engine/ringAudienceEngine.ts', './src/engine/ringAudienceDialogue.ts',
-            './src/components/RingAudiencePanel.tsx', './src/components/useRingAudienceControls.ts'],
+            './src/components/RingAudiencePanel.tsx', './src/components/useRingAudienceControls.ts',
+            './src/components/HighDramaPresetPicker.tsx','./src/components/PlayerStoryEntry.tsx','./src/components/storyPlayerController.ts','./src/components/useHighDramaOpening.ts'],
           // Truce and storage need the typed siege proof, not the active combat graph.
           'grand-siege-proof': ['./src/engine/grandSiegeProof.ts', './src/engine/storageGrandSiegeValidation.ts', './src/types/grandSiege.ts'],
           // The game seed depends only on trace state; keep the optional replay rules separate.
@@ -120,7 +121,6 @@ export default defineConfig({
           'journey-rules': ['./src/engine/terrainEngine.ts', './src/engine/simulationRegionGeometry.ts', './src/engine/mapMotionEngine.ts', './src/engine/roadEngine.ts',
             './src/engine/sealedCourierEngine.ts', './src/engine/escortEngine.ts', './src/engine/pilgrimageEngine.ts', './src/engine/expeditionRescueEngine.ts',
             './src/engine/boundaryReliefEngine.ts','./src/engine/routeWarningProof.ts','./src/engine/routeWarningEngine.ts'],
-          'story-opening-ui': ['./src/components/HighDramaPresetPicker.tsx','./src/components/PlayerStoryEntry.tsx','./src/components/storyPlayerController.ts','./src/components/useHighDramaOpening.ts'],
           'workspace-shell': ['./src/components/SandboxWorkspace.tsx', './src/components/workspacePreferences.ts'],
           'map-controls': ['./src/components/mapCamera.ts', './src/components/mapKeyboard.ts', './src/components/mapActorClusters.ts',
             './src/components/mapBrushView.ts', './src/components/mapTouchGesture.ts'],

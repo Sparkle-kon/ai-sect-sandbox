@@ -1,5 +1,5 @@
 import type {Cultivator,Sect} from '../types/world';
-import { MAP_EFFECT_LABELS, MOTION_MS, sampleFlight } from './mapPresentationView';
+import { MAP_EFFECT_LABELS, MOTION_MS } from './mapPresentationView';
 import type { buildMapPresentation, Point } from './mapPresentationView';
 import type { mapActorPositions } from './terrainMapView';
 
@@ -13,7 +13,7 @@ function line(ctx: CanvasRenderingContext2D, points: Point[], color: string, wid
   ctx.lineCap = 'round';
   ctx.beginPath();
   ctx.moveTo(points[0].x, points[0].y);
-  for (const point of points.slice(1)) ctx.lineTo(point.x, point.y);
+  for (let i=1;i<points.length;i++) ctx.lineTo(points[i].x,points[i].y);
   ctx.stroke();
 }
 
@@ -28,14 +28,13 @@ const flightInks={
   中立:{glow:'#cbd5e1',wash:'rgba(148,163,184,.40)',spine:'#dbeafe',blade:'#f8fafc',spark:'#e2e8f0'},
 } as const;
 
-function flightTail(behind:readonly Point[]):Point[]{
-  const tip=behind.at(-1);
-  if(!tip)return [];
+type FlightRoute = { points: Point[]; lengths: number[]; total: number };
+function flightTail(route:FlightRoute,tip:Point,segment:number):Point[]{
   const suffix=[tip];
   let distance=MAX_TAIL_UNITS,head=tip;
-  for(let i=behind.length-2;i>=0&&distance>0&&suffix.length<MAX_TAIL_POINTS;i--){
-    const previous=behind[i];
-    const length=Math.hypot(previous.x-head.x,previous.y-head.y);
+  for(let i=segment;i>=0&&distance>0&&suffix.length<MAX_TAIL_POINTS;i--){
+    const previous=route.points[i];
+    const length=i===segment?Math.hypot(previous.x-head.x,previous.y-head.y):route.lengths[i];
     if(length===0)continue;
     const fraction=Math.min(1,distance/length);
     suffix.push(fraction===1?previous:{x:head.x+(previous.x-head.x)*fraction,y:head.y+(previous.y-head.y)*fraction});
@@ -43,6 +42,48 @@ function flightTail(behind:readonly Point[]):Point[]{
     head=previous;
   }
   return suffix.reverse();
+}
+
+export function compileCanvasFlights(positions:Position[],routes:Presentation['routes'],alignmentOf?:FlightAlignmentReader){
+  const moving=routes.size?positions.flatMap((position,index)=>{
+    const route=routes.get(position.actor.id);
+    if(!route || route.points.length===0)return [];
+    const {points}=route;
+    const lengths=points.slice(1).map((point,i)=>Math.hypot(point.x-points[i].x,point.y-points[i].y));
+    return [{index,actor:position.actor,alignment:alignmentOf?.(position.actor)??'中立' as const,
+      route:{points,lengths,total:lengths.reduce((sum,length)=>sum+length,0)}}];
+  }):[];
+  // Borrowed animation buffer: only moving entries are replaced. Previous marker points
+  // stay immutable so paint and hit-testing share the exact last painted snapshot.
+  const frame=moving.length?positions.slice():positions;
+  return {movingCount:moving.length,draw(ctx:CanvasRenderingContext2D,elapsed:number,animate:boolean):Position[]{
+    if(!animate||elapsed>=FLIGHT_MS||!moving.length)return positions;
+    const progress=Math.max(0,elapsed/FLIGHT_MS);
+    const smoothed=progress*progress*(3-2*progress);
+    ctx.save();
+    try{
+      for(const {index,actor,alignment,route} of moving){
+        let distance=smoothed*route.total,segment=0;
+        while(segment<route.lengths.length&&!(distance<=route.lengths[segment])){
+          distance-=route.lengths[segment++];
+        }
+        const start=route.points[segment],end=route.points[segment+1];
+        const fraction=route.lengths[segment]?distance/route.lengths[segment]:0;
+        const point=end?{x:start.x+(end.x-start.x)*fraction,y:start.y+(end.y-start.y)*fraction}:start;
+        const tail=flightTail(route,point,Math.min(segment,route.points.length-1));
+        if(alignmentOf)drawSwordWake(ctx,tail,flightInks[alignment],alignment,progress);
+        else{
+          ctx.shadowColor='#67e8f9';
+          ctx.shadowBlur=11;
+          line(ctx,tail,'rgba(103,232,249,0.32)',5);
+          ctx.shadowBlur=4;
+          line(ctx,tail,'#d0f7ff',1.4);
+        }
+        frame[index]={actor,...point};
+      }
+    }finally{ctx.restore();}
+    return frame;
+  }};
 }
 
 function drawSwordWake(ctx:CanvasRenderingContext2D,tail:Point[],ink:typeof flightInks[FlightAlignment],
@@ -77,30 +118,8 @@ export function drawFlights(
   ctx: CanvasRenderingContext2D, positions: Position[], routes: Presentation['routes'], elapsed: number, animate: boolean,
   alignmentOf?:FlightAlignmentReader,
 ): Position[] {
-  if (!animate || elapsed >= FLIGHT_MS) return positions;
-  const progress = Math.max(0, elapsed / FLIGHT_MS);
-  const smoothed = progress * progress * (3 - 2 * progress);
-  ctx.save();
-  const frame = positions.map((position) => {
-    const route = routes.get(position.actor.id);
-    if (!route) return position;
-    const { point, behind } = sampleFlight(route.points, smoothed);
-    const tail=flightTail(behind);
-    if(alignmentOf){
-      const alignment=alignmentOf(position.actor)??'中立';
-      drawSwordWake(ctx,tail,flightInks[alignment],alignment,progress);
-    }else{
-      // Old callers retain the cool two-stroke look and all static/reduced-motion semantics.
-      ctx.shadowColor = '#67e8f9';
-      ctx.shadowBlur = 11;
-      line(ctx, tail, 'rgba(103,232,249,0.32)', 5);
-      ctx.shadowBlur = 4;
-      line(ctx, tail, '#d0f7ff', 1.4);
-    }
-    return { actor: position.actor, ...point };
-  });
-  ctx.restore();
-  return frame;
+  if(!animate||elapsed>=FLIGHT_MS)return positions;
+  return compileCanvasFlights(positions,routes,alignmentOf).draw(ctx,elapsed,animate);
 }
 
 export function drawMapEffects(

@@ -1,11 +1,5 @@
 import {onLowerPlane} from '../engine/upperPassageIsolation';
-import {activeDanxiaMedicineEscort,danxiaMedicineCheckpoint,danxiaMedicineParties} from '../engine/danxiaMedicineTerms';
-import { courierCheckpoint } from '../engine/sealedCourierEngine';
-import { pilgrimageCheckpoint } from '../engine/pilgrimageEngine';
-import { expeditionRescueCheckpoint } from '../engine/expeditionRescueCheckpoint';
-import { boundaryReliefCheckpoint } from '../engine/boundaryReliefCheckpoint';
-import {disasterShelterCheckpoint} from '../engine/disasterShelterCheckpoint';
-import {canSeeMarketFreightCheckpoint,marketFreightCheckpoint} from '../engine/marketFreightCheckpoint';
+import { projectMapActorsAtCheckpoints } from './mapActorCheckpointProjection';
 import type { Cultivator, LocationNode, MapPoint, MapTile, TerrainBiome, WorldState } from '../types/world';
 import { currentVisibleTileIds, terrainTileAt } from '../engine/terrainEngine';
 import { canSeeOccasion, canSeeOccasionLocation } from '../engine/expeditionOmenEngine';
@@ -39,45 +33,10 @@ export function createTerrainMapView(world: WorldState, viewer: Cultivator | und
   const seenLocations = (above ? [] : world.locations).filter(({ id }) => !hiddenGates.has(id) && (!known || known.has(locationTile.get(id)?.id ?? '')));
   const visibleOpenOccasions = world.occasions.filter(occasion => isOpenOccasion(occasion) &&
     isCurrentLocation(occasion.locationId) && canSeeOccasion(world, viewer, occasion));
-  const trailPositions = new Map<string, MapPoint>();
-  const extractionPositions = new Map<string, MapPoint>();
-  const boundaryPositions = new Map<string, MapPoint>();
-  const guardedTravelTiles = world.expeditionRescues.requests.some(({ status, pathIndex }) =>
-    status === 'extracting' || status === 'interrupted' && pathIndex > 0) ||
-    world.escorts.contracts.some(row=>row.status==='active'&&row.freight?.dispatch) ||
-    world.disasterShelter?.cases.some(({status})=>status==='outbound'||status==='returning'||status==='stranded') ||
-    world.boundaryReliefs.cases.some(({ status }) => status === 'travelling' || status === 'returning')
-    ? (current ?? (viewer?.alive ? currentVisibleTileIds(world, viewer) : new Set<string>())) : undefined;
-  const liveActors = world.cultivators.filter((actor) => {
-    if (above || !actor.alive || !onLowerPlane(actor) || hiddenGates.has(actor.locationId)) return false;
-    const medicinal=activeDanxiaMedicineEscort(world,actor);
-    if(medicinal){
-      if(!viewer||!world.cultivators.includes(viewer)||!danxiaMedicineParties(medicinal).includes(viewer.id))return false;
-      const point=danxiaMedicineCheckpoint(world,actor);
-      if(!point||(current&&!current.has(terrainTileAt(world,point.x,point.y)?.id??'')))return false;
-      trailPositions.set(actor.id,point);
-      return true;
-    }
-    const rescue = guardedTravelTiles && expeditionRescueCheckpoint(world, actor);
-    const relief = guardedTravelTiles && boundaryReliefCheckpoint(world, actor);
-    const shelter = disasterShelterCheckpoint(world,actor);
-    if (shelter && (!viewer || !world.cultivators.includes(viewer) ||
-      !world.disasterShelter?.cases.some(({guest,host,status})=>guest.actorId===actor.id &&
-        (status==='outbound'||status==='returning'||status==='stranded') && (guest.actorId===viewer.id||host.actorId===viewer.id)))) return false;
-    const freight=marketFreightCheckpoint(world,actor);
-    if(freight&&!canSeeMarketFreightCheckpoint(world,actor,viewer))return false;
-    const checkpoint = rescue ?? relief ?? shelter ?? freight ?? courierCheckpoint(world, actor) ?? pilgrimageCheckpoint(world, actor);
-    if (!checkpoint) return isCurrentLocation(actor.locationId);
-    const tiles = rescue || relief || shelter || freight ? guardedTravelTiles : current;
-    if (tiles && !tiles.has(terrainTileAt(world, checkpoint.x, checkpoint.y)?.id ?? '')) return false;
-    trailPositions.set(actor.id, checkpoint);
-    if (rescue) extractionPositions.set(actor.id, rescue);
-    if (relief) boundaryPositions.set(actor.id, relief);
-    return true;
-  });
+  const actors = projectMapActorsAtCheckpoints(world, { viewer, above, current, hiddenGates, isCurrentLocation });
   return {
     current, known, locationTile, tileState, isCurrentLocation, seenLocations, visibleOpenOccasions,
-    liveActors, trailPositions, extractionPositions, boundaryPositions,
+    ...actors,
   };
 }
 

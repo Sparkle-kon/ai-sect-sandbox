@@ -1,6 +1,6 @@
 import {describe,expect,it,vi} from 'vitest';
 import {createInitialWorld} from '../src/data/initialWorld';
-import {drawFlights} from '../src/components/mapPresentationDraw';
+import {compileCanvasFlights,drawFlights} from '../src/components/mapPresentationDraw';
 import {sampleFlight,type Point} from '../src/components/mapPresentationView';
 
 const pathPoints=Array.from({length:70},(_,i)=>({x:25+i*12,y:195}));
@@ -62,4 +62,28 @@ describe('native flight wake styling',()=>{
     expect(strokes).toHaveLength(2);
     expect(strokes.map(row=>row.color)).toContain('#d0f7ff');
   });
+  it('compiles only visible moving entries and reuses the frame without mutating earlier marker points',()=>{
+    const [actor]=createInitialWorld(518).cultivators;
+    const positions=Array.from({length:1200},(_,i)=>({actor:{...actor,id:`resident-${i}`},x:87,y:195}));
+    const traveler=positions[813], points=[{x:20,y:30},{x:20,y:30},{x:180,y:90},{x:10,y:180},traveler];
+    const routes=new Map([[traveler.actor.id,{...route,points}],['hidden-actor',route]]);
+    const styling=vi.fn(()=> '中立' as const);
+    const plan=compileCanvasFlights(positions,routes,styling);
+    const {ctx,strokes}=drawing();
+    expect(plan.movingCount).toBe(1);
+    const first=plan.draw(ctx,100,true),previousMarker=first[813];
+    const later=plan.draw(ctx,600,true);
+    expect(later).toBe(first);
+    expect(later[0]).toBe(positions[0]);
+    expect(later[813]).not.toBe(previousMarker);
+    for(const [elapsed,point] of [[100,previousMarker],[600,later[813]]] as const){
+      const p=elapsed/780;
+      expect(point).toEqual({actor:traveler.actor,...sampleFlight(points,p*p*(3-2*p)).point});
+    }
+    expect(plan.draw(ctx,780,true)).toBe(positions);
+    expect(plan.draw(ctx,170,false)).toBe(positions);
+    expect(styling).toHaveBeenCalledTimes(1);
+    expect(strokes.length).toBeGreaterThan(0);
+  });
+
 });
