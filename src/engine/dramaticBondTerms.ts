@@ -1,5 +1,5 @@
 import type {DramaticBondFact,DramaticBondFactKind} from '../types/dramaticBond';
-import type {LocationNode,WorldEvent,WorldState} from '../types/world';
+import type {ChronicleAnchor,LocationNode,WorldEvent,WorldState} from '../types/world';
 import {isScopedExpeditionGate} from './expeditionOmenTerms';
 import {matchesWitnessedPersonalScene} from './witnessedPersonalStory';
 
@@ -34,7 +34,8 @@ export function dramaticBondReadVenue(world:WorldState,fact:Pick<DramaticBondFac
 }
 export function dramaticBondEventKind(event:WorldEvent):DramaticBondFactKind|undefined{
   const [initiator,other]=event.actorIds;
-  if(event.witnessScope!==undefined||!event.locationId||event.actorIds.length!==2||!initiator||!other||initiator===other)return undefined;
+  if(event.witnessScope!==undefined||event.dialogueRedacted!==undefined||!event.locationId||
+    event.actorIds.length!==2||!initiator||!other||initiator===other)return undefined;
   if(event.category==='diplomacy'&&event.duelWinnerId===undefined){
     if(event.id===dramaticBondSourceId(event.tick,initiator,'encounter'))return 'encounter';
     if(event.id===dramaticBondSourceId(event.tick,initiator,'practice')&&event.dialogue?.kind==='dual_cultivation')return 'practice';
@@ -58,4 +59,23 @@ export function dramaticBondWitnessIds(world:WorldState,event:WorldEvent):string
   if(scenes.length!==1||!matchesWitnessedPersonalScene(scenes[0],event))return [];
   return [...new Set(scenes[0].witnessIds.filter(actorId=>!event.actorIds.includes(actorId)))]
     .sort(dramaticBondCompareIds).slice(0,DRAMATIC_BOND_WITNESSES_MAX);
+}
+
+
+/** Exact public practice mechanics retained after a confirmed export strips its original exchange. */
+export function matchesDramaticBondRedactedPractice(
+  world:WorldState,fact:DramaticBondFact,source:ChronicleAnchor|WorldEvent,archived=false,
+):boolean{
+  const [a,b]=fact.actorIds.map(id=>dramaticBondUnique(world.cultivators,id));
+  if(fact.kind!=='practice'||source.dialogue!==undefined||!a||!b||a.id===b.id||source.category!=='diplomacy'||
+    ('witnessScope' in source&&source.witnessScope!==undefined)||('duelWinnerId' in source&&source.duelWinnerId!==undefined)||
+    ('damage' in source&&source.damage!==undefined)||('daoIntents' in source&&source.daoIntents!==undefined)||
+    ('forbiddenArt' in source&&source.forbiddenArt!==undefined)||
+    source.id!==fact.sourceEventId||source.id!==dramaticBondSourceId(fact.tick,a.id,'practice')||
+    source.tick!==fact.tick||source.year!==fact.year||source.month!==fact.month||source.locationId!==fact.siteId||
+    source.actorIds.length!==2||source.actorIds[0]!==a.id||source.actorIds[1]!==b.id||fact.winnerId!==undefined||fact.fallenId!==undefined)
+    return false;
+  const expectedTitle=`合修周天：${a.name}与${b.name}`;
+  const archivedTitle=expectedTitle.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/gu,'').trim().slice(0,80);
+  return source.title===(archived?archivedTitle:expectedTitle)&&source.description==='两人自愿同修吐纳，修行进度各增 12，未逾约定。';
 }

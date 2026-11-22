@@ -73,12 +73,16 @@ export default defineConfig({
           // Both native settlement and portable scenario verification use the same small leaf proofs.
           'danxia-review-proof': ['./src/engine/danxiaSeasonTerms.ts','./src/engine/danxiaMedicineTerms.ts',
             './src/engine/danxiaShortageTerms.ts','./src/engine/settlementReliefTerms.ts'],
-          'chronicle-evidence': ['./src/engine/eraHistoryIndex.ts','./src/engine/campaignStopCondition.ts',
-            './src/engine/chronicleCausalityEngine.ts','./src/engine/chronicleFocusEngine.ts','./src/engine/witnessedPersonalStory.ts'],
+          'chronicle-evidence': ['./src/engine/chronicleCausalityEngine.ts','./src/engine/chronicleFocusEngine.ts'],
+          // Succession consumes native era and witness checks without pulling the chronology UI back into history.
+          'era-history-evidence': ['./src/engine/eraHistoryIndex.ts','./src/engine/campaignStopCondition.ts'],
+          'witnessed-scene-proof': ['./src/engine/witnessedPersonalStory.ts'],
+          'public-fact-policy': ['./src/engine/chronicleLead.ts'],
+          'share-redaction-terms': ['./src/engine/shareSaveRedactionText.ts'],
           'market-settlement': ['./src/engine/marketEngine.ts','./src/engine/caravanRestitutionEngine.ts'],
           'village-ecology': ['./src/engine/villageEvolutionEngine.ts','./src/engine/villageEvolutionTerms.ts'],
           'archive-rules': ['./src/engine/coldHistoryEngine.ts', './src/engine/memoryEngine.ts', './src/engine/scenarioObjectiveEngine.ts', './src/engine/chronicleScene.ts',
-            './src/engine/chronicleLead.ts', './src/engine/protagonistSuccession.ts', './src/engine/novelGenerator.ts',
+            './src/engine/protagonistSuccession.ts', './src/engine/novelGenerator.ts',
             './src/engine/publicDialogueProvenance.ts', './src/engine/chroniclePublicProse.ts'],
           // Private theatre selection and its save proof are shared by UI, native and storage.
           'heart-demon-rules': ['./src/engine/heartDemonEngine.ts', './src/engine/interruptedStoryChoices.ts',
@@ -94,6 +98,7 @@ export default defineConfig({
           'immortal-auction-proof': ['./src/types/immortalAuction.ts','./src/engine/immortalAuctionTerms.ts','./src/engine/storageImmortalAuctionValidation.ts'],
           'dao-path-proof': ['./src/types/daoPath.ts','./src/engine/daoPathTerms.ts','./src/engine/storageDaoPathValidation.ts'],
           'character-records-proof': ['./src/engine/storageWitnessedPersonalStoryValidation.ts','./src/engine/storageProtagonistValidation.ts'],
+          'story-encounter-proof': ['./src/engine/storageRoguelikeValidation.ts'],
           'protagonist-flight-proof': ['./src/types/protagonistFlight.ts','./src/engine/storageProtagonistFlightValidation.ts'],
           'heavenly-alchemy-proof': ['./src/types/heavenlyAlchemy.ts','./src/engine/heavenlyAlchemyTerms.ts','./src/engine/storageHeavenlyAlchemyValidation.ts'],
           'regional-care': ['./src/engine/disasterShelterEngine.ts','./src/engine/danxiaSeasonReviewEngine.ts'],

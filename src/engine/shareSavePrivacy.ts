@@ -2,6 +2,7 @@ import type { DialogueExchange,WorldState } from '../types/world';
 import { decodeWorldSave,encodeWorldSave,WORLD_SAVE_MAX_BYTES,worldSaveByteCount } from './storageEngine';
 
 import { SHARE_SAVE_REDACTED_TEXT } from './shareSaveRedactionText';
+import { matchesDramaticBondFact, matchesDramaticBondRedactedPractice } from './dramaticBondTerms';
 
 export { SHARE_SAVE_REDACTED_TEXT } from './shareSaveRedactionText';
 
@@ -80,7 +81,18 @@ export function inspectShareSavePrivacy(world:WorldState):ShareSavePrivacyInspec
     protectedCounts:Object.freeze(protectedCountsFor(world))});
 }
 
-function redactedClone(world:WorldState):WorldState{
+function nativePracticeRedactions(world:WorldState):ReadonlySet<string>{
+  const marks=new Set<string>();
+  for(const entry of world.events){
+    if(entry.dialogueRedacted!==undefined||entry.dialogue?.kind!=='dual_cultivation')continue;
+    const facts=world.dramaticBonds?.facts.filter(row=>row.sourceEventId===entry.id)??[];
+    if(facts.length===1&&matchesDramaticBondFact(facts[0],entry)&&
+      matchesDramaticBondRedactedPractice(world,facts[0],{...entry,dialogue:undefined}))marks.add(entry.id);
+  }
+  return marks;
+}
+
+function redactedClone(world:WorldState,practiceRedactions:ReadonlySet<string>):WorldState{
   const copy=structuredClone(world);
   copy.annotations.notes=[];
   for(const entry of copy.playerAvatar.transcript){
@@ -97,6 +109,7 @@ function redactedClone(world:WorldState):WorldState{
     for(const memory of [...actor.memories,...actor.coreMemories])if(memory.category==='whisper')memory.content=hiddenText(memory.content);
   }
   for(const entry of copy.events){
+    if(practiceRedactions.has(entry.id))entry.dialogueRedacted=true;
     delete entry.dialogue;
     if(entry.witnessScope==='participants'){
       entry.title=hiddenText(entry.title);entry.description=hiddenText(entry.description);
@@ -130,7 +143,7 @@ function isPrivateKind(a:unknown,b:unknown,key:string,value:string){
 }
 
 /** An independent protected-data comparison: only these exact structural fields may differ, never arbitrary text/IDs. */
-function allowedChange(path:readonly PathPart[],leftParent:unknown,rightParent:unknown){
+function allowedChange(path:readonly PathPart[],leftParent:unknown,rightParent:unknown,practiceRedactions:ReadonlySet<string>){
   const last=path.at(-1);
   if(pathIs(path,['annotations','notes']))return true;
   if((last==='message'||last==='reply'||last==='effect')&&pathIs(path,['playerAvatar','transcript',ITEM,last]))return true;
@@ -140,6 +153,9 @@ function allowedChange(path:readonly PathPart[],leftParent:unknown,rightParent:u
     pathIs(path,['cultivators',ITEM,'coreMemories',ITEM,last]))&&isPrivateKind(leftParent,rightParent,'category','whisper'))return true;
   if((last==='title'||last==='description')&&pathIs(path,['events',ITEM,last])&&
     isPrivateKind(leftParent,rightParent,'witnessScope','participants'))return true;
+  if(last==='dialogueRedacted'&&pathIs(path,['events',ITEM,last])&&object(leftParent)&&object(rightParent))
+    return typeof leftParent.id==='string'&&rightParent.id===leftParent.id&&practiceRedactions.has(leftParent.id)&&
+      leftParent.dialogueRedacted===undefined&&rightParent.dialogueRedacted===true&&rightParent.dialogue===undefined;
   if(last==='dialogue'&&(pathIs(path,['events',ITEM,last])||pathIs(path,['chronicleArchive','anchors',ITEM,last])||
     pathIs(path,['chronicleArchive','chapters',ITEM,'anchors',ITEM,last])||
     pathIs(path,['coldHistory','chapters',ITEM,'anchors',ITEM,last])))return true;
@@ -147,13 +163,13 @@ function allowedChange(path:readonly PathPart[],leftParent:unknown,rightParent:u
     pathIs(path,['councils',ITEM,'rounds',ITEM,'turns',ITEM,'text'])||
     pathIs(path,['councils',ITEM,'ballots',ITEM,'reason']);
 }
-function protectedEqual(a:unknown,b:unknown,path:readonly PathPart[]=[],leftParent?:unknown,rightParent?:unknown):boolean{
-  if(Object.is(a,b)||allowedChange(path,leftParent,rightParent))return true;
+function protectedEqual(a:unknown,b:unknown,practiceRedactions:ReadonlySet<string>,path:readonly PathPart[]=[],leftParent?:unknown,rightParent?:unknown):boolean{
+  if(Object.is(a,b)||allowedChange(path,leftParent,rightParent,practiceRedactions))return true;
   if(Array.isArray(a)||Array.isArray(b))return Array.isArray(a)&&Array.isArray(b)&&a.length===b.length&&
-    a.every((entry,index)=>protectedEqual(entry,b[index],[...path,index],a,b));
+    a.every((entry,index)=>protectedEqual(entry,b[index],practiceRedactions,[...path,index],a,b));
   if(!object(a)||!object(b))return false;
   return [...new Set([...Object.keys(a),...Object.keys(b)])].every(key=>protectedEqual(
-    Object.hasOwn(a,key)?a[key]:undefined,Object.hasOwn(b,key)?b[key]:undefined,[...path,key],a,b));
+    Object.hasOwn(a,key)?a[key]:undefined,Object.hasOwn(b,key)?b[key]:undefined,practiceRedactions,[...path,key],a,b));
 }
 
 function measureEvenIfInvalid(world:WorldState){
@@ -174,10 +190,11 @@ export function prepareShareSavePrivacy(world:WorldState):ShareSavePrivacyReview
   }
   const originalBytes=encoder().encode(originalJson).byteLength;
   try{
-    const redacted=redactedClone(original);
+    const practiceRedactions=nativePracticeRedactions(original);
+    const redacted=redactedClone(original,practiceRedactions);
     const copyJson=encodeWorldSave(redacted);
     const decoded=decodeWorldSave(copyJson);
-    if(!protectedEqual(original,decoded) || Object.values(countsFor(decoded)).some(amount=>amount!==0)){
+    if(!protectedEqual(original,decoded,practiceRedactions) || Object.values(countsFor(decoded)).some(amount=>amount!==0)){
       return Object.freeze({...common,originalBytes,redactedBytes:null,status:'invalid_copy',protectedStateVerified:false});
     }
     const copyBytes=encoder().encode(copyJson).byteLength;

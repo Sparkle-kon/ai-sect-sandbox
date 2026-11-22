@@ -1,3 +1,4 @@
+import type { ProtagonistHandoff } from './protagonistHandoff';
 import type { ProtagonistFlight } from './protagonistFlight';
 import type { AscensionMove, AscensionState } from './ascension';
 import type { ClanMove } from './cultivationClan';
@@ -533,6 +534,8 @@ export interface WorldEvent {
   actorIds: string[];
   witnessScope?: 'participants';
   dialogue?: DialogueExchange;
+  /** Confirmed-share serialization marker; never a witness for dialogue or a fresh relationship scene. */
+  dialogueRedacted?: true;
   duelWinnerId?: string;
   damage?: Array<{ cultivatorId: string; amount: number }>;
   locationId?: string;
@@ -1130,6 +1133,7 @@ export interface ProtagonistArc {
   actorId: string;
   openedTick: number;
   predecessorArcId?: string;
+  handoff?: ProtagonistHandoff;
   opening: ProtagonistEvidence[];
   support: ProtagonistEvidence[];
   endedTick?: number;

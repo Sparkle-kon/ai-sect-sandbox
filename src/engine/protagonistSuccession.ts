@@ -1,3 +1,5 @@
+import type { ProtagonistHandoff } from '../types/protagonistHandoff';
+import { certifyProtagonistHandoff, readProtagonistHandoff } from './protagonistHandoff';
 import type {ChronicleAnchor,ProtagonistArc,ProtagonistEvidence,ProtagonistSuccessionState,WorldEvent,WorldState} from '../types/world';
 import {isChronicleStoryFact,type ChronicleLead} from './chronicleLead';
 import {sameGeneratedWorld} from './worldIdentity';
@@ -104,7 +106,7 @@ function openingSet(rows:readonly ProtagonistEvidence[]):ProtagonistEvidence[]|u
   return undefined;
 }
 const last=(rows:readonly ProtagonistEvidence[])=>rows.at(-1)?.tick??-1;
-interface QualifiedLead { actorId:string; opening:ProtagonistEvidence[] }
+interface QualifiedLead { actorId:string; opening:ProtagonistEvidence[]; handoff?:ProtagonistHandoff }
 function pickLead(world:WorldState,arcs:readonly ProtagonistArc[],all:Map<string,ProtagonistEvidence[]>,throughTick:number):QualifiedLead|undefined{
   const previous=arcs.at(-1);
   const predecessorIds=new Set(previous?[...previous.opening,...previous.support,...(previous.death?[previous.death]:[])].map(row=>row.eventId):[]);
@@ -117,8 +119,16 @@ function pickLead(world:WorldState,arcs:readonly ProtagonistArc[],all:Map<string
     const opening=openingSet(rows.filter(row=>row.tick>after&&!predecessorIds.has(row.eventId)));
     if(opening)choices.push({actorId,opening});
   }
-  return choices.sort((a,b)=>
-    last(b.opening)-last(a.opening)||b.opening[0].tick-a.opening[0].tick||compare(a.actorId,b.actorId))[0];
+  const ordered=choices.sort((a,b)=>
+    last(b.opening)-last(a.opening)||b.opening[0].tick-a.opening[0].tick||compare(a.actorId,b.actorId));
+  // Old relational evidence can settle a choice only *among* independently earned candidates.
+  if(previous?.endedTick===throughTick){
+    for(const choice of ordered){
+      const handoff=certifyProtagonistHandoff(world,previous,choice.actorId,throughTick);
+      if(handoff)return {...choice,handoff};
+    }
+  }
+  return ordered[0];
 }
 function evidenceStillAllowed(index:ReturnType<typeof protagonistFactIndex>,item:ProtagonistEvidence,actorId:string):boolean{
   if(index.disputed.has(item.eventId))return false;
@@ -189,7 +199,7 @@ export function advanceProtagonistSuccession(world:WorldState,previous?:WorldSta
   const ready=pickLead(previous,state.arcs,rows,throughTick);
   if(!ready)return;
   state.arcs.push({id:`protagonist-arc-${throughTick}`,actorId:ready.actorId,openedTick:throughTick,
-    ...(current?{predecessorArcId:current.id}:{}),opening:ready.opening,support:[]});
+    ...(current?{predecessorArcId:current.id}:{}),...(ready.handoff?{handoff:ready.handoff}:{}),opening:ready.opening,support:[]});
 }
 
 export function projectProtagonistSuccession(world:WorldState,throughTick=world.tick){
@@ -211,11 +221,13 @@ export function projectProtagonistSuccession(world:WorldState,throughTick=world.
     const death=ended&&arc.death&&evidenceStillAllowed(index,arc.death,arc.actorId)&&
       (!nativeDeath||publicDeathRole(nativeDeath,nativeDeath,arc.actorId,people)===arc.death.attribution)?
       projectedProof(arc.death):undefined;
+    const compromised=arc.opening.some(row=>!evidenceStillAllowed(index,row,arc.actorId));
+    const predecessors=arc.handoff&&!compromised?world.protagonistSuccession.arcs.filter(row=>row.id===arc.predecessorArcId):[];
+    const handoff=predecessors.length===1?readProtagonistHandoff(world,arc,predecessors[0],throughTick):undefined;
     return {id:arc.id,actorId:arc.actorId,name:people.get(arc.actorId),openedTick:arc.openedTick,
       predecessorArcId:arc.predecessorArcId,endedTick:ended?arc.endedTick:undefined,
       closeReason:ended?(arc.closeReason==='public_death'&&!death?'evidence_lost' as const:arc.closeReason):undefined,
-      ...(death?{death}:{}),evidence:available.map(projectedProof),
-      compromised:arc.opening.some(row=>!evidenceStillAllowed(index,row,arc.actorId))};
+      ...(death?{death}:{}),...(handoff?{handoff}:{}),evidence:available.map(projectedProof),compromised};
   });
   return {active:slices.find(row=>row.endedTick===undefined&&!row.compromised&&!!row.name&&
     !(departureTick!==undefined&&departureTick<=throughTick&&row.actorId===departing?.id)),archived:slices.filter(row=>row.endedTick!==undefined)};

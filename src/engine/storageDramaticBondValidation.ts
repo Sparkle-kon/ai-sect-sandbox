@@ -1,6 +1,6 @@
 import type { DramaticBondFact } from '../types/dramaticBond';
 import type { ChronicleAnchor, WorldEvent, WorldState } from '../types/world';
-import { dramaticBondReadVenue, dramaticBondSourceId, dramaticBondWitnessIds, matchesDramaticBondFact } from './dramaticBondTerms';
+import { dramaticBondReadVenue, dramaticBondSourceId, dramaticBondWitnessIds, matchesDramaticBondFact, matchesDramaticBondRedactedPractice } from './dramaticBondTerms';
 
 type Fail = (path:string)=>never;
 const chronological = (row: {year:number;month:number}) => row.year*12+row.month;
@@ -18,15 +18,21 @@ function matchesArchivedBond(fact:DramaticBondFact,source:ChronicleAnchor) {
 
 export function validateDramaticBondHistory(world:WorldState,fail:Fail):void {
   const facts=world.dramaticBonds?.facts;
-  if (!facts?.length) return;
+  if (!facts?.length) {
+    if(world.events.some(event=>event.dialogueRedacted===true))fail('dramaticBonds.facts.redaction');
+    return;
+  }
   const actors=new Map(world.cultivators.map(actor=>[actor.id,actor]));
   const byId=new Map(facts.map(fact=>[fact.sourceEventId,fact]));
   if (byId.size!==facts.length) fail('dramaticBonds.facts.source');
   const originals=new Map<string,WorldEvent>();
   for(const event of world.events) {
     const fact=byId.get(event.id);
+    if(event.dialogueRedacted===true&&(!fact||!matchesDramaticBondRedactedPractice(world,fact,event)))
+      fail('dramaticBonds.facts.redaction');
     if(!fact)continue;
-    if(originals.has(event.id)||!matchesDramaticBondFact(fact,event)) fail('dramaticBonds.facts.native');
+    if(originals.has(event.id)||(event.dialogueRedacted!==true&&!matchesDramaticBondFact(fact,event)))
+      fail('dramaticBonds.facts.native');
     originals.set(event.id,event);
   }
   const archiveMatches=(source:ChronicleAnchor)=>{
