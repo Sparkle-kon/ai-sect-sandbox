@@ -110,7 +110,7 @@ function activeParties(world:WorldState):Set<string> {
   for(const row of world.sects)add(row.leaderId);
   for(const row of world.couriers.dispatches)if(row.status==='offered'||row.status==='in_transit'||row.status==='returning')
     add(row.senderId,row.recipientId,row.courierId,row.handoff?.candidateId);
-  for(const row of world.escorts.contracts)if(open(row.status))add(row.clientId,row.escortId);
+  for(const row of world.escorts.contracts)if(open(row.status))add(row.clientId,row.escortId,row.freight?.carrierId);
   for(const row of world.relocations.plans)if(row.status==='voting'||row.status==='in_transit')add(row.proposerId,...row.garrisonIds,...row.voterIds);
   for(const row of world.pilgrimages.journeys)if(row.status==='proposed'||row.status==='active')add(row.organizerId,row.companionId);
   for(const row of world.sieges)if(row.status==='marching'||row.status==='sieging')add(...row.participantIds);

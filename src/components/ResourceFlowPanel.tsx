@@ -58,6 +58,7 @@ const REASONS: Readonly<Record<string, string>> = {
   observatory_instrument: '临时观象实付仪料',
   pilgrimage_camp_provision: '途中留宿实耗玄土根',
   order_deposit: '挂单托管', order_release: '撤单或到期退回', price_improvement: '限价差退回',
+  freight_deposit: '称重运费单独托管', freight_dispatch: '亲行启运才实付运费', freight_refund: '退回未用称重运费',
   local_fill: '现场交割', shipment_departure: '商队启程转入保管', shipment_delivery: '商队到货交割',
   shipment_return: '商队退运退款退货', shipment_refund: '货损退款', shipment_loss: '实际货损',
   artifact_salvage_recovery: '拆解原器实回玄土根',
@@ -113,6 +114,7 @@ export function ResourceFlowMonth({ ledger, world, scope, visibleSiteIds }: {
       case 'oath': return row.pocket === 'payment' ? '契书价金托管' : '契书抵押托管';
       case 'order': return '坊市挂单托管';
       case 'shipment': return '商队在途保管';
+      case 'freight': return '实重运费托管';
       case 'granary': return '村镇义仓';
       case 'village_supply': return '互助在途封存';
       case 'village_fair': return '乡集摊位待付保管';

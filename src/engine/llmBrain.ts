@@ -69,6 +69,7 @@ import { activeSanctuaryPass, availableSanctuaryActions, sanctuaryCanShield } fr
 import { availableResearchActions } from './researchEngine';
 import { activeCeasefireBetween, availableCeasefireActions } from './ceasefireEngine';
 import { activeEscortForActor, availableEscortActions } from './escortEngine';
+import {decodeMarketFreightDecision,marketFreightProviderOptions,marketFreightTargets,utilityMarketFreightDecision} from './marketFreightCognition';
 import { availableCompetitionActions, competitionActorOptedOut } from './competitionEngine';
 import { availableScriptureActions, scriptureEditionModifiers } from './scriptureEngine';
 import { availablePavilionLoanActions } from './pavilionLoanEngine';
@@ -199,6 +200,8 @@ export function requiredBeforeOrdinaryDecision(actor:Cultivator,world:WorldState
   }
   const rescue=utilityExpeditionRescueDecision(actor,world);
   if(rescue)return rescue;
+  const freight=utilityMarketFreightDecision(actor,world);
+  if(freight)return freight;
   const shelter=utilityDisasterShelterDecision(actor,world,false);
   if(shelter)return shelter;
   const refuge=urgentOrdinaryRefuge(actor,world);
@@ -444,6 +447,8 @@ export function computeHeuristicDecision(
       innerMonologue: tribulationStance === 'focus' ? '抱守道心，不为幻象所动。' : '雷云不散，且运转护身法诀抵挡。',
     };
   }
+  const freight=utilityMarketFreightDecision(cultivator,world);
+  if(freight)return freight;
   const disasterShelter = utilityDisasterShelterDecision(cultivator,world);
   if(disasterShelter)return disasterShelter;
   const boundaryRow = world.boundaryReliefs.cases.find((row) => row.incomingId === cultivator.id &&
@@ -1965,6 +1970,7 @@ export async function requestCultivatorLLMDecision(
   const researchOptions = availableResearchActions(cultivator, world);
   const ceasefireOptions = availableCeasefireActions(cultivator, world);
   const escortOptions = availableEscortActions(cultivator, world);
+  const freightOptions=marketFreightProviderOptions(cultivator,world,requestTick);
   const competitionOptions = availableCompetitionActions(cultivator, world);
   const scriptureOptions = availableScriptureActions(cultivator, world);
   const pavilionLoanOptions = availablePavilionLoanActions(cultivator, world, requestTick)
@@ -2066,6 +2072,7 @@ ${waterVeinOptions.length ? `- 本人在场的水线许可，只抄 waterVeinMov
 - 避难敕令只在指定站点保护持票人的直接斗法，且护盾有限。可执行事务：${JSON.stringify(sanctuaryOptions)}
 - 共研只可使用本宗的实际议案、实有投入与已核实退出理由：${JSON.stringify(researchOptions)}
 - 停战议约只可使用双方现行授权和账款所列选项：${JSON.stringify(ceasefireOptions)}
+- 称重付运只用现有货单与指定承运人。offer 填已列 targetShipmentId 与 targetCultivatorId；其余只填 targetEscortId。不能填写货数、秤重、运费、实到或遗失。本人的许可：${JSON.stringify(freightOptions.map(marketFreightTargets))}
 - 商队护送只能选择已列的合法委托、接镖或可复核报险，货款不当作镖资：${JSON.stringify(escortOptions)}
 - 公开赛季只计列出的结果，不许以私下谋划计分。已保存的退出偏好：${competitionActorOptedOut(world, cultivator.id) ? '继续保留，只有自己明确改变心意才在未来赛季重报' : '无'}；本回合可选：${JSON.stringify(competitionOptions)}
 - 功法版本对当前行气和实战的独立倍率（1 为无额外效果）：${JSON.stringify(currentEdition)}；当地可行的校勘与版本选项：${JSON.stringify(scriptureOptions)}
@@ -2215,6 +2222,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'WORKSHOP_RELEASE',
             'WORKSHOP_ESTATE',
             'WAYPOST_MEAL',
+            'MARKET_FREIGHT',
             'DISASTER_SHELTER',
             'CRAFT_TRAINING',
             'SCRIBE_COMMISSION',
@@ -2437,6 +2445,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
                 targetToolLoanId: legalToolLoan.targetToolLoanId, innerMonologue };
           }
           if (chosenAction === 'SCRIBE_COMMISSION') return decodeScribeCommissionDecision(parsed, cultivator, scribeOptions);
+          if (chosenAction === 'MARKET_FREIGHT') return decodeMarketFreightDecision(parsed,cultivator,freightOptions);
           if (chosenAction === 'DISASTER_SHELTER') return decodeDisasterShelterDecision(parsed,cultivator,disasterShelterOptions);
           if (chosenAction === 'CRAFT_TRAINING') return decodeCraftTrainingDecision(parsed, cultivator, trainingOptions);
           if (parsed.craftTrainingMove !== undefined || parsed.targetCraftTraineeId !== undefined ||

@@ -15,6 +15,8 @@ import type { ScribeCommissionMove, ScribeCommissionState } from './scribeCommis
 
 import type { WaypostMealMove, WaypostMealState, WaypostMealWitness } from './waypostMeal';
 
+import type { MarketFreightMove, MarketFreightTerms } from './marketFreight';
+
 import type { DisasterShelterMove, DisasterShelterState } from './disasterShelter';
 
 import type { CraftTrainingMove, CraftTrainingOrigin, CraftTrainingState } from './craftTraining';
@@ -165,6 +167,7 @@ export type ActionType =
   | 'SEASON_REVIEW'
   | 'PROBATION'
   | 'SCRIBE_COMMISSION'
+  | 'MARKET_FREIGHT'
   | 'DISASTER_SHELTER'
   | 'CRAFT_TRAINING'
   | 'WAYPOST_MEAL'
@@ -591,6 +594,7 @@ export interface LLMDecisionPayload {
   targetScriptureEditionId?: string;
   seasonMove?: CompetitionMove;
   escortMove?: EscortMove;
+  marketFreightMove?: MarketFreightMove;
   targetShipmentId?: string;
   targetEscortId?: string;
   targetHazardId?: string;
@@ -1088,6 +1092,8 @@ export type AvatarInteractionCommand = AvatarInteractionRequest;
 export type AvatarOrder = 'REST' | 'CULTIVATE';
 export type AvatarPendingOrder = { actorId: string; queuedTick: number } & (
   | { action: AvatarOrder }
+  | {action:'MARKET_FREIGHT';marketFreightMove:'offer';targetShipmentId:string;targetCultivatorId:string;targetEscortId?:never}
+  | {action:'MARKET_FREIGHT';marketFreightMove:'accept'|'decline'|'withdraw';targetEscortId:string;targetShipmentId?:never;targetCultivatorId?:never}
   | {action:'DISASTER_SHELTER';disasterShelterMove:'offer';targetCultivatorId:string;targetDisasterShelterId?:never}
   | {action:'DISASTER_SHELTER';disasterShelterMove:'accept'|'decline'|'withdraw'|'return';targetDisasterShelterId:string;targetCultivatorId?:never}
   | {action:'CRAFT_TRAINING';craftTrainingMove:'offer';targetCultivatorId:string;targetCraftTraineeId:string;targetCraftTrainingId?:never}
@@ -1862,6 +1868,7 @@ export interface CompetitionReviewState {
 
 export type EscortMove = 'offer' | 'accept' | 'decline' | 'report';
 export interface EscortContract {
+  freight?: MarketFreightTerms;
   id: string;
   shipmentId: string;
   clientId: string;
@@ -2675,7 +2682,7 @@ export interface SharedCommonsState { pacts: SharedCommonsPact[]; nextId: number
 export type ResourceFlowGood = 'stone' | 'jade_seed' | 'frost_dose' | 'ward_reed' | 'frontier_water' | 'reef_salt' | 'port_rigging' | 'rift_salt' | 'stormstone' | 'upper_lattice' | MarketGood;
 export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation' | 'terrain' | 'workshop' | 'road' | 'observatory' | 'pilgrimage' | 'granary' | 'furnace_safety' | 'artifact_salvage' | 'village_supply' | 'civic_memorial' | 'village_fair' | 'sect_stipend' | 'seed_culture' | 'care_followup' | 'danxia_medicine' | 'water_vein' | 'north_mining_charter' | 'north_well_review' | 'upper_passage' | 'upper_array_field' | 'frontier' | 'scribe_commission';
 export type ResourceFlowAccount =
-  | { kind: 'actor' | 'site' | 'sect' | 'order' | 'shipment' | 'relocation' | 'workshop' | 'salvage' | 'granary' | 'village_supply' | 'village_fair' | 'seed_lot' | 'seed_plot' | 'danxia_medicine' | 'upper_passage' | 'frontier_store' | 'upper_array_store' | 'scribe_commission' | 'waypost_meal' | 'craft_training'; id: string }
+  | { kind: 'actor' | 'site' | 'sect' | 'order' | 'shipment' | 'relocation' | 'workshop' | 'salvage' | 'granary' | 'village_supply' | 'village_fair' | 'seed_lot' | 'seed_plot' | 'danxia_medicine' | 'upper_passage' | 'frontier_store' | 'upper_array_store' | 'scribe_commission' | 'waypost_meal' | 'craft_training' | 'freight'; id: string }
   | { kind: 'oath'; id: string; pocket: 'payment' | 'collateral' };
 export type ResourceFlowVisibility =
   | { kind: 'observer' }

@@ -1,3 +1,5 @@
+import {MarketFreightRead,type MarketFreightControls} from './MarketFreightRead';
+import {projectMarketFreight} from '../engine/escortEngine';
 import { useState } from 'react';
 import { marketClosureReason, marketOrdersInPriority, MARKET_GOODS } from '../engine/marketEngine';
 import { visibleEscorts } from '../engine/escortEngine';
@@ -47,7 +49,7 @@ function BookSide({ orders, side, actorName }: { orders: Order[]; side: Order['s
   );
 }
 
-export function MarketCaravansPanel({ world, cultivator }: { world: WorldState; cultivator: Cultivator | undefined }) {
+export function MarketCaravansPanel({ world, cultivator, freightControls }: { world: WorldState; cultivator: Cultivator | undefined; freightControls?:MarketFreightControls }) {
   const [requestedMarketId, setRequestedMarketId] = useState<string>();
   const [requestedGood, setRequestedGood] = useState<Good>();
   const publicMarkets = world.locations.filter(({ type }) => type === 'market');
@@ -73,6 +75,9 @@ export function MarketCaravansPanel({ world, cultivator }: { world: WorldState; 
   const closure = marketId ? marketClosureReason(world, marketId) : undefined;
   const selectedInvolved = (buyer: string, seller: string) => cultivator?.id === buyer || cultivator?.id === seller;
   const terrain = createTerrainMapView(world, cultivator, true);
+  const freightViewer=cultivator&&world.cultivators.includes(cultivator)?cultivator:undefined;
+  const freight=freightViewer?projectMarketFreight(world,freightViewer):[];
+
   const escortsByShipment = new Map((world.escorts ? visibleEscorts(world, cultivator) : []).map((view) => {
     const point = view.checkpoint;
     return [view.contract.shipmentId, { ...view,
@@ -82,7 +87,9 @@ export function MarketCaravansPanel({ world, cultivator }: { world: WorldState; 
   return (
     <section aria-label="坊市与跨境商队" className="min-w-0 space-y-2 rounded-xl border border-amber-400/25 bg-slate-900/70 p-3 text-slate-100 sm:p-4">
       <h3 className="text-sm font-semibold text-amber-100">坊市与跨境商队</h3>
-      <p className="text-xs text-slate-400">仅查看公开坊市；修士自行挂单，不代替其交易。</p>
+      <p className="text-xs text-slate-400">公开坊市仅供查阅；修士自行挂单，不代替其交易。</p>
+      {freightViewer&&<MarketFreightRead key={freightControls?.scopeKey??freightViewer.id} world={world}
+        viewer={freightViewer} rows={freight} controls={freightControls}/>}
       {!market ? <p className="text-xs text-slate-400">当前世界无公开坊市。</p> : (
         <>
           <label className="grid min-w-0 gap-1 text-xs text-slate-300">查看坊市
@@ -130,11 +137,11 @@ export function MarketCaravansPanel({ world, cultivator }: { world: WorldState; 
                   <p>{publicNames.get(shipment.originId)} → {publicNames.get(shipment.destinationId)} · {SHIPMENT_STATUS[shipment.status]}
                     {selectedInvolved(shipment.buyerId, shipment.sellerId) || !!cultivator && escort?.contract.escortId === cultivator.id ? ' · 所选修士相关' : ''}
                   </p>
-                  <p>委托货物：{goodName(shipment.good)} {shipment.quantity} 件 · 单价 {shipment.unitPrice} 灵石 · 离站 Tick #{shipment.departedTick}
+                  <p>委托货物：{goodName(shipment.good)} {shipment.quantity} 件 · 单价 {shipment.unitPrice} 灵石 · 货单登记 Tick #{shipment.departedTick}
                     {shipment.settledTick !== undefined ? ` · 结算 Tick #${shipment.settledTick}` : ` · 预计到达 Tick #${shipment.arrivalTick}`}
                   </p>
                   {shipment.reason && <p className="text-amber-100">{shipment.reason}</p>}
-                  {escort && <ShipmentEscortDetails view={escort} world={world} actorName={actorName} />}
+                  {escort && !escort.contract.freight && <ShipmentEscortDetails view={escort} world={world} actorName={actorName} />}
                 </li>;
                 })}
               </ul>

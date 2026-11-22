@@ -1,7 +1,14 @@
 import type { Cultivator, EscortContract, EscortMove, EscortReport, EscortState, LLMDecisionPayload, MapHazard, MapPoint,
   MarketShipment, WorldEvent, WorldState } from '../types/world';
+import type {MarketFreightOption} from '../types/marketFreight';
+import {marketFreightCapacity,marketFreightQuote,MARKET_FREIGHT_DISPATCH_TICKS} from './marketFreightTerms';
+import {disasterShelterLocksTravel} from './disasterShelterCheckpoint';
+import {activeDanxiaMedicineEscort} from './danxiaMedicineTerms';
+import {flowActor, recordResourceFlow} from './resourceFlowEngine';
 import { findMapPath } from './mapMotionEngine';
 import { currentVisibleTileIds, noteTerrainVisit, terrainTileAt } from './terrainEngine';
+
+export type {MarketFreightOption} from '../types/marketFreight';
 
 export const ESCORT_FEE = 30;
 export const ESCORT_RATIONS = 3;
@@ -50,7 +57,9 @@ export function activeEscortForActor(world: WorldState, actor: Cultivator): Esco
 
 export function visibleEscorts(world: WorldState, actor?: Cultivator): EscortView[] {
   if (!actor) return [];
-  return world.escorts.contracts.filter((item) => item.clientId === actor.id || item.escortId === actor.id ||
+  return world.escorts.contracts.filter((item) => item.freight?
+    world.cultivators.includes(actor)&&(item.clientId===actor.id||item.freight.carrierId===actor.id):
+    item.clientId === actor.id || item.escortId === actor.id ||
     world.markets.shipments.some((shipment) => shipment.id === item.shipmentId && shipment.buyerId === actor.id))
     .map((item) => {
       const { path, lastCrossedTileIds: _excluded, ...contract } = item;
@@ -58,7 +67,7 @@ export function visibleEscorts(world: WorldState, actor?: Cultivator): EscortVie
       const tile = point && tileId(world, point);
       const checkpoint = item.escortId === actor.id || (tile && (actor.exploredTileIds.includes(tile) || currentVisibleTileIds(world, actor).has(tile))) ?
         point && { ...point } : undefined;
-      return { contract: { ...contract, usedReportIds: [...contract.usedReportIds], detours: contract.detours.map((entry) => ({ ...entry })) },
+      return { contract: { ...contract, ...(contract.freight?{freight:structuredClone(contract.freight)}:{}), usedReportIds: [...contract.usedReportIds], detours: contract.detours.map((entry) => ({ ...entry })) },
         ...(checkpoint ? { checkpoint } : {}), reportCount: world.escorts.reports.filter(({ contractId }) => contractId === item.id).length };
     });
 }
@@ -95,7 +104,7 @@ export function availableEscortActions(actor: Cultivator, world: WorldState): Es
         getMarket(world, shipment.originId) && getMarket(world, shipment.destinationId)) {
       options.push({ action: 'ESCORT', escortMove: 'offer', targetShipmentId: shipment.id });
     }
-    if (!existing || existing.status !== 'offered' || world.tick > existing.expiresTick) continue;
+    if (!existing || existing.freight || existing.status !== 'offered' || world.tick > existing.expiresTick) continue;
     if (existing.clientId === actor.id) options.push({ action: 'ESCORT', escortMove: 'decline', targetEscortId: existing.id });
     else if (shipment.buyerId !== actor.id && actor.herbs.earth_root >= ESCORT_RATIONS &&
         world.cultivators.some((client) => client.id === existing.clientId && live(client))) {
@@ -130,9 +139,11 @@ function expireOffer(world: WorldState, contract: EscortContract, reason: string
   const client = findActor(world, contract.clientId);
   if (client) {
     client.spiritStones += contract.feeEscrow;
+    freightFunds(world,contract,'freight_refund',contract.feeEscrow);
     contract.feeRefunded = contract.feeEscrow;
     contract.feeEscrow = 0;
   }
+  if(contract.freight)contract.freight.closedBy??='expired';
   contract.status = 'expired';
   contract.settledTick = world.tick;
   contract.reason = reason;
@@ -182,6 +193,133 @@ export function resolveEscortAction(world: WorldState, actor: Cultivator, decisi
   contract.stride = Math.max(1, Math.ceil((route.length - 1) / Math.max(2, shipment.arrivalTick - shipment.departedTick)));
   return event(world, contract, 'accepted', '护镖护卫登程', '护卫送交自己的玄土根作行粮，已用去出发所需一份；未取用任何客户货物。',
     [contract.clientId, actor.id], origin.id);
+}
+
+
+const freightFunds=(world:WorldState,contract:EscortContract,reason:'freight_deposit'|'freight_dispatch'|'freight_refund',
+  amount:number)=>{
+  const freight=contract.freight;
+  if(!freight||amount<=0)return;
+  const escrow={kind:'freight' as const,id:contract.id};
+  const client=flowActor(contract.clientId);
+  recordResourceFlow(world,{kind:'transfer',mechanism:'market',refId:contract.id,reason,good:'stone',amount,
+    visibility:{kind:'participants',actorIds:[contract.clientId,freight.carrierId]},
+    from:reason==='freight_deposit'?client:escrow,to:reason==='freight_deposit'?escrow:
+      reason==='freight_dispatch'?flowActor(freight.carrierId):client});
+};
+
+function freightAvailableActor(world:WorldState,actor:Cultivator){
+  const id=actor.id;
+  return live(actor)&&actor.positionPlane===undefined&&actor.age>=18&&unoccupied(world,actor)&&
+    !disasterShelterLocksTravel(world,actor)&&!activeDanxiaMedicineEscort(world,actor)&&
+    !(actor.guardAssignment&&actor.guardAssignment.expiresTick>world.tick&&actor.guardAssignment.locationId!==actor.locationId)&&
+    !world.couriers.dispatches.some(row=>row.courierId===id&&(row.status==='in_transit'||row.status==='returning'))&&
+    !world.pilgrimages.journeys.some(row=>(row.organizerId===id||row.companionId===id)&&row.status==='active')&&
+    !world.boundaryReliefs.cases.some(row=>row.incomingId===id&&(row.status==='travelling'||row.status==='returning'))&&
+    !world.expeditionRescues.requests.some(row=>(row.explorerId===id||row.rescuerId===id)&&row.supplySpent===1&&
+      (row.status==='extracting'||row.status==='interrupted'&&row.pathIndex>0&&!row.arrivedIds?.includes(id)&&
+        world.occasions.some(occasion=>occasion.id===row.occasionId&&occasion.status==='running')));
+}
+
+function freightRoute(world:WorldState,originId:string,destinationId:string):MapPoint[]{
+  const a=getMarket(world,originId),b=getMarket(world,destinationId);
+  if(!a||!b)return [];
+  const aTile=tileId(world,a),bTile=tileId(world,b);
+  if(!aTile||!bTile||aTile===bTile)return [];
+  const normalized:MapPoint[]=[];
+  for(const point of findMapPath(world,a,b)){
+    const prior=normalized.at(-1);
+    if(!prior||tileId(world,prior)!==tileId(world,point))normalized.push(point);
+    else if(tileId(world,point)===bTile)normalized[normalized.length-1]=point;
+  }
+  return normalized;
+}
+
+function freightCandidate(world:WorldState,client:Cultivator,carrier:Cultivator,shipment:MarketShipment){
+  return client.id!==carrier.id&&carrier.id!==shipment.buyerId&&carrier.locationId===shipment.originId&&
+    freightAvailableActor(world,carrier);
+}
+
+export function availableMarketFreightActions(actor:Cultivator,world:WorldState,tick=world.tick):MarketFreightOption[]{
+  if(!world.cultivators.includes(actor)||!freightAvailableActor(world,actor)||(tick!==world.tick&&tick!==world.tick+1))return [];
+  const options:MarketFreightOption[]=[];
+  for(const shipment of world.markets.shipments){
+    if(shipment.status!=='in_transit'||shipment.originId!==actor.locationId)continue;
+    const contract=forShipment(world,shipment.id),quote=marketFreightQuote(shipment.good,shipment.quantity);
+    if(!quote||!getMarket(world,shipment.originId)||!getMarket(world,shipment.destinationId))continue;
+    if(!contract&&actor.id===shipment.sellerId&&tick===shipment.departedTick+1&&actor.spiritStones>=quote.fee&&
+      freightRoute(world,shipment.originId,shipment.destinationId).length>1){
+      for(const carrier of world.cultivators)if(freightCandidate(world,actor,carrier,shipment)&&
+        marketFreightCapacity(carrier.realm,carrier.realmStage)>=quote.load&&carrier.herbs.earth_root>=quote.rations)
+        options.push({action:'MARKET_FREIGHT',marketFreightMove:'offer',targetShipmentId:shipment.id,targetCultivatorId:carrier.id});
+      continue;
+    }
+    const freight=contract?.freight;
+    if(!contract||!freight||contract.status!=='offered'||tick>contract.expiresTick)continue;
+    const reply=(marketFreightMove:'accept'|'decline'|'withdraw')=>
+      options.push({action:'MARKET_FREIGHT',marketFreightMove,targetEscortId:contract.id});
+    if(actor.id===contract.clientId)reply('withdraw');
+    if(actor.id!==freight.carrierId||tick<=contract.offeredTick)continue;
+    reply('decline');
+    const client=findActor(world,contract.clientId);
+    if(client&&live(client)&&freightCandidate(world,client,actor,shipment)&&actor.herbs.earth_root>=quote.rations&&
+      marketFreightCapacity(actor.realm,actor.realmStage)>=quote.load&&freightRoute(world,shipment.originId,shipment.destinationId).length>1)
+      reply('accept');
+  }
+  return options;
+}
+
+export function projectMarketFreight(world:WorldState,viewer?:Cultivator):EscortView[]{
+  return visibleEscorts(world,viewer).filter(row=>row.contract.freight!==undefined);
+}
+
+const freightKeys=new Set(['chosenAction','innerMonologue','marketFreightMove','targetShipmentId','targetEscortId','targetCultivatorId']);
+export function resolveMarketFreightAction(world:WorldState,actor:Cultivator,payload:LLMDecisionPayload):WorldEvent|null{
+  if(payload.chosenAction!=='MARKET_FREIGHT'||Object.keys(payload).some(key=>!freightKeys.has(key)))return null;
+  const option=availableMarketFreightActions(actor,world).find(row=>row.marketFreightMove===payload.marketFreightMove&&
+    row.targetShipmentId===payload.targetShipmentId&&row.targetEscortId===payload.targetEscortId&&row.targetCultivatorId===payload.targetCultivatorId);
+  if(!option)return null;
+  if(option.marketFreightMove==='offer'){
+    const shipment=world.markets.shipments.find(row=>row.id===option.targetShipmentId);
+    const quote=shipment&&marketFreightQuote(shipment.good,shipment.quantity);
+    if(!shipment||!quote)return null;
+    actor.spiritStones-=quote.fee;
+    const contract:EscortContract={id:`freight-escort-${shipment.sequence}`,shipmentId:shipment.id,clientId:actor.id,
+      originId:shipment.originId,destinationId:shipment.destinationId,status:'offered',offeredTick:world.tick,expiresTick:world.tick+1,
+      freight:{...quote,carrierId:option.targetCultivatorId,buyOrderId:shipment.buyOrderId,sellOrderId:shipment.sellOrderId,
+        buyerId:shipment.buyerId,unitPrice:shipment.unitPrice,departedTick:shipment.departedTick},
+      feeEscrow:quote.fee,feePaid:0,feeRefunded:0,rationsEscrow:0,rationsSpent:0,rationsReturned:0,
+      path:[],pathIndex:0,stride:0,lastCrossedTileIds:[],usedReportIds:[],detours:[]};
+    world.escorts.contracts.push(contract);
+    freightFunds(world,contract,'freight_deposit',quote.fee);
+    return event(world,contract,'freight-offered','过秤，请人承运',
+      `只量当批${quote.quantity}份，重量${quote.load}，货主封自己的${quote.fee}灵石。买卖钱货未动。`,
+      [actor.id,option.targetCultivatorId],shipment.originId);
+  }
+  const contract=world.escorts.contracts.find(row=>row.id===option.targetEscortId);
+  const freight=contract?.freight;
+  if(!contract||!freight)return null;
+  const participants=[contract.clientId,freight.carrierId];
+  if(option.marketFreightMove!=='accept'){
+    const closed=option.marketFreightMove==='decline'?'declined':'withdrawn';
+    freight.closedBy=closed;
+    expireOffer(world,contract,'尚未承运，原封运费原数退回。');
+    return event(world,contract,`freight-${closed}`,closed==='declined'?'承运人谢绝':'货主撤回承运邀约',
+      '尚未承运，原封运费原数退回。',participants,contract.originId);
+  }
+  const shipment=world.markets.shipments.find(row=>row.id===contract.shipmentId);
+  const route=freightRoute(world,contract.originId,contract.destinationId);
+  if(!shipment||route.length<=1)return null;
+  const capacity=marketFreightCapacity(actor.realm,actor.realmStage);
+  actor.herbs.earth_root-=freight.rations;
+  freight.capability={realm:actor.realm,stage:actor.realmStage,capacity};
+  freight.dispatchByTick=world.tick+MARKET_FREIGHT_DISPATCH_TICKS;
+  contract.status='active';contract.escortId=actor.id;contract.acceptedTick=world.tick;
+  contract.rationsEscrow=freight.rations;contract.path=route;
+  const nativeStride=Math.ceil((route.length-1)/Math.max(2,shipment.arrivalTick-shipment.departedTick));
+  contract.stride=Math.max(1,nativeStride-(freight.band==='light'?0:freight.band==='medium'?1:2));
+  return event(world,contract,'freight-accepted','本人应允承运',
+    '承运人验过载重，封存自己的行粮；货未动时运费不付，行粮也未耗。',participants,contract.originId);
 }
 
 function localKnownTiles(world: WorldState, escort: Cultivator, start: MapPoint, path: MapPoint[]): Set<string> {
@@ -241,21 +379,49 @@ export function escortDirective(world: WorldState, shipment: MarketShipment): Es
   const baselineDelay = contract.holdAppliedTick === undefined ? 0 : 1;
   if (contract.status !== 'active') return directive({ baselineDelay });
   const escort = findActor(world, contract.escortId);
+  const freight=contract.freight;
   if (!escort || !live(escort) || escort.locationId !== contract.originId || !getMarket(world, contract.originId) ||
-      !getMarket(world, contract.destinationId)) {
+      !getMarket(world, contract.destinationId) || freight&&escort.positionPlane!==undefined) {
+    if(freight&&!freight.dispatch)freight.closedBy='incapable';
     return directive({ managed: true, baselineDelay, forceReturn: true });
+  }
+  if(freight&&!freight.dispatch){
+    const first=contract.path[0],second=contract.path[1],last=contract.path.at(-1);
+    const origin=getMarket(world,contract.originId),destination=getMarket(world,contract.destinationId);
+    const from=first&&tileId(world,first),to=second&&tileId(world,second);
+    if(freight.dispatchByTick===undefined||world.tick>=freight.dispatchByTick||
+      marketFreightCapacity(escort.realm,escort.realmStage)<freight.load||contract.rationsEscrow<1||
+      !origin||!destination||!last||!from||!to||from===to||tileId(world,origin)!==from||
+      tileId(world,destination)!==tileId(world,last)){
+      freight.closedBy='incapable';
+      return directive({managed:true,baselineDelay,forceReturn:true});
+    }
+    if(world.mapHazards.some(hazard=>(hazard.tileId===from||hazard.tileId===to)&&hazard.intensity>=2&&activeHazard(world,hazard)))
+      return directive({managed:true,baselineDelay,hold:true});
   }
   if (contract.lastAdvancedTick !== world.tick) {
     contract.lastAdvancedTick = world.tick;
     contract.lastCrossedTileIds = [];
     if (contract.arrivedTick === undefined) {
-      detour(world, contract, escort);
+      if(!freight||freight.dispatch)detour(world, contract, escort);
       const next = Math.min(contract.path.length - 1, contract.pathIndex + contract.stride);
       contract.lastCrossedTileIds = [...new Set(contract.path.slice(contract.pathIndex, next + 1).flatMap((point) => {
         const id = tileId(world, point);
         return id ? [id] : [];
       }))];
       contract.pathIndex = next;
+      if(freight&&!freight.dispatch&&next>0){
+        const first=contract.path[0],second=contract.path[1];
+        const from=tileId(world,first),to=tileId(world,second);
+        if(from&&to&&from!==to&&contract.lastCrossedTileIds.includes(to)){
+          freight.dispatch={tick:world.tick,fromTileId:from,toTileId:to,pathIndex:1};
+          contract.rationsEscrow--;contract.rationsSpent++;
+          const earned=contract.feeEscrow;
+          escort.spiritStones+=earned;
+          contract.feePaid=earned;contract.feeEscrow=0;
+          freightFunds(world,contract,'freight_dispatch',earned);
+        }
+      }
       if (next === contract.path.length - 1) contract.arrivedTick = world.tick;
     }
   }
@@ -267,8 +433,17 @@ function trimEscortState(world: WorldState): void {
   const shipmentsInTransit = new Set(world.markets.shipments.filter(({ status }) => status === 'in_transit').map(({ id }) => id));
   const terminal = new Set(world.escorts.contracts.filter((item) => item.status !== 'active' && item.status !== 'offered' &&
     !shipmentsInTransit.has(item.shipmentId)).slice(-96));
+  const retainedFreight=new Set<string>();
+  if(world.escorts.contracts.some(item=>item.freight)){
+    for(const row of world.events){
+      const id=/^evt-[0-9]+-(freight-escort-[1-9]\d*)-/.exec(row.id)?.[1];
+      if(id)retainedFreight.add(id);
+    }
+    for(const month of world.resourceFlow.months)for(const row of month.entries)
+      if(row.mechanism==='market'&&row.refId.startsWith('freight-escort-'))retainedFreight.add(row.refId);
+  }
   world.escorts.contracts = world.escorts.contracts.filter((item) => item.status === 'active' || item.status === 'offered' ||
-    shipmentsInTransit.has(item.shipmentId) || terminal.has(item));
+    shipmentsInTransit.has(item.shipmentId) || terminal.has(item) || !!item.freight&&retainedFreight.has(item.id));
   const retained = new Set(world.escorts.contracts.map(({ id }) => id));
   world.escorts.reports = world.escorts.reports.filter(({ contractId }) => retained.has(contractId));
 }
@@ -282,21 +457,27 @@ export function settleEscortWithShipment(world: WorldState, shipment: MarketShip
   }
   let result: WorldEvent | null = null;
   if (contract.status === 'offered') {
+    if(contract.freight)contract.freight.closedBy='shipment_ended';
     expireOffer(world, contract, '货运先行结束，未签署的护镖委托退回。');
   } else {
     const escort = findActor(world, contract.escortId);
     const client = findActor(world, contract.clientId);
     const delivered = shipment.status === 'delivered' && escort && live(escort);
+    const freight=contract.freight;
     if (delivered) {
-      escort.spiritStones += contract.feeEscrow;
-      contract.feePaid = contract.feeEscrow;
-      contract.feeEscrow = 0;
+      if(!freight){
+        escort.spiritStones += contract.feeEscrow;
+        contract.feePaid = contract.feeEscrow;
+        contract.feeEscrow = 0;
+      }
       escort.locationId = shipment.destinationId;
       noteTerrainVisit(world, escort);
-    } else if (client) {
+    } else if (client&&(!freight||!freight.dispatch)) {
       client.spiritStones += contract.feeEscrow;
+      freightFunds(world,contract,'freight_refund',contract.feeEscrow);
       contract.feeRefunded = contract.feeEscrow;
       contract.feeEscrow = 0;
+      if(freight)freight.closedBy??='shipment_ended';
     }
     if (escort) {
       escort.herbs.earth_root += contract.rationsEscrow;
@@ -305,9 +486,14 @@ export function settleEscortWithShipment(world: WorldState, shipment: MarketShip
     }
     contract.status = delivered ? 'delivered' : 'failed';
     contract.settledTick = world.tick;
-    contract.reason = delivered ? '实际到货后支付护镖报酬，归还未用行粮。' : '货运未完成护镖条件，独立报酬退回，已用行粮不退。';
-    result = event(world, contract, 'settled', delivered ? '护镖报酬交割' : '护镖委托未成', contract.reason,
-      [contract.clientId, ...(escort ? [escort.id] : [])], delivered ? shipment.destinationId : shipment.originId);
+    contract.reason = freight?freight.dispatch?
+      '运费只在实过第一段后交割，不随原货结果重付或退回；未耗行粮归还。':
+      '未实过任何路段，原封运费与未耗行粮分别归还。':
+      delivered ? '实际到货后支付护镖报酬，归还未用行粮。' : '货运未完成护镖条件，独立报酬退回，已用行粮不退。';
+    result = event(world, contract, freight?'freight-settled':'settled',
+      freight?(delivered?'称重承运抵达':'称重承运已结'):delivered ? '护镖报酬交割' : '护镖委托未成', contract.reason,
+      freight?[contract.clientId,freight.carrierId]:[contract.clientId, ...(escort ? [escort.id] : [])],
+      delivered ? shipment.destinationId : shipment.originId);
   }
   trimEscortState(world);
   return result;

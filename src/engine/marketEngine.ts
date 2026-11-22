@@ -362,12 +362,17 @@ export function advanceMarkets(world: WorldState): WorldEvent[] {
       }
     }
   }
-  const active = world.markets.shipments.filter(({ status }) => status === 'in_transit');
-  const referenced = new Set(active.flatMap(({ buyOrderId, sellOrderId }) => [buyOrderId, sellOrderId]));
+  // Where an exact weighed contract still exists, retain the original market facts it cites.
+  // Ordinary market receipts, money, quantities and independent cold limits are otherwise unchanged.
+  const weighedShipments=new Set(world.escorts.contracts.filter(row=>row.freight).map(row=>row.shipmentId));
+  const referenced = new Set(world.markets.shipments.filter(row=>row.status==='in_transit'||weighedShipments.has(row.id))
+    .flatMap(({ buyOrderId, sellOrderId }) => [buyOrderId, sellOrderId]));
   const settledOrders = new Set(world.markets.orders.filter(({ status }) => status !== 'open').slice(-96));
   world.markets.orders = world.markets.orders.filter((order) => order.status === 'open' || referenced.has(order.id) || settledOrders.has(order));
   const settledShipments = new Set(world.markets.shipments.filter(({ status }) => status !== 'in_transit').slice(-64));
-  world.markets.shipments = world.markets.shipments.filter((shipment) => shipment.status === 'in_transit' || settledShipments.has(shipment));
-  world.markets.receipts = world.markets.receipts.slice(-96);
+  world.markets.shipments = world.markets.shipments.filter((shipment) => shipment.status === 'in_transit' ||
+    weighedShipments.has(shipment.id) || settledShipments.has(shipment));
+  const recentReceiptStart=Math.max(0,world.markets.receipts.length-96);
+  world.markets.receipts=world.markets.receipts.filter((row,i)=>i>=recentReceiptStart||!!row.shipmentId&&weighedShipments.has(row.shipmentId));
   return result;
 }

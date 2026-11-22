@@ -1,3 +1,6 @@
+import {availableMarketFreightActions} from './escortEngine';
+import {MARKET_FREIGHT_MAX_LOAD} from './marketFreightTerms';
+import {validateMarketFreight} from './storageMarketFreightValidation';
 import {availableDisasterShelterActions} from './disasterShelterEngine';
 import {DISASTER_SHELTER_HISTORY,DISASTER_SHELTER_MAX_OPEN,DISASTER_SHELTER_MAX_PATH} from './disasterShelterCheckpoint';
 import {validateDisasterShelter} from './storageDisasterShelterValidation';
@@ -238,17 +241,27 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT SALVAGE_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE DOCTRINE_FOUNDING DOCTRINE_MATURITY RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE WAYPOST_MEAL DISASTER_SHELTER CHRONICLE_ERRATA HABITAT INFIRMARY CARE_FOLLOWUP DANXIA_MEDICINE DANXIA_REVIEW FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER COURIER_HANDOFF SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP CRAFT_TRAINING WORKSHOP_ESTATE WORKSHOP_RELEASE SCRIBE_COMMISSION FURNACE_RESERVATION FURNACE_SAFETY DAMAGE_ASSURANCE SPARRING EXPEDITION_RESCUE SHORT_SHIFT BOUNDARY_RELIEF MENTOR_TRANSFER APPRENTICE_COHORT SEASONAL_HOUSING HOUSEHOLD_NAME CARAVAN_RESTITUTION VILLAGE_GRANARY VILLAGE_SUPPLY ROUTE_WARNING PAVILION_LOAN WORKSHOP_CAPACITY CIVIC_MEMORIAL VILLAGE_FAIR SECT_STIPEND SEED_CULTURE WATER_VEIN NORTH_MINING_CHARTER NORTH_WELL_REVIEW UPPER_PASSAGE UPPER_ARRAY_FIELD UPPER_ARRAY_FIELD_LOCAL UPPER_ARRAY_FIELD_TRADE NORTH_GATE_RENEWAL FRONTIER FRONTIER_PRODUCTION FRONTIER_TRADE FRONTIER_PORT FRONTIER_PORT_TRADE FRONTIER_DRYLAND FRONTIER_DRYLAND_TRADE TOOL_LOAN RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY ALIGNED_WEATHER SEASON_REVIEW REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT SALVAGE_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE DOCTRINE_FOUNDING DOCTRINE_MATURITY RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT MARKET_FREIGHT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE WAYPOST_MEAL DISASTER_SHELTER CHRONICLE_ERRATA HABITAT INFIRMARY CARE_FOLLOWUP DANXIA_MEDICINE DANXIA_REVIEW FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER COURIER_HANDOFF SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP CRAFT_TRAINING WORKSHOP_ESTATE WORKSHOP_RELEASE SCRIBE_COMMISSION FURNACE_RESERVATION FURNACE_SAFETY DAMAGE_ASSURANCE SPARRING EXPEDITION_RESCUE SHORT_SHIFT BOUNDARY_RELIEF MENTOR_TRANSFER APPRENTICE_COHORT SEASONAL_HOUSING HOUSEHOLD_NAME CARAVAN_RESTITUTION VILLAGE_GRANARY VILLAGE_SUPPLY ROUTE_WARNING PAVILION_LOAN WORKSHOP_CAPACITY CIVIC_MEMORIAL VILLAGE_FAIR SECT_STIPEND SEED_CULTURE WATER_VEIN NORTH_MINING_CHARTER NORTH_WELL_REVIEW UPPER_PASSAGE UPPER_ARRAY_FIELD UPPER_ARRAY_FIELD_LOCAL UPPER_ARRAY_FIELD_TRADE NORTH_GATE_RENEWAL FRONTIER FRONTIER_PRODUCTION FRONTIER_TRADE FRONTIER_PORT FRONTIER_PORT_TRADE FRONTIER_DRYLAND FRONTIER_DRYLAND_TRADE TOOL_LOAN RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY ALIGNED_WEATHER SEASON_REVIEW REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const waypostPoint=structure({x:num(0,1000),y:num(0,600)});
 const waypostVisit=structure({journeyId:id,organizerId:id,companionId:id,spentByEach:one(PILGRIMAGE_LEG_COST,2*PILGRIMAGE_LEG_COST),
   legIndex:one(0,1),pathIndex:num(1,6400,true),reachedTick:tick,originId:id,destinationId:id});
 
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
+// A weighted escort may pin one physical shipment, its receipt and two source orders
+// from the normal terminal tail, the hot event window, or retained detailed ledgers.
+const marketFreightProofLimit=96+120+RESOURCE_FLOW_MONTH_LIMIT*RESOURCE_FLOW_DETAIL_LIMIT;
+const marketFreightTerms=structure({
+  carrierId:id,buyOrderId:id,sellOrderId:id,buyerId:id,unitPrice:num(1,500,true),departedTick:tick,
+  good:marketGood,quantity:num(1,12,true),load:num(1,MARKET_FREIGHT_MAX_LOAD,true),band:one('light','medium','heavy'),
+  fee:count,rations:one(2,3,4),capability:optional(structure({realm,stage:num(1,9,true),capacity:num(1,MARKET_FREIGHT_MAX_LOAD,true)})),
+  dispatchByTick:otick,dispatch:optional(structure({tick,fromTileId:id,toTileId:id,pathIndex:num(1,6401,true)})),
+  closedBy:optional(one('declined','withdrawn','expired','incapable','shipment_ended')),
+});
 const flowGood = one('stone','jade_seed','frost_dose','ward_reed','frontier_water','reef_salt','port_rigging','rift_salt','stormstone','upper_lattice','jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const flowMeasure = num(0,Number.MAX_SAFE_INTEGER);
 const flowSerial = num(1,Number.MAX_SAFE_INTEGER,true);
-const flowAccount = structure({kind:one('actor','site','sect','order','shipment','oath','relocation','workshop','salvage','granary','village_supply','village_fair','seed_lot','seed_plot','danxia_medicine','upper_passage','frontier_store','upper_array_store','scribe_commission','waypost_meal','craft_training'),id,
+const flowAccount = structure({kind:one('actor','site','sect','order','shipment','oath','relocation','workshop','salvage','granary','village_supply','village_fair','seed_lot','seed_plot','danxia_medicine','upper_passage','frontier_store','upper_array_store','scribe_commission','waypost_meal','craft_training','freight'),id,
   pocket:optional(one('payment','collateral'))});
 const granaryReceipt: Validator = (value, path) => {
   const kind = (value as { kind?: unknown } | null)?.kind;
@@ -986,7 +999,7 @@ const shape = structure({
       feeEscrow:doctrineAmount,feePaid:doctrineAmount,feeRefunded:doctrineAmount,rationsEscrow:count,rationsSpent:count,rationsReturned:count,
       path:arr(6402,structure({x:num(0,1000),y:num(0,600)})),pathIndex:num(0,6402,true),stride:num(0,6402,true),lastAdvancedTick:otick,
       lastCrossedTileIds:ids,arrivedTick:otick,usedReportIds:ids,detours:arr(2,structure({tick,reportId:id,extraSteps:count})),
-      settledTick:otick,reason:otext})),
+      settledTick:otick,reason:otext,freight:optional(marketFreightTerms)})),
     reports:arr(SAVE_COLLECTION_LIMIT,structure({id,contractId:id,reporterId:id,observedTick:tick,hazardId:id,tileId:id,expiresTick:tick}))}),
   competitionReviews:structure({
     proofs:arr(SAVE_COLLECTION_LIMIT,structure({
@@ -1215,13 +1228,13 @@ const shape = structure({
       actorId:oid,sectId:oid,volunteerId:oid,cultivatorId:oid,people:count,stones:wealth,herbs:count,description:text,
       oldAgeCohorts:optional(arr(SAVE_COLLECTION_LIMIT,structure({householdId:id,bornTick:tick,count:tick})))}))}),
   markets:structure({nextId:tick,
-    orders:arr(320,structure({id,sequence:tick,actorId:id,locationId:id,side:one('buy','sell'),good:marketGood,
+    orders:arr(320+2*marketFreightProofLimit,structure({id,sequence:tick,actorId:id,locationId:id,side:one('buy','sell'),good:marketGood,
       quantity:marketQty,remaining:num(0,12,true),limitPrice:marketPrice,escrowStones:wealth,escrowGoods:num(0,12,true),
       placedTick:tick,expiresTick:tick,status:one('open','filled','cancelled','expired'),settledTick:otick})),
-    shipments:arr(160,structure({id,sequence:tick,buyOrderId:id,sellOrderId:id,buyerId:id,sellerId:id,originId:id,destinationId:id,
+    shipments:arr(160+marketFreightProofLimit,structure({id,sequence:tick,buyOrderId:id,sellOrderId:id,buyerId:id,sellerId:id,originId:id,destinationId:id,
       good:marketGood,quantity:marketQty,unitPrice:marketPrice,departedTick:tick,arrivalTick:tick,
       status:one('in_transit','delivered','lost','returned'),settledTick:otick,reason:otext})),
-    receipts:arr(100,structure({id,sequence:tick,buyerId:id,sellerId:id,originId:id,destinationId:id,
+    receipts:arr(100+marketFreightProofLimit,structure({id,sequence:tick,buyerId:id,sellerId:id,originId:id,destinationId:id,
       good:marketGood,quantity:marketQty,unitPrice:marketPrice,tick,status:one('local_fill','delivered','lost','returned'),shipmentId:oid,reason:otext}))}),
   oaths:structure({nextId:tick,contracts:arr(300,structure({id,requesterId:id,providerId:id,locationId:id,
     term:one('foundation_pill','jade_herb'),quantity:num(1,100,true),payment:wealth,collateral:wealth,
@@ -1296,6 +1309,12 @@ const shape = structure({
         return 'craftTrainingMove' in order&&order.craftTrainingMove==='offer'
           ?structure({...fields,craftTrainingMove:one('offer'),targetCultivatorId:id,targetCraftTraineeId:id})(value,path)
           :structure({...fields,craftTrainingMove:one('join','decline','blank','finish','withdraw'),targetCraftTrainingId:id})(value,path);
+      }
+      if(order?.action==='MARKET_FREIGHT'){
+        const fields={...fixed,action:one('MARKET_FREIGHT')};
+        return 'marketFreightMove' in order&&order.marketFreightMove==='offer'
+          ?structure({...fields,marketFreightMove:one('offer'),targetShipmentId:id,targetCultivatorId:id})(value,path)
+          :structure({...fields,marketFreightMove:one('accept','decline','withdraw'),targetEscortId:id})(value,path);
       }
       if(order?.action==='DISASTER_SHELTER'){
         const fields={...fixed,action:one('DISASTER_SHELTER')};
@@ -2765,6 +2784,18 @@ function verifyWorld(value: unknown): WorldState {
         return false;
       }))fail('playerAvatar.craftTrainingOrder');
   }
+  if(localWaterOrder?.action==='MARKET_FREIGHT'){
+    const ordered=w.cultivators.find(row=>row.id===localWaterOrder.actorId);
+    if(localWaterOrder.queuedTick!==w.tick||(w.playerAvatar.possessionUntilTick??0)<=w.tick+1||
+      w.playerAvatar.possessedId!==localWaterOrder.actorId||!ordered||
+      !availableMarketFreightActions(ordered,w,w.tick+1).some(option=>{
+        if(option.marketFreightMove==='offer'&&localWaterOrder.marketFreightMove==='offer')
+          return option.targetShipmentId===localWaterOrder.targetShipmentId&&option.targetCultivatorId===localWaterOrder.targetCultivatorId;
+        if(option.marketFreightMove!=='offer'&&localWaterOrder.marketFreightMove!=='offer')
+          return option.marketFreightMove===localWaterOrder.marketFreightMove&&option.targetEscortId===localWaterOrder.targetEscortId;
+        return false;
+      }))fail('playerAvatar.marketFreightOrder');
+  }
   if(localWaterOrder?.action==='DISASTER_SHELTER'){
     const ordered=w.cultivators.find(row=>row.id===localWaterOrder.actorId);
     if(localWaterOrder.queuedTick!==w.tick||(w.playerAvatar.possessionUntilTick??0)<=w.tick+1||
@@ -3412,6 +3443,8 @@ function verifyWorld(value: unknown): WorldState {
   unique(w.escorts.contracts.filter(({ status }) => status === 'active'), ({ escortId }) => escortId ?? '', 'escorts.contracts.active_actor');
   unique(w.escorts.reports, ({ id }) => id, 'escorts.reports.id');
   for (const contract of w.escorts.contracts) {
+    if((contract.freight!==undefined)!==/^freight-escort-[1-9][0-9]*$/u.test(contract.id))
+      fail('escorts.freight.protocol');
     const shipment = shipmentById.get(contract.shipmentId);
     const activeContract = contract.status === 'offered' || contract.status === 'active';
     unique(contract.usedReportIds, (id) => id, 'escorts.contracts.used_reports');
@@ -3435,12 +3468,12 @@ function verifyWorld(value: unknown): WorldState {
         contract.detours.some((data) => !contract.usedReportIds.includes(data.reportId) || data.tick > w.tick || data.tick < (contract.acceptedTick ?? contract.offeredTick))) {
       fail('escorts.contracts.references');
     }
-    if (contract.feeEscrow + contract.feePaid + contract.feeRefunded !== ESCORT_FEE ||
+    if (!contract.freight && (contract.feeEscrow + contract.feePaid + contract.feeRefunded !== ESCORT_FEE ||
         contract.rationsEscrow + contract.rationsSpent + contract.rationsReturned !== (contract.acceptedTick !== undefined ? ESCORT_RATIONS : 0) ||
         (activeContract ? (contract.feeEscrow !== ESCORT_FEE || contract.feePaid !== 0 || contract.feeRefunded !== 0)
           : (contract.feeEscrow !== 0 || contract.rationsEscrow !== 0)) ||
         (contract.status === 'delivered' && (contract.feePaid !== ESCORT_FEE || contract.acceptedTick === undefined)) ||
-        ((contract.status === 'failed' || contract.status === 'expired') && contract.feeRefunded !== ESCORT_FEE)) fail('escorts.contracts.escrow');
+        ((contract.status === 'failed' || contract.status === 'expired') && contract.feeRefunded !== ESCORT_FEE))) fail('escorts.contracts.escrow');
   }
   for (const report of w.escorts.reports) {
     if (!escortContractById.has(report.contractId) || !actor.has(report.reporterId) || !map.has(report.tileId) ||
@@ -3449,6 +3482,7 @@ function verifyWorld(value: unknown): WorldState {
   for (const receipt of w.markets.receipts) {
     if (!actor.has(receipt.buyerId) || !actor.has(receipt.sellerId) || receipt.buyerId === receipt.sellerId) fail('markets.receipts.references');
   }
+  validateMarketFreight(w,fail);
   unique(w.oaths.contracts, ({ id }) => id, 'oaths.contracts.id');
   for (const oath of w.oaths.contracts) {
     const terms = OATH_TERMS[oath.term];

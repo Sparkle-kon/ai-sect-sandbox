@@ -1,4 +1,5 @@
 import {disasterShelterCheckpoint} from './disasterShelterCheckpoint';
+import {marketFreightCheckpoint} from './marketFreightCheckpoint';
 import {isUpperPassageEvent,onLowerPlane} from './upperPassageIsolation';
 import type { MapEffect, MapPoint, MapPresentation, MapTile, TerrainBiome, WorldEvent, WorldState } from '../types/world';
 import { terrainTileAt } from './terrainEngine';
@@ -108,7 +109,7 @@ export function deriveMapPresentation(prev: WorldState, next: WorldState, events
     if (!previous || !onLowerPlane(actor) || !onLowerPlane(previous)) continue;
     if (previous.locationId !== actor.locationId && actor.alive && !pilgrimsMoved.has(actor.id) && !couriersMoved.has(actor.id) &&
         !realRescueArrivals.has(actor.id) && !actualReliefArrivals.has(actor.id) && !shelterSteps.has(actor.id) &&
-        !expeditionRescueCheckpoint(prev, previous) && !boundaryReliefCheckpoint(prev, previous)) {
+        !expeditionRescueCheckpoint(prev, previous) && !boundaryReliefCheckpoint(prev, previous) && !marketFreightCheckpoint(prev,previous)) {
       const origin = prevSites.get(previous.locationId) ?? nextSites.get(previous.locationId);
       const dest = nextSites.get(actor.locationId);
       if (origin && dest) {

@@ -86,7 +86,7 @@ import { advanceSectCredit, resolveSectCreditAction } from './sectCreditEngine';
 import { advanceSanctuaries, interceptSanctuaryDuel, resolveSanctuaryAction } from './sanctuaryEngine';
 import { advanceResearch, resolveResearchAction } from './researchEngine';
 import { advanceCeasefires, availableCeasefireActions, recordCeasefireHostility, resolveCeasefireAction } from './ceasefireEngine';
-import { activeEscortForActor, resolveEscortAction } from './escortEngine';
+import { activeEscortForActor, resolveEscortAction, resolveMarketFreightAction } from './escortEngine';
 import { advanceCompetitionSeasons, publicCompetitionStandings, recordBreakthroughCompetition, recordReliefCompetition, resolveCompetitionAction } from './competitionEngine';
 import { resolveScriptureAction } from './scriptureEngine';
 import { reconcileRelicCustody, resolveRelicAction, transferLootedRelics } from './relicEngine';
@@ -352,6 +352,12 @@ export function applyCultivatorBrainDecision(
       cultivator.innerMonologue = decision.innerMonologue;
       cultivator.currentAction = 'SCRIBE_COMMISSION';
     }
+    return applied;
+  }
+  if(decision.chosenAction==='MARKET_FREIGHT'){
+    if(activeAvatar(world)?.id===cultivator.id&&decision!==explicitAvatarDecision)return null;
+    const applied=resolveMarketFreightAction(world,cultivator,decision);
+    if(applied){cultivator.currentAction='MARKET_FREIGHT';cultivator.innerMonologue=decision.innerMonologue;}
     return applied;
   }
   if (decision.chosenAction === 'CRAFT_TRAINING') {

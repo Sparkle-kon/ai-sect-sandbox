@@ -1,3 +1,4 @@
+import {availableMarketFreightActions,type MarketFreightOption} from './escortEngine';
 import {availableDisasterShelterActions} from './disasterShelterEngine';
 import type {DisasterShelterOption} from '../types/disasterShelter';
 import {availableCraftTrainingActions,type CraftTrainingOption} from './craftTrainingEngine';
@@ -350,6 +351,18 @@ export function queueAvatarDisasterShelter(world:WorldState,actorId:string,choic
   return true;
 }
 
+export function queueAvatarMarketFreight(world:WorldState,actorId:string,choice:MarketFreightOption):boolean {
+  const host=activeAvatar(world);
+  if(!host||!onLowerPlane(host)||!canQueueAvatarSalvage(world,actorId)||choice.action!=='MARKET_FREIGHT')return false;
+  const options=availableMarketFreightActions(host,world,world.tick+1).filter(option=>
+    option.marketFreightMove===choice.marketFreightMove&&option.targetCultivatorId===choice.targetCultivatorId&&
+    option.targetShipmentId===choice.targetShipmentId&&option.targetEscortId===choice.targetEscortId);
+  if(options.length!==1)return false;
+  world.playerAvatar.essence-=AVATAR_ORDER_COST;
+  world.playerAvatar.pendingOrder={actorId,queuedTick:world.tick,...options[0]};
+  return true;
+}
+
 export function consumeAvatarOrder(world: WorldState): { actorId: string; decision: LLMDecisionPayload } | undefined {
   const state = world.playerAvatar;
   const order = state?.pendingOrder;
@@ -364,6 +377,10 @@ export function consumeAvatarOrder(world: WorldState): { actorId: string; decisi
     ...(order.scribeCommissionMove==='offer'?
       {targetChronicleSourceId:order.targetChronicleSourceId,targetCultivatorId:order.targetCultivatorId}:
       {targetScribeCommissionId:order.targetScribeCommissionId})}};
+  if(order.action==='MARKET_FREIGHT')return {actorId:order.actorId,decision:{
+    chosenAction:order.action,innerMonologue:'只核实这批货、实际载力与本人应承。',marketFreightMove:order.marketFreightMove,
+    ...(order.marketFreightMove==='offer'?
+      {targetShipmentId:order.targetShipmentId,targetCultivatorId:order.targetCultivatorId}:{targetEscortId:order.targetEscortId})}};
   if(order.action==='DISASTER_SHELTER')return {actorId:order.actorId,decision:{
     chosenAction:order.action,innerMonologue:'只照原户籍、实际行路和本人答复续办。',disasterShelterMove:order.disasterShelterMove,
     ...(order.disasterShelterMove==='offer'?{targetCultivatorId:order.targetCultivatorId}:{targetDisasterShelterId:order.targetDisasterShelterId})}};
