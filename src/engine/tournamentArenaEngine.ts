@@ -3,9 +3,8 @@ import {isScopedExpeditionGate} from './expeditionOmenTerms';
 import type {TournamentArena,TournamentArenaBout,TournamentArenaRound} from '../types/tournamentArena';
 import type {Cultivator,WorldEvent,WorldOccasion,WorldState} from '../types/world';
 
-export const TOURNAMENT_ARENA_TITLE='百年论剑魁首';
-export const TOURNAMENT_ARENA_PRIZE_NAME='万宗照夜印';
-export const tournamentArenaPrizeId=(occasionId:string)=>`tournament-champion-${occasionId}`;
+import { TOURNAMENT_ARENA_TITLE, TOURNAMENT_ARENA_PRIZE_NAME, tournamentArenaPrizeId } from './tournamentArenaTerms';
+export { TOURNAMENT_ARENA_TITLE, TOURNAMENT_ARENA_PRIZE_NAME, tournamentArenaPrizeId } from './tournamentArenaTerms';
 type Pair=Pick<TournamentArenaBout,'firstId'|'secondId'>;
 
 export interface TournamentArenaView extends TournamentArena {

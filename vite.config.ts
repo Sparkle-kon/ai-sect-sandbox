@@ -76,6 +76,7 @@ export default defineConfig({
           'chronicle-evidence': ['./src/engine/chronicleCausalityEngine.ts','./src/engine/chronicleFocusEngine.ts'],
           // Succession consumes native era and witness checks without pulling the chronology UI back into history.
           'era-history-evidence': ['./src/engine/eraHistoryIndex.ts','./src/engine/campaignStopCondition.ts'],
+          'tournament-banquet-proof': ['./src/engine/tournamentArenaTerms.ts', './src/engine/tournamentBanquet.ts'],
           'witnessed-scene-proof': ['./src/engine/witnessedPersonalStory.ts'],
           'public-fact-policy': ['./src/engine/chronicleLead.ts'],
           'share-redaction-terms': ['./src/engine/shareSaveRedactionText.ts'],

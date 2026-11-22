@@ -54,6 +54,7 @@ export interface CivicWorldHubProps {
   active:boolean;
   selectedCultivator?:Cultivator;
   atlasExtras?:ReactNode;
+  banquetScene?:ReactNode;
   initialOpen?:string;
   rememberedOpen?:string|null;
   onOpenChange?:(id:string|null)=>void;
@@ -66,7 +67,7 @@ export interface CivicWorldHubProps {
 }
 
 export function CivicWorldHub({
-  simulation,active,selectedCultivator,atlasExtras,initialOpen='weather',rememberedOpen,onOpenChange,
+  simulation,active,selectedCultivator,atlasExtras,banquetScene,initialOpen='weather',rememberedOpen,onOpenChange,
   authoredEra,handedness,onChangeHandedness,audience,onIntervene,onAnalytics,
 }:CivicWorldHubProps) {
   const {
@@ -175,9 +176,12 @@ export function CivicWorldHub({
             <React.Suspense fallback={null}><VillageGranaryPanel world={visibleWorld} cultivator={selectedCultivator} settlementId={selectedSettlementId} /></React.Suspense>
           </>}
       </div> },
-      { id: 'occasions', label: '比武与秘境盛会', content: selectedCultivator
-        ? <React.Suspense fallback={<p role="status">载入盛会记录…</p>}><WorldOccasionsPanel world={visibleWorld} cultivator={selectedCultivator} arenaControls={arenaControls} dungeonControls={dungeonControls} /></React.Suspense>
-        : <p className="text-xs text-slate-300">从人物名册选择实际修士后查看盛会。</p> },
+      { id: 'occasions', label: '比武与秘境盛会', content: <div className="space-y-2.5">
+        {banquetScene}
+        {selectedCultivator
+          ? <React.Suspense fallback={<p role="status">载入盛会记录…</p>}><WorldOccasionsPanel world={visibleWorld} cultivator={selectedCultivator} arenaControls={arenaControls} dungeonControls={dungeonControls} /></React.Suspense>
+          : <p className="text-xs text-slate-300">从人物名册选择实际修士后查看盛会。</p>}
+      </div> },
       { id: 'bounties', label: '天机悬赏榜', content: <React.Suspense fallback={<p role="status">载入悬赏榜…</p>}><BountyBoard world={visibleWorld} /></React.Suspense> },
       { id: 'analytics', label: '天道观测与演化统计', content: <button type="button" onClick={() => onAnalytics()}
         className={`${action} bg-sky-900/60 text-sky-100 hover:bg-sky-800`}><BarChart3 aria-hidden="true" className="h-4 w-4" />打开天道观测</button> },

@@ -1,6 +1,7 @@
 import {closeExpeditionDungeon,dungeonEnrollmentHeld,reconcileExpeditionDungeon} from './expeditionDungeonEngine';
 import {finishTournamentArena,openTournamentArena,recordTournamentArenaRound,tournamentArenaRoster} from './tournamentArenaEngine';
 import {settleTournamentWagers} from './tournamentWagerSettlement';
+import {openTournamentBanquet} from './tournamentBanquet';
 import type {TournamentArenaBout} from '../types/tournamentArena';
 import { recordTournamentChampion, recordTournamentRound } from './competitionEngine';
 import { grantExpeditionRelic } from './relicEngine';
@@ -217,6 +218,8 @@ export function advanceOccasions(world: WorldState, rng: () => number): WorldEve
         const crowned=event(world, occasion, 'champion', '大比魁首揭晓', description, [champion.id]);
         if(occasion.arena)recordTournamentArenaRound(world,occasion,crowned,roster,arenaBouts);
         results.push(crowned);
+        // The last two finalists are still physically here, before the native closing return.
+        if(occasion.arena)results.push(...openTournamentBanquet(world,occasion,crowned,roster));
         close(occasion);
         if(occasion.arena){
           finishTournamentArena(world,occasion,crowned);

@@ -167,6 +167,7 @@ import { maintainSectPolitics, resolveLeadershipAction, rewardContribution } fro
 import { maintainSectEconomy, mitigateSectArray, previewSectArrayDamage, resolveSectEconomyAction, sectQiBonus } from './sectEconomyEngine';
 import { activeSiegeForActor, advanceDiplomacy, resolveDiplomacyAction } from './diplomacyEngine';
 import { activeOccasionForActor, advanceOccasions, joinOccasion } from './occasionEngine';
+import { isPrivateTournamentBanquetEvent, recordTournamentBanquetAfterTalk } from './tournamentBanquet';
 import { advanceBounties, pursueBounty, recordTransgression } from './bountyEngine';
 import { knownMapLocations, noteTerrainVisit } from './terrainEngine';
 import { deriveMapPresentation } from './mapMotionEngine';
@@ -1714,6 +1715,10 @@ export function advanceWorldTick(
       }
       newEvents.push(evt);
       witnessEvent(nextState, evt);
+      if(decision.chosenAction==='SOCIALIZE'&&cultivator.currentAction==='SOCIALIZE'){
+        const after=recordTournamentBanquetAfterTalk(nextState,evt);
+        if(after&&!newEvents.some(row=>row.id===after.id))newEvents.push(after);
+      }
     }
   }
 
@@ -1774,7 +1779,7 @@ export function advanceWorldTick(
   }), ...advanceOccasions(nextState, rng), ...advanceOaths(nextState), ...advanceMarkets(nextState), ...advanceWitnesses(nextState), ...advanceSeasonReviews(nextState, (state, seasonId) =>
     publicCompetitionStandings(state, seasonId).find(({ rank }) => rank === 1)), ...maintainSectPolitics(nextState), ...advanceDoctrineFoundings(nextState), ...advanceDoctrineMaturity(nextState,prevState), ...advanceBounties(nextState), ...advanceResearch(nextState), ...advanceWorkshops(nextState), ...advanceCraftTraining(nextState), ...advanceScribeCommissions(nextState), ...advanceDamageAssurance(nextState), ...advanceRelicExhibits(nextState), ...advanceProbation(nextState), ...advanceToolLoans(nextState), ...advanceWaypostMeals(nextState), ...advanceImmortalAuctions(nextState), ...advanceEstates(nextState), ...advanceDoctrines(nextState), ...advanceSectCredit(nextState), ...advanceSanctuaries(nextState), ...advancePilgrimages(nextState), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceCareFollowups(nextState), ...advanceDanxiaShortages(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...reconcileCourierDeaths(nextState), ...advanceHouseholds(nextState), ...advanceHouseholdNames(nextState), ...advanceCultivationClans(nextState)]) {
     newEvents.push(event);
-    witnessEvent(nextState, event);
+    if(!isPrivateTournamentBanquetEvent(event))witnessEvent(nextState, event);
   }
   for(const event of [...advanceDisasterShelters(nextState), ...advanceSeasonalHousing(nextState), ...advanceMentorTransfers(nextState), ...advanceSectStipends(nextState)]) {
     newEvents.push(event);

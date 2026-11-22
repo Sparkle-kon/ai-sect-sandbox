@@ -20,6 +20,7 @@ import { projectStoryHomepage } from './engine/storyHomepage';
 import {ChronicleArchiveHub} from './components/hubs/ChronicleArchiveHub';
 import {CivicWorldHub} from './components/hubs/CivicWorldHub';
 import {SectAffairsHub} from './components/hubs/SectAffairsHub';
+import {useTournamentBanquetScene} from './components/useTournamentBanquetScene';
 import {useCivicRealmViews} from './components/hubs/useCivicRealmViews';
 import { useWorldSimulationController } from './controllers/useWorldSimulationController';
 import {findVisibleCampaignStopOption,visibleCampaignStopOptions} from './components/campaignStopOptions';
@@ -412,6 +413,8 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   useEffect(() => {
     if (trail) backRef.current?.focus({ preventScroll: true });
   }, [trail]);
+  const {card:banquetCard,story:banquetStory}=useTournamentBanquetScene(visibleWorld,viewScopeKey,
+    cockpitOpen||!dashboardOpen&&!storyEntryOpen||dashboardOpen&&workspace==='world',Boolean(preview));
   const {immersive,atlasExtras,passageScene}=useCivicRealmViews({
     simulation,selectedCultivator,cockpitOpen,dashboardOpen,storyEntryOpen,workspace,onSelectCultivator:setSelectedCultivatorId,
     onClearAvatarNotice:()=>setAvatarNotice(undefined),
@@ -640,7 +643,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   const clearWorldPulse=(token:number)=>setPulseFocus(current=>current?.token===token?undefined:current);
   const pulseStrip=worldPulse&&<WorldPulseBar view={worldPulse} historical={Boolean(preview)}
     canFocus={!immersive} onFocusAlert={focusWorldPulse}/>;
-  if(cockpitOpen)return <PanoramicCockpitView world={visibleWorld} titleRef={cockpitHeading} exit={cockpitSwitch} statusStrip={pulseStrip} stageOverride={featuredStoryCard} subplot={guidance.subplot} branchScene={flightCard??passageScene}
+  if(cockpitOpen)return <PanoramicCockpitView world={visibleWorld} titleRef={cockpitHeading} exit={cockpitSwitch} statusStrip={pulseStrip} stageOverride={featuredStoryCard} subplot={guidance.subplot} branchScene={flightCard??passageScene??banquetStory}
     time={{historical:Boolean(preview),running:isRunning,busy:cockpitBusy||storyDecisionPending,onStep:()=>void handleStepTick(),
       onToggleAutoplay:toggleStoryAutoplay,onReturnLive:()=>handleTimelinePreview(null),onOpenTimeline:()=>{
         openWorkspace('chronicle');rememberFold('chronicle','timeline');setStoryEntryOpen(false);
@@ -674,7 +677,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
       revision={world} busy={isStepping||fastForwardLocked} onBack={()=>setStoryEntryOpen(false)} onTools={openDashboard}
       openings={<HighDramaPresetPicker scopeKey={viewScopeKey} revision={world} disabled={dramaticOpening.disabled} onStart={dramaticOpening.start}/>}
       onFollow={storyHome.lead?followCurrentLead:undefined} onEnter={enterCurrentLead} onOrder={orderCurrentStoryAvatar} />:
-      <StoryFirstHome scene={storyHome.scene} subplot={guidance.subplot} branchScene={flightCard??passageScene??<DeferredGrandSiegeMapScene world={world} viewer={activeAvatar(world)} fog personalOnly visible witnessScopeKey={viewScopeKey}/>} leadName={storyHome.lead?.name} playerName={activeAvatar(world)?.name}
+      <StoryFirstHome scene={storyHome.scene} subplot={guidance.subplot} branchScene={flightCard??passageScene??banquetStory??<DeferredGrandSiegeMapScene world={world} viewer={activeAvatar(world)} fog personalOnly visible witnessScopeKey={viewScopeKey}/>} leadName={storyHome.lead?.name} playerName={activeAvatar(world)?.name}
         busy={isStepping} moreRef={storyMoreRef} notice={storyNotice} calendar={storyHome.calendar} opening={dramaticOpening.opening}
         outcome={storyOutcome?.world===world?storyOutcome.text:undefined} onContinue={advanceStory} onMore={openStoryEntry} />)}
   </main>;
@@ -815,7 +818,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
           initialOpen={opened('sect','governance')} {...fold('sect')}
           onCouncil={()=>{setCouncilOpenedBefore(true);setCouncilOpen(true);}}/>,
         world:immersive??<CivicWorldHub simulation={simulation} active={dashboardOpen&&workspace==='world'}
-          selectedCultivator={selectedCultivator} atlasExtras={atlasExtras}
+          selectedCultivator={selectedCultivator} atlasExtras={atlasExtras} banquetScene={banquetCard}
           audience={getAudience('heaven',activeActorId??undefined)}
           initialOpen={opened('world','weather')} {...fold('world')} authoredEra={authoredEra}
           handedness={handedness} onChangeHandedness={changeHandedness} onIntervene={handleGodIntervene}
