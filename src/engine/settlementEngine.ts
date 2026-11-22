@@ -4,7 +4,7 @@ import {recordEraMigration} from './eraHistoryIndex';
 import { captureCivicReliefDeed } from './civicMemorialEngine';
 import { closeVillageCensusPeriod, openVillageCensusPeriod, recordVillageCensusMaturation, recordVillageCensusSettlement } from './villageCensusEngine';
 import { recordProbationRelief } from './probationEngine';
-import { initializeHouseholds, matureHouseholdBirth, recordHouseholdBirth, recordHouseholdMigration, recordHouseholdMortality,
+import { initializeHouseholds, matureHouseholdBirth, recordHouseholdBirth, recordHouseholdMigration, recordHouseholdMortality, recordHouseholdOldAge,
   recordHouseholdRecruitment, registerHouseholdVolunteer, retireHouseholdVolunteer } from './householdEngine';
 import { attachRecollectionAfterRecruitment, MORTAL_MATURITY_TICKS, maturingReincarnationCases,
   pruneExpiredVolunteerEchoes, registerMaturedReincarnation, reserveReincarnationBirth } from './reincarnationEngine';
@@ -205,8 +205,9 @@ function annualCohort(world: WorldState, village: MortalSettlement, stressedByHa
     const number = mixed(world.random.seed, id);
     village.volunteers.push({ id, cohortYear: world.year, name: FAMILY[number % FAMILY.length] + GIVEN[Math.floor(number / 13) % GIVEN.length],
       age: 18, spiritRoot: ROOTS[Math.floor(number / 113) % ROOTS.length], aptitude: 60 + number % 35, willingness: 68 + number % 30 });
-    registerHouseholdVolunteer(world, village, village.volunteers.at(-1)!);
-    registerMaturedReincarnation(world, item, village, id);
+    const listed = registerHouseholdVolunteer(world, village, village.volunteers.at(-1)!, item.birthTick);
+    if (!listed) village.volunteers.pop();
+    registerMaturedReincarnation(world, item, village, listed ? id : undefined);
   }
   if (cannotRegister) return undefined;
 
@@ -223,7 +224,10 @@ function annualCohort(world: WorldState, village: MortalSettlement, stressedByHa
       age: 18 + number % 23, spiritRoot: ROOTS[Math.floor(number / 113) % ROOTS.length],
       aptitude: 60 + number % 35, willingness: 79 + number % 20,
     });
-    registerHouseholdVolunteer(world, village, village.volunteers.at(-1)!);
+    if (!registerHouseholdVolunteer(world, village, village.volunteers.at(-1)!)) {
+      village.volunteers.pop();
+      break;
+    }
   }
 
   // A village needs an adult community; empty or severely distressed settlements cannot create residents.
@@ -256,6 +260,15 @@ export function advanceSettlements(world: WorldState): WorldEvent[] {
       return false;
     });
     if (removedCohorts.length) recordVillageCensusMaturation(world, village, removedCohorts);
+    const oldAgeCohorts = recordHouseholdOldAge(world, village);
+    if (oldAgeCohorts.length) {
+      const people = oldAgeCohorts.reduce((sum, cohort) => sum + cohort.count, 0);
+      village.population -= people;
+      events.push(log(world, village, { kind:'old_age', people, stones:0, herbs:0, oldAgeCohorts,
+        description:`${village.name}有${people}名有历年出生记录的居民寿终，户籍照实销记。` }, 'registered', '凡人寿终',
+        world.locations.find(site=>site.id===village.locationId)?.type==='market' ? undefined :
+          villageEvolutionLocalObserverIds(world,new Set([village.id]))));
+    }
     const location = world.locations.find(({ id }) => id === village.locationId)!;
     const tile = terrainTileAt(world, location.x, location.y);
     const hazard = tile && world.mapHazards.filter((item) =>

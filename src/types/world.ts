@@ -1249,10 +1249,17 @@ export interface MortalSettlement {
   lastDisasterTick?: number;
   lastReliefTick?: number;
 }
+export interface MortalAgeCohort {
+  bornTick: number;
+  count: number;
+}
+export interface MortalOldAgeSlice extends MortalAgeCohort {
+  householdId: string;
+}
 export interface SettlementRecord {
   id: string;
   tick: number;
-  kind: 'disaster' | 'migration' | 'relief' | 'recruitment' | 'growth';
+  kind: 'disaster' | 'migration' | 'relief' | 'recruitment' | 'growth' | 'old_age';
   settlementId: string;
   targetSettlementId?: string;
   actorId?: string;
@@ -1263,6 +1270,7 @@ export interface SettlementRecord {
   stones: number;
   herbs: number;
   description: string;
+  oldAgeCohorts?: MortalOldAgeSlice[];
 }
 export type CivicMemorialMove = 'propose'|'verify';
 export interface CivicErrataEvidence {
@@ -2271,6 +2279,7 @@ export interface TerritorialLeaseState { leases: TerritorialLease[]; nextId: num
 export interface HouseholdPresence {
   settlementId: string;
   adults: number;
+  adultAgeCohorts?: MortalAgeCohort[];
   juvenileCohorts: Array<{ bornTick: number; count: number }>;
   births: number;
   matured: number;
@@ -2287,6 +2296,7 @@ export interface MortalHousehold {
 }
 export interface HouseholdMember {
   volunteerId: string;
+  knownBornTick?: number;
   householdId: string;
   settlementId: string;
   registeredTick: number;
@@ -3084,6 +3094,7 @@ export interface VillageCensusCount {
 }
 export interface VillageCensusMovement {
   id: string;
+  deathCause?: 'old_age';
   kind: 'birth' | 'maturation' | 'death' | 'migration' | 'enrollment';
   villageId: string;
   people: number;
@@ -3266,7 +3277,27 @@ export interface RegionalSimulationState {
   actors:RegionalDeferredActor[];annual:RegionalAnnualSummary[];
 }
 
+export interface EraHeritageDate { tick: number; year: number; month: number }
+export interface EraHeritageOath extends EraHeritageDate {
+  oathId: string; eventId: string; locationId: string; requesterId: string; providerId: string;
+  term: OathTerm; quantity: number; payment: number; collateral: number;
+}
+export interface EraHeritageArtifact extends EraHeritageDate {
+  artifactId: string; eventId: string; locationId: string; makerId: string;
+  setId: RelicSetId; fragmentIds: [string, string];
+}
+export interface EraHeritageRelay { learnerId: string; originWitnessId: string; learnedTick: number }
+export interface EraHeritageFact extends EraHeritageDate {
+  source: ChronicleSourceFact; firsthandIds: string[]; retellings: ChronicleRetelling[];
+  correction?: ChronicleCorrection; relays: EraHeritageRelay[];
+}
+export interface EraHeritageState {
+  version: 1; oaths: EraHeritageOath[]; artifacts: EraHeritageArtifact[]; facts: EraHeritageFact[];
+}
+
 export interface WorldState {
+  mortalAgeTrackingSinceTick?: number;
+  eraHeritage?: EraHeritageState;
   regionalSimulation?:RegionalSimulationState;
   authoredEraOrigin?:AuthoredEraOrigin;
   fieldObservatories: FieldObservatoriesState;

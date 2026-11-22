@@ -1,4 +1,5 @@
 import {REGIONAL_SIMULATION_VERSION,regionForPoint,SIMULATION_REGION_NAMES} from '../engine/regionalSimulationEngine';
+import {projectEraHeritage} from '../engine/eraHeritageEngine';
 import {localDoctrineFoundingNotice} from '../engine/doctrineFoundingEngine';
 import {localDanxiaSeasonReviewSite} from '../engine/danxiaSeasonReviewEngine';
 import { VILLAGE_WORK_RULES, visibleVillageWorks } from '../engine/villageWorksEngine';
@@ -356,6 +357,12 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     if (!tile || !knownMapLocations(world, selected).includes(selectedLocation) || !currentVisibleTileIds(world, selected).has(tile.id)) return undefined;
     return regionForPoint(world, selectedLocation);
   }, [world, selected, selectedLocation]);
+  const localHeritageReading = useMemo(() => {
+    if (!toolsExpanded || !world.eraHeritage || !selected || !selectedLocation) return false;
+    const siteTile = terrainTileAt(world, selectedLocation.x, selectedLocation.y);
+    return !!siteTile && currentVisibleTileIds(world, selected).has(siteTile.id) &&
+      projectEraHeritage(world, selected).presentSiteId === selectedLocation.id;
+  }, [toolsExpanded, world, selected, selectedLocation]);
   const selectedTrial = selected?.tribulation;
   const selectedBounty = selected && relevantBounty(world.bounties, selected.id);
   const activeSieges = world.sieges.filter(isActiveCampaign);
@@ -1226,6 +1233,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         {toolsExpanded && selectedKnownRegion && <span className="text-[11px] text-emerald-200">
           所选已知地点所属地域：{SIMULATION_REGION_NAMES[selectedKnownRegion]}
         </span>}
+        {localHeritageReading && <span className="text-[11px] text-amber-200">此处有本人可以核查的旧事凭据。</span>}
+
       </div>
       <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-800 px-4 py-2 text-[11px] text-slate-300" aria-label="地图视角与画笔">
         {([

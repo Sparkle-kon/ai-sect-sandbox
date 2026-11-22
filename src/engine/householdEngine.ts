@@ -1,7 +1,8 @@
 import type { Cultivator, HouseholdGuardianship, HouseholdGuardianMove, HouseholdMember, HouseholdPresence, HouseholdState, LLMDecisionPayload,
-  MortalHousehold, MortalSettlement, MortalVolunteer, WorldEvent, WorldState } from '../types/world';
+  MortalAgeCohort, MortalHousehold, MortalOldAgeSlice, MortalSettlement, MortalVolunteer, WorldEvent, WorldState } from '../types/world';
 import { pilgrimageCheckpoint } from './pilgrimageEngine';
 import { knownMapLocations } from './terrainEngine';
+import { creditAdultAge, debitAdultAge, MORTAL_OLD_AGE_TICKS, unknownAdultCount } from './mortalAgeCohorts';
 
 export const HOUSEHOLD_GUARDIAN_OFFER_TICKS = 4;
 const GUARDIAN_HISTORY = 64;
@@ -135,6 +136,8 @@ export function recordHouseholdBirth(world: WorldState, village: MortalSettlemen
   if (bornTick !== world.tick || count <= 0 || !village.juvenileCohorts.some((row) => row.bornTick === bornTick && row.count === count)) return;
   const all = atVillage(world, village.id);
   if (!all.length || all.some(({ row }) => row.juvenileCohorts.some((cohort) => cohort.bornTick === bornTick))) return;
+  // Old imported children/adults have no new age proof; start with this actual birth.
+  world.mortalAgeTrackingSinceTick ??= bornTick;
   const registered = new Set(namedLocal(world, village.id).map(({ householdId }) => householdId));
   const eligible = all.filter(({ row, group }) => row.adults > 0 || registered.has(group.id));
   const homes = eligible.length ? eligible : all;
@@ -151,6 +154,8 @@ export function matureHouseholdBirth(world: WorldState, village: MortalSettlemen
     const available = row.juvenileCohorts.find(({ bornTick: birth }) => birth === bornTick);
     if (!available) continue;
     row.adults += available.count;
+    if (world.mortalAgeTrackingSinceTick !== undefined && bornTick >= world.mortalAgeTrackingSinceTick)
+      creditAdultAge(row, available);
     row.matured += available.count;
     row.juvenileCohorts = row.juvenileCohorts.filter(({ bornTick: birth }) => birth !== bornTick);
   }
@@ -160,20 +165,32 @@ export function retireHouseholdVolunteer(world: WorldState, village: MortalSettl
   const member = world.households.members.find((row) => row.volunteerId === volunteer.id && row.settlementId === village.id && row.status === 'resident');
   const group = member && world.households.groups.find(({ id }) => id === member.householdId);
   if (!member || !group || volunteer.enlistedCultivatorId) return;
-  ensurePresence(group, village.id).adults++;
+  const row = ensurePresence(group, village.id);
+  row.adults++;
+  if (member.knownBornTick !== undefined) creditAdultAge(row, { bornTick: member.knownBornTick, count: 1 });
+  delete member.knownBornTick;
   member.status = 'retired';
   member.settledTick = world.tick;
 }
 
-export function registerHouseholdVolunteer(world: WorldState, village: MortalSettlement, volunteer: MortalVolunteer): void {
+export function registerHouseholdVolunteer(world: WorldState, village: MortalSettlement, volunteer: MortalVolunteer, preferredBornTick?: number): boolean {
   if (!village.volunteers.includes(volunteer) || volunteer.enlistedCultivatorId ||
-      world.households.members.some(({ volunteerId }) => volunteerId === volunteer.id)) return;
+      world.households.members.some(({ volunteerId }) => volunteerId === volunteer.id)) return false;
   const homes = atVillage(world, village.id).sort((a, b) => b.row.adults - a.row.adults || a.group.id.localeCompare(b.group.id));
-  const real = homes.find(({ row }) => row.adults > 0);
-  if (!real) return;
+  const exact = preferredBornTick === undefined ? undefined :
+    homes.find(({ row }) => row.adultAgeCohorts?.some(item => item.bornTick === preferredBornTick));
+  const unknown = homes.find(({ row }) => unknownAdultCount(row) > 0);
+  const dated = homes.flatMap(home => (home.row.adultAgeCohorts ?? []).filter(item => Math.floor((world.tick-item.bornTick)/12) <= 47)
+    .map(item => ({ home,bornTick:item.bornTick }))).sort((a,b) => b.bornTick-a.bornTick)[0];
+  const real = exact ?? unknown ?? (preferredBornTick === undefined ? dated?.home : undefined);
+  if (!real) return false;
+  const requestedAge = exact ? preferredBornTick : unknown ? undefined : dated?.bornTick;
+  const bornTick = debitAdultAge(real.row, 1, requestedAge)[0]?.bornTick;
   real.row.adults--;
+  if (bornTick !== undefined) volunteer.age = Math.floor((world.tick - bornTick) / 12);
   world.households.members.push({ volunteerId: volunteer.id, householdId: real.group.id, settlementId: village.id,
-    registeredTick: world.tick, status: 'resident' });
+    registeredTick: world.tick, status: 'resident', ...(bornTick === undefined ? {} : { knownBornTick: bornTick }) });
+  return true;
 }
 
 export function recordHouseholdRecruitment(world: WorldState, village: MortalSettlement, volunteer: MortalVolunteer, recruit: Cultivator): void {
@@ -181,17 +198,20 @@ export function recordHouseholdRecruitment(world: WorldState, village: MortalSet
   const member = world.households.members.find((row) => row.volunteerId === volunteer.id && row.settlementId === village.id && row.status === 'resident');
   if (!member) return;
   member.status = 'recruited';
+  delete member.knownBornTick;
   member.recruitedId = recruit.id;
   member.settledTick = world.tick;
 }
 
-function withdrawAnonymous(world: WorldState, settlementId: string, count: number, apply: (group: MortalHousehold, row: HouseholdPresence, people: number) => void): void {
+function withdrawAnonymous(world: WorldState, settlementId: string, count: number,
+  apply: (group: MortalHousehold, row: HouseholdPresence, people: number, cohorts: MortalAgeCohort[]) => void): void {
   let remaining = count;
   for (const { group, row } of atVillage(world, settlementId).sort((a, b) => b.row.adults - a.row.adults || a.group.id.localeCompare(b.group.id))) {
     const people = Math.min(remaining, row.adults);
     if (people < 1) break;
+    const cohorts = debitAdultAge(row, people);
     row.adults -= people;
-    apply(group, row, people);
+    apply(group, row, people, cohorts);
     remaining -= people;
   }
 }
@@ -202,14 +222,34 @@ export function recordHouseholdMortality(world: WorldState, village: MortalSettl
 export function recordHouseholdMigration(world: WorldState, from: MortalSettlement, to: MortalSettlement, count: number): Array<{householdId:string;adults:number}> {
   const moves:Array<{householdId:string;adults:number}>=[];
   if (from.id === to.id) return moves;
-  withdrawAnonymous(world, from.id, count, (group, row, people) => {
+  withdrawAnonymous(world, from.id, count, (group, row, people, cohorts) => {
     const destination = ensurePresence(group, to.id);
     row.migratedOut += people;
     destination.adults += people;
+    for (const cohort of cohorts) creditAdultAge(destination, cohort);
     destination.migratedIn += people;
     moves.push({householdId:group.id,adults:people});
   });
   return moves;
+}
+
+/** Deduct only dated, still living, unregistered adults at their actual current settlement. */
+export function recordHouseholdOldAge(world: WorldState, village: MortalSettlement): MortalOldAgeSlice[] {
+  if (world.mortalAgeTrackingSinceTick === undefined || world.month !== 1) return [];
+  const slices: MortalOldAgeSlice[] = [];
+  for (const {group,row} of atVillage(world, village.id)) {
+    const due = (row.adultAgeCohorts ?? []).filter(cohort => world.tick - cohort.bornTick >= MORTAL_OLD_AGE_TICKS)
+      .sort((a,b) => a.bornTick-b.bornTick);
+    if (!due.length) continue;
+    const people = due.reduce((total, cohort) => total + cohort.count, 0);
+    row.adults -= people;
+    row.deaths += people;
+    for (const cohort of due) slices.push({householdId:group.id, ...cohort});
+    const remaining = (row.adultAgeCohorts ?? []).filter(cohort => world.tick - cohort.bornTick < MORTAL_OLD_AGE_TICKS);
+    if (remaining.length) row.adultAgeCohorts = remaining;
+    else delete row.adultAgeCohorts;
+  }
+  return slices;
 }
 
 const pending = (world: WorldState, row: HouseholdGuardianship) => row.status === 'offered' &&

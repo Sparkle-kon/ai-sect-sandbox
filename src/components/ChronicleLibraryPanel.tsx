@@ -14,6 +14,7 @@ import { canShowOriginalChronicleManuscript, publicChronicleExcerpt } from '../e
 import { ColdChronicleShelf } from './ColdChronicleShelf';
 import { EraHistoryPanel,type EraHistoryOption } from './EraHistoryPanel';
 import { projectEraHistory } from '../engine/eraHistoryIndex';
+import { projectEraHeritage } from '../engine/eraHeritageEngine';
 import { createTerrainMapView } from './terrainMapView';
 
 import { ChronicleTopicDigest } from './ChronicleTopicDigest';
@@ -175,7 +176,7 @@ export function ChronicleLibraryPanel({ world, cultivator, scopeKey }: { world: 
     <section className="space-y-3 rounded-xl border border-amber-400/20 bg-slate-900/60 p-3 sm:p-4" aria-label="藏书阁">
       <header>
         <h3 className="text-sm font-semibold tracking-wide text-amber-100">藏书阁</h3>
-        <p className="text-xs text-slate-300">叙事视角：仅公开史料。未公开的密议、私语与内心独白不入此卷。</p>
+        <p className="text-xs text-slate-300">叙事视角：仅公开史料。正文不收未公开的密议、私语与内心独白。</p>
       </header>
       {chapters.length > 0 && (
         <label className="grid gap-1 text-xs text-slate-300">
@@ -241,6 +242,7 @@ export function ChronicleLibraryPanel({ world, cultivator, scopeKey }: { world: 
             resolveDialogue={(id)=>publicDialogues.chapter(safe.id,id)} />;
         }} />
       <EraHistoryPanel scopeKey={`${scopeKey??''}:${cultivator?.id??''}`} options={eraOptions}
+        readProvenance={()=>projectEraHeritage(world,cultivator)}
         read={(query,before,limit)=>projectEraHistory(world,query,cultivator?.id,world.tick,{before,limit})} />
     </section>
   );

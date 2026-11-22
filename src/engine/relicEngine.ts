@@ -1,5 +1,6 @@
 import type { Cultivator, LLMDecisionPayload, LocationNode, RelicFragment, RelicMove, RelicSetId, RelicSlot,
   RelicState, WorldEvent, WorldOccasion, WorldState } from '../types/world';
+import { captureHeritageArtifact } from './eraHeritageCapture';
 import { canUseFurnace, claimFurnaceUse } from './furnaceReservationEngine';
 
 const SET: RelicSetId = 'star-balance';
@@ -108,9 +109,12 @@ export function resolveRelicAction(world: WorldState, actor: Cultivator, decisio
   for (const item of pair) item.holder = { kind: 'consumed', id };
   actor.artifacts.push({ id, name: rules.name, spiritRoot: '雷', tier: '灵器', durability: 100, maxDurability: 100, resonance: 0,
     relicSetId: SET, relicFragmentIds: [pair[0].id, pair[1].id] });
-  return event(world, `assemble-${id}`, '遗器合璧重铸',
+  const assembled = event(world, `assemble-${id}`, '遗器合璧重铸',
     `${actor.name}在合用炉中消耗两枚互补碎片、${rules.stoneCost}灵石及${rules.earthCost}份玄土根，将${rules.name}铸成一件实物，仍须认主装备。`,
     actor.id, actor.locationId);
+  const object = actor.artifacts.at(-1);
+  if (object) captureHeritageArtifact(world, actor, object, assembled);
+  return assembled;
 }
 
 /** Hook after the real expedition result and its canonical event are instantiated. */

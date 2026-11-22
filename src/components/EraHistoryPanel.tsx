@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { EraProvenanceSection, hasEraProvenance, type EraProvenanceReading } from './EraProvenanceSection';
 import type { EraHistoryQuery, EraHistoryView } from '../engine/eraHistoryIndex';
 
 export type EraHistoryCursor = { tick: number; eventId: string };
@@ -6,6 +7,7 @@ export interface EraHistoryOption { query: EraHistoryQuery; label: string }
 export interface EraHistoryPanelProps {
   scopeKey: string;
   options: readonly EraHistoryOption[];
+  readProvenance?: () => EraProvenanceReading;
   read: (query: EraHistoryQuery, before?: EraHistoryCursor, limit?: number) => readonly EraHistoryView[];
 }
 const PAGE_SIZE = 12;
@@ -50,12 +52,13 @@ export function EraHistoryReceipts({ rows, query }: { rows: readonly EraHistoryV
   );
 }
 
-export function EraHistoryPanel({ scopeKey, options, read }: EraHistoryPanelProps) {
-  return <EraHistoryPortal key={scopeKey} options={options} read={read} />;
+export function EraHistoryPanel({ scopeKey, options, read, readProvenance }: EraHistoryPanelProps) {
+  return <EraHistoryPortal key={scopeKey} options={options} read={read} readProvenance={readProvenance} />;
 }
 
-function EraHistoryPortal({ options, read }: Pick<EraHistoryPanelProps, 'options' | 'read'>) {
+function EraHistoryPortal({ options, read, readProvenance }: Omit<EraHistoryPanelProps, 'scopeKey'>) {
   const [open, setOpen] = useState(false);
+  const provenance=useMemo(()=>open&&options.length>0?readProvenance?.():undefined,[open,options.length,readProvenance]);
   const [selected, setSelected] = useState<EraHistoryQuery>();
   const [trail, setTrail] = useState<EraHistoryCursor[]>([]);
   const matches = selected ? options.filter(({ query }) => sameQuery(query, selected)) : [];
@@ -93,6 +96,7 @@ function EraHistoryPortal({ options, read }: Pick<EraHistoryPanelProps, 'options
               onClick={() => setTrail((value) => [...value, { tick: last.tick, eventId: last.eventId }])}>查看更早记录</button>}
           </div>}
         </>}
+        {open && hasEraProvenance(provenance) && <EraProvenanceSection reading={provenance} />}
       </div>
     </details>
   );

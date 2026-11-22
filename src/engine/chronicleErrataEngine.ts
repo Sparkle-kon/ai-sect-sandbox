@@ -1,5 +1,6 @@
 import type { ChronicleCorrection, ChronicleErrataMove, ChronicleErrataState, ChronicleReading, ChronicleReliefReading, ChronicleRetelling,
   ChronicleSourceFact, Cultivator, LLMDecisionPayload, WorldEvent, WorldState } from '../types/world';
+import { captureHeritageBoardReading, captureHeritageFact } from './eraHeritageCapture';
 import { pilgrimageCheckpoint } from './pilgrimageEngine';
 import { SETTLEMENT_RELIEF } from './settlementEngine';
 
@@ -74,6 +75,7 @@ export function captureChronicleErrataSource(world: WorldState, event: WorldEven
   const source = event.duelWinnerId ? verifiedDuel(world, event, event.locationId) : verifiedRelief(world, event, event.locationId);
   if (!source || state.sources.filter((row) => row.kind === source.kind && row.tick === world.tick).length >= SOURCES_PER_KIND_TICK) return false;
   state.sources.push(source);
+  captureHeritageFact(world, source, event);
   return true;
 }
 
@@ -176,6 +178,8 @@ export function resolveChronicleErrataAction(world: WorldState, actor: Cultivato
   } else {
     state.retellings.push({ id, sourceEventId: source.sourceEventId, authorId: actor.id, tick: world.tick, reading: optionReading(option)! });
   }
+  const proof = correct ? state.corrections.at(-1) : state.retellings.at(-1);
+  if (proof) captureHeritageBoardReading(world, proof);
   return { id: `evt-${id}`, tick: world.tick, year: world.year, month: world.month, locationId: source.locationId, actorIds: [actor.id],
     category: 'diplomacy', title: correct ? '公开史牍追加勘误' : '公开史牍收录异闻',
     description: correct ? '独立校勘者依据本地原始证据追加一条判读；旧有说法、纪事和实际世界结果保持不变。' :

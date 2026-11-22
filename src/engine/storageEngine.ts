@@ -1,3 +1,4 @@
+import {validateMortalAgeCohorts} from './storageMortalAgeCohorts';
 import { isOrdinaryActionEvidence } from './ordinaryActionEvidence';
 import { validateEraHistory, validateEraHistoryShape } from './storageEraHistoryValidation';
 import { validateSeasonalHousing } from './storageSeasonalHousingValidation';
@@ -6,6 +7,7 @@ import { sameGeneratedWorld } from './worldIdentity';
 import {validateAuthoredEraHistory} from './storageAuthoredEraValidation';
 import {validateRegionalSimulation} from './storageRegionalSimulationValidation';
 import {validateRegionalPromotions} from './storageRegionalPromotionValidation';
+import {validateEraHeritage} from './storageEraHeritageValidation';
 import {validateEraDesignDraft} from './eraDesignSchema';
 import { createAlignedWeatherState } from './alignedWeatherEngine';
 import { alignedWeatherPinnedRuns } from './alignedWeatherTerms';
@@ -466,11 +468,12 @@ const shape = structure({
       filing:optional(structure({observerId:id,tick}))
     }))
   }),
+  mortalAgeTrackingSinceTick:otick,
   villageCensuses:structure({periods:arr(VILLAGE_CENSUS_PERIOD_LIMIT,structure({
     tick,year:tick,month,opening:arr(SAVE_COLLECTION_LIMIT,censusCount),closing:optional(arr(SAVE_COLLECTION_LIMIT,censusCount)),
     movements:arr(SAVE_COLLECTION_LIMIT,structure({
       id,kind:one('birth','maturation','death','migration','enrollment'),villageId:id,targetVillageId:oid,people:censusNumber,
-      volunteerId:oid,cultivatorId:oid,bornTick:otick
+      volunteerId:oid,cultivatorId:oid,bornTick:otick,deathCause:optional(one('old_age'))
     })),
     observations:arr(SAVE_COLLECTION_LIMIT,structure({villageId:id,observerId:id,count:censusCount,
       sample:optional(structure({householdId:id,adults:censusNumber,juveniles:censusNumber,namedResidents:censusNumber}))}))
@@ -733,8 +736,9 @@ const shape = structure({
   households:structure({nextId:num(1,100_000_000,true),
     groups:arr(SAVE_COLLECTION_LIMIT,structure({id,originSettlementId:id,branch:one('first','second'),createdTick:tick,
       presences:arr(SAVE_COLLECTION_LIMIT,structure({settlementId:id,adults:tick,juvenileCohorts:arr(200,structure({bornTick:tick,count:tick})),
+        adultAgeCohorts:optional(arr(72,structure({bornTick:tick,count:tick}))),
         births:tick,matured:tick,migratedIn:tick,migratedOut:tick,deaths:tick}))})),
-    members:arr(SAVE_COLLECTION_LIMIT,structure({volunteerId:id,householdId:id,settlementId:id,registeredTick:tick,
+    members:arr(SAVE_COLLECTION_LIMIT,structure({volunteerId:id,knownBornTick:otick,householdId:id,settlementId:id,registeredTick:tick,
       status:one('resident','recruited','retired','deceased'),recruitedId:oid,settledTick:otick})),
     guardianships:arr(SAVE_COLLECTION_LIMIT,structure({id,householdId:id,guardianId:id,wardId:id,openedTick:tick,expiresTick:tick,
       status:one('offered','active','declined','expired','renounced','ended'),acceptedTick:otick,settledTick:otick,
@@ -917,6 +921,17 @@ const shape = structure({
     abandonedSites:arr(SAVE_COLLECTION_LIMIT,structure({id,planId:id,sectId:id,originId:id,destinationId:id,tick,
       originalType:locationKind,facilities:facilityLevels,arrayHp:wealth,arrayMaxHp:wealth}))}),
   scenarioOrigin:optional(structure({version:one(1,2,3),ruleset:one(1),id:strings(100,1),endTick:num(1,120,true)})),
+  eraHeritage:optional(structure({version:one(1),
+    oaths:arr(SAVE_COLLECTION_LIMIT,structure({tick,year:tick,month,oathId:id,eventId:id,locationId:id,
+      requesterId:id,providerId:id,term:one('foundation_pill','jade_herb'),quantity:count,payment:count,collateral:count})),
+    artifacts:arr(SAVE_COLLECTION_LIMIT,structure({tick,year:tick,month,artifactId:id,eventId:id,locationId:id,
+      makerId:id,setId:relicSet,fragmentIds:arr(2,id)})),
+    facts:arr(SAVE_COLLECTION_LIMIT,structure({tick,year:tick,month,source:errataSourceFact,firsthandIds:ids,
+      retellings:arr(CHRONICLE_ERRATA_MAX_RETELLINGS,structure({id,sourceEventId:id,authorId:id,tick,reading:chronicleReading})),
+      correction:optional(structure({id,sourceEventId:id,editorId:id,tick,reading:chronicleReading,
+        contestedRetellingIds:arr(CHRONICLE_ERRATA_MAX_RETELLINGS,id)})),
+      relays:arr(SAVE_COLLECTION_LIMIT,structure({learnerId:id,originWitnessId:id,learnedTick:tick}))})),
+  })),
   regionalSimulation:optional(structure({
     version:one(1),focusSiteId:id,
     promotions:optional(arr(SAVE_COLLECTION_LIMIT,(value,path)=>{
@@ -991,8 +1006,9 @@ const shape = structure({
       nextVolunteerSequence:optional(num(1,100_000_000,true)),
       juvenileCohorts:optional(arr(200,structure({bornTick:tick,count}))),lastCohortYear:otick,lastRecruitTick:otick,
       lastDisasterTick:otick,lastReliefTick:otick})),
-    records:arr(SAVE_COLLECTION_LIMIT,structure({id,tick,kind:one('disaster','migration','relief','recruitment','growth'),settlementId:id,targetSettlementId:oid,
-      actorId:oid,sectId:oid,volunteerId:oid,cultivatorId:oid,people:count,stones:wealth,herbs:count,description:text}))}),
+    records:arr(SAVE_COLLECTION_LIMIT,structure({id,tick,kind:one('disaster','migration','relief','recruitment','growth','old_age'),settlementId:id,targetSettlementId:oid,
+      actorId:oid,sectId:oid,volunteerId:oid,cultivatorId:oid,people:count,stones:wealth,herbs:count,description:text,
+      oldAgeCohorts:optional(arr(SAVE_COLLECTION_LIMIT,structure({householdId:id,bornTick:tick,count:tick})))}))}),
   markets:structure({nextId:tick,
     orders:arr(320,structure({id,sequence:tick,actorId:id,locationId:id,side:one('buy','sell'),good:marketGood,
       quantity:marketQty,remaining:num(0,12,true),limitPrice:marketPrice,escrowStones:wealth,escrowGoods:num(0,12,true),
@@ -1335,7 +1351,8 @@ function verifyWorld(value: unknown): WorldState {
           (row.kind === 'maturation' ? row.bornTick === undefined || period.tick - row.bornTick < MORTAL_MATURITY_TICKS ||
             row.id !== `mature-${period.tick}-${row.villageId}-${row.bornTick}`
             : row.kind === 'birth' ? row.bornTick !== period.tick : row.bornTick !== undefined) ||
-          (existing && (row.kind === 'maturation' || existing.kind !== movementSource[row.kind] ||
+          (row.deathCause !== undefined && (row.kind !== 'death' || row.id !== `settlement-${period.tick}-old_age-${row.villageId}-registered`)) ||
+          (existing && (row.kind === 'maturation' || existing.kind !== (row.deathCause==='old_age'?'old_age':movementSource[row.kind]) ||
             existing.tick !== period.tick || existing.settlementId !== row.villageId || existing.targetSettlementId !== row.targetVillageId ||
             existing.people !== row.people || existing.volunteerId !== row.volunteerId || existing.cultivatorId !== row.cultivatorId)))
         fail('villageCensuses.movements.references');
@@ -2802,6 +2819,7 @@ function verifyWorld(value: unknown): WorldState {
         (row.volunteerId && !volunteerIds.has(row.volunteerId)) || (row.cultivatorId && !actor.has(row.cultivatorId))) fail('settlements.records.references');
   }
   validateVillageEvolutionHistory(w,fail);
+  validateMortalAgeCohorts(w,fail);
   unique(w.villageWorks.projects, ({ id }) => id, 'villageWorks.projects.id');
   unique(w.villageWorks.projects.filter(({ status }) => status === 'building'), ({ settlementId }) => settlementId,
     'villageWorks.projects.active_village');
@@ -3076,6 +3094,7 @@ function verifyWorld(value: unknown): WorldState {
   validateAuthoredEraHistory(w,fail);
   validateRegionalSimulation(w,fail);
   validateRegionalPromotions(w,fail);
+  validateEraHeritage(w,fail);
   w.coldHistory = freezeColdHistory(w.coldHistory);
   return w;
 }
@@ -3087,8 +3106,15 @@ function checkSize(text: string, ceiling = WORLD_SAVE_MAX_BYTES, notice = '存�
 }
 
 function serializeWorldSave(world: WorldState): string {
-  try { return JSON.stringify({ format: FORMAT, version: VERSION, world }); }
-  catch { throw new WorldSaveError('json', '当前世界不能序列化为 JSON。'); }
+  try {
+    // A native turn may first attach either optional ledger after a hot-world clone.
+    // Normalize that bounded extension order, leaving every pre-extension byte intact.
+    if (world.eraHeritage !== undefined || world.mortalAgeTrackingSinceTick !== undefined) {
+      const {eraHeritage,mortalAgeTrackingSinceTick,...legacy}=world;
+      return JSON.stringify({format:FORMAT,version:VERSION,world:{...legacy,eraHeritage,mortalAgeTrackingSinceTick}});
+    }
+    return JSON.stringify({ format: FORMAT, version: VERSION, world });
+  } catch { throw new WorldSaveError('json', '当前世界不能序列化为 JSON。'); }
 }
 
 /** Exact UTF-8 export envelope size, separate from in-memory objects and independent of the file acceptance limit. */

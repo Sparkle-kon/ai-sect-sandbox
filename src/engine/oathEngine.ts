@@ -1,3 +1,4 @@
+import { captureHeritageOath } from './eraHeritageCapture';
 import { advanceOathArbitrations, arbitrationHoldUntil, captureOathTenderObservers } from './oathArbitrationEngine';
 import { flowActor, flowOath, recordResourceFlow } from './resourceFlowEngine';
 import type { Cultivator, LLMDecisionPayload, OathContract, OathEvidence, OathState, OathTerm, WorldEvent, WorldState } from '../types/world';
@@ -120,7 +121,9 @@ export function resolveOathAction(world: WorldState, actor: Cultivator, choice: 
     recordResourceFlow(world, { ...shared, from: flowActor(requester.id), to: flowOath(oath.id, 'payment'), amount: oath.payment });
     recordResourceFlow(world, { ...shared, from: flowActor(actor.id), to: flowOath(oath.id, 'collateral'), amount: oath.collateral });
     oath.deadlineTick = world.tick + SERVICE_WINDOW; oath.status = 'active';
-    return oathEvent(world, oath, 'accept', '天道契书生效', `双方实际出资已托管，须于第${oath.deadlineTick}轮之前在立约地完成交付。`);
+    const accepted = oathEvent(world, oath, 'accept', '天道契书生效', `双方实际出资已托管，须于第${oath.deadlineTick}轮之前在立约地完成交付。`);
+    captureHeritageOath(world, oath, accepted);
+    return accepted;
   }
   if (option.action === 'FULFILL_OATH') {
     const present = isLive(requester) && requester.locationId === oath.locationId;

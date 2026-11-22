@@ -49,6 +49,7 @@ function recognizedVillageReceipt(record: SettlementRecord): boolean {
       record.id === prefix + record.targetSettlementId && record.stones === 0 && record.herbs === 0;
     case 'growth': return record.id === prefix + 'births' && record.stones === 0 && record.herbs === 0;
     case 'disaster': return record.id.startsWith(prefix) && record.id.length > prefix.length && record.stones === 0 && record.herbs === 0;
+    case 'old_age': return false; // The age ledger is local; do not widen it through the generic digest.
   }
 }
 

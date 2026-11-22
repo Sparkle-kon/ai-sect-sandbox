@@ -93,6 +93,10 @@ export function recordVillageCensusSettlement(world: WorldState, record: Settlem
   } else if (record.kind === 'disaster') {
     if (village.lastDisasterTick !== world.tick) return;
     append(period, { ...row, kind: 'death' });
+  } else if (record.kind === 'old_age') {
+    if (record.id !== `settlement-${world.tick}-old_age-${village.id}-registered` ||
+        !record.oldAgeCohorts?.length || record.oldAgeCohorts.reduce((sum, cohort) => sum + cohort.count,0) !== record.people) return;
+    append(period, { ...row, kind: 'death', deathCause:'old_age' });
   } else if (record.kind === 'migration') {
     const target = record.targetSettlementId && villageFor(world, record.targetSettlementId);
     if (!target || target === village || !world.locations.some(({ id }) => id === target.locationId)) return;

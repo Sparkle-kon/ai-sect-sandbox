@@ -1,3 +1,4 @@
+import { captureHeritageRelay } from './eraHeritageCapture';
 import { isScopedExpeditionGate } from './expeditionOmenTerms';
 import { courierCheckpoint } from './sealedCourierEngine';
 import { captureChronicleErrataSource } from './chronicleErrataEngine';
@@ -91,7 +92,10 @@ export function spreadRumors(world: WorldState): void {
           provenance: conversation ? 'conversation' : 'flying_sword', sourceCultivatorId: sender.id };
       }
     }
-    if (best) learn(listener, best, world.tick);
+    if (best) {
+      learn(listener, best, world.tick);
+      captureHeritageRelay(world, listener, best);
+    }
   }
 }
 

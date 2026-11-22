@@ -19,10 +19,10 @@ import { VillageEvolutionDetails, villageDisplayLabel } from './VillageEvolution
 
 type RecordEntry = WorldState['settlements']['records'][number];
 const KIND_LABELS: Record<RecordEntry['kind'], string> = {
-  disaster: '受灾', migration: '迁徙', relief: '赈济', recruitment: '自愿入门', growth: '本地新增人口',
+  disaster: '受灾', old_age:'寿终', migration: '迁徙', relief: '赈济', recruitment: '自愿入门', growth: '本地新增人口',
 };
 const PEOPLE_LABELS: Record<RecordEntry['kind'], string> = {
-  disaster: '遇难', migration: '迁出', relief: '受益', recruitment: '自愿入门', growth: '新生',
+  disaster: '遇难', old_age:'寿终', migration: '迁出', relief: '受益', recruitment: '自愿入门', growth: '新生',
 };
 
 export function MortalVillagesPanel({ world, cultivator }: { world: WorldState; cultivator: Cultivator | undefined }) {
