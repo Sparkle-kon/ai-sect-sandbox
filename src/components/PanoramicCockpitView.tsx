@@ -31,9 +31,10 @@ interface PanoramicCockpitViewProps extends Omit<PanoramicCockpitProps,'timeCont
   time:Omit<CockpitTimeControlsProps,'date'>;
   exit:ReactNode;
   statusStrip?:ReactNode;
+  stageOverride?:ReactNode;
 }
 
-export function PanoramicCockpitView({world,titleRef,time,exit,statusStrip,...slots}:PanoramicCockpitViewProps){
+export function PanoramicCockpitView({world,titleRef,time,exit,statusStrip,stageOverride,...slots}:PanoramicCockpitViewProps){
   return <main data-panoramic-cockpit data-cockpit-tick={world.tick}
     className="min-h-dvh bg-slate-950 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
     <header className="mx-auto flex max-w-[192rem] items-center justify-between gap-3 px-4 py-2 text-amber-100">
@@ -41,7 +42,7 @@ export function PanoramicCockpitView({world,titleRef,time,exit,statusStrip,...sl
       {exit}
     </header>
     {statusStrip&&<div className="mx-auto mb-2 w-full max-w-[192rem] px-2.5 sm:px-4">{statusStrip}</div>}
-    <PanoramicCockpit {...slots} stage={<CockpitStoryStage world={world}/>}
+    <PanoramicCockpit {...slots} stage={stageOverride??<CockpitStoryStage world={world}/>}
       timeControls={<CockpitTimeControls {...time} date={world}/>}/>
   </main>;
 }

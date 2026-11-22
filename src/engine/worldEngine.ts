@@ -106,6 +106,9 @@ import { advanceOaths, resolveOathAction } from './oathEngine';
 import { maintainMentorship, mentorshipTechniqueMultiplier, resolveMentorshipAction } from './mentorshipEngine';
 import { worldRandom } from './worldRandom';
 import { activeAvatar, consumeAvatarOrder, maintainPlayerAvatar } from './avatarEngine';
+import {activeRoguelikeEncounter,chooseRoguelikeEncounterDecision,finalizeRoguelikeEncounters,
+  maybeOpenRoguelikeEncounter,settleRoguelikeEncounter} from './roguelikeEncounterEngine';
+import {ROGUELIKE_ENCOUNTER_CHOICES} from '../types/roguelikeEncounter';
 import { archiveChronicleEvents } from './novelGenerator';
 import { advanceWitnessedPersonalStory, captureWitnessedPersonalScene } from './witnessedPersonalStory';
 import { advanceProtagonistSuccession } from './protagonistSuccession';
@@ -558,6 +561,10 @@ export function applyCultivatorBrainDecision(
       return resolveInfirmaryAction(world, cultivator, decision);
     case 'CARE_FOLLOWUP':
       return resolveCareFollowupAction(world, cultivator, decision);
+    case 'ROGUELIKE_ENCOUNTER':
+      return decision.targetRoguelikeEncounterId&&decision.roguelikeEncounterChoice
+        ?settleRoguelikeEncounter(world,cultivator,decision.targetRoguelikeEncounterId,decision.roguelikeEncounterChoice)
+        :null;
     case 'DANXIA_MEDICINE':
       return resolveDanxiaMedicineAction(world,cultivator,decision,rng);
     case 'DOCTRINE_MATURITY':
@@ -1131,7 +1138,19 @@ export function advanceWorldTick(
       }
     }
 
-    if(deferRegionalActorTurn(nextState,regionalTurn,cultivator,expeditionOrder??provided??supplied??fieldNegotiation,
+    // Mandatory embodied travel, trial and siege checks above are never bypassed by an encounter.
+    const liveEncounter=nextState.roguelikeEncounters?.length&&!avatarDecision&&!expeditionOrder&&!occasion&&!activeSiegeForActor(nextState,cultivator)
+      ?activeRoguelikeEncounter(nextState,cultivator):undefined;
+    let modelEncounterReplaced=false;
+    if(liveEncounter){
+      const allowed=provided?.chosenAction==='ROGUELIKE_ENCOUNTER'&&provided.targetRoguelikeEncounterId===liveEncounter.id&&
+        !!provided.roguelikeEncounterChoice&&ROGUELIKE_ENCOUNTER_CHOICES.includes(provided.roguelikeEncounterChoice);
+      if(!allowed||liveEncounter.guided){
+        const local=chooseRoguelikeEncounterDecision(nextState,cultivator);
+        if(local){provided=local;modelEncounterReplaced=Boolean(modelProposal);}
+      }
+    }
+    if(!liveEncounter&&deferRegionalActorTurn(nextState,regionalTurn,cultivator,expeditionOrder??provided??supplied??fieldNegotiation,
       ()=>!!requiredBeforeOrdinaryDecision(cultivator,nextState)))continue;
 
     let decisionDraws = 0;
@@ -1157,6 +1176,8 @@ export function advanceWorldTick(
       renewRegionalProtectionAfterEvent(regionalTurn);
       const lodging = recordSeasonalHousingMovement(nextState,cultivator,previousLocation);
       if (lodging) { newEvents.push(lodging); witnessEvent(nextState,lodging); }
+      const encounter=maybeOpenRoguelikeEncounter(nextState,cultivator,previousLocation);
+      if(encounter)newEvents.push(encounter);
     }
     if (evt && (decision.chosenAction === 'DUEL' || decision.chosenAction === 'SOCIALIZE' || decision.chosenAction === 'BREAKTHROUGH'))
       captureWitnessedPersonalScene(nextState, evt);
@@ -1165,10 +1186,10 @@ export function advanceWorldTick(
       (decision.chosenAction === 'EXPLORE' && previousLocation !== cultivator.locationId));
     recordOrdinaryActionEvidence(cultivator,nextState.tick,decision,ordinaryBefore,
       {applied:validEffect,avatar:avatarOrder?.actorId===cultivator.id,event:evt});
-    if (recordDecisionEffect && supplied) recordDecisionEffect(cultivator.id, !avatarDecision && !modelOrdinaryReplaced && validEffect);
+    if (recordDecisionEffect && supplied) recordDecisionEffect(cultivator.id, !avatarDecision && !modelOrdinaryReplaced && !modelEncounterReplaced && validEffect);
     traceOptions?.onActor?.(cultivator.id, candidates, validEffect);
     if (captureTrace) recordDecisionTrace(nextState, cultivator.id, candidates, decision,
-      avatarDecision ? 'avatar' : modelProposal && !modelOrdinaryReplaced ? 'model' : 'utility', validEffect);
+      avatarDecision ? 'avatar' : modelProposal && !modelOrdinaryReplaced && !modelEncounterReplaced ? 'model' : 'utility', validEffect);
     creditSectService(nextState, cultivator, evt);
     if (evt) {
       renewRegionalProtectionAfterEvent(regionalTurn);
@@ -1220,6 +1241,7 @@ export function advanceWorldTick(
   advanceChronicleErrata(nextState);
   for (const actor of nextState.cultivators) if (actor.alive) noteTerrainVisit(nextState, actor);
   maintainPlayerAvatar(nextState);
+  finalizeRoguelikeEncounters(nextState);
   spreadRumors(nextState);
   reconcileRelicCustody(nextState);
   advanceReincarnation(nextState);

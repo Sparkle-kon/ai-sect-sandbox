@@ -1,3 +1,4 @@
+import type {RoguelikeEncounterChoice,RoguelikeEncounterRecord} from './roguelikeEncounter';
 import type {FrontierAnchorId,FrontierMovementMove,FrontierPositionPlane,FrontierSiteId,FrontierState} from '../engine/frontierTerms';
 import type {FrontierProductionMove} from '../engine/frontierProductionTerms';
 import type {FrontierTradeMove} from '../engine/frontierTradeTerms';
@@ -100,6 +101,7 @@ export type PersonalityTrait =
   | '诡诈';
 
 export type ActionType =
+  | 'ROGUELIKE_ENCOUNTER'
   | 'CULTIVATE'
   | 'BREAKTHROUGH'
   | 'EXPLORE'
@@ -515,6 +517,8 @@ export interface LLMConfig {
 }
 
 export interface LLMDecisionPayload {
+  targetRoguelikeEncounterId?:string;
+  roguelikeEncounterChoice?:RoguelikeEncounterChoice;
   innerMonologue: string;
   chosenAction: ActionType;
   waterVeinMove?: WaterVeinMove;
@@ -3529,6 +3533,7 @@ export interface NorthWellRevisitReviewState {
 }
 
 export interface WorldState {
+  roguelikeEncounters?:RoguelikeEncounterRecord[];
   scribeCommissions?: ScribeCommissionState;
   waypostMeals?: WaypostMealState;
   disasterShelter?: DisasterShelterState;

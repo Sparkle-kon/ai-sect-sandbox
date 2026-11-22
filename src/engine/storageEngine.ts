@@ -1,3 +1,7 @@
+import {activeRoguelikeEncounter,roguelikeEncounterRoll,roguelikeEncounterRoute,ROGUELIKE_ENCOUNTER_ACTOR_COOLDOWN,
+  ROGUELIKE_ENCOUNTER_HISTORY,ROGUELIKE_ENCOUNTER_NPC_OPENING_THRESHOLD} from './roguelikeEncounterEngine';
+import {roguelikeNominalEffect} from './roguelikeEncounterCatalog';
+import {ROGUELIKE_ENCOUNTER_CHOICES,ROGUELIKE_ENCOUNTER_KINDS} from '../types/roguelikeEncounter';
 import {availableMarketFreightActions} from './escortEngine';
 import {MARKET_FREIGHT_MAX_LOAD} from './marketFreightTerms';
 import {validateMarketFreight} from './storageMarketFreightValidation';
@@ -241,7 +245,7 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT SALVAGE_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE DOCTRINE_FOUNDING DOCTRINE_MATURITY RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT MARKET_FREIGHT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE WAYPOST_MEAL DISASTER_SHELTER CHRONICLE_ERRATA HABITAT INFIRMARY CARE_FOLLOWUP DANXIA_MEDICINE DANXIA_REVIEW FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER COURIER_HANDOFF SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP CRAFT_TRAINING WORKSHOP_ESTATE WORKSHOP_RELEASE SCRIBE_COMMISSION FURNACE_RESERVATION FURNACE_SAFETY DAMAGE_ASSURANCE SPARRING EXPEDITION_RESCUE SHORT_SHIFT BOUNDARY_RELIEF MENTOR_TRANSFER APPRENTICE_COHORT SEASONAL_HOUSING HOUSEHOLD_NAME CARAVAN_RESTITUTION VILLAGE_GRANARY VILLAGE_SUPPLY ROUTE_WARNING PAVILION_LOAN WORKSHOP_CAPACITY CIVIC_MEMORIAL VILLAGE_FAIR SECT_STIPEND SEED_CULTURE WATER_VEIN NORTH_MINING_CHARTER NORTH_WELL_REVIEW UPPER_PASSAGE UPPER_ARRAY_FIELD UPPER_ARRAY_FIELD_LOCAL UPPER_ARRAY_FIELD_TRADE NORTH_GATE_RENEWAL FRONTIER FRONTIER_PRODUCTION FRONTIER_TRADE FRONTIER_PORT FRONTIER_PORT_TRADE FRONTIER_DRYLAND FRONTIER_DRYLAND_TRADE TOOL_LOAN RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY ALIGNED_WEATHER SEASON_REVIEW REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE ROGUELIKE_ENCOUNTER SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT SALVAGE_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE DOCTRINE_FOUNDING DOCTRINE_MATURITY RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT MARKET_FREIGHT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE WAYPOST_MEAL DISASTER_SHELTER CHRONICLE_ERRATA HABITAT INFIRMARY CARE_FOLLOWUP DANXIA_MEDICINE DANXIA_REVIEW FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER COURIER_HANDOFF SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP CRAFT_TRAINING WORKSHOP_ESTATE WORKSHOP_RELEASE SCRIBE_COMMISSION FURNACE_RESERVATION FURNACE_SAFETY DAMAGE_ASSURANCE SPARRING EXPEDITION_RESCUE SHORT_SHIFT BOUNDARY_RELIEF MENTOR_TRANSFER APPRENTICE_COHORT SEASONAL_HOUSING HOUSEHOLD_NAME CARAVAN_RESTITUTION VILLAGE_GRANARY VILLAGE_SUPPLY ROUTE_WARNING PAVILION_LOAN WORKSHOP_CAPACITY CIVIC_MEMORIAL VILLAGE_FAIR SECT_STIPEND SEED_CULTURE WATER_VEIN NORTH_MINING_CHARTER NORTH_WELL_REVIEW UPPER_PASSAGE UPPER_ARRAY_FIELD UPPER_ARRAY_FIELD_LOCAL UPPER_ARRAY_FIELD_TRADE NORTH_GATE_RENEWAL FRONTIER FRONTIER_PRODUCTION FRONTIER_TRADE FRONTIER_PORT FRONTIER_PORT_TRADE FRONTIER_DRYLAND FRONTIER_DRYLAND_TRADE TOOL_LOAN RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY ALIGNED_WEATHER SEASON_REVIEW REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const waypostPoint=structure({x:num(0,1000),y:num(0,600)});
 const waypostVisit=structure({journeyId:id,organizerId:id,companionId:id,spentByEach:one(PILGRIMAGE_LEG_COST,2*PILGRIMAGE_LEG_COST),
@@ -429,7 +433,16 @@ const censusNumber = num(0,Number.MAX_SAFE_INTEGER,true);
 const censusCount = structure({villageId:id,population:censusNumber,juveniles:censusNumber});
 const locationKind = one('sect_hq','spirit_vein','secret_realm','market','abyss');
 
+const roguelikeRecord=structure({
+  id,actorId:id,fromSiteId:id,siteId:id,openedTick:tick,kind:one(...ROGUELIKE_ENCOUNTER_KINDS),
+  guided:bool,witnessId:oid,status:one('offered','resolved','expired'),resolvedTick:otick,
+  choice:optional(one(...ROGUELIKE_ENCOUNTER_CHOICES)),
+  outcome:optional(structure({success:bool,qiDelta:num(-100,100),hpDelta:num(-1_000_000_000,1_000_000_000),
+    karmaDelta:num(-200,200),lifespanDelta:num(-1_000_000_000,1_000_000_000),affinityDelta:num(-200,200)})),
+});
+
 const shape = structure({
+  roguelikeEncounters:optional(arr(SAVE_COLLECTION_LIMIT,roguelikeRecord)),
   tick, interventionSequence:tick, year:tick, month,
   random:structure({algorithm:one('mulberry32-v1'),seed:unsigned32,state:unsigned32}),
   sects:arr(SAVE_COLLECTION_LIMIT,structure({id,name:id,alignment:one('正道','魔道','中立'),color:strings(80),doctrine:text,reputation:num(-1_000_000,1_000_000),spiritStones:wealth,headquartersId:id,
@@ -1399,6 +1412,76 @@ function unique<T>(items: T[], key: (item: T) => string, path: string): Set<stri
   if (keys.size !== items.length) fail(path);
   return keys;
 }
+function validateRoguelikeEncounterHistory(world:WorldState,actorIds:ReadonlySet<string>):void {
+  const rows=world.roguelikeEncounters??[];
+  const eventPrefix='evt-roguelike-encounter-';
+  const privateEvent=(eventId:string)=>eventId.startsWith(eventPrefix);
+  const hasPrivate=(anchors:readonly {id:string}[])=>anchors.some(anchor=>privateEvent(anchor.id));
+  if(hasPrivate(world.chronicleArchive.anchors)||world.chronicleArchive.chapters.some(chapter=>hasPrivate(chapter.anchors))||
+    world.coldHistory.chapters.some(chapter=>hasPrivate(chapter.anchors))||
+    world.chronicleCausality.nodes.some(row=>privateEvent(row.eventId))||world.chronicleErrata.sources.some(row=>privateEvent(row.sourceEventId))||
+    world.eraHeritage?.facts.some(row=>privateEvent(row.source.sourceEventId)))
+    return fail('roguelikeEncounters.publicArchive');
+  if(!rows.length&&world.roguelikeEncounters!==undefined)return fail('roguelikeEncounters.empty');
+  if(!rows.length&&!world.events.some(({id})=>privateEvent(id)))return;
+  const body=new Map(world.cultivators.map(actor=>[actor.id,actor]));
+  const seen=new Set<string>(),offered=new Set<string>(),latest=new Map<string,number>();
+  let lastOpened=0,previousTerminal=0;
+  const stamps=new Map<string,{tick:number;actorId:string;siteId:string}>();
+  const signed=(actual:number,nominal:number)=>nominal===0?actual===0:
+    nominal>0?actual>=0&&actual<=nominal+1e-7:actual<=0&&actual>=nominal-1e-7;
+  for(const row of rows){
+    const {actorId,fromSiteId,siteId,id,openedTick,status,resolvedTick,choice,outcome,witnessId}=row;
+    if(seen.has(id)||id!==`roguelike-encounter-${openedTick}-${actorId}`||openedTick<1||openedTick>world.tick||
+      !actorIds.has(actorId)||!roguelikeEncounterRoute(world,fromSiteId,siteId)||
+      (row.kind==='wounded-traveler'?(witnessId===undefined||witnessId===actorId||!actorIds.has(witnessId)):witnessId!==undefined))
+      return fail('roguelikeEncounters.references');
+    if(openedTick<lastOpened||openedTick-(latest.get(actorId)??-Infinity)<ROGUELIKE_ENCOUNTER_ACTOR_COOLDOWN)
+      return fail('roguelikeEncounters.order');
+    const aim=roguelikeEncounterRoll(world,row,'kind');
+    const kind=row.kind==='wounded-traveler'&&aim>=34&&aim<67?'wounded-traveler':aim<50?'sword-cave':'sealed-scroll';
+    if(row.kind!==kind)return fail('roguelikeEncounters.kind');
+    if(!row.guided&&roguelikeEncounterRoll(world,row,'opening')>=ROGUELIKE_ENCOUNTER_NPC_OPENING_THRESHOLD)
+      return fail('roguelikeEncounters.openingRoll');
+    seen.add(id);latest.set(actorId,openedTick);lastOpened=openedTick;
+    stamps.set(`evt-${id}-open`,{tick:openedTick,actorId,siteId});
+    if(status==='offered'){
+      const person=body.get(actorId);
+      if(offered.has(actorId)||openedTick!==world.tick||resolvedTick!==undefined||choice!==undefined||outcome!==undefined||
+        !person||activeRoguelikeEncounter(world,person)!==row)
+        return fail('roguelikeEncounters.open');
+      offered.add(actorId);
+      continue;
+    }
+    if(resolvedTick===undefined||resolvedTick<openedTick||resolvedTick>world.tick||resolvedTick>openedTick+1)
+      return fail('roguelikeEncounters.phase');
+    if(resolvedTick<world.tick)previousTerminal++;
+    if(status==='expired'){
+      if(choice!==undefined||outcome!==undefined)return fail('roguelikeEncounters.phase');
+      continue;
+    }
+    if(choice===undefined||outcome===undefined||(!row.guided&&resolvedTick!==openedTick+1)||
+      (row.guided&&resolvedTick!==openedTick&&choice!=='leave'))return fail('roguelikeEncounters.phase');
+    const {success,effect}=roguelikeNominalEffect(row.kind,choice,roguelikeEncounterRoll(world,row,choice));
+    if(success!==outcome.success||!signed(outcome.qiDelta,effect.qi)||!signed(outcome.karmaDelta,effect.karma)||
+      !signed(outcome.lifespanDelta,effect.years)||!signed(outcome.affinityDelta,effect.affinity)||
+      !signed(outcome.hpDelta,Math.round(1_000_000_000*effect.hpRate)))return fail('roguelikeEncounters.outcome');
+    stamps.set(`evt-${id}-settled`,{tick:resolvedTick,actorId,siteId});
+  }
+  // The previous frame's bounded native event ring may still pin terminals which just left the new ring.
+  if(previousTerminal>ROGUELIKE_ENCOUNTER_HISTORY+120)return fail('roguelikeEncounters.retention');
+  const newsIds=new Set<string>();
+  for(const news of world.events){
+    if(!privateEvent(news.id))continue;
+    const expected=stamps.get(news.id);
+    if(!expected||newsIds.has(news.id)||news.witnessScope!=='participants'||news.category!=='intrigue'||
+      news.tick!==expected.tick||news.locationId!==expected.siteId||news.actorIds.length!==1||news.actorIds[0]!==expected.actorId||
+      news.dialogue!==undefined||news.duelWinnerId!==undefined||news.damage!==undefined)
+      return fail('roguelikeEncounters.event');
+    newsIds.add(news.id);
+  }
+
+}
 function verifyWorld(value: unknown): WorldState {
   const candidate = value !== null && typeof value === 'object' && !Array.isArray(value)
     ? { ...value,
@@ -1493,6 +1576,7 @@ function verifyWorld(value: unknown): WorldState {
     w.competitions = createCompetitionState(w.year, w.tick);
   }
   const actor = unique(w.cultivators, (item) => item.id, 'cultivators.id');
+  validateRoguelikeEncounterHistory(w,actor);
   const ordinaryTrace = new Map(w.decisionTrace.records.map(row=>[row.id,row]));
   for(const person of w.cultivators){
     const receipt=person.ordinaryActionEvidence;
@@ -3638,9 +3722,9 @@ function serializeWorldSave(world: WorldState): string {
   try {
     // A native turn may first attach either optional ledger after a hot-world clone.
     // Normalize that bounded extension order, leaving every pre-extension byte intact.
-    if (world.eraHeritage !== undefined || world.mortalAgeTrackingSinceTick !== undefined || world.coldWaterVein !== undefined || world.northMiningCharters !== undefined || world.northWellRevisitLaw !== undefined || world.northWellRevisitReviews !== undefined || world.upperPassage !== undefined || world.northGateRenewal !== undefined || world.frontier !== undefined || world.upperArrayField !== undefined || world.scribeCommissions !== undefined || world.waypostMeals !== undefined || world.craftTraining !== undefined || world.disasterShelter !== undefined) {
-      const {eraHeritage,mortalAgeTrackingSinceTick,coldWaterVein,northMiningCharters,northWellRevisitLaw,northWellRevisitReviews,upperPassage,northGateRenewal,frontier,upperArrayField,scribeCommissions,waypostMeals,craftTraining,disasterShelter,...legacy}=world;
-      return JSON.stringify({format:FORMAT,version:VERSION,world:{...legacy,eraHeritage,mortalAgeTrackingSinceTick,coldWaterVein,northMiningCharters,northWellRevisitLaw,northWellRevisitReviews,upperPassage,northGateRenewal,frontier,upperArrayField,scribeCommissions,waypostMeals,craftTraining,disasterShelter}});
+    if (world.eraHeritage !== undefined || world.mortalAgeTrackingSinceTick !== undefined || world.coldWaterVein !== undefined || world.northMiningCharters !== undefined || world.northWellRevisitLaw !== undefined || world.northWellRevisitReviews !== undefined || world.upperPassage !== undefined || world.northGateRenewal !== undefined || world.frontier !== undefined || world.upperArrayField !== undefined || world.scribeCommissions !== undefined || world.waypostMeals !== undefined || world.craftTraining !== undefined || world.disasterShelter !== undefined || world.roguelikeEncounters !== undefined) {
+      const {eraHeritage,mortalAgeTrackingSinceTick,coldWaterVein,northMiningCharters,northWellRevisitLaw,northWellRevisitReviews,upperPassage,northGateRenewal,frontier,upperArrayField,scribeCommissions,waypostMeals,craftTraining,disasterShelter,roguelikeEncounters,...legacy}=world;
+      return JSON.stringify({format:FORMAT,version:VERSION,world:{...legacy,eraHeritage,mortalAgeTrackingSinceTick,coldWaterVein,northMiningCharters,northWellRevisitLaw,northWellRevisitReviews,upperPassage,northGateRenewal,frontier,upperArrayField,scribeCommissions,waypostMeals,craftTraining,disasterShelter,roguelikeEncounters}});
     }
     return JSON.stringify({ format: FORMAT, version: VERSION, world });
   } catch { throw new WorldSaveError('json', '当前世界不能序列化为 JSON。'); }

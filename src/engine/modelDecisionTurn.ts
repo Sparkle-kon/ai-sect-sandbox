@@ -1,5 +1,6 @@
 import { regionalModelPassiveActorIds } from './regionalSimulationEngine';
 import { availableUpperPassageProviderActions,availableFrontierProviderActions,requiredBeforeOrdinaryDecision } from './llmBrain';
+import { activeRoguelikeEncounter } from './roguelikeEncounterEngine';
 import {activeDanxiaMedicineEscort} from './danxiaMedicineTerms';
 import type { Cultivator, LLMDecisionPayload, WorldState } from '../types/world';
 import { activeAvatar } from './avatarEngine';
@@ -59,7 +60,10 @@ export function modelDecisionCandidates(world: WorldState): Cultivator[] {
     if(!actor.alive||actor.hp<=0||actor.id===commandedId||(world.month===12&&actor.age+1>=actor.lifespan))return false;
     if(actor.positionPlane==='frontier')return availableFrontierProviderActions(actor,world,nextTick).length>0;
     if(actor.positionPlane!==undefined)return availableUpperPassageProviderActions(actor,world,nextTick).length>0;
-    return !passive.has(actor.id) &&
+    const encounter = activeRoguelikeEncounter(world, actor);
+    if (encounter && (encounter.guided || encounter.openedTick !== world.tick)) return false;
+    // A genuine one-turn autonomous encounter wakes only the normal admission guard below.
+    return (!passive.has(actor.id) || !!encounter) &&
     (!activeCourierForActor(world, actor) || availableCourierHandoffActions(actor, world, nextTick).some(({ courierHandoffMove }) => courierHandoffMove === 'offer')) &&
     !activeDanxiaMedicineEscort(world,actor)&&!activeEscortForActor(world, actor) && !activeRelocationForActor(world, actor) &&
     !activeSiegeForActor(world, actor) && isEligibleForOccasionDecision(world, actor, nextTick) &&

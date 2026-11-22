@@ -1,3 +1,5 @@
+import {activeRoguelikeEncounter, chooseRoguelikeEncounterDecision} from './roguelikeEncounterEngine';
+import {ROGUELIKE_ENCOUNTER_CHOICES} from '../types/roguelikeEncounter';
 import {availableDoctrineMaturityActions} from './doctrineMaturityEngine';
 import {availableDoctrineFoundingActions} from './doctrineFoundingEngine';
 import {availableDanxiaMedicineActions} from './danxiaMedicineEngine';
@@ -450,6 +452,8 @@ export function computeHeuristicDecision(
       innerMonologue: tribulationStance === 'focus' ? '抱守道心，不为幻象所动。' : '雷云不散，且运转护身法诀抵挡。',
     };
   }
+  const roguelikeDecision = chooseRoguelikeEncounterDecision(world, cultivator);
+  if (roguelikeDecision) return roguelikeDecision;
   const freight=utilityMarketFreightDecision(cultivator,world);
   if(freight)return freight;
   const disasterShelter = utilityDisasterShelterDecision(cultivator,world);
@@ -1776,6 +1780,19 @@ function decodeCourierHandoff(parsed: Partial<LLMDecisionPayload>, choices: Retu
       innerMonologue:innerMonologue || '只按亲到驿站的选项办理。' };
 }
 
+const encounterDecisionFields = ['chosenAction', 'targetRoguelikeEncounterId', 'roguelikeEncounterChoice'] as const;
+
+function decodeRoguelikeEncounterDecision(parsed: Partial<LLMDecisionPayload>, exactId: string): LLMDecisionPayload | undefined {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) ||
+      Object.keys(parsed).length !== encounterDecisionFields.length ||
+      !encounterDecisionFields.every(key => Object.hasOwn(parsed, key)) ||
+      parsed.chosenAction !== 'ROGUELIKE_ENCOUNTER' || parsed.targetRoguelikeEncounterId !== exactId) return undefined;
+  const choice = ROGUELIKE_ENCOUNTER_CHOICES.find(id => id === parsed.roguelikeEncounterChoice);
+  if (!choice) return undefined;
+  return { chosenAction: 'ROGUELIKE_ENCOUNTER', targetRoguelikeEncounterId: exactId, roguelikeEncounterChoice: choice,
+    innerMonologue: '亲到才有此机缘，眼下只依已见的抉择行事。' };
+}
+
 /** A provider-only lane. Missing/invalid/unsent results never synthesize a Utility decision here. */
 export async function requestCultivatorLLMDecision(
   cultivator: Cultivator,
@@ -1819,6 +1836,22 @@ export async function requestCultivatorLLMDecision(
       `从许可中成对照抄 targetDispatchId 和 targetCourierId。不要填写路段、地点、地址、封信内容、费用或他人身份。` +
       `选项：${JSON.stringify(ids)}`;
     return requestDecisionPrompt(config, requestTick, options, prompt, (payload) => decodeCourierHandoff(payload, handoffs), 150);
+  }
+
+  const encounter = activeRoguelikeEncounter(world, cultivator);
+  if (encounter) {
+    // This exact choice replaces the usual prompt and consumes only the existing fair Decision slot.
+    // Never send player-owned choices or reopen the menu after this opportunity's real next turn.
+    if (encounter.guided || encounter.openedTick !== world.tick || requestTick !== world.tick + 1) return undefined;
+    const candidates = ROGUELIKE_ENCOUNTER_CHOICES.map(roguelikeEncounterChoice => ({
+      chosenAction: 'ROGUELIKE_ENCOUNTER', targetRoguelikeEncounterId: encounter.id, roguelikeEncounterChoice,
+    }));
+    const prompt = `实际到达后眼前的奇遇：${encounter.kind}。cautious 谨慎试探，bold 冒险深入，leave 不参与。
+` +
+      `只原样复制下列一个完整 JSON 对象；不补充独白、人物、地点、收益、代价或结果。许可：${JSON.stringify(candidates)}`;
+    return requestDecisionPrompt(config, requestTick, options, prompt, parsed =>
+      requestTick === world.tick + 1 && activeRoguelikeEncounter(world, cultivator) === encounter && !encounter.guided
+        ? decodeRoguelikeEncounterDecision(parsed, encounter.id) : undefined, 160);
   }
 
   const activeVow = activePilgrimageForActor(world, cultivator);
