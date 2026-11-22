@@ -1,3 +1,5 @@
+import { availableWitnessInquiryActions } from './witnessInquiry';
+import { exactWitnessInquiryDecision, witnessInquiryCommand } from './witnessInquiryCognition';
 import { availableFrontierNightHuntActions, projectFrontierNightHunt } from './frontierNightHunt';
 import { exactFrontierNightHuntDecision, frontierNightHuntCommand } from './frontierNightHuntCognition';
 import { availableSchoolFormChoices, schoolFormDuelForParticipant } from './schoolFormDuel';
@@ -1432,6 +1434,12 @@ export function computeHeuristicDecision(
         === (option.targetCultivatorId === fact.winnerId);
     }) : undefined);
   if (evidenceAction) return { ...evidenceAction, chosenAction: evidenceAction.action, innerMonologue: '证言应以亲知来由或已掌握的案卷为据。' };
+  if(activeAvatar(world)!==cultivator && (cultivator.personality==='刚正'||cultivator.personality==='逍遥')){
+    const inquiries=availableWitnessInquiryActions(cultivator,world,world.tick);
+    const option=inquiries.find(row=>row.witnessInquiryMove==='ask')??inquiries[0];
+    const inquiry=option&&exactWitnessInquiryDecision(witnessInquiryCommand(option),inquiries);
+    if(inquiry)return inquiry;
+  }
 
   const villageNeeds = world.tick >= 4 && !cultivator.guardAssignment ? availableSettlementActions(cultivator, world) : [];
   const relief = villageNeeds.find((option) => option.action === 'DELIVER_RELIEF');
@@ -2536,6 +2544,16 @@ export async function requestCultivatorLLMDecision(
         exactBeastDuelResponse(parsed,beastContact.id,availableBeastDuelChoices(world,cultivator)):undefined,160);
   }
 
+  const inquiries=availableWitnessActions(cultivator,world,false).length?[]:
+    availableWitnessInquiryActions(cultivator,world,requestTick);
+  if(inquiries.length){
+    if(requestTick!==world.tick+1||activeAvatar(world)===cultivator)return undefined;
+    const menu=inquiries.map(witnessInquiryCommand);
+    return requestDecisionPrompt(config,requestTick,options,
+      '只原样复制当前可做的一个查问。不准填写证词、情节、名誉变化、裁决或任何额外字段：'+JSON.stringify(menu),
+      parsed=>requestTick===world.tick+1&&activeAvatar(world)!==cultivator&&exactWitnessInquiryDecision(parsed,inquiries)
+        ?exactWitnessInquiryDecision(parsed,availableWitnessInquiryActions(cultivator,world,requestTick)):undefined,160);
+  }
   const wards = availableCalamityArrayChoices(world, cultivator, requestTick);
   if (wards.length) {
     if (requestTick !== world.tick + 1 || activeAvatar(world) === cultivator) return undefined;

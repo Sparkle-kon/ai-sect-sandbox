@@ -126,6 +126,7 @@ export function MapEntityPopover({data,anchor,pinned,readOnly=false,actions,onCl
             </div>)}
           </dl>
         </details>}
+        {data.localDispute&&<p className="text-xs leading-relaxed text-amber-100">此地有一纸待核的公开指证。</p>}
         {data.eventTitles.length>0&&<ul aria-label="此地当月公开见闻" className="list-inside list-disc text-sm leading-6 text-amber-100">
           {data.eventTitles.map((text,index)=><li key={index}>{text}</li>)}
         </ul>}

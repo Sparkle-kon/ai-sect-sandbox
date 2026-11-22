@@ -1,3 +1,4 @@
+import { resolveGuidedWitnessInquiryTurn, type GuidedWitnessInquiryTurn } from './guidedWitnessInquiryTurn';
 import { resolveGuidedFrontierNightHuntTurn, type GuidedFrontierNightHuntTurn } from './guidedFrontierNightHuntTurn';
 import { resolveGuidedSchoolFormDuelTurn, type GuidedSchoolFormDuelTurn } from './guidedSchoolFormDuelTurn';
 import { resolveGuidedCalamityArrayTurn, type GuidedCalamityArrayTurn } from './guidedCalamityArrayTurn';
@@ -12,11 +13,12 @@ import {resolveGuidedHeavenlyAlchemyTurn,type GuidedHeavenlyAlchemyTurn} from '.
 import {resolveGuidedImmortalAuctionTurn,type GuidedImmortalAuctionTurn} from './guidedImmortalAuctionTurn';
 import type {WorldState} from '../types/world';
 
-export type GuidedWorldTurn=GuidedDungeonTurn|GuidedHeavenlyAlchemyTurn|GuidedDaoPathTurn|GuidedImmortalAuctionTurn|GuidedCultivationClanTurn|GuidedAscensionTurn|GuidedProtagonistFlightTurn|GuidedHeartDemonRecoveryTurn|GuidedBattlefieldRevisitTurn|GuidedCalamityArrayTurn|GuidedSchoolFormDuelTurn|GuidedFrontierNightHuntTurn;
+export type GuidedWorldTurn=GuidedDungeonTurn|GuidedHeavenlyAlchemyTurn|GuidedDaoPathTurn|GuidedImmortalAuctionTurn|GuidedCultivationClanTurn|GuidedAscensionTurn|GuidedProtagonistFlightTurn|GuidedHeartDemonRecoveryTurn|GuidedBattlefieldRevisitTurn|GuidedCalamityArrayTurn|GuidedSchoolFormDuelTurn|GuidedFrontierNightHuntTurn|GuidedWitnessInquiryTurn;
 
 export function resolveGuidedWorldTurn(order:GuidedWorldTurn,world:WorldState,branch:string,revision:number){
   if(!('kind' in order))return resolveGuidedDungeonTurn(order,world,branch,revision);
   switch(order.kind){
+    case 'witness-inquiry':return resolveGuidedWitnessInquiryTurn(order,world,branch,revision);
     case 'frontier-night-hunt':return resolveGuidedFrontierNightHuntTurn(order,world,branch,revision);
     case 'school-form-duel':return resolveGuidedSchoolFormDuelTurn(order,world,branch,revision);
     case 'calamity-array':return resolveGuidedCalamityArrayTurn(order,world,branch,revision);

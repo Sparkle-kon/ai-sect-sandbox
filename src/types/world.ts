@@ -134,6 +134,7 @@ export type ActionType =
   | 'GRAND_SIEGE_HERO'
   | 'BATTLEFIELD_REVISIT'
   | 'CALAMITY_ARRAY'
+  | 'WITNESS_INQUIRY'
   | 'FRONTIER_NIGHT_HUNT'
   | 'AUDIENCE_PLEDGE'
   | 'CULTIVATE'
@@ -597,6 +598,7 @@ export interface LLMDecisionPayload {
   calamityArrayStance?: 'joint' | 'local';
   targetCalamityHazardId?: string;
   frontierNightHuntMove?: FrontierNightHuntMove;
+  witnessInquiryMove?: 'inspect'|'ask';
   targetBattlefieldSiegeId?: string;
   grandSiegeHeroMove?: GrandSiegeHeroMove;
   targetRoguelikeEncounterId?:string;
