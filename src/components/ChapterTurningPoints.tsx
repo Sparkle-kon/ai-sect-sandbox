@@ -1,3 +1,5 @@
+import {SharedTurningPointRead} from './SharedTurningPointRead';
+import type {SharedTurningPoint} from './sharedTurningPointsModel';
 import type { ChapterTurningPoint, TurningPointOutcome } from '../engine/chronicleTurningPoints';
 import type { CausalChronicleRelation } from '../types/world';
 
@@ -35,18 +37,21 @@ function connectedEvidence(arc: ChapterTurningPoint) {
   return { consequence, scenes, links };
 }
 
-export function ChapterTurningPoints({ arcs }: { arcs: readonly ChapterTurningPoint[] }) {
+export function ChapterTurningPoints({arcs,shared=[]}:{arcs:readonly ChapterTurningPoint[];shared?:readonly SharedTurningPoint[]}) {
   const exact = arcs.flatMap((arc) => {
     const view = connectedEvidence(arc);
     return view ? [{ id: arc.id, ...view }] : [];
   });
-  if (!exact.length) return null;
+  if (!exact.length&&!shared.length) return null;
   return <details className="min-w-0 rounded border border-amber-400/20 bg-slate-950/55">
     <summary className="flex min-h-11 cursor-pointer items-center px-2.5 text-xs font-semibold text-amber-100
       focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300">有据转折</summary>
     <div className="min-w-0 space-y-2 break-words px-2.5 pb-2 text-xs leading-relaxed text-slate-300">
       <p className="text-slate-400">这里只串起实录能接上的事。其余见闻仍照正文各自读。</p>
-      <ol aria-label="本章可核验的故事转折" className="max-h-80 space-y-2 overflow-y-auto">
+      {shared.length>0&&<div className="space-y-2" aria-label="两条路在此相逢">
+        {shared.map(view=><SharedTurningPointRead key={view.eventId} view={view}/>)}
+      </div>}
+      {exact.length>0&&<ol aria-label="本章可核验的故事转折" className="max-h-80 space-y-2 overflow-y-auto">
         {exact.map(({ id, consequence, scenes, links }) => <li key={id} className="min-w-0 space-y-2 rounded border border-slate-800 p-2">
           {scenes.map((scene) => <section key={scene.eventId} className="min-w-0 space-y-0.5">
             <h5 className="font-serif text-sm font-semibold text-amber-100">{scene.title}</h5>
@@ -62,7 +67,7 @@ export function ChapterTurningPoints({ arcs }: { arcs: readonly ChapterTurningPo
             </li>)}
           </ul>
         </li>)}
-      </ol>
+      </ol>}
     </div>
   </details>;
 }

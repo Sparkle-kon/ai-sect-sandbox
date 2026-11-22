@@ -1,3 +1,4 @@
+import {projectSharedTurningPoints,type SharedTurningPoint} from './sharedTurningPointsModel';
 import {ScribeCommissionRead,type ScribeCommissionControls} from './ScribeCommissionRead';
 import { useId, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
@@ -47,9 +48,10 @@ function chapterForReading(chapter: ChronicleChapter, liveIds: ReadonlySet<strin
   return anchors.length === chapter.anchors.length ? chapter : { ...chapter, anchors, body: '' };
 }
 
-function ChapterArchive({ chapter, reading, lead, turningPoints, resolveDialogue }: {
+function ChapterArchive({ chapter, reading, lead, turningPoints, sharedTurningPoints, resolveDialogue }: {
   chapter: ChronicleChapter; reading: ReturnType<typeof projectChronicleReading>; lead?: ChronicleLead;
   turningPoints: readonly ChapterTurningPoint[];
+  sharedTurningPoints: readonly SharedTurningPoint[];
   resolveDialogue: (eventId:string)=>PublicDialogueProvenance | undefined;
 }) {
   const [readOriginal, setReadOriginal] = useState(false);
@@ -68,7 +70,7 @@ function ChapterArchive({ chapter, reading, lead, turningPoints, resolveDialogue
             <p className="whitespace-pre-wrap break-words font-serif text-sm leading-7 text-slate-100">{section.paragraph}</p>}
         </section>
       )) : <p className="text-sm text-slate-400">本章没有可写成场景的公开史料。</p>}
-      <ChapterTurningPoints arcs={turningPoints} />
+      <ChapterTurningPoints arcs={turningPoints} shared={sharedTurningPoints} />
       <details className="rounded border border-slate-800 bg-slate-950/70 p-2">
         <summary className="min-h-11 cursor-pointer py-2 text-xs font-medium text-amber-200">本章公开史料 · {anchors.length} 条</summary>
         <p className="text-xs text-slate-400">记载时段：Tick #{chapter.startTick} 至 #{chapter.endTick}</p>
@@ -226,6 +228,7 @@ export function ChronicleLibraryPanel({ world, cultivator, scopeKey, scribeContr
             ? <p className="text-sm text-slate-400">尚无已编成的章节。公开史料累积到结集时会出现新篇。</p>
             : kind === 'chapter' ? <ChapterArchive key={chapter.id} chapter={chapter} reading={reading} lead={lead}
               turningPoints={projectChapterTurningPoints(world,chapter.id,cultivator?.id).arcs}
+              sharedTurningPoints={projectSharedTurningPoints(world,chapter.id,cultivator?.id)}
               resolveDialogue={(id)=>publicDialogues.chapter(chapter.id,id)} /> : <ChapterBiographies chapter={chapter} />)}
         </div>
       ))}
@@ -241,6 +244,7 @@ export function ChronicleLibraryPanel({ world, cultivator, scopeKey, scribeContr
           const olderLead = safe.storyFocal ? stampedChronicleLead(safe) : projectChronicleLead(world, safe.anchors, safe.endTick);
           return <ChapterArchive key={safe.id} chapter={safe} reading={projectChronicleReading(safe, olderLead, true)} lead={olderLead}
             turningPoints={projectChapterTurningPoints(world,safe.id,cultivator?.id).arcs}
+            sharedTurningPoints={projectSharedTurningPoints(world,safe.id,cultivator?.id)}
             resolveDialogue={(id)=>publicDialogues.chapter(safe.id,id)} />;
         }} />
       <EraHistoryPanel scopeKey={`${scopeKey??''}:${cultivator?.id??''}`} options={eraOptions}
