@@ -32,7 +32,8 @@ import { availableVillageCensusActions } from './villageCensusEngine';
 import { availableRoadActions } from './roadEngine';
 import { availableProbationActions, probationReliefTargets } from './probationEngine';
 import { availableRelicExhibitActions } from './relicExhibitEngine';
-import { availableWorkshopActions, availableWorkshopCapacityActions } from './workshopEngine';
+import { availableWorkshopActions, availableWorkshopCapacityActions, availableWorkshopReleaseActions,
+  type WorkshopReleaseOption } from './workshopEngine';
 import { availableToolLoanActions } from './toolLoanEngine';
 import { availableSparringActions, sparringLocksActor, SPARRING_QI_COST } from './sparringEngine';
 import { availableExpeditionRescueActions, EXPEDITION_RESCUE_DISTRESS_HP } from './expeditionRescueEngine';
@@ -814,6 +815,34 @@ export function computeHeuristicDecision(
           offers.find(({ targetWorkshopId }) => targetWorkshopId === undefined) : undefined);
         if (request) return { ...request, chosenAction: request.action, innerMonologue: '当轮炉位已满，按本地许可为下一轮排位。' };
       }
+    }
+  }
+  if (!cultivator.guardAssignment && !possessedForWorkshopRelease(cultivator, world, world.tick) &&
+      workshopState.some((order) => order.status === 'active' &&
+      order.siteId === cultivator.locationId && order.quantity === 2 && order.work.length === 2 &&
+      (order.makerId === cultivator.id || order.patronId === cultivator.id))) {
+    const options = availableWorkshopReleaseActions(cultivator, world);
+    // An agreement is voluntary. Do not have the autonomous actor choose between rival contracts.
+    const prefersRelease = cultivator.personality !== '嗜血' && cultivator.hp >= cultivator.maxHp * .65;
+    const replies = options.filter(({ workshopReleaseMove }) => workshopReleaseMove === (prefersRelease ? 'accept' : 'decline'));
+    if (replies.length === 1) {
+      return workshopReleaseDecision(replies[0], prefersRelease
+        ? '前件归前账，愿与原签人停做余件，只清未耗之物。' : '这封释约，我不应允。仍按原约行事。');
+    }
+    // The maker who sent the note may wait voluntarily for its one reply month.
+    // This is not a lock: an actual instructed work turn can still start the second piece.
+    if (workshopState.some((order) => order.status === 'active' && order.makerId === cultivator.id &&
+        order.siteId === cultivator.locationId && order.work.length === 2 &&
+        order.releaseNegotiations?.some((row) => row.status === 'offered' && row.proposerId === cultivator.id &&
+          row.offeredTick < world.tick && world.tick < row.expiresTick))) {
+      return { chosenAction: 'REST', innerMonologue: '余件尚未起炉，候原订人一月回信。并非原约已停。' };
+    }
+    // Do not replace timely production just because one could negotiate after a good delivery.
+    const failed = options.filter(({ workshopReleaseMove, targetWorkshopId }) => workshopReleaseMove === 'propose' &&
+      workshopState.some((order) => order.id === targetWorkshopId && order.makerId === cultivator.id &&
+        order.work[1].artifactId === undefined));
+    if (prefersRelease && failed.length === 1) {
+      return workshopReleaseDecision(failed[0], '头一件未过验。且问原订人肯不肯停做余件，不擅动款料。');
     }
   }
   const mayCommission = world.tick >= 28 && (world.tick + cultivator.id.charCodeAt(cultivator.id.length - 1)) % 13 === 6;
@@ -1849,6 +1878,10 @@ export async function requestCultivatorLLMDecision(
   const probationOptions = availableProbationActions(cultivator, world);
   const exhibitOptions = availableRelicExhibitActions(cultivator, world);
   const workshopOptions = availableWorkshopActions(cultivator, world, true, requestTick);
+  const workshopReleaseOptions = possessedForWorkshopRelease(cultivator, world, requestTick)
+    ? [] : availableWorkshopReleaseActions(cultivator, world, requestTick);
+  const workshopReleasePromptOptions = workshopReleaseOptions.map(({ workshopReleaseMove, targetWorkshopId,
+    targetWorkshopReleaseId }) => ({ workshopReleaseMove, targetWorkshopId, targetWorkshopReleaseId }));
   const toolLoanOptions = availableToolLoanActions(cultivator, world, requestTick);
   const toolLoanPromptOptions = toolLoanOptions.map(({ toolLoanMove, targetArtifactId, targetWorkshopId, targetToolLoanId }) =>
     ({ toolLoanMove, targetArtifactId, targetWorkshopId, targetToolLoanId }));
@@ -1970,6 +2003,7 @@ ${waterVeinOptions.length ? `- 本人在场的水线许可，只抄 waterVeinMov
 - 只有已列的受助 WORKSHOP work 才照抄它的 targetToolLoanId；普通 work 必须省略。不能假定无效借具照常运作。
 - 工坊委制只复制现有许可；须双方同意，按实际加工与质量交付：${JSON.stringify(workshopOptions)}${mayAcceptCharteredWorkshop ?
     '\n- 本人可接受的一份章程内委制：如这座旧工坊实际因迁宗撤并，实余资财退原委托人，已付或已耗不重算；新址不自动接约。这不是另一个行动。' : ''}
+- 余件释约只照抄本人列表中的 propose、accept、decline；提议不是暂停，同意才清剩余托管，不填写钱物或交割结果：${JSON.stringify(workshopReleasePromptOptions)}
 - 工坊容量调整只抄自己可用的 offer 或 accept 和 targetWorkshopId。停炉后已起工的仍记原账，未起工余项只由原委托人本人另行同意释放；不得填写款料、期限、数量、人物、炉况或假称已交付：${JSON.stringify(capacityOptions)}
 - 地脉恢复只可使用现地列出的地格，按实付收费，永久伤痕不能用普通工作抹掉：${JSON.stringify(recoveryOptions)}
 - 共管不会改变地权；只复制实际列出的三方提议或对本宗邀请的选择：${JSON.stringify(commonsOptions)}
@@ -2146,6 +2180,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'WORKSHOP',
             'TOOL_LOAN',
             'WORKSHOP_CAPACITY',
+            'WORKSHOP_RELEASE',
             'FURNACE_RESERVATION',
             'FURNACE_SAFETY',
             'DAMAGE_ASSURANCE',
@@ -2361,6 +2396,16 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
                 targetWorkshopId: legalToolLoan.targetWorkshopId, innerMonologue }
               : { chosenAction: 'TOOL_LOAN', toolLoanMove: legalToolLoan.toolLoanMove,
                 targetToolLoanId: legalToolLoan.targetToolLoanId, innerMonologue };
+          }
+          if (chosenAction === 'WORKSHOP_RELEASE') {
+            const exact = workshopReleaseOptions.find((item) => item.workshopReleaseMove === parsed.workshopReleaseMove &&
+              item.targetWorkshopId === parsed.targetWorkshopId && item.targetWorkshopReleaseId === parsed.targetWorkshopReleaseId);
+            if (!exact || Object.keys(parsed).some((key) => !['chosenAction', 'innerMonologue',
+              'workshopReleaseMove', 'targetWorkshopId', ...(exact.workshopReleaseMove === 'propose'
+                ? [] : ['targetWorkshopReleaseId'])].includes(key))) return undefined;
+            const innerMonologue = (typeof parsed.innerMonologue === 'string' && parsed.innerMonologue.trim().slice(0, 160)) ||
+              cultivator.innerMonologue || '照原人、原地与眼前真实账目再作决定。';
+            return workshopReleaseDecision(exact, innerMonologue);
           }
           const legalWorkshopCapacity = chosenAction === 'WORKSHOP_CAPACITY' ? capacityOptions.find((item) =>
             item.workshopCapacityMove === parsed.workshopCapacityMove && item.targetWorkshopId === parsed.targetWorkshopId) : undefined;
@@ -2901,4 +2946,15 @@ function toMentorTransferDecision({action,...targets}:MentorTransferOption,inner
 
 function toHousingDecision({action,...targets}:SeasonalHousingOption,innerMonologue:string):LLMDecisionPayload {
   return {chosenAction:action,...targets,innerMonologue};
+}
+
+
+function workshopReleaseDecision(option: WorkshopReleaseOption, innerMonologue: string): LLMDecisionPayload {
+  const { action: chosenAction, ...targets } = option;
+  return { chosenAction, ...targets, innerMonologue };
+}
+
+
+function possessedForWorkshopRelease(actor: Cultivator, world: WorldState, executionTick: number): boolean {
+  return world.playerAvatar.possessedId === actor.id && (world.playerAvatar.possessionUntilTick ?? 0) > executionTick;
 }

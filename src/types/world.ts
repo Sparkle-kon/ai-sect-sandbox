@@ -155,6 +155,7 @@ export type ActionType =
   | 'OATH_ARBITRATION'
   | 'SEASON_REVIEW'
   | 'PROBATION'
+  | 'WORKSHOP_RELEASE'
   | 'WORKSHOP'
   | 'FURNACE_RESERVATION'
   | 'FURNACE_SAFETY'
@@ -631,6 +632,8 @@ export interface LLMDecisionPayload {
   probationSecondVillageId?: string;
   probationVote?: ProbationVote;
   workshopMove?: WorkshopMove;
+  workshopReleaseMove?: WorkshopReleaseMove;
+  targetWorkshopReleaseId?: string;
   furnaceMove?: 'reserve' | 'cancel';
   furnaceSafetyMove?: FurnaceSafetyMove;
   damageAssuranceMove?: DamageAssuranceMove;
@@ -1061,6 +1064,8 @@ export type AvatarInteractionCommand = AvatarInteractionRequest;
 export type AvatarOrder = 'REST' | 'CULTIVATE';
 export type AvatarPendingOrder = { actorId: string; queuedTick: number } & (
   | { action: AvatarOrder }
+  | {action:'WORKSHOP_RELEASE';workshopReleaseMove:'propose';targetWorkshopId:string;targetWorkshopReleaseId?:never}
+  | {action:'WORKSHOP_RELEASE';workshopReleaseMove:'accept'|'decline';targetWorkshopId:string;targetWorkshopReleaseId:string}
   | { action: 'WATER_VEIN'; waterVeinMove: WaterVeinMove; targetLocationId: 'loc-vein-north' }
   | { action:'NORTH_MINING_CHARTER'; northMiningMove:'propose'; northMiningStance:NorthMiningStance; targetNorthMiningCharterId?:never }
   | { action:'NORTH_MINING_CHARTER'; northMiningMove:'sign'; targetNorthMiningCharterId:string; northMiningStance?:never }
@@ -2679,7 +2684,7 @@ export type WorkshopQualityFloor = 'standard' | 'fine';
 export type WorkshopOutputGrade = 'failed' | WorkshopQualityFloor;
 export type WorkshopStatus = 'offered' | 'active' | 'completed' | 'cancelled' | 'declined' | 'expired';
 export type WorkshopCloseReason = 'patron_cancelled' | 'maker_cancelled' | 'offer_expired' |
-  'work_expired' | 'patron_unavailable' | 'maker_unavailable' | 'site_unavailable' | 'institution_closed';
+  'mutual_release' | 'work_expired' | 'patron_unavailable' | 'maker_unavailable' | 'site_unavailable' | 'institution_closed';
 
 export type ToolLoanMove='offer'|'accept'|'decline'|'withdraw'|'release'|'reclaim';
 export interface ToolLoanUse {
@@ -2743,7 +2748,17 @@ export interface WorkshopCapacityAmendment {
   releasedStones:number;
   releasedHerbs:number;
 }
+export type WorkshopReleaseMove = 'propose'|'accept'|'decline';
+export interface WorkshopReleaseNegotiation {
+  id:string; proposerId:string; offeredTick:number; expiresTick:number;
+  firstFinishTick:number; firstOutcome:'delivered'|'stock_unavailable';
+  balanceStones:number; balanceHerbs:number;
+  status:'offered'|'accepted'|'declined'|'expired'|'superseded';
+  closedTick?:number; responderId?:string; returnedStones?:number; returnedHerbs?:number;
+  supersededBy?:'work_changed'|'contract_closed';
+}
 export interface WorkshopOrder {
+  releaseNegotiations?:WorkshopReleaseNegotiation[];
   capacityOffer?: WorkshopCapacityOffer;
   capacityAmendment?: WorkshopCapacityAmendment;
   id: string;

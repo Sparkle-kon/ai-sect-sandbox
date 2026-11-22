@@ -1,3 +1,4 @@
+import {availableWorkshopReleaseActions,type WorkshopReleaseOption} from './workshopEngine';
 import {onLowerPlane,onUpperPassagePlane} from './upperPassageIsolation';
 import {upperArrayFieldPhysicalSite} from './upperArrayFieldMovementEngine';
 import {availableUpperArrayFieldActions,upperArrayFieldCommand,upperArrayFieldOptionKey,type UpperArrayFieldOption} from './upperArrayFieldActions';
@@ -272,6 +273,18 @@ export function queueAvatarUpperArrayField(world:WorldState,actorId:string,choic
   return true;
 }
 
+export function queueAvatarWorkshopRelease(world:WorldState,actorId:string,choice:WorkshopReleaseOption):boolean {
+  const host=activeAvatar(world);
+  if(!host||!onLowerPlane(host)||!canQueueAvatarSalvage(world,actorId)||choice.action!=='WORKSHOP_RELEASE')return false;
+  const options=availableWorkshopReleaseActions(host,world,world.tick+1).filter(option=>
+    option.workshopReleaseMove===choice.workshopReleaseMove&&option.targetWorkshopId===choice.targetWorkshopId&&
+    option.targetWorkshopReleaseId===choice.targetWorkshopReleaseId);
+  if(options.length!==1)return false;
+  world.playerAvatar.essence-=AVATAR_ORDER_COST;
+  world.playerAvatar.pendingOrder={actorId,queuedTick:world.tick,...options[0]};
+  return true;
+}
+
 export function consumeAvatarOrder(world: WorldState): { actorId: string; decision: LLMDecisionPayload } | undefined {
   const state = world.playerAvatar;
   const order = state?.pendingOrder;
@@ -281,6 +294,10 @@ export function consumeAvatarOrder(world: WorldState): { actorId: string; decisi
   if(order.action==='FRONTIER'||order.action==='FRONTIER_PRODUCTION'||order.action==='FRONTIER_TRADE'||
     order.action==='FRONTIER_PORT'||order.action==='FRONTIER_PORT_TRADE'||order.action==='FRONTIER_DRYLAND'||order.action==='FRONTIER_DRYLAND_TRADE')
     return {actorId:order.actorId,decision:{...frontierCommand(order),innerMonologue:'按确切的另图安排前行。'}};
+  if(order.action==='WORKSHOP_RELEASE')return {actorId:order.actorId,decision:{chosenAction:order.action,
+    innerMonologue:'只按原签和实余托管复核这次释约。',
+    workshopReleaseMove:order.workshopReleaseMove,targetWorkshopId:order.targetWorkshopId,
+    ...(order.workshopReleaseMove==='propose'?{}:{targetWorkshopReleaseId:order.targetWorkshopReleaseId})}};
   if(order.action==='UPPER_ARRAY_FIELD'||order.action==='UPPER_ARRAY_FIELD_LOCAL'||order.action==='UPPER_ARRAY_FIELD_TRADE')
     return {actorId:order.actorId,decision:{...upperArrayFieldCommand(order),innerMonologue:'按脚下实地和本人原约办理。'}};
   const targets = order.action === 'NORTH_GATE_RENEWAL' ?

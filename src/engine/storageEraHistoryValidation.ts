@@ -125,6 +125,7 @@ export function validateEraHistory(world:WorldState,fail:Fail):void {
       const orders=nativeOrders.get(row.orderId)??[];
       if(!actors.has(row.patronId)||!actors.has(row.makerId)||!serial(row.kind,row.orderId)||
         // When retained, the actual terminal order must verify paid work, zero escrow, parties/site/date and status.
+        row.eventId.endsWith('-release-accepted')&&orders.length!==1||
         orders.length>1||orders.some(order=>!eraWorkshopOrderMatches(row,order)))return fail('eraHistory.receipts.workshop');
     }
   }

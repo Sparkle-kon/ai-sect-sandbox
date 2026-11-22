@@ -1,3 +1,4 @@
+import {WorkshopReleaseRead,type WorkshopReleaseControls} from './WorkshopReleaseRead';
 import { visibleWorkshopOrders, workshopTerms } from '../engine/workshopEngine';
 import { WORKSHOP_CAPACITY_RECOVERY_TICKS } from '../engine/workshopCapacityTerms';
 import { knownMapLocations } from '../engine/terrainEngine';
@@ -13,7 +14,7 @@ const STATUS: Record<Order['status'], string> = {
 const CLOSE: Record<NonNullable<Order['closeReason']>, string> = {
   patron_cancelled: '委托方取消', maker_cancelled: '工匠取消', offer_expired: '邀约过期',
   work_expired: '工期已满', patron_unavailable: '委托方无法交接', maker_unavailable: '工匠无法继续', site_unavailable: '工坊地点已失效',
-  institution_closed: '原山门工坊章程终止',
+  institution_closed: '原山门工坊章程终止', mutual_release:'双方同意停作余件',
 };
 const QUALITY = { failed: '未成品', standard: '合格', fine: '精良' } as const;
 
@@ -68,7 +69,7 @@ function CapacityReceipt({ order, tick, patron, receipts }: {
   </div>;
 }
 
-export function WorkshopPanel({ world, cultivator }: { world: WorldState; cultivator: Cultivator }) {
+export function WorkshopPanel({ world, cultivator, releaseControls }: { world: WorldState; cultivator: Cultivator; releaseControls?:WorkshopReleaseControls }) {
   const actor = world.cultivators.find(({ id }) => id === cultivator.id);
   if (!actor) return null;
   const orders = visibleWorkshopOrders(world, actor).filter(({ patronId, makerId, offeredTick }) =>
@@ -110,6 +111,7 @@ export function WorkshopPanel({ world, cultivator }: { world: WorldState; cultiv
                 </> : <p className="text-slate-400">没有已同意的承制记录，未开工。</p>}
                 {order.closeReason !== 'institution_closed' && <p>当前托管 {order.escrowStones} 灵石与玄土根 {order.escrowHerbs} 株 · 已实退 {order.refundedStones} 灵石与玄土根 {order.refundedHerbs} 株</p>}
                 <CapacityReceipt order={order} tick={world.tick} patron={patron} receipts={receipts} />
+                <WorkshopReleaseRead key={releaseControls?.scopeKey??actor.id} order={order} actorId={actor.id} tick={world.tick} controls={releaseControls}/>
                 {order.closeReason && (order.closeReason !== 'institution_closed' || institutionClosed) &&
                   <p>结案：{CLOSE[order.closeReason]}{order.settledTick !== undefined && ` · Tick #${order.settledTick}`}</p>}
                 {institutionClosed && <ClosureReceipt world={world} order={order} patron={patron} />}

@@ -90,6 +90,11 @@ function terminalWorkshop(eventId:string,id:string,tick:number,status:WorkshopHi
   return phase==='close'||phase==='cancel'||phase==='institution-return'||phase==='release-accepted';
 }
 export function eraWorkshopOrderMatches(row:WorkshopHistory,order:WorkshopOrder):boolean{
+  const release=row.eventId===`evt-workshop-${order.id}-${row.tick}-release-accepted`;
+  if(release!==(order.closeReason==='mutual_release')||
+      release&&!order.releaseNegotiations?.some(proof=>proof.status==='accepted'&&proof.closedTick===row.tick&&
+        (proof.proposerId===order.patronId&&proof.responderId===order.makerId||
+          proof.proposerId===order.makerId&&proof.responderId===order.patronId)))return false;
   return row.orderId===order.id&&row.patronId===order.patronId&&row.makerId===order.makerId&&
     order.acceptedTick!==undefined&&order.acceptedTick<=row.tick&&order.settledTick===row.tick&&order.status===row.status&&
     order.siteId===row.locationId&&order.escrowStones===0&&order.escrowHerbs===0&&

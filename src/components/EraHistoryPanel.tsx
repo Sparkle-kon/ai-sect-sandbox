@@ -33,7 +33,11 @@ function receiptText(receipt: EraHistoryView['receipt'], query: EraHistoryQuery)
       const direction = query.kind !== 'settlement' ? '迁徙' : receipt.toSettlementId === query.id ? '迁入' : '迁出';
       return `记载村民${direction} · ${receipt.people} 人`;
     }
-    case 'workshop': return `工坊原单${orderLabel[receipt.status]} · 实际交割 ${receipt.delivered} 件`;
+    case 'workshop': {
+      const closedByAgreement=receipt.status==='cancelled'&&
+        receipt.eventId===`evt-workshop-${receipt.orderId}-${receipt.tick}-release-accepted`;
+      return `工坊原单${closedByAgreement?'经双方同意停作余件':orderLabel[receipt.status]} · 实际交割 ${receipt.delivered} 件`;
+    }
   }
 }
 

@@ -37,7 +37,7 @@ import { closeVillageCensusPeriod, resolveVillageCensusAction } from './villageC
 import { advanceRoads, resolveRoadAction } from './roadEngine';
 import { advanceProbation, resolveProbationAction } from './probationEngine';
 import { advanceRelicExhibits, resolveRelicExhibitAction } from './relicExhibitEngine';
-import { advanceWorkshopInstitutionClosures, advanceWorkshops, resolveWorkshopAction, resolveWorkshopCapacityAction } from './workshopEngine';
+import { advanceWorkshopInstitutionClosures, advanceWorkshops, resolveWorkshopAction, resolveWorkshopCapacityAction, resolveWorkshopReleaseAction } from './workshopEngine';
 import { openFurnaceTurn, resolveFurnaceReservationAction, settleFurnaceTurn } from './furnaceReservationEngine';
 import { advanceSparring, resolveSparringAction, sparringLocksActor } from './sparringEngine';
 import { resolveExpeditionRescueAction } from './expeditionRescueEngine';
@@ -308,6 +308,15 @@ export function applyCultivatorBrainDecision(
   if(isFrontierAction(decision.chosenAction))return applyFrontierDecision(world,cultivator,decision,rng,explicitAvatarDecision);
   if(decision.chosenAction==='UPPER_PASSAGE')return applyUpperPassageDecision(world,cultivator,decision,explicitAvatarDecision);
   if(isUpperArrayFieldAction(decision.chosenAction))return applyUpperArrayFieldDecision(world,cultivator,decision,explicitAvatarDecision);
+  if (decision.chosenAction === 'WORKSHOP_RELEASE') {
+    if (activeAvatar(world)?.id === cultivator.id && decision !== explicitAvatarDecision) return null;
+    const applied = resolveWorkshopReleaseAction(world, cultivator, decision);
+    if (applied) {
+      cultivator.innerMonologue = decision.innerMonologue;
+      cultivator.currentAction = 'WORKSHOP_RELEASE';
+    }
+    return applied;
+  }
   if(decision.chosenAction==='NORTH_GATE_RENEWAL'){
     if(activeAvatar(world)?.id===cultivator.id&&decision!==explicitAvatarDecision)return null;
     const applied=resolveNorthGateRenewalAction(world,cultivator,decision);
