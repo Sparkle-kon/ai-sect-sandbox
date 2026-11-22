@@ -1,3 +1,4 @@
+import { availableHeavenlyAlchemyActions } from './heavenlyAlchemyEngine';
 import { availableDungeonMoves } from './expeditionDungeonEngine';
 import { activeAvatar } from './avatarEngine';
 import { availableGrandSiegeHeroActions } from './grandSiegeTheatreEngine';
@@ -91,7 +92,9 @@ export function recordDecisionTrace(world: WorldState, actorId: string, candidat
   const privateDecision = isPrivateHeartTurn(world, actorId, decision) || decision.chosenAction === 'FORBIDDEN_ART' ||
     decision.targetForbiddenDuelId !== undefined || decision.forbiddenArtChoice !== undefined ||
     decision.chosenAction === 'GRAND_SIEGE_HERO' || decision.targetGrandSiegeId !== undefined || decision.grandSiegeHeroMove !== undefined ||
-    decision.chosenAction === 'EXPEDITION_DUNGEON' || decision.targetDungeonRoomId !== undefined || decision.dungeonMove !== undefined;
+    decision.chosenAction === 'EXPEDITION_DUNGEON' || decision.targetDungeonRoomId !== undefined || decision.dungeonMove !== undefined ||
+    decision.chosenAction === 'HEAVENLY_ALCHEMY' || decision.heavenlyAlchemyMove !== undefined ||
+    decision.targetHeavenlyRecipeId !== undefined || decision.heavenlyAlchemyHeat !== undefined || decision.heavenlyAlchemyQuality !== undefined;
   const picks: DecisionTraceCandidate[] = [];
   for (const item of privateDecision ? [] : candidates) {
     if (!isSafeAction(item.action) || !Number.isFinite(item.score)) continue;
@@ -193,9 +196,17 @@ export function rememberReplayDecision(tape: DecisionReplayTape, actorId: string
     row.dungeonMove === decision.dungeonMove);
   const dungeonFields = dungeonChoice ? { targetOccasionId: dungeonChoice.targetOccasionId,
     targetDungeonRoomId: dungeonChoice.targetDungeonRoomId, dungeonMove: dungeonChoice.dungeonMove } : undefined;
-  state.decisions.set(actorId, { ...(forbiddenAction || grandSiegeAction || dungeonAction ? {} : details),
+  const heavenlyAction = decision.chosenAction === 'HEAVENLY_ALCHEMY';
+  const alchemist = heavenlyAction && state.base.cultivators.find(({ id }) => id === actorId);
+  const recipe = alchemist && availableHeavenlyAlchemyActions(alchemist, state.base, state.base.tick + 1).find(row =>
+    row.heavenlyAlchemyMove === decision.heavenlyAlchemyMove && row.targetHeavenlyRecipeId === decision.targetHeavenlyRecipeId &&
+    row.heavenlyAlchemyHeat === decision.heavenlyAlchemyHeat && row.heavenlyAlchemyQuality === decision.heavenlyAlchemyQuality);
+  const chosenAlchemy = recipe ? { heavenlyAlchemyMove: recipe.heavenlyAlchemyMove,
+    targetHeavenlyRecipeId: recipe.targetHeavenlyRecipeId, ...(recipe.heavenlyAlchemyMove === 'brew'
+      ? { heavenlyAlchemyHeat: recipe.heavenlyAlchemyHeat } : { heavenlyAlchemyQuality: recipe.heavenlyAlchemyQuality }) } : undefined;
+  state.decisions.set(actorId, { ...(forbiddenAction || grandSiegeAction || dungeonAction || heavenlyAction ? {} : details),
     chosenAction: decision.chosenAction, innerMonologue: '', ...(cohortInviteeIds ? { cohortInviteeIds } : {}),
-    ...personalHeartChoice, ...personalForbiddenChoice, ...personalHeroChoice, ...dungeonFields });
+    ...personalHeartChoice, ...personalForbiddenChoice, ...personalHeroChoice, ...dungeonFields, ...chosenAlchemy });
   if (personalHeartChoice && heartModel) state.heartModelActors.add(actorId);
   else state.heartModelActors.delete(actorId);
   if (personalForbiddenChoice && forbiddenModel) state.forbiddenModelActors.add(actorId);

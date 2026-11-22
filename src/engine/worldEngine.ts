@@ -1,3 +1,4 @@
+import { availableHeavenlyAlchemyActions, resolveHeavenlyAlchemyAction } from './heavenlyAlchemyEngine';
 import { activeDungeonForActor, availableDungeonMoves, resolveDungeonAction } from './expeditionDungeonEngine';
 import {RING_AUDIENCE_TABOO_TECHNIQUE,expireRingAudiences,finishRingAudienceExecution,pendingRingAudienceExecution} from './ringAudienceEngine';
 import { personaLine } from './wildPersonaEngine';
@@ -134,7 +135,7 @@ import {
   WorldEvent,
   WorldState,
 } from '../types/world';
-import { computeHeuristicDecision, dungeonDecisionOccasion, exactDungeonDecision, isProviderPersonaDecision, requiredBeforeOrdinaryDecision, utilityCeasefireDecision, utilityDungeonDecision, utilityExpeditionRescueDecision } from './llmBrain';
+import { availableAutonomousHeavenlyAlchemyActions, computeHeuristicDecision, dungeonDecisionOccasion, exactDungeonDecision, exactHeavenlyAlchemyDecision, isProviderPersonaDecision, requiredBeforeOrdinaryDecision, utilityCeasefireDecision, utilityDungeonDecision, utilityExpeditionRescueDecision } from './llmBrain';
 import { maintainMemories, recordMemory } from './memoryEngine';
 import { synthesizeReflections } from './reflectionEngine';
 import { fabricateRumor, knownRumorLead, spreadRumors, witnessEvent } from './rumorEngine';
@@ -490,6 +491,20 @@ export function applyCultivatorBrainDecision(
     return applied;
   }
   if (decision.chosenAction !== 'EXPEDITION_RESCUE' && activeDungeonForActor(world, cultivator)) return null;
+  if (decision.chosenAction === 'HEAVENLY_ALCHEMY') {
+    if (activeSiegeForActor(world, cultivator) || activeOccasionForActor(world, cultivator)) return null;
+    const autonomous = modelInput || isProviderPersonaDecision(decision);
+    const choices = autonomous ? availableAutonomousHeavenlyAlchemyActions(cultivator, world)
+      : availableHeavenlyAlchemyActions(cultivator, world);
+    const exact = exactHeavenlyAlchemyDecision(decision, choices, true);
+    if (!exact) return null;
+    const applied = resolveHeavenlyAlchemyAction(world, cultivator, exact, rng);
+    if (applied) {
+      cultivator.currentAction = 'HEAVENLY_ALCHEMY';
+      cultivator.innerMonologue = exact.innerMonologue;
+    }
+    return applied;
+  }
   if(isFrontierAction(decision.chosenAction))return applyFrontierDecision(world,cultivator,decision,rng,explicitAvatarDecision);
   if(decision.chosenAction==='UPPER_PASSAGE')return applyUpperPassageDecision(world,cultivator,decision,explicitAvatarDecision);
   if(isUpperArrayFieldAction(decision.chosenAction))return applyUpperArrayFieldDecision(world,cultivator,decision,explicitAvatarDecision);
@@ -1260,6 +1275,16 @@ export function advanceWorldTick(
     const modelProposal = supplied && traceOptions?.modelActors?.has(cultivator.id) ? supplied : undefined;
     let provided = avatarDecision ?? supplied;
     let modelOrdinaryReplaced=false;
+    if (!avatarDecision && provided?.chosenAction === 'HEAVENLY_ALCHEMY' &&
+        (modelProposal || isProviderPersonaDecision(provided))) {
+      const required = requiredBeforeOrdinaryDecision(cultivator, nextState);
+      const exact = !required && exactHeavenlyAlchemyDecision(provided,
+        availableAutonomousHeavenlyAlchemyActions(cultivator, nextState), true);
+      if (!exact) {
+        provided = required;
+        modelOrdinaryReplaced = true;
+      }
+    }
     if(!avatarDecision&&modelProposal&&traceOptions?.replayDraws===undefined&&isOrdinaryIntentAction(modelProposal.chosenAction)){
       const required=requiredBeforeOrdinaryDecision(cultivator,nextState);
       if(required){
@@ -1363,7 +1388,8 @@ export function advanceWorldTick(
       computeHeuristicDecision(cultivator, nextState, () => { decisionDraws++; return rng(); });
 
     const captureTrace = traceOptions?.captureTrace !== false;
-    const candidates = (captureTrace || traceOptions?.onActor) && decision.chosenAction !== 'EXPEDITION_DUNGEON' ?
+    const candidates = (captureTrace || traceOptions?.onActor) && decision.chosenAction !== 'EXPEDITION_DUNGEON' &&
+      decision.chosenAction !== 'HEAVENLY_ALCHEMY' ?
       legalTraceCandidates(nextState, cultivator) : [];
     const chosenByModel = Boolean(modelProposal && !modelOrdinaryReplaced && !modelStoryChoiceReplaced && !expeditionModelReplaced);
     if (traceOptions?.tape) rememberReplayDecision(traceOptions.tape, cultivator.id, decision, decisionDraws, chosenByModel);

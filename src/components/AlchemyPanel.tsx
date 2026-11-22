@@ -1,3 +1,5 @@
+import {HeavenlyAlchemyRead,type HeavenlyAlchemyControls} from './HeavenlyAlchemyRead';
+import {projectHeavenlyAlchemy} from '../engine/heavenlyAlchemyEngine';
 import type { Cultivator, HerbId, LocationNode, PillId, WorldState } from '../types/world';
 export { countHerbs } from './mapStatusLabels';
 
@@ -77,8 +79,9 @@ function RecipeBook({ cultivator, location, safety }: {
   );
 }
 
-export function AlchemyPanel({ world, cultivator, location }: { world: WorldState; cultivator: Cultivator; location: LocationNode | undefined }) {
+export function AlchemyPanel({ world, cultivator, location, heavenlyAlchemyControls }: { world: WorldState; cultivator: Cultivator; location: LocationNode | undefined; heavenlyAlchemyControls?:HeavenlyAlchemyControls }) {
   const viewer = world.cultivators.find(({ id }) => id === cultivator.id);
+  const heavenly = viewer===cultivator?projectHeavenlyAlchemy(world,viewer):undefined;
   const safety = location && projectFurnaceSafety(world, viewer, location.id);
   const presentLocation = cultivator.alive && (location?.furnaceGrade === 0 || safety) ? location : undefined;
   return (
@@ -106,6 +109,7 @@ export function AlchemyPanel({ world, cultivator, location }: { world: WorldStat
         </p>
       )}
       {viewer && <SeedCulturePanel world={world} cultivator={viewer} />}
+      {heavenly&&<HeavenlyAlchemyRead key={`${heavenly.actorId}:${heavenly.siteId}`} view={heavenly} tick={world.tick} controls={heavenlyAlchemyControls}/>}
       <RecipeBook cultivator={cultivator} location={presentLocation} safety={safety} />
     </section>
   );

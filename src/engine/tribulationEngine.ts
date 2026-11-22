@@ -1,3 +1,4 @@
+import {spendHeavenlyPillWard} from './heavenlyAlchemyEngine';
 import { STANCES, STORMS } from './tribulationTerms';
 import type { HeartDemonGuide } from '../types/heartDemon';
 import { heartDemonEffects, isHeartDemonRealm, openHeartDemonFrame, prepareHeartDemonResolution,
@@ -96,8 +97,10 @@ export function resolveTribulation(world: WorldState, actor: Cultivator, stance:
     const toxicity = clamp(actor.pillToxicity, 0, 100);
     let fraction = (storm.strength + (wave - 1) * .018) * (.85 + .3 * rng()) * posture.damage * (1 - equipment);
     fraction += trial.pressure * .001 + toxicity * .00045;
+    const refinedWard=spendHeavenlyPillWard(actor,trial,world.tick);
+    if(refinedWard>0)fraction*=1-refinedWard;
     let pillUsed = false;
-    if (actor.pills.barrier > 0 && toxicity < 72 &&
+    if (refinedWard===0 && actor.pills.barrier > 0 && toxicity < 72 &&
         (actor.hp / actor.maxHp <= .45 || fraction * actor.maxHp >= actor.hp * .60)) {
       actor.pills.barrier--;
       actor.pillToxicity = Math.min(100, toxicity + 24);
@@ -110,10 +113,10 @@ export function resolveTribulation(world: WorldState, actor: Cultivator, stance:
     const impact = [{ cultivatorId: actor.id, amount: previousHp - actor.hp }];
     wearArtifact(actor, actor.hp > 0);
     trial.pressure = clamp(trial.pressure + posture.pressure, 0, 100);
-    if (actor.hp === 0) return { ...failTrial(world, actor, trial, `未能承受第${wave}重劫雷${pillUsed ? '，破障丹护持亦告破' : ''}`), damage: impact };
+    if (actor.hp === 0) return { ...failTrial(world, actor, trial, `未能承受第${wave}重劫雷${refinedWard>0?'，已耗渡劫神丹护持':pillUsed ? '，破障丹护持亦告破' : ''}`), damage: impact };
     trial.nextWave++;
     if (wave >= trial.totalWaves) trial.stage = 'heart_demon';
-    trial.lastOutcome = `${actor.name}以${posture.name}扛过第${wave}/${trial.totalWaves}重劫雷，损失${damage}气血${pillUsed ? '，耗费一枚破障丹抵消部分雷力' : ''}。${trial.stage === 'heart_demon' ? '雷云消退，心魔随即浮现。' : ''}`;
+    trial.lastOutcome = `${actor.name}以${posture.name}扛过第${wave}/${trial.totalWaves}重劫雷，损失${damage}气血${refinedWard>0?'，渡劫神丹护持抵去本重部分雷力':pillUsed ? '，耗费一枚破障丹抵消部分雷力' : ''}。${trial.stage === 'heart_demon' ? '雷云消退，心魔随即浮现。' : ''}`;
     const bolt = { ...trialEvent(world, actor, `wave-${wave}`, `第${wave}重雷劫`, trial.lastOutcome), damage: impact };
     if (trial.stage === 'heart_demon') openHeartDemonFrame(world, actor, trial, bolt);
     return bolt;

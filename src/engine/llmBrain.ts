@@ -1,3 +1,6 @@
+import { availableHeavenlyAlchemyActions } from './heavenlyAlchemyEngine';
+import { HEAVENLY_ALCHEMY_RECIPES } from './heavenlyAlchemyTerms';
+import { HEAVENLY_QUALITIES } from '../types/heavenlyAlchemy';
 import { activeDungeonForActor, availableDungeonMoves } from './expeditionDungeonEngine';
 import { DESTINY_TRAIT_CATALOG } from './destinyTraitCatalog';
 import { latestEarnedPersonaTrait, personaLine, privatePersonaText } from './wildPersonaEngine';
@@ -114,10 +117,10 @@ import { availableTechniques, mayAuthorTechnique, utilityStudyTarget } from './t
 import { availableAlchemy } from './alchemyEngine';
 import { artifactId, availableArtifactActions, durabilityOf, equippedArtifact } from './artifactEngine';
 import { availableArtifactSalvageActions } from './artifactSalvageEngine';
-import { availableAmbushTargets, isTribulationActive, recommendedTribulationStance } from './tribulationEngine';
+import { availableAmbushTargets, isTribulationActive, recommendedTribulationStance, tribulationTarget } from './tribulationEngine';
 import { availableLeadershipActions } from './sectPoliticsEngine';
 import { availableSectEconomyActions } from './sectEconomyEngine';
-import { availableDiplomacyActions } from './diplomacyEngine';
+import { activeSiegeForActor, availableDiplomacyActions } from './diplomacyEngine';
 import { activeOccasionForActor, availableOccasionJoins } from './occasionEngine';
 import { canSeeOccasion, canInvestigateExpeditionOmen, projectExpeditionOmens } from './expeditionOmenEngine';
 import { availableBountyHunts } from './bountyEngine';
@@ -158,6 +161,68 @@ export function utilityExpeditionRescueDecision(actor: Cultivator, world: WorldS
   const thought = option.rescueMove === 'signal' ? '向确能收到的在场见证人发出求援。' : option.rescueMove === 'accept' ?
     '我自愿携实物补给接应，只沿已核实的撤离路。' : '已脱离伤势所致的求援条件；在尚未交付补给时撤信。';
   return { ...option, chosenAction: option.action, innerMonologue: thought };
+}
+
+type HeavenlyOption = ReturnType<typeof availableHeavenlyAlchemyActions>[number];
+const heavenlyAction = (row: HeavenlyOption) => ({
+  chosenAction: 'HEAVENLY_ALCHEMY' as const,
+  targetHeavenlyRecipeId: row.targetHeavenlyRecipeId,
+  ...(row.heavenlyAlchemyMove === 'brew'
+    ? { heavenlyAlchemyMove: row.heavenlyAlchemyMove, heavenlyAlchemyHeat: row.heavenlyAlchemyHeat }
+    : { heavenlyAlchemyMove: row.heavenlyAlchemyMove, heavenlyAlchemyQuality: row.heavenlyAlchemyQuality }),
+});
+const sameHeavenlyAction = (a: Pick<LLMDecisionPayload, 'chosenAction' | 'targetHeavenlyRecipeId' | 'heavenlyAlchemyMove' |
+  'heavenlyAlchemyHeat' | 'heavenlyAlchemyQuality'>, b: typeof a) => a.chosenAction === b.chosenAction &&
+  a.targetHeavenlyRecipeId === b.targetHeavenlyRecipeId && a.heavenlyAlchemyMove === b.heavenlyAlchemyMove &&
+  a.heavenlyAlchemyHeat === b.heavenlyAlchemyHeat && a.heavenlyAlchemyQuality === b.heavenlyAlchemyQuality;
+const heavenlyDecision = (row: HeavenlyOption): LLMDecisionPayload => ({
+  ...heavenlyAction(row), innerMonologue: row.heavenlyAlchemyMove === 'brew'
+    ? '依实际炉位和本人灵材择定炉火，成色不由口说。' : '只炼化本人实际待用的原丹。',
+});
+
+/** No forecast, numerical effect, actor or model-authored prose is part of this command. */
+export function exactHeavenlyAlchemyDecision(input: unknown, options: readonly HeavenlyOption[],
+  allowAuthoredThought = false): LLMDecisionPayload | undefined {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return undefined;
+  const data = input as Partial<LLMDecisionPayload>;
+  if (data.chosenAction !== 'HEAVENLY_ALCHEMY' || (data.heavenlyAlchemyMove !== 'brew' && data.heavenlyAlchemyMove !== 'take')) return undefined;
+  const keys = ['chosenAction', 'heavenlyAlchemyMove', 'targetHeavenlyRecipeId',
+    data.heavenlyAlchemyMove === 'brew' ? 'heavenlyAlchemyHeat' : 'heavenlyAlchemyQuality'];
+  if (keys.some(key => !Object.hasOwn(data, key)) ||
+      Object.keys(data).some(key => !keys.includes(key) && !(allowAuthoredThought && key === 'innerMonologue'))) return undefined;
+  const selected = options.find(row => sameHeavenlyAction(heavenlyAction(row), data as LLMDecisionPayload));
+  return selected ? heavenlyDecision(selected) : undefined;
+}
+
+export function availableAutonomousHeavenlyAlchemyActions(actor: Cultivator, world: WorldState, executionTick = world.tick): readonly HeavenlyOption[] {
+  const hasOwnDose = actor.heavenlyAlchemy?.attempts.some(row => row.quality && !row.use);
+  const confident = executionTick % 5 === 0 && actor.techniqueMastery >= 65 && actor.spiritStones >= 240 &&
+    (actor.spiritRoot === '火' || actor.heavenlyAlchemy?.attempts.some(row => row.quality));
+  if ((!hasOwnDose && !confident) || actor.guardAssignment || actor.positionPlane !== undefined || actor.qiProgress >= 92 ||
+      actor.hp < actor.maxHp * .45 || actor.pillToxicity >= 45 || activeAvatar(world) === actor ||
+      activeOccasionForActor(world, actor) || activeSiegeForActor(world, actor) || activePilgrimageForActor(world, actor) ||
+      boundaryReliefCheckpoint(world, actor) || disasterShelterCheckpoint(world, actor) ||
+      requiredBeforeOrdinaryDecision(actor, world)) return [];
+  const native = availableHeavenlyAlchemyActions(actor, world, executionTick);
+  const take = native.filter(row => row.heavenlyAlchemyMove === 'take' &&
+    (row.targetHeavenlyRecipeId === 'nine_turn_golden' ? actor.hp < actor.maxHp * .75 && actor.qiProgress < 74 :
+      actor.qiProgress >= 78 && !!tribulationTarget(actor)));
+  if (take.length) return take;
+  if (!confident || hasOwnDose || actor.hp < actor.maxHp * .8 || mayAuthorTechnique(actor)) return [];
+  return native.filter(option => {
+    if (option.heavenlyAlchemyMove !== 'brew') return false;
+    const recipe = HEAVENLY_ALCHEMY_RECIPES[option.targetHeavenlyRecipeId];
+    return actor.spiritStones >= recipe.stones * 2 &&
+      Object.entries(recipe.herbs).every(([herb, amount]) => actor.herbs[herb as keyof typeof actor.herbs] >= amount * 2);
+  });
+}
+
+export function utilityHeavenlyAlchemyDecision(actor: Cultivator, world: WorldState): LLMDecisionPayload | undefined {
+  const options = availableAutonomousHeavenlyAlchemyActions(actor, world, world.tick);
+  const selected = [...options].filter(row => row.heavenlyAlchemyMove === 'take').sort((a, b) =>
+    HEAVENLY_QUALITIES.indexOf(b.heavenlyAlchemyQuality!) - HEAVENLY_QUALITIES.indexOf(a.heavenlyAlchemyQuality!))[0] ??
+    options.find(option => option.heavenlyAlchemyMove === 'brew' && option.heavenlyAlchemyHeat === 'calm');
+  return selected ? heavenlyDecision(selected) : undefined;
 }
 
 type DungeonOption = ReturnType<typeof availableDungeonMoves>[number];
@@ -1384,6 +1449,8 @@ export function computeHeuristicDecision(
       [...choices].reverse().find((item) => item.action === 'FORGE_ARTIFACT');
     if (artifactAction) return { ...artifactAction, chosenAction: artifactAction.action, innerMonologue: '兵刃须磨砺温养，方能与我心神相合。' };
   }
+  const heavenly = utilityHeavenlyAlchemyDecision(cultivator, world);
+  if (heavenly) return heavenly;
   if (world.tick % 5 === 0) {
     const option = alchemy.find((item) => item.action === 'USE_PILL' &&
       (item.targetPillId === 'heart_poison' || (cultivator.pillToxicity < 35 && cultivator.qiProgress < 78))) ??
@@ -2141,6 +2208,21 @@ export async function requestCultivatorLLMDecision(
   const rescueOnly = activeOccasionForActor(world, cultivator)?.kind === 'expedition' || world.expeditionRescues.requests.some((row) =>
     row.status === 'extracting' && (row.explorerId === cultivator.id || row.rescuerId === cultivator.id));
   if (rescueOnly && !rescueOptions.length) return undefined;
+  if (!activeVow && !boundaryReliefOnly && !rescueOnly && requestTick === world.tick + 1) {
+    const rituals = availableAutonomousHeavenlyAlchemyActions(cultivator, world, requestTick);
+    if (rituals.length) {
+      const originalSite = cultivator.locationId;
+      const menu = rituals.map(heavenlyAction);
+      const prompt = '仅在本人实物和实际许可内择定火候，或原样选本人已有的一枚丹。只原样复制一完整 JSON 对象，' +
+        '不得添加独白、目标人物、品质预测、功效、数额或炼制结果。许可：' + JSON.stringify(menu);
+      return requestDecisionPrompt(config, requestTick, options, prompt, parsed => {
+        if (requestTick !== world.tick + 1 || cultivator.locationId !== originalSite) return undefined;
+        const current = availableAutonomousHeavenlyAlchemyActions(cultivator, world, requestTick);
+        if (current.length !== menu.length || current.some((row, i) => !sameHeavenlyAction(heavenlyAction(row), menu[i]))) return undefined;
+        return exactHeavenlyAlchemyDecision(parsed, current);
+      }, 160);
+    }
+  }
 
   const location = world.locations.find((l) => l.id === cultivator.locationId);
   const physicalRegion=physicalAtlasHome(world,cultivator)?.point.regionId;
@@ -2433,7 +2515,9 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
               Object.hasOwn(parsed, 'targetHeartTrialId') || Object.hasOwn(parsed, 'heartDemonChoice') ||
               Object.hasOwn(parsed, 'targetForbiddenDuelId') || Object.hasOwn(parsed, 'forbiddenArtChoice') ||
               Object.hasOwn(parsed, 'targetGrandSiegeId') || Object.hasOwn(parsed, 'grandSiegeHeroMove') ||
-              Object.hasOwn(parsed, 'targetDungeonRoomId') || Object.hasOwn(parsed, 'dungeonMove')) return undefined;
+              Object.hasOwn(parsed, 'targetDungeonRoomId') || Object.hasOwn(parsed, 'dungeonMove') ||
+              ['heavenlyAlchemyMove', 'targetHeavenlyRecipeId', 'heavenlyAlchemyHeat', 'heavenlyAlchemyQuality']
+                .some(key => Object.hasOwn(parsed, key))) return undefined;
           const validActions: ActionType[] = [
             'CULTIVATE',
             'BREAKTHROUGH',

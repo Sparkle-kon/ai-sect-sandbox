@@ -1,3 +1,5 @@
+import type { HeavenlyAlchemyMove, HeavenlyHeat, HeavenlyQuality, HeavenlyRecipeId } from './heavenlyAlchemy';
+import type { HeavenlyAlchemyState } from './heavenlyAlchemy';
 import type {DungeonMove, DungeonRoom, ExpeditionDungeon} from './expeditionDungeon';
 import type {TournamentWagerState} from './tournamentWager';
 import type {TournamentArena} from './tournamentArena';
@@ -176,6 +178,7 @@ export type ActionType =
   | 'ROAD'
   | 'GATHER_HERBS'
   | 'BREW_PILL'
+  | 'HEAVENLY_ALCHEMY'
   | 'USE_PILL'
   | 'VILLAGE_CENSUS'
   | 'FIELD_OBSERVATORY'
@@ -423,6 +426,7 @@ export interface PublicAlchemyPractice {
 }
 export interface Cultivator {
   publicAlchemy?: PublicAlchemyPractice[];
+  heavenlyAlchemy?: HeavenlyAlchemyState;
   destinyTraits?: DestinyTraitProgress;
   forbiddenScars?: ForbiddenArtScar[];
   positionPlane?:UpperPositionPlane|FrontierPositionPlane;
@@ -684,6 +688,10 @@ export interface LLMDecisionPayload {
   targetTechniqueId?: string;
   targetHerbId?: HerbId;
   targetPillId?: PillId;
+  heavenlyAlchemyMove?: HeavenlyAlchemyMove;
+  targetHeavenlyRecipeId?: HeavenlyRecipeId;
+  heavenlyAlchemyHeat?: HeavenlyHeat;
+  heavenlyAlchemyQuality?: HeavenlyQuality;
   targetArtifactId?: string;
   forgeTier?: ArtifactTier;
   probationMove?: ProbationMove;

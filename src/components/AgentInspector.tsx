@@ -24,6 +24,7 @@ import { SpiritRootBadge } from './SpiritRootBadge';
 import { visibleScriptureEditions } from '../engine/scriptureEngine';
 import { TechniquePanel } from './TechniquePanel';
 import { AlchemyPanel } from './AlchemyPanel';
+import type {HeavenlyAlchemyControls} from './HeavenlyAlchemyRead';
 import { heldRelicFragments } from '../engine/relicEngine';
 import { WorkshopPanel } from './WorkshopPanel';
 import { FurnaceReservationPanel } from './FurnaceReservationPanel';
@@ -54,6 +55,7 @@ interface AgentInspectorProps {
   workshopReleaseControls?:WorkshopReleaseControls;
   workshopEstateControls?:WorkshopEstateControls;
   craftTrainingControls?:CraftTrainingControls;
+  heavenlyAlchemyControls?:HeavenlyAlchemyControls;
 }
 
 export const AgentInspector: React.FC<AgentInspectorProps> = ({
@@ -65,6 +67,7 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
   workshopReleaseControls,
   workshopEstateControls,
   craftTrainingControls,
+  heavenlyAlchemyControls,
   publicBonds,personalBonds,allowPersonalThought=false,
 }) => {
   if (!cultivator) {
@@ -251,7 +254,7 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
       {scriptureCatalog?.original && <React.Suspense fallback={<p role="status" className="text-xs text-slate-400">载入经义校勘…</p>}>
         <ScriptureEditionPanel world={world} actor={cultivator} catalog={scriptureCatalog} />
       </React.Suspense>}
-      <AlchemyPanel world={world} cultivator={cultivator} location={location} />
+      <AlchemyPanel world={world} cultivator={cultivator} location={location} heavenlyAlchemyControls={heavenlyAlchemyControls} />
       </>}
       {mind && <>
       <RecollectionPanel world={world} actorId={cultivator.id} />

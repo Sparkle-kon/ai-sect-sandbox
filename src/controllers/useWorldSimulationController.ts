@@ -1,3 +1,4 @@
+import {resolveGuidedHeavenlyAlchemyTurn,type GuidedHeavenlyAlchemyTurn} from './guidedHeavenlyAlchemyTurn';
 import {resolveGuidedDungeonTurn,type GuidedDungeonTurn} from './guidedDungeonTurn';
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {createInitialWorld} from '../data/initialWorld';
@@ -130,13 +131,15 @@ export function useWorldSimulationController({
     setLlmConfig(config);
   };
 
-  const handleStepTick = useCallback(async (guide?:GuidedDungeonTurn) => {
+  const handleStepTick = useCallback(async (guide?:GuidedDungeonTurn|GuidedHeavenlyAlchemyTurn) => {
     if (fastForwardRun.current || campaignGuard.current || !tryBeginInteraction()) return;
     let modelAbort: AbortController | undefined;
     try {
       const starting = authority.current;
       const branchId = history.current.activeBranchId;
-      const directed=guide&&resolveGuidedDungeonTurn(guide,starting,branchId,saveContextVersion.current);
+      const directed=guide&&('kind' in guide
+        ?resolveGuidedHeavenlyAlchemyTurn(guide,starting,branchId,saveContextVersion.current)
+        :resolveGuidedDungeonTurn(guide,starting,branchId,saveContextVersion.current));
       if(guide&&!directed)return;
       if (llmConfig.enabled && llmConfig.apiKey.trim()) {
         const controller = new AbortController();
