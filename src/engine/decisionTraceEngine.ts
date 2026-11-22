@@ -1,3 +1,5 @@
+import { availableFrontierGorgeActions } from './frontierGorge';
+import { exactFrontierGorgeDecision } from './frontierGorgeCognition';
 import { availableWitnessInquiryActions } from './witnessInquiry';
 import { exactWitnessInquiryDecision } from './witnessInquiryCognition';
 import { availableFrontierNightHuntActions } from './frontierNightHunt';
@@ -116,6 +118,7 @@ export function recordDecisionTrace(world: WorldState, actorId: string, candidat
     decision.chosenAction === 'BEAST_DUEL_RESPONSE' || decision.targetBeastDuelId !== undefined || decision.beastDuelChoice !== undefined ||
     decision.chosenAction==='PAVILION_FIRE'||decision.targetPavilionFireId!==undefined||decision.pavilionFireMove!==undefined||
     decision.targetCampaignAssemblySiegeId !== undefined || decision.chosenAction === 'WITNESS_INQUIRY' || decision.witnessInquiryMove !== undefined ||
+    decision.chosenAction === 'FRONTIER_GORGE' || decision.frontierGorgeMove!==undefined ||
     decision.chosenAction === 'FRONTIER_NIGHT_HUNT' || decision.frontierNightHuntMove !== undefined ||
     decision.chosenAction === 'SCHOOL_FORM_DUEL' || decision.schoolFormChoice !== undefined || decision.targetSchoolFormContactId !== undefined ||
     decision.chosenAction === 'CALAMITY_ARRAY' || decision.targetCalamityHazardId !== undefined || decision.calamityArrayStance !== undefined ||
@@ -276,6 +279,11 @@ export function rememberReplayDecision(tape: DecisionReplayTape, actorId: string
   const asked=reader&&exactWitnessInquiryDecision(decision,availableWitnessInquiryActions(reader,state.base,state.base.tick+1),true);
   const inquiryFields=asked?{witnessInquiryMove:asked.witnessInquiryMove,targetWitnessClaimId:asked.targetWitnessClaimId,
     ...(asked.targetCultivatorId?{targetCultivatorId:asked.targetCultivatorId}:{})}:undefined;
+  const gorgeAction=decision.chosenAction==='FRONTIER_GORGE';
+  const gorgeActor=gorgeAction?state.base.cultivators.find(row=>row.id===actorId):undefined;
+  const gorge=gorgeActor&&exactFrontierGorgeDecision(decision,
+    availableFrontierGorgeActions(gorgeActor,state.base,state.base.tick+1),true);
+  const gorgeFields=gorge?{frontierGorgeMove:gorge.frontierGorgeMove,targetFrontierSiteId:gorge.targetFrontierSiteId}:undefined;
   const nightAction=decision.chosenAction==='FRONTIER_NIGHT_HUNT';
   const nightActor=nightAction?state.base.cultivators.find(row=>row.id===actorId):undefined;
   const hunt=nightActor&&exactFrontierNightHuntDecision(decision,
@@ -307,9 +315,9 @@ export function rememberReplayDecision(tape: DecisionReplayTape, actorId: string
   const ascent = stance ? { ascensionMove: stance.ascensionMove, ...(stance.targetAscensionTrialId === undefined ? {} :
     { targetAscensionTrialId: stance.targetAscensionTrialId }) } : undefined;
   state.decisions.set(actorId, { ...(forbiddenAction || grandSiegeAction || dungeonAction || heavenlyAction || daoPathAction ||
-      auctionAction || auctionAmbush || clanAction || ascensionAction || revisitAction || beastAction || arrayAction || schoolAction || nightAction || inquiryAction ? {} : details),
+      auctionAction || auctionAmbush || clanAction || ascensionAction || revisitAction || beastAction || arrayAction || schoolAction || nightAction || inquiryAction || gorgeAction ? {} : details),
     chosenAction: decision.chosenAction, innerMonologue: '', ...(cohortInviteeIds ? { cohortInviteeIds } : {}),
-    ...personalHeartChoice, ...personalForbiddenChoice, ...personalHeroChoice, ...dungeonFields, ...chosenAlchemy, ...pathFields, ...auctionFields, ...ambushFields, ...clanFields, ...ascent, ...revisitFields, ...beastFields, ...arrayFields, ...schoolFields, ...nightFields, ...inquiryFields });
+    ...personalHeartChoice, ...personalForbiddenChoice, ...personalHeroChoice, ...dungeonFields, ...chosenAlchemy, ...pathFields, ...auctionFields, ...ambushFields, ...clanFields, ...ascent, ...revisitFields, ...beastFields, ...arrayFields, ...schoolFields, ...nightFields, ...inquiryFields, ...gorgeFields });
   if (personalHeartChoice && heartModel) state.heartModelActors.add(actorId);
   else state.heartModelActors.delete(actorId);
   if (personalForbiddenChoice && forbiddenModel) state.forbiddenModelActors.add(actorId);

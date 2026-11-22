@@ -1,3 +1,4 @@
+import { availableFrontierGorgeActions } from './frontierGorge';
 import { availableCampaignAssemblyActions } from './campaignAssembly';
 import { availableFrontierNightHuntActions } from './frontierNightHunt';
 import { availableSchoolFormChoices, schoolFormDuelForParticipant } from './schoolFormDuel';
@@ -70,7 +71,8 @@ export function modelDecisionCandidates(world: WorldState): Cultivator[] {
   return world.cultivators.filter(actor=>{
     if(!actor.alive||actor.hp<=0||actor.positionPlane==='immortal'||actor.id===commandedId||(world.month===12&&actor.age+1>=actor.lifespan))return false;
     if(actor.positionPlane==='frontier')return availableFrontierProviderActions(actor,world,nextTick).length>0||
-      (avatar!==actor&&availableFrontierNightHuntActions(actor,world,nextTick).length>0);
+      (avatar!==actor&&(availableFrontierNightHuntActions(actor,world,nextTick).length>0||
+        availableFrontierGorgeActions(actor,world,nextTick).length>0));
     if(actor.positionPlane!==undefined)return availableUpperPassageProviderActions(actor,world,nextTick).length>0;
     if(ascensionDutyActive(world,actor)||actor.realm==='渡劫'&&actor.realmStage===9&&
         availableAscensionActions(actor,world,nextTick).some(row=>row.ascensionMove==='start'))

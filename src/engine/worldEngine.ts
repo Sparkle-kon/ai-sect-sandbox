@@ -1,3 +1,5 @@
+import { availableFrontierGorgeActions, isPrivateFrontierGorgeEvent, resolveFrontierGorgeAction } from './frontierGorge';
+import { exactFrontierGorgeDecision } from './frontierGorgeCognition';
 import { advancePavilionFires, availablePavilionFireActions, isPrivatePavilionFireEvent, resolvePavilionFireAction } from './pavilionFire';
 import { exactPavilionFireDecision } from './pavilionFireCognition';
 import { availableCampaignAssemblyActions } from './campaignAssembly';
@@ -446,6 +448,13 @@ export function applyCultivatorBrainDecision(
     return event;
   }
   if(cultivator.positionPlane==='frontier'){
+    if(decision.chosenAction==='FRONTIER_GORGE'){
+      if(activeAvatar(world)===cultivator&&(modelInput||isProviderPersonaDecision(decision)))return null;
+      const exact=exactFrontierGorgeDecision(decision,availableFrontierGorgeActions(cultivator,world,world.tick),true);
+      const result=exact&&resolveFrontierGorgeAction(world,cultivator,exact);
+      if(result&&exact){cultivator.currentAction='FRONTIER_GORGE';cultivator.innerMonologue=exact.innerMonologue;}
+      return result??null;
+    }
     if(decision.chosenAction==='FRONTIER_NIGHT_HUNT'){
       if(activeAvatar(world)===cultivator&&(modelInput||isProviderPersonaDecision(decision)))return null;
       const exact=exactFrontierNightHuntDecision(decision,availableFrontierNightHuntActions(cultivator,world,world.tick),true);
@@ -1162,6 +1171,7 @@ export function applyCultivatorBrainDecision(
       };
     }
 
+    case 'FRONTIER_GORGE':
     case 'FRONTIER_NIGHT_HUNT':
     case 'SCHOOL_FORM_DUEL':
     case 'BEAST_DUEL_RESPONSE':
@@ -1348,6 +1358,11 @@ export function advanceWorldTick(
       let decisionDraws=0;
       const fromModel=Boolean(!explicit&&supplied&&traceOptions?.modelActors?.has(cultivator.id));
       let requested=explicit??supplied;
+      if(fromModel&&requested?.chosenAction==='FRONTIER_GORGE'){
+        const earlier=prevState.cultivators.find(actor=>actor.id===cultivator.id);
+        if(!earlier||activeAvatar(prevState)===earlier||!exactFrontierGorgeDecision(requested,
+          availableFrontierGorgeActions(earlier,prevState,nextState.tick),true))requested=undefined;
+      }
       if(fromModel&&requested?.chosenAction==='FRONTIER_NIGHT_HUNT'){
         const earlier=prevState.cultivators.find(actor=>actor.id===cultivator.id);
         if(!earlier||activeAvatar(prevState)===earlier||!exactFrontierNightHuntDecision(requested,
@@ -1364,13 +1379,13 @@ export function advanceWorldTick(
       const result=applyCultivatorBrainDecision(nextState,cultivator,decision,rng,undefined,event=>{
         newEvents.push(event);witnessEvent(nextState,event);
       },explicit,Boolean(fromModel&&requested));
-      const applied=(decision.chosenAction==='UPPER_PASSAGE'||decision.chosenAction==='FRONTIER_NIGHT_HUNT'||
+      const applied=(decision.chosenAction==='UPPER_PASSAGE'||decision.chosenAction==='FRONTIER_NIGHT_HUNT'||decision.chosenAction==='FRONTIER_GORGE'||
         isFrontierAction(decision.chosenAction)||isUpperArrayFieldAction(decision.chosenAction))&&result!==null;
       if(supplied)recordDecisionEffect?.(cultivator.id,!explicit&&requested===supplied&&applied);
       traceOptions?.onActor?.(cultivator.id,candidates,applied);
       if(capture)recordDecisionTrace(nextState,cultivator.id,candidates,decision,explicit?'avatar':
         supplied&&traceOptions?.modelActors?.has(cultivator.id)?'model':'utility',applied);
-      if(result){newEvents.push(result);if(!isPrivateFrontierNightHuntEvent(result))witnessEvent(nextState,result);}
+      if(result){newEvents.push(result);if(decision.chosenAction!=='FRONTIER_GORGE'&&!isPrivateFrontierNightHuntEvent(result)&&!isPrivateFrontierGorgeEvent(result))witnessEvent(nextState,result);}
       continue;
     }
 

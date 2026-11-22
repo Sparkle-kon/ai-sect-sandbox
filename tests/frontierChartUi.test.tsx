@@ -42,3 +42,20 @@ describe('proved night trail in known terrain only',()=>{
     expect(renderToStaticMarkup(<FrontierChart chart={maritime} trail={trail}/>)).not.toContain('曾查见足迹');
   });
 });
+
+describe('actually crossed gorge section',()=>{
+  const walked:FrontierChartData={...chart,currentTileId:'n01',tiles:[...chart.tiles,
+    {chartId:chart.chartId,tileId:'n01',row:0,col:1,name:'今到歇脚处'}]};
+  const crossing={chartId:chart.chartId,fromTileId:'n00',toTileId:'n01'};
+  it('mirrors only the authenticated directed pair in text without native IDs',()=>{
+    const html=renderToStaticMarkup(<FrontierChart chart={walked} crossing={crossing}/>);
+    expect(html).toContain('实经一段：雪谷关 至 今到歇脚处。');
+    expect(html).not.toMatch(/n00|n01/);
+  });
+  it('hides missing, nonadjacent, foreign or reversed stale pairs instead of extending the map',()=>{
+    const invalid=[undefined,{...crossing,toTileId:'n11'},{...crossing,fromTileId:'n-out'},
+      {...crossing,chartId:'chart-south-marsh'},{...crossing,fromTileId:'n01',toTileId:'n00'}];
+    for(const crossing of invalid)expect(renderToStaticMarkup(<FrontierChart chart={walked} crossing={crossing}/>))
+      .not.toContain('实经一段');
+  });
+});

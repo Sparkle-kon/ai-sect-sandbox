@@ -1,3 +1,4 @@
+import {frontierGorgeWindBlocks} from './frontierGorgeWeather';
 import type {Cultivator,LLMDecisionPayload,LocationNode,WorldEvent,WorldState} from '../types/world';
 import {doctrineFoundingPhysicallyAt} from './doctrineFoundingEngine';
 import {flowActor,recordResourceFlow} from './resourceFlowEngine';
@@ -87,6 +88,8 @@ export function availableFrontierMovementActions(actor:Cultivator,world:WorldSta
   const month=frontierStepMonth(world.month,executionTick-world.tick);
   const choices:FrontierMovementOption[]=FRONTIER_EDGES.flatMap(edge=>{
     if(edge.winterClosed&&frontierWinter(month))return [];
+    const target=edge.from===site.id?edge.to:edge.to===site.id?edge.from:undefined;
+    if(target&&frontierGorgeWindBlocks(world,site.id,target,executionTick))return [];
     return edge.from===site.id?[option('travel',edge.to)]:edge.to===site.id?[option('travel',edge.from)]:[];
   });
   if(site.id===chart.gateId&&frontierAnchor(world,site.regionId))choices.push({action:'FRONTIER',frontierMove:'exit',targetFrontierSiteId:chart.anchorId});

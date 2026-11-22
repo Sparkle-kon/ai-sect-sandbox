@@ -138,6 +138,7 @@ export type ActionType =
   | 'WITNESS_INQUIRY'
   | 'PAVILION_FIRE'
   | 'FRONTIER_NIGHT_HUNT'
+  | 'FRONTIER_GORGE'
   | 'AUDIENCE_PLEDGE'
   | 'CULTIVATE'
   | 'BREAKTHROUGH'
@@ -600,6 +601,7 @@ export interface LLMDecisionPayload {
   calamityArrayStance?: 'joint' | 'local';
   targetCalamityHazardId?: string;
   frontierNightHuntMove?: FrontierNightHuntMove;
+  frontierGorgeMove?: 'detour'|'wait';
   witnessInquiryMove?: 'inspect'|'ask';
   pavilionFireMove?: PavilionFireMove;
   targetPavilionFireId?: string;

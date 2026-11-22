@@ -30,6 +30,10 @@ function hash(seed: number, value: number): number {
   n = Math.imul(n ^ (n >>> 15), 0x846ca68b);
   return ((n ^ (n >>> 16)) >>> 0) / 0x100000000;
 }
+const weatherBandAngle = (seed: number) => hash(seed, 11) * 2 * Math.PI;
+/** East component of the translating weather band, not a new draw or a separate forecast. */
+export const seededWeatherFrontEastward = (world: WorldState): number => -Math.cos(weatherBandAngle(world.terrain.seed));
+
 function territoryPhase(seed: number, owner: string | undefined): number {
   if (!owner) return 0;
   let key = 0;
@@ -46,7 +50,7 @@ function qiWeatherAt(world: WorldState, x: number, y: number, tick: number, site
 
   // Coherent bands cross the map at a fixed pace; a second slower pulse gives seed-specific years.
   // Territory subtly shifts the exposure, but neither alters the RNG cursor nor stores weather.
-  const theta = hash(seed, 11) * 2 * Math.PI;
+  const theta = weatherBandAngle(seed);
   const space = (x / 1000 - .5) * Math.cos(theta) + (y / 600 - .5) * Math.sin(theta);
   const phase = 2 * Math.PI * (space + MOD(tick, 14) / 14 + hash(seed, 29)) +
     territoryPhase(seed, siteOwner ?? biome.ownerSectId);

@@ -1,3 +1,5 @@
+import { availableFrontierGorgeActions } from './frontierGorge';
+import { exactFrontierGorgeDecision,frontierGorgeCommand } from './frontierGorgeCognition';
 import { availablePavilionFireActions } from './pavilionFire';
 import { exactPavilionFireDecision,pavilionFireCommand } from './pavilionFireCognition';
 import { availableCampaignAssemblyActions } from './campaignAssembly';
@@ -812,6 +814,11 @@ export function computeHeuristicDecision(
   if (ascensionDutyActive(world, cultivator)) return utilityAscensionDecision(cultivator, world) ?? ascensionQuietWait();
   if(cultivator.positionPlane==='frontier'){
     if(activeAvatar(world)!==cultivator){
+      const gorge=availableFrontierGorgeActions(cultivator,world,world.tick);
+      const choice=(cultivator.hp>=cultivator.maxHp*.55?gorge.find(row=>row.frontierGorgeMove==='detour'):undefined)??
+        gorge.find(row=>row.frontierGorgeMove==='wait');
+      const exactChoice=choice&&exactFrontierGorgeDecision(frontierGorgeCommand(choice),gorge);
+      if(exactChoice)return exactChoice;
       const hunt=availableFrontierNightHuntActions(cultivator,world,world.tick);
       if(hunt.length){
         const before=projectFrontierNightHunt(world,cultivator);
@@ -2401,6 +2408,14 @@ export async function requestCultivatorLLMDecision(
     }, 165);
   }
   if(cultivator.positionPlane==='frontier'){
+    const gorge=availableFrontierGorgeActions(cultivator,world,requestTick);
+    if(gorge.length){
+      if(requestTick!==world.tick+1||activeAvatar(world)===cultivator)return undefined;
+      return requestDecisionPrompt(config,requestTick,options,
+        '只原样抄写当下核准的一项峡口行止。不补远处路线、天气预报、到达或结局：'+JSON.stringify(gorge.map(frontierGorgeCommand)),
+        parsed=>requestTick===world.tick+1&&activeAvatar(world)!==cultivator&&exactFrontierGorgeDecision(parsed,gorge)
+          ?exactFrontierGorgeDecision(parsed,availableFrontierGorgeActions(cultivator,world,requestTick)):undefined,155);
+    }
     const hunt=availableFrontierNightHuntActions(cultivator,world,requestTick);
     if(hunt.length){
       if(requestTick!==world.tick+1||activeAvatar(world)===cultivator)return undefined;

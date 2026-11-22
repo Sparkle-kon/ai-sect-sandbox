@@ -10,6 +10,7 @@ export interface FrontierChartData {
   currentTileId:string;tiles:readonly FrontierChartCell[];
 }
 export interface FrontierChartTrail {chartId:string;tileId:string}
+export interface FrontierChartCrossing {chartId:string;fromTileId:string;toTileId:string}
 type Blueprint={tiles:FrontierChartCell[];cols:number;rows:number;active:FrontierChartCell};
 export const frontierCoordinate=({row,col}:Pick<FrontierChartCell,'row'|'col'>)=>`第 ${row+1} 行，第 ${col+1} 列`;
 
@@ -39,8 +40,19 @@ export function frontierChartTrail(geometry:Blueprint,trail?:FrontierChartTrail)
   return geometry.tiles.find(tile=>tile.tileId===trail.tileId&&tile.surface!=='sea');
 }
 
+/** Renders only one proved step, with both ends admitted by the same displayed chart. */
+export function frontierChartCrossing(geometry:Blueprint,crossing?:FrontierChartCrossing):
+  readonly [FrontierChartCell,FrontierChartCell]|undefined {
+  if(!crossing||crossing.chartId!==geometry.active.chartId)return undefined;
+  const {tiles,active}=geometry;
+  const from=tiles.find(tile=>tile.tileId===crossing.fromTileId),to=tiles.find(tile=>tile.tileId===crossing.toTileId);
+  if(!from||!to||to!==active||from.surface==='sea'||to.surface==='sea'||
+    Math.abs(from.row-to.row)+Math.abs(from.col-to.col)!==1)return undefined;
+  return [from,to];
+}
+
 const WIDTH=480,HEIGHT=270;
-export function paintFrontierChart(ctx:CanvasRenderingContext2D,blueprint:Blueprint,trail?:FrontierChartTrail){
+export function paintFrontierChart(ctx:CanvasRenderingContext2D,blueprint:Blueprint,trail?:FrontierChartTrail,crossing?:FrontierChartCrossing){
   const {tiles,cols,rows,active}=blueprint;
   const ink=frontierChartInk(active.chartId);
   const marked=frontierChartTrail(blueprint,trail);
@@ -69,23 +81,35 @@ export function paintFrontierChart(ctx:CanvasRenderingContext2D,blueprint:Bluepr
       ctx.fillText(tile.name,x+size/2,y+size*.67,size-7);
     }
   }
+  const crossed=frontierChartCrossing(blueprint,crossing);
+  if(crossed){
+    const [from,to]=crossed,dx=to.col-from.col,dy=to.row-from.row;
+    const x=left+(from.col+.5+dx*.5)*size,y=top+(from.row+.5+dy*.5)*size;
+    ctx.save();
+    ctx.beginPath();ctx.moveTo(x-size*.23*dx,y-size*.23*dy);ctx.lineTo(x+size*.23*dx,y+size*.23*dy);
+    ctx.lineCap='round';ctx.lineWidth=5;ctx.strokeStyle='#101d26';ctx.stroke();
+    ctx.lineWidth=2;ctx.strokeStyle='#b4d7cc';ctx.stroke();
+    ctx.restore();
+  }
 }
 
-export function FrontierChart({chart,trail}:{chart:FrontierChartData;trail?:FrontierChartTrail}){
+export function FrontierChart({chart,trail,crossing}:{chart:FrontierChartData;trail?:FrontierChartTrail;crossing?:FrontierChartCrossing}){
   const geometry=useMemo(()=>frontierChartGeometry(chart),[chart]);
   const canvas=useRef<HTMLCanvasElement>(null);
   const caption=useId();
   useEffect(()=>{
     const ctx=geometry&&canvas.current?.getContext('2d');
-    if(ctx&&geometry)paintFrontierChart(ctx,geometry,trail);
-  },[geometry,trail]);
+    if(ctx&&geometry)paintFrontierChart(ctx,geometry,trail,crossing);
+  },[geometry,trail,crossing]);
   if(!geometry)return null;
   const {active,tiles}=geometry;
   const marked=frontierChartTrail(geometry,trail);
+  const crossed=frontierChartCrossing(geometry,crossing);
   return <figure className="min-w-0 space-y-1" aria-labelledby={caption}>
     <figcaption id={caption} className="text-sm text-emerald-100">此处脚下：{active.name&&`${active.name} · `}{frontierCoordinate(active)}。</figcaption>
     <canvas ref={canvas} width={WIDTH} height={HEIGHT} aria-hidden="true"
       className="mx-auto block h-auto w-full max-w-sm rounded border border-emerald-800/70"/>
+    {crossed&&<p className="text-xs text-teal-100">实经一段：{crossed[0].name??frontierCoordinate(crossed[0])} 至 {crossed[1].name??frontierCoordinate(crossed[1])}。</p>}
     <details className="min-w-0 rounded border border-slate-800 px-2">
       <summary className="flex min-h-11 cursor-pointer items-center text-sm text-slate-200 focus-visible:outline focus-visible:outline-amber-300">已知地块与坐标</summary>
       <ol className="space-y-1 pb-2 text-xs text-slate-300" aria-label="本图已知地块">

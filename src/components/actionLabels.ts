@@ -11,6 +11,7 @@ const ACTION_LABELS = {
   WITNESS_INQUIRY: '查问坊间指证',
   PAVILION_FIRE: '火中守卷',
   FRONTIER_NIGHT_HUNT: '雪岭查迹',
+  FRONTIER_GORGE: '峡口避风',
   SCHOOL_FORM_DUEL: '剑锋相对',
   AUDIENCE_PLEDGE: '践行密议',
   WATER_VEIN: '实察井水、借脉或采矿',

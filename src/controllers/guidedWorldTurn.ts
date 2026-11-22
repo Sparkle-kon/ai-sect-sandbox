@@ -1,3 +1,4 @@
+import { resolveGuidedFrontierGorgeTurn, type GuidedFrontierGorgeTurn } from './guidedFrontierGorgeTurn';
 import { resolveGuidedPavilionFireTurn, type GuidedPavilionFireTurn } from './guidedPavilionFireTurn';
 import { resolveGuidedCampaignAssemblyTurn, type GuidedCampaignAssemblyTurn } from './guidedCampaignAssemblyTurn';
 import { resolveGuidedWitnessInquiryTurn, type GuidedWitnessInquiryTurn } from './guidedWitnessInquiryTurn';
@@ -15,11 +16,12 @@ import {resolveGuidedHeavenlyAlchemyTurn,type GuidedHeavenlyAlchemyTurn} from '.
 import {resolveGuidedImmortalAuctionTurn,type GuidedImmortalAuctionTurn} from './guidedImmortalAuctionTurn';
 import type {WorldState} from '../types/world';
 
-export type GuidedWorldTurn=GuidedDungeonTurn|GuidedHeavenlyAlchemyTurn|GuidedDaoPathTurn|GuidedImmortalAuctionTurn|GuidedCultivationClanTurn|GuidedAscensionTurn|GuidedProtagonistFlightTurn|GuidedHeartDemonRecoveryTurn|GuidedBattlefieldRevisitTurn|GuidedCalamityArrayTurn|GuidedSchoolFormDuelTurn|GuidedFrontierNightHuntTurn|GuidedWitnessInquiryTurn|GuidedCampaignAssemblyTurn|GuidedPavilionFireTurn;
+export type GuidedWorldTurn=GuidedDungeonTurn|GuidedHeavenlyAlchemyTurn|GuidedDaoPathTurn|GuidedImmortalAuctionTurn|GuidedCultivationClanTurn|GuidedAscensionTurn|GuidedProtagonistFlightTurn|GuidedHeartDemonRecoveryTurn|GuidedBattlefieldRevisitTurn|GuidedCalamityArrayTurn|GuidedSchoolFormDuelTurn|GuidedFrontierNightHuntTurn|GuidedWitnessInquiryTurn|GuidedCampaignAssemblyTurn|GuidedPavilionFireTurn|GuidedFrontierGorgeTurn;
 
 export function resolveGuidedWorldTurn(order:GuidedWorldTurn,world:WorldState,branch:string,revision:number){
   if(!('kind' in order))return resolveGuidedDungeonTurn(order,world,branch,revision);
   switch(order.kind){
+    case 'frontier-gorge':return resolveGuidedFrontierGorgeTurn(order,world,branch,revision);
     case 'pavilion-fire':return resolveGuidedPavilionFireTurn(order,world,branch,revision);
     case 'campaign-assembly':return resolveGuidedCampaignAssemblyTurn(order,world,branch,revision);
     case 'witness-inquiry':return resolveGuidedWitnessInquiryTurn(order,world,branch,revision);

@@ -1,3 +1,4 @@
+import {useFrontierGorgeStory} from './components/useFrontierGorgeStory';
 import { usePavilionFireStory } from './components/usePavilionFireStory';
 import { projectNextStoryGuidance } from './engine/nextStoryGuidance';
 import { useCampaignAssemblyStory } from './components/useCampaignAssemblyStory';
@@ -314,6 +315,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   const pavilionFire=usePavilionFireStory(simulation,(!dashboardOpen||cockpitOpen)&&!storyEntryOpen,selectedCultivator);
   const campaignAssembly=useCampaignAssemblyStory(simulation,!dashboardOpen&&!storyEntryOpen,selectedCultivator);
   const witnessInquiry=useWitnessInquiryStory(simulation,!dashboardOpen&&!cockpitOpen&&!storyEntryOpen,selectedCultivator);
+  const frontierGorge=useFrontierGorgeStory(simulation,(!dashboardOpen||cockpitOpen)&&!storyEntryOpen,selectedCultivator);
   const nightHunt=useFrontierNightHuntStory(simulation,!dashboardOpen&&!cockpitOpen&&!storyEntryOpen,selectedCultivator);
   const schoolFormDuel=useSchoolFormDuelStory(simulation,(!dashboardOpen||cockpitOpen)&&!storyEntryOpen,selectedCultivator,
     preview?'history':cockpitOpen?'cockpit':'story',cockpitOpen?cockpitHeading:storyMoreRef);
@@ -647,7 +649,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   const clearWorldPulse=(token:number)=>setPulseFocus(current=>current?.token===token?undefined:current);
   const pulseStrip=worldPulse&&<WorldPulseBar view={worldPulse} historical={Boolean(preview)}
     canFocus={!immersive} onFocusAlert={focusWorldPulse}/>;
-  if(cockpitOpen)return <PanoramicCockpitView world={visibleWorld} titleRef={cockpitHeading} exit={cockpitSwitch} statusStrip={pulseStrip} stageOverride={featuredStoryCard} subplot={guidance.subplot} branchScene={pavilionFire??schoolFormDuel??flightCard??passageScene??banquetStory??campaignAssembly}
+  if(cockpitOpen)return <PanoramicCockpitView world={visibleWorld} titleRef={cockpitHeading} exit={cockpitSwitch} statusStrip={pulseStrip} stageOverride={featuredStoryCard} subplot={guidance.subplot} branchScene={pavilionFire??frontierGorge??schoolFormDuel??flightCard??passageScene??banquetStory??campaignAssembly}
     time={{historical:Boolean(preview),running:isRunning,busy:cockpitBusy||storyDecisionPending,onStep:()=>void handleStepTick(),
       onToggleAutoplay:toggleStoryAutoplay,onReturnLive:()=>handleTimelinePreview(null),onOpenTimeline:()=>{
         openWorkspace('chronicle');rememberFold('chronicle','timeline');setStoryEntryOpen(false);
@@ -672,7 +674,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
         resolvePublicDialogue={publicRead?.dialogue.event} category={chronicleFilter} onCategoryChange={setChronicleFilter}/>
     </React.Suspense>}/>;
 
-  const activeReadingScene=pavilionFire??dungeonFork??nightHunt??schoolFormDuel??calamityArray??battlefieldRevisit??witnessInquiry??campaignAssembly??
+  const activeReadingScene=pavilionFire??dungeonFork??frontierGorge??nightHunt??schoolFormDuel??calamityArray??battlefieldRevisit??witnessInquiry??campaignAssembly??
     flightCard??passageScene??banquetStory;
   const guidanceActor=!preview&&storyHome&&!activeReadingScene
     ?activeAvatar(world)??world.cultivators.find(actor=>actor.id===storyHome.lead?.id)??selectedCultivator:undefined;
