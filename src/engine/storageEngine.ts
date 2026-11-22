@@ -1,3 +1,4 @@
+import { validatePublicAlchemyPractice } from './storagePublicAlchemyValidation';
 import { RING_AUDIENCE_MAX_SESSIONS, RING_AUDIENCE_MAX_TURNS } from './ringAudienceTerms';
 import { RING_AUDIENCE_AIMS } from '../types/ringAudience';
 import { validateRingAudienceHistory } from './storageRingAudienceValidation';
@@ -537,6 +538,7 @@ const shape = structure({
   locations:arr(1200,structure({id,name:id,x:num(0,1000),y:num(0,600),type:one('sect_hq','spirit_vein','secret_realm','market','abyss'),spiritRoot:spirit,
     spiritQi:num(0,150),ownerSectId:oid,expeditionOmenId:oid,inheritanceScrolls:arr(350,technique),herbs,herbCapacity:herbs,furnaceGrade:one(0,1,2,3),description:text})),
   cultivators:arr(SAVE_COLLECTION_LIMIT,structure({id,name:id,title:text,sectId:strings(240),sectRank,contribution:wealth,transgressions:percentage,disciplineRevision:otick,realm,realmStage:num(1,9,true),
+    publicAlchemy:optional(arr(1200,structure({siteId:id,firstTick:tick,lastTick:tick,successes:num(1,100_000_000,true),bestGrade:one(1,2,3)}))),
     destinyTraits:optional(destinyTraits),
     forbiddenScars:optional(arr(FORBIDDEN_ART_IDS.length,forbiddenScar)),
     ordinaryActionEvidence:optional((value,path)=>{if(!isOrdinaryActionEvidence(value))fail(path);}),
@@ -3720,6 +3722,7 @@ function verifyWorld(value: unknown): WorldState {
   validateWitnessedPersonalStory(w,actor,fail);
   validateDramaticBondHistory(w,fail);
   validateRingAudienceHistory(w,fail);
+  validatePublicAlchemyPractice(w,fail);
   validateEraHistory(w,fail);
   validateAuthoredEraHistory(w,fail);
   validateRegionalSimulation(w,fail);

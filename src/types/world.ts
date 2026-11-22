@@ -409,7 +409,16 @@ export type OrdinaryAction = 'REST'|'CULTIVATE'|'SOCIALIZE'|'EXPLORE'|'GATHER_HE
 export interface OrdinaryActionEvidence {
   readonly action:OrdinaryAction;readonly tick:number;readonly streak:1|2|3;
 }
+/** Recorded ordinary public furnace successes since this save began using the Hall rules. */
+export interface PublicAlchemyPractice {
+  siteId: string;
+  firstTick: number;
+  lastTick: number;
+  successes: number;
+  bestGrade: 1 | 2 | 3;
+}
 export interface Cultivator {
+  publicAlchemy?: PublicAlchemyPractice[];
   destinyTraits?: DestinyTraitProgress;
   forbiddenScars?: ForbiddenArtScar[];
   positionPlane?:UpperPositionPlane|FrontierPositionPlane;

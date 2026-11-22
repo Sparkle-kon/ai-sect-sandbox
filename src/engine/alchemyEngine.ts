@@ -1,3 +1,5 @@
+import {ALCHEMY_RECIPES} from './alchemyCatalog';
+export {ALCHEMY_RECIPES,type AlchemyRecipe} from './alchemyCatalog';
 import { flowDanxiaMedicine } from './danxiaMedicineTerms';
 import { flowActor, flowSite, recordResourceFlow } from './resourceFlowEngine';
 import { commonsHarvestLimit, settleCommonsHarvest } from './sharedCommonsEngine';
@@ -12,23 +14,6 @@ import { DANXIA_REGROWTH_CADENCE, danxiaMedicineSite, type DanxiaRegrowthSample 
 
 export const HERB_LABELS: Record<HerbId, string> = {
   jade_leaf: '翡翠灵叶', earth_root: '玄土根', star_bloom: '星露花', shadow_moss: '幽影苔',
-};
-
-export interface AlchemyRecipe {
-  name: string;
-  herbs: Partial<Record<HerbId, number>>;
-  furnaceGrade: 1 | 2 | 3;
-  spiritStones: number;
-  success: number;
-  toxicity: number;
-}
-
-/** Entirely fictional spirit ingredients and game effects, not real chemistry. */
-export const ALCHEMY_RECIPES: Record<PillId, AlchemyRecipe> = {
-  foundation: { name: '筑基丹', herbs: { jade_leaf: 2, earth_root: 1 }, furnaceGrade: 1, spiritStones: 40, success: 0.65, toxicity: 18 },
-  golden: { name: '九转金丹', herbs: { jade_leaf: 2, star_bloom: 3 }, furnaceGrade: 3, spiritStones: 120, success: 0.55, toxicity: 30 },
-  barrier: { name: '破障丹', herbs: { earth_root: 2, star_bloom: 2 }, furnaceGrade: 2, spiritStones: 75, success: 0.6, toxicity: 24 },
-  heart_poison: { name: '噬心毒丹', herbs: { shadow_moss: 3, earth_root: 1 }, furnaceGrade: 2, spiritStones: 60, success: 0.6, toxicity: 35 },
 };
 
 const HERBS = Object.keys(HERB_LABELS) as HerbId[];
@@ -169,7 +154,23 @@ export function resolveAlchemy(world: WorldState, actor: Cultivator, decision: L
   }
   const pill = option.targetPillId!;
   const recipe = ALCHEMY_RECIPES[pill];
-  if (option.action === 'BREW_PILL') return brewNative(world,actor,place,pill,rng)?.event??null;
+  if (option.action === 'BREW_PILL') {
+    const actual=brewNative(world,actor,place,pill,rng);
+    // Do not capture the separately scoped Danxia escrow path or a hidden plane/site.
+    if(actual?.success&&world.cultivators.includes(actor)&&actor.positionPlane===undefined&&
+        place.type!=='abyss'&&place.type!=='secret_realm'&&place.expeditionOmenId===undefined&&actual.event.witnessScope===undefined){
+      const grade=recipe.furnaceGrade;
+      const records=actor.publicAlchemy??(actor.publicAlchemy=[]);
+      const record=records.find(row=>row.siteId===place.id);
+      if(!record)records.push({siteId:place.id,firstTick:world.tick,lastTick:world.tick,successes:1,bestGrade:grade});
+      else if(record.lastTick<world.tick){
+        record.lastTick=world.tick;
+        record.successes++;
+        if(grade>record.bestGrade)record.bestGrade=grade;
+      }
+    }
+    return actual?.event??null;
+  }
   actor.pills[pill] -= 1;
   recordResourceFlow(world, { kind: 'consumption', mechanism: 'alchemy', refId: place.id, reason: 'pill_use',
     from: pocket, good: pill, amount: 1, visibility: participant });

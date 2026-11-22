@@ -1,4 +1,5 @@
 import {lazy,Suspense,type ComponentProps} from 'react';
+import {HallOfImmortalsLauncher} from '../HallOfImmortalsLauncher';
 import type {useWorldSimulationController} from '../../controllers/useWorldSimulationController';
 import {activeAvatar,canQueueAvatarSalvage,queueAvatarScribeCommission} from '../../engine/avatarEngine';
 import {availableScribeCommissionActions} from '../../engine/scribeCommissionEngine';
@@ -115,9 +116,13 @@ export function ChronicleArchiveHub({simulation,selectedCultivator,active,initia
         {personal?.story&&!isReturning?<WitnessedPersonalStory story={personal.story} focusEventId={personal.focusEventId}/>:
           <ChronicleFeed {...feed} reading={isReturning?undefined:feed.reading}/>}
       </Suspense>},
-      {id:'library',label:'藏书阁与故事',content:<Suspense fallback={<p role="status">载入藏书阁…</p>}>
-        <ChronicleLibraryPanel world={visibleWorld} cultivator={selectedCultivator} scopeKey={viewScopeKey} scribeControls={scribeControls}/>
-      </Suspense>},
+      {id:'library',label:'藏书阁与故事',content:<div className="min-w-0 space-y-3">
+        <HallOfImmortalsLauncher key={`${viewScopeKey}:${actorId??''}`} world={visibleWorld}
+          viewer={selectedCultivator} scopeKey={`${viewScopeKey}:${actorId??''}`} historical={!!preview}/>
+        <Suspense fallback={<p role="status">载入藏书阁…</p>}>
+          <ChronicleLibraryPanel world={visibleWorld} cultivator={selectedCultivator} scopeKey={viewScopeKey} scribeControls={scribeControls}/>
+        </Suspense>
+      </div>},
       {id:'notebook',label:'书签与地图批注',content:<Suspense fallback={<p role="status">载入分支记录…</p>}>
         <ChronicleNotebookPanel key={`${timeline.activeBranchId}:${preview?.tick??'live'}:${actorId??''}`}
           world={visibleWorld} actorId={actorId} branchId={timeline.activeBranchId} readOnly={!!preview} busy={isStepping} onWrite={writeAnnotation}/>
