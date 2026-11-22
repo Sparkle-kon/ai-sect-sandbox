@@ -1,3 +1,4 @@
+import type { DestinyTraitId, DestinyTraitProgress } from './destinyTrait';
 import type {RoguelikeEncounterChoice,RoguelikeEncounterRecord} from './roguelikeEncounter';
 import type {FrontierAnchorId,FrontierMovementMove,FrontierPositionPlane,FrontierSiteId,FrontierState} from '../engine/frontierTerms';
 import type {FrontierProductionMove} from '../engine/frontierProductionTerms';
@@ -102,6 +103,7 @@ export type PersonalityTrait =
 
 export type ActionType =
   | 'ROGUELIKE_ENCOUNTER'
+  | 'AWAKEN_DESTINY'
   | 'CULTIVATE'
   | 'BREAKTHROUGH'
   | 'EXPLORE'
@@ -397,6 +399,7 @@ export interface OrdinaryActionEvidence {
   readonly action:OrdinaryAction;readonly tick:number;readonly streak:1|2|3;
 }
 export interface Cultivator {
+  destinyTraits?: DestinyTraitProgress;
   positionPlane?:UpperPositionPlane|FrontierPositionPlane;
   ordinaryActionEvidence?: OrdinaryActionEvidence;
   id: string;
@@ -519,6 +522,8 @@ export interface LLMConfig {
 export interface LLMDecisionPayload {
   targetRoguelikeEncounterId?:string;
   roguelikeEncounterChoice?:RoguelikeEncounterChoice;
+  targetDestinyOfferId?: string;
+  destinyTraitChoice?: DestinyTraitId;
   innerMonologue: string;
   chosenAction: ActionType;
   waterVeinMove?: WaterVeinMove;

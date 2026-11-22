@@ -1,3 +1,4 @@
+import {EarnedDestinyTraits} from './DestinyTraitCard';
 import type {CraftTrainingControls} from './CraftTrainingRead';
 import type {WorkshopEstateControls} from './WorkshopEstateRead';
 import type {WorkshopReleaseControls} from './WorkshopReleaseRead';
@@ -132,6 +133,8 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
           {cultivator.alive ? `当前: ${cultivator.currentAction}` : '已陨落'}
         </span>
       </div>}
+
+      {profile&&<EarnedDestinyTraits world={world} actor={cultivator}/>}
 
       {/* Fictional character narration */}
       {mind && <div className="p-3 rounded-lg bg-slate-950/90 border border-indigo-500/30 space-y-1.5">

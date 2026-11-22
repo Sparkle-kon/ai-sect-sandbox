@@ -5,6 +5,7 @@ import type { ActionType, Cultivator, DecisionTraceCandidate, DecisionTraceRecor
 
 const ACTION_LABELS: Record<ActionType, string> = {
   ROGUELIKE_ENCOUNTER: '抉择奇遇',
+  AWAKEN_DESTINY: '觉醒天命',
   WATER_VEIN: '实察井水、借脉或采矿',
   NORTH_MINING_CHARTER: '提出本人采契或按原件落笔',
   NORTH_WELL_REVIEW: '复核旧井原件与现行规则',

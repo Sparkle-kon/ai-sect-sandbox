@@ -1,3 +1,6 @@
+import {activeDestinyTraitOffer, chooseDestinyTraitDecision, destinyDuelAppetite} from './destinyTraitEngine';
+import {activeAvatar} from './avatarEngine';
+import type {DestinyTraitOffer} from '../types/destinyTrait';
 import {activeRoguelikeEncounter, chooseRoguelikeEncounterDecision} from './roguelikeEncounterEngine';
 import {ROGUELIKE_ENCOUNTER_CHOICES} from '../types/roguelikeEncounter';
 import {availableDoctrineMaturityActions} from './doctrineMaturityEngine';
@@ -454,6 +457,8 @@ export function computeHeuristicDecision(
   }
   const roguelikeDecision = chooseRoguelikeEncounterDecision(world, cultivator);
   if (roguelikeDecision) return roguelikeDecision;
+  const destinyDecision = chooseDestinyTraitDecision(world, cultivator);
+  if (destinyDecision) return destinyDecision;
   const freight=utilityMarketFreightDecision(cultivator,world);
   if(freight)return freight;
   const disasterShelter = utilityDisasterShelterDecision(cultivator,world);
@@ -1312,7 +1317,7 @@ export function computeHeuristicDecision(
     enemy &&
     cultivator.personality !== '苟道' &&
     cultivator.combatPower * strikeMultiplier(cultivator, enemy) * petCombatBonus(world, cultivator) >= enemy.combatPower * strikeMultiplier(enemy, cultivator) * petCombatBonus(world, enemy) * 0.85 &&
-    rng() < (conflictDemon ? 0.18 : painfulDuel ? 0.3 : 0.65)
+    rng() < Math.max(0, Math.min(1, (conflictDemon ? 0.18 : painfulDuel ? 0.3 : 0.65) + destinyDuelAppetite(cultivator, enemy)))
   ) {
     return {
       innerMonologue: `冤家路窄！在此撞见宿敌【${enemy.name}】，我战力占优，不如趁此机会将其重创！`,
@@ -1793,6 +1798,19 @@ function decodeRoguelikeEncounterDecision(parsed: Partial<LLMDecisionPayload>, e
     innerMonologue: '亲到才有此机缘，眼下只依已见的抉择行事。' };
 }
 
+const destinyDecisionFields = ['chosenAction', 'targetDestinyOfferId', 'destinyTraitChoice'] as const;
+
+function decodeDestinyTraitDecision(parsed: Partial<LLMDecisionPayload>, offer: Pick<DestinyTraitOffer, 'id'> & { options: readonly DestinyTraitOffer['options'][number][] }): LLMDecisionPayload | undefined {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) ||
+      Object.keys(parsed).length !== destinyDecisionFields.length ||
+      !destinyDecisionFields.every(key => Object.hasOwn(parsed, key)) ||
+      parsed.chosenAction !== 'AWAKEN_DESTINY' || parsed.targetDestinyOfferId !== offer.id) return undefined;
+  const destinyTraitChoice = offer.options.find(id => id === parsed.destinyTraitChoice);
+  if (!destinyTraitChoice) return undefined;
+  return { chosenAction: 'AWAKEN_DESTINY', targetDestinyOfferId: offer.id, destinyTraitChoice,
+    innerMonologue: '诸般天命已现，且取一途践行。' };
+}
+
 /** A provider-only lane. Missing/invalid/unsent results never synthesize a Utility decision here. */
 export async function requestCultivatorLLMDecision(
   cultivator: Cultivator,
@@ -1852,6 +1870,24 @@ export async function requestCultivatorLLMDecision(
     return requestDecisionPrompt(config, requestTick, options, prompt, parsed =>
       requestTick === world.tick + 1 && activeRoguelikeEncounter(world, cultivator) === encounter && !encounter.guided
         ? decodeRoguelikeEncounterDecision(parsed, encounter.id) : undefined, 160);
+  }
+
+  const destiny = activeDestinyTraitOffer(world, cultivator);
+  if (destiny) {
+    // A deliberately held body reserves its own live offer; the regular prompt must not replace this choice.
+    if (requestTick !== world.tick + 1 || activeAvatar(world) === cultivator) return undefined;
+    const submittedMenu = { id: destiny.id, options: [...destiny.options] };
+    const candidates = submittedMenu.options.map(destinyTraitChoice => ({
+      chosenAction: 'AWAKEN_DESTINY', targetDestinyOfferId: submittedMenu.id, destinyTraitChoice,
+    }));
+    const prompt = '本人的真实破境已留下一项待择天命。只原样复制下列一个完整 JSON 对象；' +
+      `不补充独白、人物、境界、数值、功效或结果。许可：${JSON.stringify(candidates)}`;
+    return requestDecisionPrompt(config, requestTick, options, prompt, parsed =>
+      requestTick === world.tick + 1 && activeDestinyTraitOffer(world, cultivator) === destiny &&
+      activeAvatar(world) !== cultivator && destiny.id === submittedMenu.id &&
+      destiny.options.length === submittedMenu.options.length &&
+      destiny.options.every((choice, index) => choice === submittedMenu.options[index])
+        ? decodeDestinyTraitDecision(parsed, submittedMenu) : undefined, 160);
   }
 
   const activeVow = activePilgrimageForActor(world, cultivator);

@@ -31,9 +31,16 @@ describe('opt-in focused native cadence',()=>{
     expect(regional.events.every(row=>!row.id.startsWith('regional-'))).toBe(true);
     expect(exact.cultivators.find(row=>row.id==='npc-1')?.age).toBe(regional.cultivators.find(row=>row.id==='npc-1')?.age);
     expect(initial.cultivators.every(actor=>regional.cultivators.some(real=>real.id===actor.id))).toBe(true);
-    // Separate 24-month regression under corrected scope; not the measured T6→18 UI comparison.
-    expect(Object.values(counts(exact))).toEqual([22,204,37052,50,3]);
-    expect(Object.values(counts(regional))).toEqual([22,205,38386,56,2]);
+    // V3-2 changes actual decisions from T7: both seeds first open and settle the same native
+    // 金丹 offer for npc-6. Retain exact 24-month totals and the independent T6→18 UI fixture.
+    for (const lane of [exact, regional]) {
+      expect(lane.cultivators.find(row => row.id === 'npc-6')?.destinyTraits?.earned).toEqual([
+        expect.objectContaining({realm:'金丹', traitId:'supreme-patience', openedTick:6, chosenTick:7,
+          sourceEventId:'evt-6-npc-6-tribulation-passed'}),
+      ]);
+    }
+    expect(Object.values(counts(exact))).toEqual([22,204,37354,52,3]);
+    expect(Object.values(counts(regional))).toEqual([22,205,38496,56,2]);
     expect(report.annual.map(({regionId,actorMonths,waivedActorMonths,qiAdded})=>({regionId,actorMonths,waivedActorMonths,qiAdded}))).toEqual([
       {regionId:'east',actorMonths:33,waivedActorMonths:0,qiAdded:33},{regionId:'east',actorMonths:36,waivedActorMonths:0,qiAdded:36},
     ]);

@@ -109,6 +109,8 @@ import { activeAvatar, consumeAvatarOrder, maintainPlayerAvatar } from './avatar
 import {activeRoguelikeEncounter,chooseRoguelikeEncounterDecision,finalizeRoguelikeEncounters,
   maybeOpenRoguelikeEncounter,settleRoguelikeEncounter} from './roguelikeEncounterEngine';
 import {ROGUELIKE_ENCOUNTER_CHOICES} from '../types/roguelikeEncounter';
+import { activeDestinyTraitOffer, chooseDestinyTraitDecision, destinyCultivationDetox, destinyCultivationMultiplier, destinyDuelDamageMultiplier,
+  destinyDuelPower, finalizeDestinyTraitOffers, maybeOpenDestinyTrait, settleDestinyTrait } from './destinyTraitEngine';
 import { archiveChronicleEvents } from './novelGenerator';
 import { advanceWitnessedPersonalStory, captureWitnessedPersonalScene } from './witnessedPersonalStory';
 import { advanceProtagonistSuccession } from './protagonistSuccession';
@@ -561,6 +563,10 @@ export function applyCultivatorBrainDecision(
       return resolveInfirmaryAction(world, cultivator, decision);
     case 'CARE_FOLLOWUP':
       return resolveCareFollowupAction(world, cultivator, decision);
+    case 'AWAKEN_DESTINY':
+      return decision.targetDestinyOfferId && decision.destinyTraitChoice
+        ? settleDestinyTrait(world, cultivator, decision.targetDestinyOfferId, decision.destinyTraitChoice)
+        : null;
     case 'ROGUELIKE_ENCOUNTER':
       return decision.targetRoguelikeEncounterId&&decision.roguelikeEncounterChoice
         ?settleRoguelikeEncounter(world,cultivator,decision.targetRoguelikeEncounterId,decision.roguelikeEncounterChoice)
@@ -651,8 +657,9 @@ export function applyCultivatorBrainDecision(
           cultivator.sectId === target.sectId ? '同门' : '竞争'));
     case 'CULTIVATE': {
       const beforeMastery = cultivator.techniqueMastery;
-      const gain = Math.round((8 + rng() * 10) * qiFactor * cultivationMultiplier(cultivator, location) * masteryMultiplier(cultivator, 'cultivation') * mentorshipTechniqueMultiplier(world, cultivator) * sectQiBonus(world, cultivator));
+      const gain = Math.round((8 + rng() * 10) * qiFactor * cultivationMultiplier(cultivator, location) * masteryMultiplier(cultivator, 'cultivation') * mentorshipTechniqueMultiplier(world, cultivator) * sectQiBonus(world, cultivator) * destinyCultivationMultiplier(cultivator));
       cultivator.qiProgress = clamp(cultivator.qiProgress + gain, 0, 100);
+      cultivator.pillToxicity -= destinyCultivationDetox(cultivator);
       gainMastery(cultivator, 3);
       cultivator.hp = clamp(
         cultivator.hp + Math.round(cultivator.maxHp * 0.08),
@@ -833,15 +840,20 @@ export function applyCultivatorBrainDecision(
         return proof;
       };
 
-      const attackerScore = cultivator.combatPower * (0.85 + rng() * 0.3) * strikeMultiplier(cultivator, defender) * masteryMultiplier(cultivator) * petCombatBonus(world, cultivator);
-      const defenderScore = defender.combatPower * (0.85 + rng() * 0.3) * strikeMultiplier(defender, cultivator) * masteryMultiplier(defender) * petCombatBonus(world, defender);
+      const attackerArt = destinyDuelPower(cultivator, defender);
+      const defenderArt = destinyDuelPower(defender, cultivator);
+      const attackerScore = cultivator.combatPower * (0.85 + rng() * 0.3) * strikeMultiplier(cultivator, defender) * masteryMultiplier(cultivator) * petCombatBonus(world, cultivator) * attackerArt.multiplier;
+      const defenderScore = defender.combatPower * (0.85 + rng() * 0.3) * strikeMultiplier(defender, cultivator) * masteryMultiplier(defender) * petCombatBonus(world, defender) * defenderArt.multiplier;
+      const divineArts = [[cultivator.name, attackerArt.arts], [defender.name, defenderArt.arts]] as const;
+      const divineArtProse = divineArts.map(([name, arts]) => arts.length ? name + '使出' + arts.map(art => '「' + art + '」').join('、') : '')
+        .filter(Boolean).join('；');
       const winner = attackerScore >= defenderScore ? cultivator : defender;
       const loser = winner.id === cultivator.id ? defender : cultivator;
 
       const dmgToLoser = Math.round(loser.maxHp * (0.35 + rng() * 0.35) * strikeMultiplier(winner, loser));
       const dmgToWinner = Math.round(winner.maxHp * (0.1 + rng() * 0.15) * strikeMultiplier(loser, winner));
-      const sufferedByLoser = mitigateSectArray(world, loser, winner, dmgToLoser);
-      const sufferedByWinner = mitigateSectArray(world, winner, loser, dmgToWinner);
+      const sufferedByLoser = mitigateSectArray(world, loser, winner, Math.round(dmgToLoser * destinyDuelDamageMultiplier(loser, winner)));
+      const sufferedByWinner = mitigateSectArray(world, winner, loser, Math.round(dmgToWinner * destinyDuelDamageMultiplier(winner, loser)));
       const loserBeforeHp = loser.hp;
       const winnerBeforeHp = winner.hp;
       loser.hp = Math.max(0, loser.hp - sufferedByLoser);
@@ -888,6 +900,7 @@ export function applyCultivatorBrainDecision(
           dialogue: scriptedDialogue('combat', cultivator, defender, `${winner.name}胜出，${loser.name}当场陨落。`, decision.spokenLine),
           locationId: cultivator.locationId,
         };
+        if (divineArtProse) lethalEvent.description += divineArtProse + '。';
         const fragments = transferLootedRelics(world, winner, loser, lethalEvent);
         if (fragments) lethalEvent.description += `另有${fragments}枚古器碎片循实账随战利品转移。`;
         return finishDuel(lethalEvent);
@@ -907,7 +920,7 @@ export function applyCultivatorBrainDecision(
         9,
         'combat', -5
       );
-      return finishDuel({
+      const duelEvent: WorldEvent = {
         id: `evt-${world.tick}-${cultivator.id}-duel`,
         tick: world.tick,
         year: world.year,
@@ -920,7 +933,9 @@ export function applyCultivatorBrainDecision(
         damage,
         dialogue: scriptedDialogue('combat', cultivator, defender, `${winner.name}占得上风，${loser.name}负伤离去。`, decision.spokenLine),
         locationId: cultivator.locationId,
-      });
+      };
+      if (divineArtProse) duelEvent.description += divineArtProse + '。';
+      return finishDuel(duelEvent);
     }
   }
 }
@@ -1141,16 +1156,28 @@ export function advanceWorldTick(
     // Mandatory embodied travel, trial and siege checks above are never bypassed by an encounter.
     const liveEncounter=nextState.roguelikeEncounters?.length&&!avatarDecision&&!expeditionOrder&&!occasion&&!activeSiegeForActor(nextState,cultivator)
       ?activeRoguelikeEncounter(nextState,cultivator):undefined;
-    let modelEncounterReplaced=false;
+    let modelStoryChoiceReplaced=false;
     if(liveEncounter){
       const allowed=provided?.chosenAction==='ROGUELIKE_ENCOUNTER'&&provided.targetRoguelikeEncounterId===liveEncounter.id&&
         !!provided.roguelikeEncounterChoice&&ROGUELIKE_ENCOUNTER_CHOICES.includes(provided.roguelikeEncounterChoice);
       if(!allowed||liveEncounter.guided){
         const local=chooseRoguelikeEncounterDecision(nextState,cultivator);
-        if(local){provided=local;modelEncounterReplaced=Boolean(modelProposal);}
+        if(local){provided=local;modelStoryChoiceReplaced=Boolean(modelProposal);}
       }
     }
-    if(!liveEncounter&&deferRegionalActorTurn(nextState,regionalTurn,cultivator,expeditionOrder??provided??supplied??fieldNegotiation,
+    const destinyOffer = !liveEncounter && !avatarDecision && !expeditionOrder && !occasion &&
+      cultivator.destinyTraits?.pending && !activeSiegeForActor(nextState, cultivator)
+      ? activeDestinyTraitOffer(nextState, cultivator) : undefined;
+    const liveDestiny = destinyOffer && destinyOffer.openedTick < nextState.tick ? destinyOffer : undefined;
+    if (liveDestiny) {
+      const validPick = provided?.chosenAction === 'AWAKEN_DESTINY' && provided.targetDestinyOfferId === liveDestiny.id &&
+        provided.destinyTraitChoice !== undefined && liveDestiny.options.includes(provided.destinyTraitChoice);
+      if (!validPick || activeAvatar(nextState) === cultivator) {
+        const local = chooseDestinyTraitDecision(nextState, cultivator);
+        if (local) { provided = local; modelStoryChoiceReplaced = Boolean(modelProposal); }
+      }
+    }
+    if(!liveEncounter&&!liveDestiny&&deferRegionalActorTurn(nextState,regionalTurn,cultivator,expeditionOrder??provided??supplied??fieldNegotiation,
       ()=>!!requiredBeforeOrdinaryDecision(cultivator,nextState)))continue;
 
     let decisionDraws = 0;
@@ -1166,6 +1193,7 @@ export function advanceWorldTick(
     if (traceOptions?.tape) rememberReplayDecision(traceOptions.tape, cultivator.id, decision, decisionDraws);
     const previousLocation = cultivator.locationId;
     const previousRealm = cultivator.realm;
+    const previousRealmStage = cultivator.realmStage;
     const ordinaryBefore = snapshotOrdinaryAction(cultivator, decision);
     const evt = applyCultivatorBrainDecision(nextState, cultivator, decision, rng, undefined, (event) => {
       newEvents.push(event);
@@ -1186,14 +1214,17 @@ export function advanceWorldTick(
       (decision.chosenAction === 'EXPLORE' && previousLocation !== cultivator.locationId));
     recordOrdinaryActionEvidence(cultivator,nextState.tick,decision,ordinaryBefore,
       {applied:validEffect,avatar:avatarOrder?.actorId===cultivator.id,event:evt});
-    if (recordDecisionEffect && supplied) recordDecisionEffect(cultivator.id, !avatarDecision && !modelOrdinaryReplaced && !modelEncounterReplaced && validEffect);
+    if (recordDecisionEffect && supplied) recordDecisionEffect(cultivator.id, !avatarDecision && !modelOrdinaryReplaced && !modelStoryChoiceReplaced && validEffect);
     traceOptions?.onActor?.(cultivator.id, candidates, validEffect);
     if (captureTrace) recordDecisionTrace(nextState, cultivator.id, candidates, decision,
-      avatarDecision ? 'avatar' : modelProposal && !modelOrdinaryReplaced && !modelEncounterReplaced ? 'model' : 'utility', validEffect);
+      avatarDecision ? 'avatar' : modelProposal && !modelOrdinaryReplaced && !modelStoryChoiceReplaced ? 'model' : 'utility', validEffect);
     creditSectService(nextState, cultivator, evt);
     if (evt) {
       renewRegionalProtectionAfterEvent(regionalTurn);
-      if (cultivator.realm !== previousRealm) recordBreakthroughCompetition(nextState, cultivator, previousRealm, evt);
+      if (cultivator.realm !== previousRealm) {
+        recordBreakthroughCompetition(nextState, cultivator, previousRealm, evt);
+        maybeOpenDestinyTrait(nextState, cultivator, previousRealm, previousRealmStage, evt);
+      }
       if (decision.chosenAction === 'AMBUSH_TRIBULATION') {
         const opponent = nextState.cultivators.find((candidate) => candidate.id !== cultivator.id && evt.actorIds.includes(candidate.id));
         if (opponent) {
@@ -1272,6 +1303,7 @@ export function advanceWorldTick(
   const completedEvents=[...newEvents,...nextState.events.filter(({id,tick})=>tick===nextState.tick&&!mainEventIds.has(id))];
   settleUpperPassageMortality(nextState);
   settleFrontierMortality(nextState);
+  finalizeDestinyTraitOffers(nextState);
   recordEraHistoryTurn(prevState,nextState,completedEvents);
   recordRegionalTurnRegistry(nextState);
   traceOptions?.onCompletedEvents?.(completedEvents);

@@ -3,9 +3,7 @@ import type {WaypostMealControls} from './components/WaypostMealRead';
 import {useAuthoredEraLaunch} from './components/useAuthoredEraLaunch';
 import { activeAvatar, canQueueAvatarSalvage, queueAvatarWaypostMeal } from './engine/avatarEngine';
 import { StoryFirstHome } from './components/StoryFirstHome';
-import {RoguelikeEncounterCard} from './components/RoguelikeEncounterCard';
-import {activeRoguelikeEncounter,resolveGuidedRoguelikeChoice} from './engine/roguelikeEncounterEngine';
-import type {RoguelikeEncounterChoice} from './types/roguelikeEncounter';
+import {useFeaturedStoryDecision} from './components/useFeaturedStoryDecision';
 import { PlayerStoryEntry } from './components/PlayerStoryEntry';
 import { enterStoryLead, orderStoryAvatar, projectStoryPlayerRole, storyOrderOutcome } from './components/storyPlayerController';
 import { CockpitModeSwitch, PanoramicCockpitView } from './components/PanoramicCockpitView';
@@ -106,7 +104,6 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   const storySurface=cockpitOpen?'cockpit':dashboardOpen?'tools':storyEntryOpen?'entry':'home';
   const renderedStorySurface=useRef(storySurface);
   const [storyNotice, setStoryNotice] = useState<string>();
-  const [dismissedEncounter,setDismissedEncounter]=useState<string>();
   const [storyOutcome,setStoryOutcome]=useState<{world:WorldState;text:string}>();
   useEffect(() => {
     if (renderedStorySurface.current === storySurface) return;
@@ -302,28 +299,8 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   }:undefined;
   const aliveCount = visibleWorld.cultivators.filter((c) => c.alive).length;
   const activeActorId = selectedCultivator?.id ?? null;
-  const encounterActor=!preview&&world.roguelikeEncounters?.length?activeAvatar(world):undefined;
-  const currentEncounter=encounterActor&&activeRoguelikeEncounter(world,encounterActor);
-  const encounter=encounterActor&&(currentEncounter?.guided?currentEncounter:
-    world.roguelikeEncounters?.slice().reverse().find(record=>record.guided&&record.actorId===encounterActor.id&&
-      record.status==='resolved'&&record.resolvedTick===world.tick&&record.siteId===encounterActor.locationId));
-  const encounterScope=encounter&&`${viewScopeKey}:${encounter.id}`;
-  const encounterPending=encounter?.status==='offered';
-  useEffect(()=>{if(encounterPending&&isRunning)setIsRunning(false);},[encounterPending,isRunning,setIsRunning]);
-  const encounteredAt=encounter&&world.locations.find(loc=>loc.id===encounter.siteId);
-  const encounterWitness=encounter?.witnessId?world.cultivators.find(actor=>actor.id===encounter.witnessId&&
-    actor.alive&&actor.locationId===encounter.siteId):undefined;
-  const encounterRevision=saveContextVersion.current;
-  const chooseEncounter=(choice:RoguelikeEncounterChoice)=>{
-    if(!encounterPending||!encounter||authority.current!==world||history.current!==timeline||
-      saveContextVersion.current!==encounterRevision||browsing.current||stepInFlight.current||
-      fastForwardRun.current||campaignGuard.current)return;
-    updateWorld(current=>current===world?resolveGuidedRoguelikeChoice(current,encounter.id,choice):current);
-  };
-  const encounterCard=encounter&&encounterActor&&encounteredAt&&encounterScope!==dismissedEncounter?
-    <RoguelikeEncounterCard key={encounterScope} encounter={encounter} actorName={encounterActor.name}
-      siteName={encounteredAt.name} witnessName={encounterWitness?.name} busy={isStepping||fastForwardLocked}
-      onChoose={chooseEncounter} onContinue={()=>setDismissedEncounter(encounterScope)}/>:undefined;
+  const {card:featuredStoryCard,pending:storyDecisionPending}=useFeaturedStoryDecision(simulation);
+  const toggleStoryAutoplay=()=>{if(!storyDecisionPending||isRunning)toggleAutoplay();};
   const worldPulse=useMemo(()=>dashboardOpen||cockpitOpen?projectWorldPulse(visibleWorld,activeActorId,mapFog):undefined,
     [dashboardOpen,cockpitOpen,visibleWorld,activeActorId,mapFog]);
   const inspectionRevision=saveContextVersion.current;
@@ -639,7 +616,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
     setDashboardOpen(false);
   };
   const advanceStory = () => {
-    if (encounterPending || dashboardOpen || storyEntryOpen || stepInFlight.current || browsing.current || fastForwardRun.current||campaignGuard.current) return;
+    if (storyDecisionPending || dashboardOpen || storyEntryOpen || stepInFlight.current || browsing.current || fastForwardRun.current||campaignGuard.current) return;
     setStoryNotice(undefined);
     setStoryOutcome(undefined);
     const before=authority.current,branch=history.current.activeBranchId,revision=saveContextVersion.current;
@@ -666,9 +643,9 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   const clearWorldPulse=(token:number)=>setPulseFocus(current=>current?.token===token?undefined:current);
   const pulseStrip=worldPulse&&<WorldPulseBar view={worldPulse} historical={Boolean(preview)}
     canFocus={!immersive} onFocusAlert={focusWorldPulse}/>;
-  if(cockpitOpen)return <PanoramicCockpitView world={visibleWorld} titleRef={cockpitHeading} exit={cockpitSwitch} statusStrip={pulseStrip} stageOverride={encounterCard}
-    time={{historical:Boolean(preview),running:isRunning,busy:cockpitBusy||encounterPending,onStep:()=>void handleStepTick(),
-      onToggleAutoplay:toggleAutoplay,onReturnLive:()=>handleTimelinePreview(null),onOpenTimeline:()=>{
+  if(cockpitOpen)return <PanoramicCockpitView world={visibleWorld} titleRef={cockpitHeading} exit={cockpitSwitch} statusStrip={pulseStrip} stageOverride={featuredStoryCard}
+    time={{historical:Boolean(preview),running:isRunning,busy:cockpitBusy||storyDecisionPending,onStep:()=>void handleStepTick(),
+      onToggleAutoplay:toggleStoryAutoplay,onReturnLive:()=>handleTimelinePreview(null),onOpenTimeline:()=>{
         openWorkspace('chronicle');rememberFold('chronicle','timeline');setStoryEntryOpen(false);
         setDashboardOpen(true);setCockpitOpen(false);
       }}}
@@ -692,7 +669,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
 
   if (storyHome) return <main data-story-home data-story-turn={storyHome.calendar.tick} className="min-h-dvh bg-slate-950 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
     <div className="mx-auto flex max-w-[76rem] justify-end px-4 empty:hidden">{cockpitSwitch}</div>
-    {encounterCard??(storyEntryOpen?<PlayerStoryEntry titleRef={storyEntryHeading} role={projectStoryPlayerRole(world,storyHome.lead)}
+    {featuredStoryCard??(storyEntryOpen?<PlayerStoryEntry titleRef={storyEntryHeading} role={projectStoryPlayerRole(world,storyHome.lead)}
       revision={world} busy={isStepping||fastForwardLocked} onBack={()=>setStoryEntryOpen(false)} onTools={openDashboard}
       onFollow={storyHome.lead?followCurrentLead:undefined} onEnter={enterCurrentLead} onOrder={orderCurrentStoryAvatar} />:
       <StoryFirstHome scene={storyHome.scene} leadName={storyHome.lead?.name} playerName={activeAvatar(world)?.name}
@@ -725,13 +702,13 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
                 <button type="button" onClick={() => handleTimelinePreview(null)} className={`${action} bg-amber-400/15 text-amber-100`}>回到当前</button></>
             ) : (
               <>
-                <button type="button" disabled={fastForwardLocked} onClick={toggleAutoplay}
+                <button type="button" disabled={fastForwardLocked||storyDecisionPending&&!isRunning} onClick={toggleStoryAutoplay}
                   className={`${action} ${isRunning ? 'bg-amber-500 text-slate-950' :
                     handedness === 'default' ? 'max-sm:hidden bg-emerald-500 text-slate-950' : 'bg-slate-800 text-emerald-100 sm:bg-emerald-500 sm:text-slate-950'}`}>
                   {isRunning ? <Pause aria-hidden="true" className="h-4 w-4" /> : <Play aria-hidden="true" className="h-4 w-4" />}
                   {isRunning ? '暂停推演' : '自动推演'}
                 </button>
-                <button type="button" disabled={isStepping || fastForwardLocked || encounterPending} onClick={() => void handleStepTick()}
+                <button type="button" disabled={isStepping || fastForwardLocked || storyDecisionPending} onClick={() => void handleStepTick()}
                   className={`${action} ${isRunning ? 'max-sm:hidden bg-slate-800 text-slate-100' : 'bg-emerald-500 text-slate-950'}`}>
                   <FastForward aria-hidden="true" className="h-4 w-4" />{isStepping ? '推演中…' : '单步推演'}
                 </button>
@@ -742,7 +719,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
       </header>
       {pulseStrip&&<div className="mx-auto w-full max-w-[76rem] px-2.5 pt-2 sm:px-4">{pulseStrip}</div>}
 
-      {encounterCard&&<div className="mx-auto w-full max-w-2xl px-3 pt-3">{encounterCard}</div>}
+      {featuredStoryCard&&<div className="mx-auto w-full max-w-2xl px-3 pt-3">{featuredStoryCard}</div>}
       <SandboxWorkspace active={workspace} onChange={openWorkspace} autoFocusTab={!(trail || chronicleReturn)}
         hideActiveContent={Boolean(trail && !focusTarget)} panelLead={trail && <div className="mb-2 flex min-w-0 flex-wrap items-center gap-2">
           <button type="button" data-control-dock="back" ref={backRef} onClick={returnToChronicle} className={`${action} bg-slate-800 text-amber-100`}>返回原纪事</button>
@@ -756,7 +733,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
           onPulseFocusHandled={clearWorldPulse}
             toolsOpen={workspace === 'map' && (foldPreferences.mapTools ?? false)} onToolsOpenChange={(mapTools) =>
               setFoldPreferences((previous) => (previous.mapTools ?? false) === mapTools ? previous : { ...previous, mapTools })}
-            additionalTools={handedness === 'default' && !preview && !isRunning ? <button type="button" disabled={fastForwardLocked} onClick={toggleAutoplay}
+            additionalTools={handedness === 'default' && !preview && !isRunning ? <button type="button" disabled={fastForwardLocked||storyDecisionPending&&!isRunning} onClick={toggleStoryAutoplay}
               className={`${action} bg-slate-800 text-emerald-100 sm:hidden`}><Play aria-hidden="true" className="h-4 w-4" />自动推演</button> : undefined}
             chronicleFocus={trail?.request.kind === 'site' && focusTarget ? trail : undefined} onChronicleFocusUnavailable={reportMapFocusFailure}
             onSelectCultivator={setSelectedCultivatorId} onBrushStroke={preview ? undefined : handleBrushStroke} />
