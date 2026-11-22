@@ -27,6 +27,7 @@ import type {DanxiaSeasonReviewControlsProps} from './components/DanxiaSeasonRev
 import { StoryFirstHome } from './components/StoryFirstHome';
 import { PlayerStoryEntry } from './components/PlayerStoryEntry';
 import { enterStoryLead, orderStoryAvatar, projectStoryPlayerRole, storyOrderOutcome } from './components/storyPlayerController';
+import { CockpitModeSwitch, PanoramicCockpitView } from './components/PanoramicCockpitView';
 import { projectStoryHomepage } from './engine/storyHomepage';
 import { FAST_FORWARD_MAX_TICKS } from './engine/fastForwardEngine';
 import { addFastForwardCalendarMonths } from './engine/fastForwardCalendar';
@@ -194,7 +195,7 @@ const WorldStoragePanel = React.lazy(async () => ({ default: (await import('./co
 const SectCouncilModal = React.lazy(async () => ({ default: (await import('./components/SectCouncilModal')).SectCouncilModal }));
 const AnalyticsModal = React.lazy(async () => ({ default: (await import('./components/AnalyticsModal')).AnalyticsModal }));
 
-interface AppProps { initialWorkspace?: WorkspaceId; initialSection?: string }
+interface AppProps { initialWorkspace?: WorkspaceId; initialSection?: string; initialCockpit?: boolean }
 interface ChronicleTrail extends ChronicleFeedReturn {
   viewerId: string;
   category: ChronicleCategoryFilter;
@@ -222,14 +223,16 @@ const saveTimelineIdentity = (): string | undefined => {
 const action = 'inline-flex min-h-11 items-center justify-center gap-1.5 rounded-md px-3 text-xs font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300 disabled:opacity-40';
 const panel = 'space-y-2 rounded-xl border border-slate-800 bg-slate-900 p-3';
 
-export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) => {
+export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, initialCockpit = false }) => {
+  const [cockpitOpen,setCockpitOpen]=useState(initialCockpit);
+  const cockpitHeading=useRef<HTMLHeadingElement>(null);
   const [dashboardOpen, setDashboardOpen] = useState(initialWorkspace !== undefined);
   const [workspace, setWorkspace] = useState<WorkspaceId>(initialWorkspace ?? 'map');
   const [storyEntryOpen,setStoryEntryOpen]=useState(false);
   const storyMoreRef = useRef<HTMLButtonElement>(null);
   const storyEntryHeading=useRef<HTMLHeadingElement>(null);
   const dashboardHeading = useRef<HTMLHeadingElement>(null);
-  const storySurface=dashboardOpen?'tools':storyEntryOpen?'entry':'home';
+  const storySurface=cockpitOpen?'cockpit':dashboardOpen?'tools':storyEntryOpen?'entry':'home';
   const renderedStorySurface=useRef(storySurface);
   const [storyNotice, setStoryNotice] = useState<string>();
   const [storyOutcome,setStoryOutcome]=useState<{world:WorldState;text:string}>();
@@ -237,7 +240,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
     if (renderedStorySurface.current === storySurface) return;
     renderedStorySurface.current=storySurface;
     window.scrollTo({top:0,behavior:'instant'});
-    (storySurface==='tools'?dashboardHeading.current:storySurface==='entry'?storyEntryHeading.current:
+    (storySurface==='cockpit'?cockpitHeading.current:storySurface==='tools'?dashboardHeading.current:storySurface==='entry'?storyEntryHeading.current:
       storyMoreRef.current)?.focus({preventScroll:true});
   }, [storySurface]);
   const [foldPreferences, setFoldPreferences] = useState(readWorkspaceFoldPreferences);
@@ -421,12 +424,12 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
   }, [llmConfig, updateWorld, retainReplay]);
 
   useEffect(() => {
-    if (!dashboardOpen || !isRunning) return;
+    if ((!dashboardOpen && !cockpitOpen) || !isRunning) return;
     const timer = setInterval(() => {
       void handleStepTick();
     }, tickIntervalMs);
     return () => clearInterval(timer);
-  }, [dashboardOpen, isRunning, tickIntervalMs, handleStepTick]);
+  }, [dashboardOpen, cockpitOpen, isRunning, tickIntervalMs, handleStepTick]);
 
   const handleConveneCouncil = useCallback(async (plan: CouncilPlan) => {
     const starting = authority.current;
@@ -799,7 +802,8 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
       (base, orders, mode, onActor, replayDraws) => advanceWorldTick(base, orders, undefined, mode, undefined, { captureTrace: false, onActor, replayDraws }));
   };
   const visibleHistory = timeline.branches.find(({ id }) => id === timeline.activeBranchId)?.snapshots;
-  const readingChronicle = dashboardOpen && workspace === 'chronicle';
+  const readingChronicle = !cockpitOpen && dashboardOpen && workspace === 'chronicle';
+  const showingChronicle = cockpitOpen || readingChronicle;
   const authoredHead=timeline.branches.find(branch=>branch.id===timeline.activeBranchId)?.snapshots.at(-1);
   const authoredRevision=saveContextVersion.current;
   const authoredDisabled=!dashboardOpen||workspace!=='world'||Boolean(preview)||isStepping||isRunning||fastForwardLocked||
@@ -827,15 +831,15 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
     },
   });
   const storyHome = React.useMemo(() => dashboardOpen ? undefined : projectStoryHomepage(world), [dashboardOpen,world]);
-  const chronicleScenes = React.useMemo(() => readingChronicle ? publicChronicleSceneEvents(visibleWorld) : [], [readingChronicle,visibleWorld]);
-  const publicDialogue = React.useMemo(() => readingChronicle ? createPublicDialogueResolver(visibleWorld) : undefined, [readingChronicle,visibleWorld]);
-  const succession = React.useMemo(() => readingChronicle &&
+  const chronicleScenes = React.useMemo(() => showingChronicle ? publicChronicleSceneEvents(visibleWorld) : [], [showingChronicle,visibleWorld]);
+  const publicDialogue = React.useMemo(() => showingChronicle ? createPublicDialogueResolver(visibleWorld) : undefined, [showingChronicle,visibleWorld]);
+  const succession = React.useMemo(() => showingChronicle &&
     visibleWorld.protagonistSuccession.lastEvaluatedTick !== undefined ? projectProtagonistSuccession(visibleWorld) : undefined,
-    [readingChronicle,visibleWorld]);
-  const chronicleLead = React.useMemo(() => readingChronicle ?
+    [showingChronicle,visibleWorld]);
+  const chronicleLead = React.useMemo(() => showingChronicle ?
     visibleWorld.protagonistSuccession.lastEvaluatedTick === undefined ? projectChronicleLead(visibleWorld) :
       projectEarnedChronicleLead(visibleWorld,chronicleScenes,visibleWorld.tick) : undefined,
-    [readingChronicle,visibleWorld,chronicleScenes]);
+    [showingChronicle,visibleWorld,chronicleScenes]);
   const selectedCultivator = resolveWorkspaceActor(visibleWorld, selectedCultivatorId);
   const regionalReadActive=dashboardOpen&&workspace==='world'&&!preview;
   const regionalAvatar=regionalReadActive?activeAvatar(world):undefined;
@@ -1051,7 +1055,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
       return true;
     }});
   const northWellRevisitAuthor=mayDeclareWellLaw?northWellLawControls:undefined;
-  const upperPassageActive=dashboardOpen&&(workspace==='map'||workspace==='world');
+  const upperPassageActive=cockpitOpen||dashboardOpen&&(workspace==='map'||workspace==='world');
   const upperPassageView=upperPassageActive?projectUpperPassage(visibleWorld,selectedCultivator):undefined;
   const upperPassageAway=upperPassageView&&upperPassagePlane(upperPassageView.nodeId);
   const upperPassageAtWell=workspace==='world'&&upperPassageView&&!upperPassageAway;
@@ -1703,7 +1707,35 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
     }).catch(()=>setStoryNotice('未能翻到下一幕，请重试。'));
   };
 
+  const cockpitBusy=isStepping||fastForwardLocked;
+  const cockpitSwitch=<CockpitModeSwitch active={cockpitOpen} disabled={cockpitBusy} onSwitch={()=>{
+    if(stepInFlight.current||fastForwardRun.current||campaignGuard.current)return;
+    if(cockpitOpen)backToStory();
+    setCockpitOpen(!cockpitOpen);
+  }}/>;
+  if(cockpitOpen)return <PanoramicCockpitView world={visibleWorld} titleRef={cockpitHeading} exit={cockpitSwitch}
+    time={{historical:Boolean(preview),running:isRunning,busy:cockpitBusy,onStep:()=>void handleStepTick(),
+      onToggleAutoplay:toggleAutoplay,onReturnLive:()=>handleTimelinePreview(null),onOpenTimeline:()=>{
+        openWorkspace('chronicle');rememberFold('chronicle','timeline');setStoryEntryOpen(false);
+        setDashboardOpen(true);setCockpitOpen(false);
+      }}}
+    map={frontierView?.scope==='frontier'?frontierRealmView:arrayFieldAway||upperPassageAway?realmView:
+      <React.Suspense fallback={<p role="status">载入舆图…</p>}>
+        <WorldMapCanvas compact scopeKey={viewScopeKey} world={visibleWorld} selectedCultivatorId={activeActorId}
+          onSelectCultivator={setSelectedCultivatorId} onBrushStroke={preview?undefined:handleBrushStroke}/>
+      </React.Suspense>}
+    inspector={<>{inspect('profile')}{inspect('mind')}</>}
+    relationships={<React.Suspense fallback={<p role="status">载入关系图…</p>}>
+      <RelationshipGraph key={viewScopeKey} world={visibleWorld} selectedCultivatorId={activeActorId}
+        onSelectCultivator={setSelectedCultivatorId}/>
+    </React.Suspense>}
+    chronicle={<React.Suspense fallback={<p role="status">载入纪事…</p>}>
+      <ChronicleFeed events={chronicleScenes} lead={chronicleLead} succession={succession}
+        resolvePublicDialogue={publicDialogue?.event} category={chronicleFilter} onCategoryChange={setChronicleFilter}/>
+    </React.Suspense>}/>;
+
   if (storyHome) return <main data-story-home data-story-turn={storyHome.calendar.tick} className="min-h-dvh bg-slate-950 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
+    <div className="mx-auto flex max-w-[76rem] justify-end px-4 empty:hidden">{cockpitSwitch}</div>
     {storyEntryOpen?<PlayerStoryEntry titleRef={storyEntryHeading} role={projectStoryPlayerRole(world,storyHome.lead)}
       revision={world} busy={isStepping||fastForwardLocked} onBack={()=>setStoryEntryOpen(false)} onTools={openDashboard}
       onFollow={storyHome.lead?followCurrentLead:undefined} onEnter={enterCurrentLead} onOrder={orderCurrentStoryAvatar} />:
@@ -1728,6 +1760,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
               <p className="break-words text-xs text-slate-300">仙历 {visibleWorld.year}年{visibleWorld.month}月 · 在世 {aliveCount} · 已陨落 {visibleWorld.cultivators.length - aliveCount}</p>
             </div>
           </div>
+          {cockpitSwitch}
           <button type="button" disabled={isStepping || fastForwardLocked} onClick={backToStory}
             className={`${action} bg-slate-800 text-amber-100`}>回到故事</button>
           <div aria-label="推演控制" data-control-dock="repeat" className={`flex flex-wrap items-center gap-1.5 ${handedness === 'default' && workspace !== 'map' && !preview && !isRunning ? 'max-sm:hidden' : ''}`}>
