@@ -1,3 +1,4 @@
+import type { BeastDuelChoice, BeastDuelContact } from './beastDuelProtection';
 import type { ProtagonistHandoff } from './protagonistHandoff';
 import type { ProtagonistFlight } from './protagonistFlight';
 import type { AscensionMove, AscensionState } from './ascension';
@@ -125,6 +126,7 @@ export type ActionType =
   | 'ROGUELIKE_ENCOUNTER'
   | 'AWAKEN_DESTINY'
   | 'FORBIDDEN_ART'
+  | 'BEAST_DUEL_RESPONSE'
   | 'GRAND_SIEGE_HERO'
   | 'BATTLEFIELD_REVISIT'
   | 'AUDIENCE_PLEDGE'
@@ -579,6 +581,8 @@ export interface LLMDecisionPayload {
   heartDemonChoice?: HeartDemonChoice;
   targetHeartDemonAftermathId?: string;
   targetForbiddenDuelId?: string;
+  targetBeastDuelId?:string;
+  beastDuelChoice?:BeastDuelChoice;
   forbiddenArtChoice?: ForbiddenArtChoice;
   targetGrandSiegeId?: string;
   battlefieldRevisitMove?: 'repair' | 'seek';
@@ -3637,6 +3641,7 @@ export interface NorthWellRevisitReviewState {
 export interface WorldState {
   roguelikeEncounters?:RoguelikeEncounterRecord[];
   forbiddenDuels?: ForbiddenDuelContact[];
+  beastDuelContacts?:BeastDuelContact[];
   scribeCommissions?: ScribeCommissionState;
   waypostMeals?: WaypostMealState;
   disasterShelter?: DisasterShelterState;

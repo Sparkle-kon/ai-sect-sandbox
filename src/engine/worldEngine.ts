@@ -1,3 +1,6 @@
+import { beastDuelContactForParticipant, beastDuelGuardEvent, consumeBeastDuelContact, openBeastDuelContact, openBeastDuelEvent,
+  prepareBeastDuelResolution, pruneInvalidBeastDuelContacts, settleBeastGuard, settleBeastWithdraw } from './beastDuelProtection';
+import type { BeastDuelContact } from '../types/beastDuelProtection';
 import { availableBattlefieldRevisits, isBattlefieldRevisitEvent, recordBattlefieldReturn, resolveBattlefieldRevisit } from './battlefieldRevisit';
 import { exactBattlefieldRevisitDecision } from './battlefieldRevisitCognition';
 import {autonomousExpeditionRescueOptions,canPauseAftermathRescue,voluntaryHeartDemonChoiceEffect} from './heartDemonChoicePolicy';
@@ -271,7 +274,7 @@ interface ForbiddenDuelSettlement {
 /** Ordinary and suspended contact finish through the same real damage, witnesses, and inheritance. */
 function settleNativeDuel(world:WorldState,cultivator:Cultivator,defender:Cultivator,decision:LLMDecisionPayload,
   rolls:NativeDuelRolls,authorizedBountyTargetId?:string,emit?:(event:WorldEvent)=>void,
-  context?:ForbiddenDuelSettlement):WorldEvent{
+  context?:ForbiddenDuelSettlement,beastGuardContact?:BeastDuelContact):WorldEvent{
   const location=world.locations.find(site=>site.id===cultivator.locationId);
   const finishDuel = (proof: WorldEvent,paid:ReturnType<typeof consumeDaoDuelIntents>=[]): WorldEvent => {
     recordDaoDuelIntents(world,proof,paid);
@@ -290,7 +293,9 @@ function settleNativeDuel(world:WorldState,cultivator:Cultivator,defender:Cultiv
   const ordinaryWinner=context&&context.activation.choice!=='decline'
     ?measureNativeDuel(world,cultivator,defender,rolls,undefined,daoPaid).winner:undefined;
   const {winner,loser,hitLoser,hitWinner,divineArtProse}=measureNativeDuel(world,cultivator,defender,rolls,modifier,daoPaid);
-  const sufferedByLoser=mitigateSectArray(world,loser,winner,hitLoser);
+  const nativeLoserDamage=mitigateSectArray(world,loser,winner,hitLoser);
+  const guarded=beastGuardContact&&settleBeastGuard(world,beastGuardContact,loser,nativeLoserDamage);
+  const sufferedByLoser=nativeLoserDamage-(guarded?.absorbed??0);
   const sufferedByWinner=mitigateSectArray(world,winner,loser,hitWinner);
   const attachForbiddenOutcome=(event:WorldEvent):WorldEvent=>{
     if(!context||context.activation.choice==='decline')return event;
@@ -307,6 +312,8 @@ function settleNativeDuel(world:WorldState,cultivator:Cultivator,defender:Cultiv
   const winnerBeforeHp = winner.hp;
   loser.hp = Math.max(context?.activation.lastStand && context.contact.ownerId === loser.id ? 1 : 0, loser.hp - sufferedByLoser);
   winner.hp = Math.max(1, winner.hp - sufferedByWinner);
+  if(guarded&&beastGuardContact)
+    recordAuxiliaryActionEvent(world,beastDuelGuardEvent(world,beastGuardContact,guarded,loser),emit);
   const damage = [{cultivatorId: loser.id, amount: loserBeforeHp - loser.hp},
     {cultivatorId: winner.id, amount: winnerBeforeHp - winner.hp}].filter((item) => item.amount > 0);
   wearArtifact(winner, true);
@@ -375,12 +382,12 @@ function settleNativeDuel(world:WorldState,cultivator:Cultivator,defender:Cultiv
     year: world.year,
     month: world.month,
     title: `惊天斗法：${cultivator.name}激战${defender.name}`,
-    description: `${cultivator.name}于【${location?.name ?? '秘境'}】向${defender.name}悍然出手！一番激斗后，${winner.name}占据上风，${loser.name}受创（-${loserBeforeHp - loser.hp} HP）化作血光遁走。`,
+    description: `${cultivator.name}于【${location?.name ?? '秘境'}】向${defender.name}悍然出手！一番激斗后，${winner.name}占据上风，${loser.name}受创（-${loserBeforeHp - loser.hp} HP）${guarded?'，仍立在此处。':'化作血光遁走。'}`,
     category: 'combat',
     actorIds: [cultivator.id, defender.id],
     duelWinnerId: winner.id,
     damage,
-    dialogue: scriptedDialogue('combat', cultivator, defender, `${winner.name}占得上风，${loser.name}负伤离去。`, decision.spokenLine),
+    dialogue: scriptedDialogue('combat', cultivator, defender, `${winner.name}占得上风，${loser.name}${guarded?'仍在此处。':'负伤离去。'}`, decision.spokenLine),
     locationId: cultivator.locationId,
   };
   if (divineArtProse) duelEvent.description += divineArtProse + '。';
@@ -1105,6 +1112,7 @@ export function applyCultivatorBrainDecision(
       };
     }
 
+    case 'BEAST_DUEL_RESPONSE':
     case 'FORBIDDEN_ART':
       // The owner can only answer through an actual suspended duel's native monthly slot.
       return null;
@@ -1113,7 +1121,8 @@ export function applyCultivatorBrainDecision(
         c.alive && c.id !== cultivator.id && !ascensionDutyActive(world,c) && c.locationId === cultivator.locationId && !activeDanxiaMedicineEscort(world,c) && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) && !courierCheckpoint(world, c) && !expeditionRescueCheckpoint(world, c) && !boundaryReliefCheckpoint(world, c) && !disasterShelterCheckpoint(world,c) &&
         (decision.targetCultivatorId === undefined || c.id === decision.targetCultivatorId)
       );
-      if (!defender || forbiddenDuelForParticipant(world,defender) || forbiddenDuelForParticipant(world,cultivator)) return null;
+      if (!defender || forbiddenDuelForParticipant(world,defender) || forbiddenDuelForParticipant(world,cultivator)||beastDuelContactForParticipant(world,defender)||
+          beastDuelContactForParticipant(world,cultivator)) return null;
       const ward = interceptSanctuaryDuel(world, cultivator, defender);
       if (ward?.blocked) return ward.event;
       if (ward) recordAuxiliaryActionEvent(world, ward.event, emit);
@@ -1129,6 +1138,8 @@ export function applyCultivatorBrainDecision(
             title:'刃下绝境',description:'两道锋芒已在此地相抵；交锋尚未落定。',
             category:'combat',actorIds:[cultivator.id,defender.id],locationId:contact.siteId,witnessScope:'participants',
           };
+          const beastContact=openBeastDuelContact(world,cultivator,defender,threat.loser,rolls);
+          if(beastContact)return openBeastDuelEvent(world,beastContact);
         }
       }
       return settleNativeDuel(world,cultivator,defender,publicDecision,rolls,authorizedBountyTargetId,emit);
@@ -1206,6 +1217,7 @@ export function advanceWorldTick(
   const regionalTurn=beginRegionalSimulationTurn(nextState);
   const finishedDuelActors=new Set<string>();
   pruneInvalidForbiddenDuelContacts(nextState);
+  pruneInvalidBeastDuelContacts(nextState);
 
   for (const cultivator of [...nextState.cultivators]) {
     if (!cultivator.alive || cultivator.positionPlane === 'immortal') continue;
@@ -1342,6 +1354,44 @@ export function advanceWorldTick(
     }
 
     if(finishedDuelActors.has(cultivator.id))continue;
+    const beastContact=beastDuelContactForParticipant(nextState,cultivator);
+    if(beastContact){
+      cultivator.currentAction='BEAST_DUEL_RESPONSE';
+      cultivator.innerMonologue='这一刃尚未落定，不在此时另行动作。';
+      if(beastContact.attackerId!==cultivator.id||beastContact.openedTick>=nextState.tick)continue;
+      const defender=nextState.cultivators.find(actor=>actor.id===beastContact.defenderId);
+      if(!defender)continue;
+      const owner=beastContact.ownerId===cultivator.id?cultivator:defender;
+      const offered=precomputedDecisions?.[owner.id];
+      const modelInput=Boolean(offered&&(traceOptions?.modelActors?.has(owner.id)||traceOptions?.replayDraws));
+      const response=prepareBeastDuelResolution(nextState,beastContact,offered,modelInput);
+      if(!response)continue;
+      const published=(event:WorldEvent)=>{newEvents.push(event);witnessEvent(nextState,event);};
+      if(response.choice==='withdraw'){
+        const retreat=response.destinationId&&settleBeastWithdraw(nextState,beastContact,response.destinationId);
+        if(!retreat)continue;
+        published(retreat);
+      }
+      finishedDuelActors.add(cultivator.id);finishedDuelActors.add(defender.id);
+      const settled:LLMDecisionPayload={chosenAction:'BEAST_DUEL_RESPONSE',targetBeastDuelId:beastContact.id,
+        beastDuelChoice:response.choice,
+        ...(response.destinationId?{targetLocationId:response.destinationId}:{}),innerMonologue:'依这一刃实际行止。'};
+      const event=settleNativeDuel(nextState,cultivator,defender,settled,beastContact.rolls,undefined,published,undefined,
+        response.choice==='guard'?beastContact:undefined);
+      consumeBeastDuelContact(nextState,beastContact);
+      captureWitnessedPersonalScene(nextState,event);
+      captureDramaticBondFact(nextState,event);
+      published(event);
+      renewRegionalProtectionAfterEvent(regionalTurn);
+      const modelUsed=Boolean(modelInput&&offered?.chosenAction==='BEAST_DUEL_RESPONSE'&&
+        offered.targetBeastDuelId===beastContact.id&&response.choice===offered.beastDuelChoice&&response.destinationId===offered.targetLocationId);
+      if(traceOptions?.tape)rememberReplayDecision(traceOptions.tape,owner.id,settled,0);
+      recordDecisionEffect?.(owner.id,modelUsed);
+      traceOptions?.onActor?.(owner.id,[],true);
+      if(traceOptions?.captureTrace!==false)recordDecisionTrace(nextState,owner.id,[],settled,
+        beastContact.guided?'avatar':modelUsed?'model':'utility',true);
+      continue;
+    }
     const contact=nextState.forbiddenDuels?.length?forbiddenDuelForParticipant(nextState,cultivator):undefined;
     if(contact){
       cultivator.currentAction='FORBIDDEN_ART';
@@ -1362,6 +1412,14 @@ export function advanceWorldTick(
       if(traceOptions?.tape)rememberReplayDecision(traceOptions.tape,owner.id,settled,0,false,activation.origin==='model');
       finishedDuelActors.add(cultivator.id);finishedDuelActors.add(defender.id);
       const publish=(event:WorldEvent)=>{newEvents.push(event);witnessEvent(nextState,event);};
+      if(activation.choice==='decline'){
+        const threat=measureNativeDuel(nextState,cultivator,defender,contact.rolls,undefined,previewDaoDuelIntents(nextState,cultivator,defender));
+        if(threat.loser===owner&&owner.hp<.25*owner.maxHp&&
+          previewSectArrayDamage(nextState,threat.loser,threat.winner,threat.hitLoser)>=owner.hp){
+          const nextContact=openBeastDuelContact(nextState,cultivator,defender,owner,contact.rolls);
+          if(nextContact){publish(openBeastDuelEvent(nextState,nextContact));continue;}
+        }
+      }
       const event=settleNativeDuel(nextState,cultivator,defender,settled,contact.rolls,undefined,publish,{contact,activation});
       captureWitnessedPersonalScene(nextState,event);
       captureDramaticBondFact(nextState,event);
@@ -1845,6 +1903,7 @@ export function advanceWorldTick(
   expireRingAudiences(nextState);
   finalizeDestinyTraitOffers(nextState);
   pruneInvalidForbiddenDuelContacts(nextState);
+  pruneInvalidBeastDuelContacts(nextState);
   finalizeProtagonistFlightTurn(prevState,nextState,completedEvents);
   recordEraHistoryTurn(prevState,nextState,completedEvents);
   publishTianjiGazette(prevState,nextState,completedEvents);
@@ -2011,5 +2070,6 @@ export function executeGodIntervention(
     nextState.mapPresentation = deriveMapPresentation(prevState, nextState, [head]);
   }
   pruneInvalidForbiddenDuelContacts(nextState);
+  pruneInvalidBeastDuelContacts(nextState);
   return nextState;
 }

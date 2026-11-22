@@ -26,6 +26,7 @@ function learn(cultivator: Cultivator, rumor: Rumor, tick: number): void {
 }
 
 export function witnessEvent(world: WorldState, event: WorldEvent): void {
+  if (event.witnessScope==='participants'&&event.id.startsWith('evt-beast-duel-'))return;
   if (isUpperPassageEvent(event) || event.witnessScope==='participants'&&sealedHeartDemonEventId(event.id)) return;
   // The Dao ledger is private even to the generic self-witness buffer. Replaying a local receipt as a rumor
   // would disclose the actual path/prepared intent outside the scoped read; true DUEL remains ordinary news.

@@ -1,3 +1,5 @@
+import { availableBeastDuelChoices, beastDuelContactForParticipant } from './beastDuelProtection';
+import { beastDuelCommand, exactBeastDuelResponse } from './beastDuelCognition';
 import { availableBattlefieldRevisits } from './battlefieldRevisit';
 import { battlefieldRevisitCommand, exactBattlefieldRevisitDecision } from './battlefieldRevisitCognition';
 import {activeHeartDemonAftermath,availableHeartDemonRecovery} from './heartDemonAftermathEngine';
@@ -2473,6 +2475,18 @@ export async function requestCultivatorLLMDecision(
         row.targetGrandSiegeId !== exactId || row.grandSiegeHeroMove !== moves[index])) return undefined;
       return decodeGrandSiegeHeroDecision(parsed, exactId, moves);
     }, 160);
+  }
+
+  const beastContact=beastDuelContactForParticipant(world,cultivator);
+  if(beastContact){
+    if(beastContact.ownerId!==cultivator.id||beastContact.guided||requestTick!==world.tick+1)return undefined;
+    const choices=availableBeastDuelChoices(world,cultivator);
+    if(!choices.length)return undefined;
+    const menu=choices.map(choice=>beastDuelCommand(beastContact.id,choice));
+    return requestDecisionPrompt(config,requestTick,options,
+      '只原样复制眼前的一项灵兽行止。不可填写独白、伤势、生死、契约解除结果或别的去处：'+JSON.stringify(menu),
+      parsed=>beastDuelContactForParticipant(world,cultivator)===beastContact&&requestTick===world.tick+1?
+        exactBeastDuelResponse(parsed,beastContact.id,availableBeastDuelChoices(world,cultivator)):undefined,160);
   }
 
   const battlefield=availableBattlefieldRevisits(world,cultivator,requestTick);

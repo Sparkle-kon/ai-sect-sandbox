@@ -1,3 +1,5 @@
+import { availableBeastDuelChoices, beastDuelContactForParticipant } from './beastDuelProtection';
+import { exactBeastDuelResponse } from './beastDuelCognition';
 import { availableBattlefieldRevisits } from './battlefieldRevisit';
 import { exactBattlefieldRevisitDecision } from './battlefieldRevisitCognition';
 import {FLIGHT_ROUNDS} from '../types/protagonistFlight';
@@ -103,6 +105,7 @@ export function recordDecisionTrace(world: WorldState, actorId: string, candidat
   const privateDecision = decision.targetHeartDemonAftermathId!==undefined || isPrivateHeartTurn(world, actorId, decision) || decision.chosenAction === 'FORBIDDEN_ART' ||
     decision.targetForbiddenDuelId !== undefined || decision.forbiddenArtChoice !== undefined ||
     decision.chosenAction === 'GRAND_SIEGE_HERO' || decision.targetGrandSiegeId !== undefined || decision.grandSiegeHeroMove !== undefined ||
+    decision.chosenAction === 'BEAST_DUEL_RESPONSE' || decision.targetBeastDuelId !== undefined || decision.beastDuelChoice !== undefined ||
     decision.chosenAction === 'BATTLEFIELD_REVISIT' || decision.targetBattlefieldSiegeId !== undefined || decision.battlefieldRevisitMove !== undefined ||
     decision.chosenAction === 'EXPEDITION_DUNGEON' || decision.targetDungeonRoomId !== undefined || decision.dungeonMove !== undefined ||
     decision.chosenAction === 'DAO_PATH' || decision.targetDaoPathId !== undefined || decision.daoPathMove !== undefined ||
@@ -248,6 +251,13 @@ export function rememberReplayDecision(tape: DecisionReplayTape, actorId: string
   const clanFields = signed ? signed.clanMove === 'propose'
     ? { clanMove: signed.clanMove, targetCultivatorId: signed.targetCultivatorId }
     : { clanMove: signed.clanMove, targetCultivationUnionId: signed.targetCultivationUnionId } : undefined;
+  const beastAction=decision.chosenAction==='BEAST_DUEL_RESPONSE';
+  const beastOwner=beastAction?state.base.cultivators.find(row=>row.id===actorId):undefined;
+  const duelContact=beastOwner&&beastDuelContactForParticipant(state.base,beastOwner);
+  const beastResponse=beastOwner&&duelContact?.ownerId===actorId&&exactBeastDuelResponse(decision,duelContact.id,
+    availableBeastDuelChoices(state.base,beastOwner),true);
+  const beastFields=beastResponse?{targetBeastDuelId:beastResponse.targetBeastDuelId,beastDuelChoice:beastResponse.beastDuelChoice,
+    ...(beastResponse.targetLocationId?{targetLocationId:beastResponse.targetLocationId}:{})}:undefined;
   const revisitAction=decision.chosenAction==='BATTLEFIELD_REVISIT';
   const revisitor=revisitAction?current.cultivators.find(row=>row.id===actorId):undefined;
   const revisited=revisitor&&exactBattlefieldRevisitDecision(decision,
@@ -262,9 +272,9 @@ export function rememberReplayDecision(tape: DecisionReplayTape, actorId: string
   const ascent = stance ? { ascensionMove: stance.ascensionMove, ...(stance.targetAscensionTrialId === undefined ? {} :
     { targetAscensionTrialId: stance.targetAscensionTrialId }) } : undefined;
   state.decisions.set(actorId, { ...(forbiddenAction || grandSiegeAction || dungeonAction || heavenlyAction || daoPathAction ||
-      auctionAction || auctionAmbush || clanAction || ascensionAction || revisitAction ? {} : details),
+      auctionAction || auctionAmbush || clanAction || ascensionAction || revisitAction || beastAction ? {} : details),
     chosenAction: decision.chosenAction, innerMonologue: '', ...(cohortInviteeIds ? { cohortInviteeIds } : {}),
-    ...personalHeartChoice, ...personalForbiddenChoice, ...personalHeroChoice, ...dungeonFields, ...chosenAlchemy, ...pathFields, ...auctionFields, ...ambushFields, ...clanFields, ...ascent, ...revisitFields });
+    ...personalHeartChoice, ...personalForbiddenChoice, ...personalHeroChoice, ...dungeonFields, ...chosenAlchemy, ...pathFields, ...auctionFields, ...ambushFields, ...clanFields, ...ascent, ...revisitFields, ...beastFields });
   if (personalHeartChoice && heartModel) state.heartModelActors.add(actorId);
   else state.heartModelActors.delete(actorId);
   if (personalForbiddenChoice && forbiddenModel) state.forbiddenModelActors.add(actorId);

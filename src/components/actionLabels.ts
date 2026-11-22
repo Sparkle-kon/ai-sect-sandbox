@@ -4,6 +4,7 @@ const ACTION_LABELS = {
   ROGUELIKE_ENCOUNTER: '抉择奇遇',
   AWAKEN_DESTINY: '觉醒天命',
   FORBIDDEN_ART: '禁术抉择',
+  BEAST_DUEL_RESPONSE: '刃下护契',
   GRAND_SIEGE_HERO: '阵前抉择',
   BATTLEFIELD_REVISIT: '重访旧战场',
   AUDIENCE_PLEDGE: '践行密议',
