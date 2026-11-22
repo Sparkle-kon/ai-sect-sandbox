@@ -18,7 +18,7 @@ function card(encounter:RoguelikeEncounterRecord,busy=false,witnessName?:string)
 
 describe('one dramatic encounter, three distinct actions',()=>{
   it('presents three large deliberate options for every current encounter instead of generic controls or assumed results',()=>{
-    for(const kind of ROGUELIKE_ENCOUNTER_KINDS){
+    for(const kind of ROGUELIKE_ENCOUNTER_KINDS.filter(kind=>kind!=='sect-gate')){
       const html=card({...offered,kind,choice:'bold',outcome},false,'岑闻溪');
       expect(html).toContain('半途奇遇');
       expect(html).toContain('旧墟 · 闻笛');

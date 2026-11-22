@@ -4,6 +4,15 @@ interface EncounterChoiceWords {readonly choice:RoguelikeEncounterChoice;readonl
 interface EncounterWords {readonly title:string;readonly scene:string;readonly choices:readonly EncounterChoiceWords[]}
 const retreat:EncounterChoiceWords={choice:'leave',label:'转身离去',risk:'不取机缘，也不耗气血。'};
 export const ROGUELIKE_ENCOUNTER_CATALOG:Readonly<Record<RoguelikeEncounterKind,EncounterWords>>={
+  'sect-gate':{
+    title:'拜山试心',
+    scene:'你已到了本门山门。掌门把一张空名笺放在门规旁：未曾自报名，便不立约。门规就在眼前，要应承怎样的来意，只由你自己开口。',
+    choices:[
+      {choice:'cautious',label:'守诺',risk:'只应自己能守的约，止步在门前，说明来意。声望按本门实规落下。'},
+      {choice:'bold',label:'识破',risk:'当面指出空名笺不能代人应约。门中按本门看重的分寸记下这一答。'},
+      {choice:'leave',label:'离开',risk:'收起话头，不应试也不开约。人仍在这处山门；要离山须另行赶路。'},
+    ],
+  },
   'sword-cave':{
     title:'坐化剑仙洞府',
     scene:'石门半掩，一线剑意从尘中透出。不知多少年前，有人把最后一招留在了这里。',
@@ -40,7 +49,8 @@ type Chances=Readonly<Record<Exclude<RoguelikeEncounterChoice,'leave'>,
   {readonly threshold:number;readonly win:RoguelikeNominalEffect;readonly loss:RoguelikeNominalEffect}>>;
 const effects=(qi:number,hpRate:number,karma:number,years:number,affinity=0):RoguelikeNominalEffect=>({qi,hpRate,karma,years,affinity});
 const empty=effects(0,0,0,0);
-const outcomes:Readonly<Record<RoguelikeEncounterKind,Chances>>={
+export type ChanceDrivenRoguelikeKind=Exclude<RoguelikeEncounterKind,'sect-gate'>;
+const outcomes:Readonly<Record<ChanceDrivenRoguelikeKind,Chances>>={
   'sword-cave':{
     cautious:{threshold:82,win:effects(12,0,2,0),loss:effects(0,-.04,0,0)},
     bold:{threshold:52,win:effects(24,0,4,2),loss:effects(-8,-.16,-2,0)},
@@ -55,7 +65,7 @@ const outcomes:Readonly<Record<RoguelikeEncounterKind,Chances>>={
   },
 };
 
-export function roguelikeNominalEffect(kind:RoguelikeEncounterKind,choice:RoguelikeEncounterChoice,roll:number):
+export function roguelikeNominalEffect(kind:ChanceDrivenRoguelikeKind,choice:RoguelikeEncounterChoice,roll:number):
   {success:boolean;effect:RoguelikeNominalEffect}{
   if(choice==='leave')return {success:false,effect:empty};
   const row=outcomes[kind][choice];

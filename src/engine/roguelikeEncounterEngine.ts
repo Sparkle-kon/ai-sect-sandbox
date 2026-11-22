@@ -13,6 +13,7 @@ import {pilgrimageCheckpoint} from './pilgrimageEngine';
 import {recordMemory} from './memoryEngine';
 import {regionForPoint} from './simulationRegionGeometry';
 import {ROGUELIKE_ENCOUNTER_CATALOG,roguelikeNominalEffect} from './roguelikeEncounterCatalog';
+import {currentSectGateTrialAuthority,openSectGateTrialStamp,sectGateReceiptText,sectGateReputationDelta} from './sectGateTrialEngine';
 
 export const ROGUELIKE_ENCOUNTER_HISTORY=96;
 export const ROGUELIKE_ENCOUNTER_ACTOR_COOLDOWN=6;
@@ -67,6 +68,9 @@ export function describeRoguelikeEncounter(_world:WorldState,record:RoguelikeEnc
   return ROGUELIKE_ENCOUNTER_CATALOG[record.kind];
 }
 function event(world:WorldState,row:RoguelikeEncounterRecord,phase:'open'|'settled'):WorldEvent{
+  if(row.kind==='sect-gate')return {id:`evt-${row.id}-${phase}`,tick:world.tick,year:world.year,month:world.month,
+    ...sectGateReceiptText(phase==='settled'?row.choice:undefined),
+    category:'intrigue',actorIds:[row.actorId],locationId:row.siteId,witnessScope:'participants'};
   const {title,scene}=ROGUELIKE_ENCOUNTER_CATALOG[row.kind];
   const description=phase==='open'?scene:row.choice==='leave'?'你没有伸手，把这一步留给了将来。':
     row.outcome?.success?'你没有白走这一遭。所得所失，都写在这段亲历里。':
@@ -79,10 +83,18 @@ function event(world:WorldState,row:RoguelikeEncounterRecord,phase:'open'|'settl
 /** Only the caller's independently successful movement step may open a new local encounter. */
 export function maybeOpenRoguelikeEncounter(world:WorldState,actor:Cultivator,originId:string):WorldEvent|undefined{
   if(actor.currentAction!=='EXPLORE'||!stationary(world,actor,actor.locationId)||
-    !roguelikeEncounterRoute(world,originId,actor.locationId)||openRows(world).some(row=>row.actorId===actor.id&&
+    openRows(world).some(row=>row.actorId===actor.id&&
       (row.status==='offered'||world.tick-row.openedTick<ROGUELIKE_ENCOUNTER_ACTOR_COOLDOWN)))return undefined;
   const guided=activeAvatar(world)===actor;
   const stamp={actorId:actor.id,fromSiteId:originId,siteId:actor.locationId,openedTick:world.tick};
+  const sectGate=guided?openSectGateTrialStamp(world,actor,originId,stationary):undefined;
+  if(sectGate){
+    const row:RoguelikeEncounterRecord={id:`roguelike-encounter-${world.tick}-${actor.id}`,...stamp,
+      kind:'sect-gate',guided:true,sectGate,status:'offered'};
+    (world.roguelikeEncounters??=[]).push(row);
+    return event(world,row,'open');
+  }
+  if(!roguelikeEncounterRoute(world,originId,actor.locationId))return undefined;
   if(!guided&&roguelikeEncounterRoll(world,stamp,'opening')>=ROGUELIKE_ENCOUNTER_NPC_OPENING_THRESHOLD)return undefined;
   const aim=roguelikeEncounterRoll(world,stamp,'kind');
   const witness=aim>=34&&aim<67?world.cultivators.filter(other=>other.id!==actor.id&&other.hp/other.maxHp<.45&&
@@ -97,12 +109,13 @@ export function maybeOpenRoguelikeEncounter(world:WorldState,actor:Cultivator,or
 export function activeRoguelikeEncounter(world:WorldState,actor:Cultivator):RoguelikeEncounterRecord|undefined{
   const rows=openRows(world).filter(row=>row.actorId===actor.id&&row.status==='offered'&&row.openedTick<=world.tick&&
     world.tick<=row.openedTick+1&&stationary(world,actor,row.siteId)&&
-    roguelikeEncounterRoute(world,row.fromSiteId,row.siteId)&&(row.kind!=='wounded-traveler'||!!witnessFor(world,row)));
+    (row.kind==='sect-gate'?!!currentSectGateTrialAuthority(world,actor,row,stationary):
+      roguelikeEncounterRoute(world,row.fromSiteId,row.siteId)&&(row.kind!=='wounded-traveler'||!!witnessFor(world,row))));
   return rows.length===1?rows[0]:undefined;
 }
 export function chooseRoguelikeEncounterDecision(world:WorldState,actor:Cultivator):LLMDecisionPayload|undefined{
   const row=activeRoguelikeEncounter(world,actor);
-  if(!row)return undefined;
+  if(!row||row.kind==='sect-gate')return undefined;
   const condition=actor.hp/actor.maxHp;
   let choice:RoguelikeEncounterChoice='cautious';
   if(row.guided||condition<.25||actor.personality==='苟道'&&condition<.6)choice='leave';
@@ -136,6 +149,17 @@ function settle(world:WorldState,actor:Cultivator,encounterId:string,choice:Rogu
   if(world.tick===row.openedTick){
     if(!explicitGuide||!row.guided||activeAvatar(world)!==actor)return null;
   }else if(explicitGuide||row.guided&&choice!=='leave')return null;
+
+  if(row.kind==='sect-gate'){
+    if(!explicitGuide)return null;
+    const sect=currentSectGateTrialAuthority(world,actor,row,stationary);
+    if(!sect)return null;
+    const sectReputationDelta=sectGateReputationDelta(sect.alignment,choice,sect.reputation);
+    sect.reputation+=sectReputationDelta;
+    row.status='resolved';row.resolvedTick=world.tick;row.choice=choice;
+    row.outcome={success:choice!=='leave',qiDelta:0,hpDelta:0,karmaDelta:0,lifespanDelta:0,affinityDelta:0,sectReputationDelta};
+    return event(world,row,'settled');
+  }
 
   const {success,effect}=roguelikeNominalEffect(row.kind,choice,roguelikeEncounterRoll(world,row,choice));
   const qi=actor.qiProgress,hp=actor.hp,karma=actor.karma,years=actor.lifespan;
@@ -173,7 +197,8 @@ export function finalizeRoguelikeEncounters(world:WorldState):void{
     if(row.status!=='offered')continue;
     const actor=byActor(world,row.actorId);
     if(world.tick>=row.openedTick+1||!stationary(world,actor,row.siteId)||
-      row.kind==='wounded-traveler'&&!witnessFor(world,row)){
+      row.kind==='wounded-traveler'&&!witnessFor(world,row)||
+      row.kind==='sect-gate'&&(!actor||!currentSectGateTrialAuthority(world,actor,row,stationary))){
       row.status='expired';row.resolvedTick=world.tick;
     }
   }

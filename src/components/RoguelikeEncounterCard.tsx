@@ -3,7 +3,7 @@ import {BookOpen,Flame,HandHeart,Mountain} from 'lucide-react';
 import {ROGUELIKE_ENCOUNTER_CATALOG} from '../engine/roguelikeEncounterCatalog';
 import type {RoguelikeEncounterChoice,RoguelikeEncounterOutcome,RoguelikeEncounterRecord} from '../types/roguelikeEncounter';
 
-const icons={ 'sword-cave':Mountain,'wounded-traveler':HandHeart,'sealed-scroll':BookOpen } as const;
+const icons={ 'sword-cave':Mountain,'wounded-traveler':HandHeart,'sealed-scroll':BookOpen,'sect-gate':Mountain } as const;
 const optionTone={
   cautious:'border-teal-500/25 text-teal-100 hover:bg-teal-950/55',
   bold:'border-rose-400/30 text-rose-100 hover:bg-rose-950/55',
@@ -38,6 +38,7 @@ export interface RoguelikeEncounterCardProps {
 export function RoguelikeEncounterCard({encounter,actorName,siteName,witnessName,busy,onChoose,onContinue}:RoguelikeEncounterCardProps){
   const title=useId(),intro=useId();
   const heading=useRef<HTMLHeadingElement>(null);
+  const gate=encounter.kind==='sect-gate';
   const scene=ROGUELIKE_ENCOUNTER_CATALOG[encounter.kind];
   const Icon=icons[encounter.kind];
   const offered=encounter.status==='offered';
@@ -46,12 +47,14 @@ export function RoguelikeEncounterCard({encounter,actorName,siteName,witnessName
   useEffect(()=>{
     heading.current?.focus({preventScroll:true});
   },[encounter.id,encounter.status]);
+  if(gate&&(!encounter.guided||!encounter.sectGate))return null;
+  const reputation=outcome?.result.sectReputationDelta;
   return <section aria-labelledby={title} className="relative isolate min-w-0 overflow-hidden rounded-2xl border border-amber-500/35
     bg-gradient-to-br from-amber-950/55 via-slate-950 to-slate-950 p-3.5 text-slate-100 [overflow-wrap:anywhere] sm:p-5">
     <div aria-hidden="true" className="pointer-events-none absolute -right-9 -top-14 -z-10 h-44 w-44 rounded-full border border-amber-200/15 shadow-[0_0_3rem_rgba(251,191,36,.13)]"/>
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
       <span className="flex items-center gap-1.5 font-medium tracking-widest text-amber-200">
-        <Icon size={15} aria-hidden="true" className="shrink-0"/>{offered?'半途奇遇':'奇遇余音'}
+        <Icon size={15} aria-hidden="true" className="shrink-0"/>{gate?(offered?'山门问心':'问心余音'):(offered?'半途奇遇':'奇遇余音')}
       </span>
       <span className="text-slate-400">{siteName} · {actorName}</span>
     </div>
@@ -65,7 +68,7 @@ export function RoguelikeEncounterCard({encounter,actorName,siteName,witnessName
             onKeyDown={event=>{if(event.key==='Enter'&&event.repeat)event.preventDefault();}}
             className={`flex min-h-12 min-w-0 w-full flex-wrap items-start gap-x-2 gap-y-0.5 rounded-lg border bg-slate-950/70 px-3 py-2 text-left disabled:opacity-50 ${focus} ${optionTone[choice]}`}>
             <span className="font-semibold">{label}</span>
-            <span className="ml-auto rounded border border-current/25 px-1.5 text-[11px]">{risk[choice]}</span>
+            {!gate&&<span className="ml-auto rounded border border-current/25 px-1.5 text-[11px]">{risk[choice]}</span>}
             <span className="basis-full text-xs leading-relaxed text-slate-300">{hint}</span>
           </button>;
         })}
@@ -74,8 +77,13 @@ export function RoguelikeEncounterCard({encounter,actorName,siteName,witnessName
     </>:<>
       {outcome?.choice?<div className="mt-2 rounded-lg border border-amber-300/25 bg-slate-950/55 p-3">
         <p className="flex items-center gap-1.5 text-xs text-amber-200"><Flame size={13} aria-hidden="true"/>
-          {outcome.choice.choice==='leave'?'就此收手':outcome.result.success?'此念已定':'未能如愿'} · {outcome.choice.label}</p>
-        <p className="mt-1 font-serif text-base leading-relaxed text-slate-200">{encounterOutcomeText(outcome.result,witnessName)}</p>
+          {outcome.choice.choice==='leave'?(gate?'到此作别':'就此收手'):outcome.result.success?'此念已定':'未能如愿'} · {outcome.choice.label}</p>
+        {(!gate||outcome.result.qiDelta!==0||outcome.result.hpDelta!==0||outcome.result.karmaDelta!==0||
+          outcome.result.lifespanDelta!==0||outcome.result.affinityDelta!==0)&&
+          <p className="mt-1 font-serif text-base leading-relaxed text-slate-200">{encounterOutcomeText(outcome.result,witnessName)}</p>}
+        {gate&&typeof reputation==='number'&&Number.isSafeInteger(reputation)&&(reputation!==0
+          ? <p className="mt-1 text-sm text-amber-100">本门声望{reputation>0?'增':'减'} {Math.abs(reputation)}。</p>
+          : <p className="mt-1 font-serif text-sm leading-relaxed text-slate-300">此番问心，本门声望未改。</p>)}
       </div>:<p className="mt-2 text-sm text-slate-300">这一幕已经错过，没有新的结果可读。</p>}
       <button type="button" disabled={busy} className={`mt-3 min-h-11 w-full rounded-lg border border-amber-400/40 bg-slate-950/70 px-3
         text-sm font-semibold text-amber-100 hover:bg-amber-950/70 disabled:opacity-50 ${focus}`}
