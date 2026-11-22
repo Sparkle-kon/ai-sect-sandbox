@@ -20,33 +20,64 @@ function drawingContext() {
 const wipe=(world:WorldState)=>world.terrain.tiles.forEach(tile=>delete tile.ownerSectId);
 
 describe('same currently seen territory on Canvas and in the text index',()=>{
-  it('uses recognized visible HQ tile, falls back to an actual visible boundary, and never renumbers with fog',()=>{
+  it('places the real clan elbow on visible owned boundary, not its headquarters, without fog renumbering',()=>{
     const world=createInitialWorld(487);
     wipe(world);
     const [hidden,boundary,headquartered]=world.sects;
     const hq=world.locations.find(site=>site.id===headquartered.headquartersId)!;
     const hqTile=terrainTileAt(world,hq.x,hq.y)!;
-    const [hiddenTile,borderTile,otherTile,foreign]=world.terrain.tiles.filter(tile=>tile.id!==hqTile.id);
+    const plaza=world.terrain.tiles.filter(tile=>Math.abs(tile.col-hqTile.col)<=1&&Math.abs(tile.row-hqTile.row)<=1);
+    const [hiddenTile,borderTile,foreign]=world.terrain.tiles.filter(tile=>!plaza.includes(tile));
     hiddenTile.ownerSectId=hidden.id;
     borderTile.ownerSectId=boundary.id;
-    otherTile.ownerSectId=headquartered.id;
-    hqTile.ownerSectId=headquartered.id;
     foreign.ownerSectId='unregistered-owner';
-    const now=new Set([borderTile.id,otherTile.id,foreign.id,hqTile.id]);
+    for(const tile of plaza)tile.ownerSectId=headquartered.id;
+    const now=new Set([borderTile.id,foreign.id,...plaza.map(tile=>tile.id)]);
+    // The adjacent unowned exterior is in sight, so this is a confirmed and not inferred fog-edge corner.
+    for(const tile of world.terrain.tiles)
+      if(Math.abs(tile.col-hqTile.col)<=2&&Math.abs(tile.row-hqTile.row)<=2)now.add(tile.id);
     const projection=()=>projectMapTerritories(world,(tile)=>now.has(tile.id)?'visible':'explored');
     const visible=projection();
-    expect(visible.markers.map(({code,tileId})=>[code,tileId])).toEqual([['宗2',borderTile.id],['宗3',hqTile.id]]);
+    expect(visible.markers.map(({code})=>code)).toEqual(['宗2','宗3']);
+    expect(visible.markers[0].tileId).toBe(borderTile.id);
+    const emblem=visible.markers[1],tile=terrainTileAt(world,emblem.point.x,emblem.point.y)!;
+    expect(tile.id).toBe(emblem.tileId);
+    expect(tile.ownerSectId).toBe(headquartered.id);
+    expect(Math.abs(tile.row-hqTile.row)).toBe(1);
+    expect(Math.abs(tile.col-hqTile.col)).toBe(1);
+    expect(Math.hypot(emblem.point.x-hq.x,emblem.point.y-hq.y)).toBeGreaterThan(54);
+    expect(emblem.summary).toContain('当前可见领地边缘');
+    expect(emblem.summary).not.toContain('驻地格');
     expect(visible.byFaction.size).toBe(2);
-    expect(visible.markers[1].summary).toContain('当前可见宗门驻地格');
     expect(JSON.stringify(visible.markers)).not.toContain(hidden.name);
     expect(JSON.stringify(visible.markers)).not.toContain('unregistered-owner');
     now.delete(hqTile.id);
-    const fallback=projection();
-    expect(fallback.markers[1]).toMatchObject({code:'宗3',tileId:otherTile.id,summary:expect.stringContaining('当前可见领地边缘')});
-    const before=JSON.stringify(fallback.markers);
+    const before=JSON.stringify(projection().markers);
     hiddenTile.ownerSectId=boundary.id;
-    hqTile.ownerSectId=hidden.id; // Explored ownership changes no pixels, code, or fallback point.
+    hqTile.ownerSectId=hidden.id; // Explored ownership changes no pixels, code, or anchor.
     expect(JSON.stringify(projection().markers)).toBe(before);
+  });
+
+  it('avoids an authorized map pin and cannot infer a hidden annotation or private gate over the same land',()=>{
+    const world=createInitialWorld(487);
+    const prototype=world.locations[0];
+    world.locations=[];
+    wipe(world);
+    const owner=world.sects[0];
+    const left=world.terrain.tiles.find(tile=>tile.row===4&&tile.col===4)!;
+    const right=world.terrain.tiles.find(tile=>tile.row===4&&tile.col===12)!;
+    left.ownerSectId=right.ownerSectId=owner.id;
+    const center=(tile:MapTile)=>({x:(tile.col+.5)*1000/world.terrain.columns,y:(tile.row+.5)*600/world.terrain.rows});
+    const full=()=> 'visible' as const;
+    const first=projectMapTerritories(world,full).markers[0];
+    expect(first.tileId).toBe(left.id);
+    const pin=center(left);
+    expect(projectMapTerritories(world,full,[pin]).markers[0]).toMatchObject({tileId:right.id,id:first.id,code:first.code,pattern:first.pattern});
+    world.locations.push({...prototype,...pin,id:'private-new-gate',type:'secret_realm',expeditionOmenId:'secret-proof'});
+    expect(projectMapTerritories(world,full).markers[0]).toEqual(first);
+    const scoped=(tile:MapTile)=>tile===left||tile===right?'visible' as const:'hidden' as const;
+    const hiddenPoint=center(world.terrain.tiles.find(tile=>tile.row===4&&tile.col===3)!);
+    expect(projectMapTerritories(world,scoped,[hiddenPoint])).toEqual(projectMapTerritories(world,scoped));
   });
 
   it('stable ordinal labels beyond pattern cycle and no faction cap despite long real roster',()=>{

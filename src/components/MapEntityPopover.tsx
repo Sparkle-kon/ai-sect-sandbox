@@ -110,12 +110,22 @@ export function MapEntityPopover({data,anchor,pinned,readOnly=false,actions,onCl
         </div>}
       </>:<>
         <p className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-slate-300">
+          {data.spiritRoot&&<span>灵脉 <strong className="text-amber-100">{data.spiritRoot}</strong></span>}
           <span>灵气 <strong className="text-teal-200">{data.spiritQi}</strong></span>
           {data.population!==undefined&&<span>聚落 {data.population} 人</span>}
           <span>在场修士 {data.residentCount} 人</span>
         </p>
         {data.residents.length>0&&<p className="text-xs text-slate-300">{data.residents.join('、')}
           {data.residentCount>data.residents.length?'等':''}</p>}
+        {pinned&&!!data.details?.length&&<details key={data.target.id}
+          className="min-w-0 rounded-md border border-slate-800 bg-slate-950/60 px-2">
+          <summary className={`min-h-11 cursor-pointer content-center rounded-md text-xs font-semibold text-amber-100 ${focus}`}>此地设施与近况</summary>
+          <dl className="space-y-1.5 pb-2 text-xs leading-relaxed text-slate-300">
+            {data.details.map(({label,text})=><div key={label} className="min-w-0 border-t border-slate-800 pt-1.5">
+              <dt className="font-semibold text-amber-100">{label}</dt><dd>{text}</dd>
+            </div>)}
+          </dl>
+        </details>}
         {data.eventTitles.length>0&&<ul aria-label="此地当月公开见闻" className="list-inside list-disc text-sm leading-6 text-amber-100">
           {data.eventTitles.map((text,index)=><li key={index}>{text}</li>)}
         </ul>}

@@ -1,3 +1,5 @@
+import {makeMapNamePills,drawMapNamePills,measureMapNamePill} from './mapCanvasNamePills';
+import {projectMapSitePins} from './mapSitePinLayout';
 import {buildAscensionMapVfx,drawAscensionMapVfx} from './ascensionSceneVfx';
 import {cultivationClanMapSites,drawCultivationClanMapSeal} from './cultivationClanMapMark';
 import {drawCultivatorRealmAura} from './cultivatorRealmAuraDraw';
@@ -36,7 +38,7 @@ import { GodBrushKind, LocationNode, MapPoint, WorldEvent, WorldState } from '..
 import { memoryStrength } from '../engine/memoryEngine';
 import { countCompletedSchemeSteps, countHerbs, isActiveTrial, isGuardOnDuty, SCHEME_STATUS, TRIAL_STAGE } from './mapStatusLabels';
 import { DIALOGUE_KIND_LABELS } from './DialogueTranscript';
-import { SPIRIT_ROOT_COLORS, SpiritRootBadge } from './SpiritRootBadge';
+import { SpiritRootBadge } from './SpiritRootBadge';
 import { durabilityOf, equippedArtifact, maxDurabilityOf } from '../engine/artifactEngine';
 import { isActiveCampaign, SIEGE_LABELS } from './siegeLabels';
 import { OCCASION_KIND, OCCASION_STATUS } from './occasionLabels';
@@ -45,7 +47,7 @@ import { BIOME_PALETTE, createTerrainMapView, mapActorPositions } from './terrai
 import {buildCanvasBiomeRelief,drawCanvasBiomeRelief,type CanvasBiomeReliefPlan} from './canvasBiomeShader';
 import {buildQiFlowPlan,drawQiFlow} from './qiFlowCanvas';
 import {mapScenicAnimationAllowed,mapScenicFrameDelay} from './mapScenicScheduler';
-import { drawMapTerritoryGlyphs, drawTerrain } from './terrainMapDraw';
+import { drawTerrain } from './terrainMapDraw';
 import { drawMapConvoys, mapTransitActorIds, visibleMapConvoys, visibleMapEscort } from './mapConvoyView';
 import { buildMapPresentation, MAP_EFFECT_LABELS, MOTION_MS } from './mapPresentationView';
 import {visibleMapFlyingSwords} from './mapFlyingSwordView';
@@ -325,7 +327,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const civicObservation = useMemo(() => selected && villageEvolutionLocalSettlement(world, selected), [world, selected]);
   const villageMapLabels = useMemo(() => projectVillageMapLabels(world, selected), [world, selected]);
   const usedVillageSegments = useMemo(() => projectUsedVillageMigrationSegments(world, selected), [world, selected]);
-  const territorySemantics = useMemo(() => projectMapTerritories(world,mapView.tileState), [world,mapView]);
+  const territorySemantics = useMemo(() => projectMapTerritories(world,mapView.tileState,seenLocations.filter(row=>isCurrentLocation(row.id))), [world,mapView,seenLocations,isCurrentLocation]);
   const locallyObservedWorkshopClosure = useMemo(() => {
     if (!selected?.alive || selected.hp <= 0 || !isCurrentLocation(selected.locationId) ||
       mapTransitActorIds(world).has(selected.id) || courierCheckpoint(world,selected) || pilgrimageCheckpoint(world,selected) ||
@@ -516,7 +518,6 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const trialsByLocation = new Map<string, number>();
   const guardsByLocation = new Map<string, number>();
   const headquarters = new Map(world.sects.map((sect) => [sect.headquartersId, sect]));
-  const villagesAt = new Map(world.settlements.villages.map((village) => [village.locationId, village]));
   const currentCouncils = new Map(world.councils.filter((record) => record.tick === world.tick).map((record) => [record.sectId, record]));
   for (const actor of liveActors) {
     if (mapView.trailPositions.has(actor.id)) continue; // Never count a moving pilgrim at its saved departure site.
@@ -581,6 +582,15 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     let markerSize: MarkerViewport = canvas.getBoundingClientRect();
     let staticMarkers: ReturnType<typeof planActorMarkers> | undefined;
     let badgeLayoutCache:{markers:ReturnType<typeof planActorMarkers>;layout:ReturnType<typeof planMapActorBadgeLayout>}|undefined;
+    let sitePins=projectMapSitePins(seenLocations,isCurrentLocation,camera,markerSize);
+    let namePillCache:{markers:ReturnType<typeof planActorMarkers>;plan:ReturnType<typeof makeMapNamePills>}|undefined;
+    const siteById=new Map(seenLocations.map(site=>[site.id,site]));
+    const shiftStationary=(points:typeof actorPositions)=>sitePins.size?points.map(point=>{
+      const id=point.actor.locationId,from=siteById.get(id),pin=sitePins.get(id);
+      return from&&pin&&!mapView.trailPositions.has(point.actor.id)&&!presentation.routes.has(point.actor.id)?
+        {...point,x:point.x+pin.x-from.x,y:point.y+pin.y-from.y}:point;
+    }):points;
+
 
     const hasMotion=ascensionMarks.length>0||daoMarks.length>0||alchemyMarks.length>0||presentation.routes.size>0||combatVfx.hasTransient||letters.length>0||travel.hasMotion||hasBadgeQuote;
     if (playback.current?.source !== world.mapPresentation) {
@@ -683,12 +693,10 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
 
       // No landmark connects to an invented route. Qi uses only the approved geometry painted above.
       // 4. Draw Locations
-      for (const loc of seenLocations) {
+      for (const location of seenLocations) {
+        const pin=sitePins.get(location.id),loc=pin?{...location,...pin}:location;
         if (!isCurrentLocation(loc.id)) {
           ctx.fillStyle = '#64748b';
-          ctx.font = '12px sans-serif';
-          ctx.textAlign = 'center';
-          ctx.fillText(loc.name, loc.x, loc.y - 15);
           ctx.beginPath();
           ctx.arc(loc.x, loc.y, 5, 0, Math.PI * 2);
           ctx.fill();
@@ -697,6 +705,10 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         const ownerSect = world.sects.find((s) => s.id === loc.ownerSectId);
         const baseColor = ownerSect?.color ?? '#fbbf24';
 
+        if(pin){
+          ctx.save();ctx.strokeStyle='rgba(217,193,123,.5)';ctx.lineWidth=logicalPerCssPixel;
+          ctx.beginPath();ctx.moveTo(location.x,location.y);ctx.lineTo(pin.x,pin.y);ctx.stroke();ctx.restore();
+        }
         // Aura glow proportional to spiritQi
         const auraRadius = 28 + (loc.spiritQi / 100) * 26;
         const aura = ctx.createRadialGradient(
@@ -739,173 +751,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           ctx.setLineDash([]);
         }
 
-        if (localLeaseSites.has(loc.id)) {
-          ctx.save();
-          ctx.fillStyle = '#fcd34d';
-          ctx.fillRect(loc.x + 17, loc.y + 12, 7, 5);
-          ctx.restore();
-        }
-
-        if (localCommons.has(loc.id)) {
-          ctx.save();
-          ctx.fillStyle = '#5eead4';
-          ctx.font = 'bold 10px sans-serif';
-          ctx.textAlign = 'left';
-          ctx.fillText('共', loc.x + 18, loc.y + 18);
-          ctx.restore();
-        }
-        if (observedCohortSites.has(loc.id)) {
-          ctx.save();
-          ctx.fillStyle = '#fde68a';
-          ctx.font = 'bold 10px sans-serif';
-          ctx.textAlign = 'left';
-          ctx.fillText('授', loc.x + 17, loc.y - 13);
-          ctx.restore();
-        }
-        if (observedSalvageSites.has(loc.id)) {
-          ctx.save();
-          ctx.fillStyle = '#ccfbf1';
-          ctx.font = 'bold 10px sans-serif';
-          ctx.textAlign = 'left';
-          ctx.fillText('封', loc.x + 17, loc.y + 8);
-          ctx.restore();
-        }
-
-        // Keep the element beside the location name so it doesn't add a competing row.
-        ctx.font = 'bold 13px sans-serif';
-        const marker = `〈${loc.spiritRoot}〉`;
-        const placeWidth = ctx.measureText(loc.name).width;
-        const markerWidth = ctx.measureText(marker).width;
-        const scrollCount = loc.inheritanceScrolls.length;
-        const scrollMarker = scrollCount > 0 ? ` 遗卷×${scrollCount}` : '';
-        const scrollWidth = ctx.measureText(scrollMarker).width;
-        const closedFurnace = selected?.locationId === loc.id && isCurrentLocation(loc.id) && furnaceShift?.capacity === 0;
-        const furnaceMarker = loc.furnaceGrade > 0 ? closedFurnace ? ' 闭炉' : ` 炉${loc.furnaceGrade}` : '';
-        const furnaceWidth = ctx.measureText(furnaceMarker).width;
-        const guardCount = guardsByLocation.get(loc.id) ?? 0;
-        const guardMarker = guardCount > 0 ? ` 卫${guardCount}` : '';
-        const guardWidth = ctx.measureText(guardMarker).width;
-        const pavilionMarker = localPavilionDesk?.siteId===loc.id && isCurrentLocation(loc.id) &&
-          (localPavilionDesk.staffed || localPavilionDesk.heldCopies>0 || localPavilionDesk.availableCopies>0) ? ' 经' : '';
-        const memorialMarker=localMemorial?.siteId===loc.id && localMemorial.count>0 && isCurrentLocation(loc.id) ? ' 祠' : '';
-        const fairMarker=localVillageFair?.siteId===loc.id&&isCurrentLocation(loc.id)?' 集':'';
-        const stipendMarker=localStipend?.siteId===loc.id&&isCurrentLocation(loc.id)?' 俸':'';
-        const seedMarker=localSeedCulture?.siteId===loc.id&&isCurrentLocation(loc.id)?(localSeedCulture.ready>0?' 收':' 苗'):'';
-        const toolMarker=localToolLoans?.siteId===loc.id&&isCurrentLocation(loc.id)?(localToolLoans.awaiting>0?' 待领':' 共器'):'';
-        const alignmentMarker=localAlignedWeather?.siteId===loc.id&&isCurrentLocation(loc.id)?' 校':'';
-        const alignmentWidth=ctx.measureText(alignmentMarker).width;
-        const toolWidth=ctx.measureText(toolMarker).width;
-        const seedWidth=ctx.measureText(seedMarker).width;
-        const stipendWidth=ctx.measureText(stipendMarker).width;
-        const fairWidth=ctx.measureText(fairMarker).width;
-        const memorialWidth=ctx.measureText(memorialMarker).width;
-        const pavilionWidth=ctx.measureText(pavilionMarker).width;
-        const labelStart = loc.x - (placeWidth + markerWidth + scrollWidth + furnaceWidth + guardWidth + pavilionWidth + memorialWidth + fairWidth + stipendWidth + seedWidth + toolWidth + alignmentWidth) / 2;
-        ctx.textAlign = 'left';
-        ctx.fillStyle = '#e2e8f0';
-        ctx.fillText(loc.name, labelStart, loc.y - 26);
-        ctx.fillStyle = SPIRIT_ROOT_COLORS[loc.spiritRoot];
-        ctx.fillText(marker, labelStart + placeWidth, loc.y - 26);
-        if (scrollMarker) {
-          ctx.fillStyle = '#fcd34d';
-          ctx.fillText(scrollMarker, labelStart + placeWidth + markerWidth, loc.y - 26);
-        }
-
-        if (furnaceMarker) {
-          ctx.fillStyle = closedFurnace ? '#fbbf24' : '#86efac';
-          ctx.fillText(furnaceMarker, labelStart + placeWidth + markerWidth + scrollWidth, loc.y - 26);
-        }
-        if (guardMarker) {
-          ctx.fillStyle = '#a5b4fc';
-          ctx.fillText(guardMarker, labelStart + placeWidth + markerWidth + scrollWidth + furnaceWidth, loc.y - 26);
-        }
-        if(pavilionMarker) {
-          ctx.fillStyle='#fde68a';
-          ctx.fillText(pavilionMarker,labelStart+placeWidth+markerWidth+scrollWidth+furnaceWidth+guardWidth,loc.y-26);
-        }
-        if(memorialMarker){
-          ctx.fillStyle='#f5d0a9';
-          ctx.fillText(memorialMarker,labelStart+placeWidth+markerWidth+scrollWidth+furnaceWidth+guardWidth+pavilionWidth,loc.y-26);
-        }
-        if(fairMarker){
-          ctx.fillStyle='#a7f3d0';
-          ctx.fillText(fairMarker,labelStart+placeWidth+markerWidth+scrollWidth+furnaceWidth+guardWidth+pavilionWidth+memorialWidth,loc.y-26);
-        }
-        if(stipendMarker){
-          ctx.fillStyle='#f8d7a6';
-          ctx.fillText(stipendMarker,labelStart+placeWidth+markerWidth+scrollWidth+furnaceWidth+guardWidth+pavilionWidth+memorialWidth+fairWidth,loc.y-26);
-        }
-        if(seedMarker){
-          ctx.fillStyle='#bbf7d0';
-          ctx.fillText(seedMarker,labelStart+placeWidth+markerWidth+scrollWidth+furnaceWidth+guardWidth+pavilionWidth+memorialWidth+fairWidth+stipendWidth,loc.y-26);
-        }
-        if(toolMarker){
-          ctx.fillStyle='#c4b5fd';
-          ctx.fillText(toolMarker,labelStart+placeWidth+markerWidth+scrollWidth+furnaceWidth+guardWidth+pavilionWidth+memorialWidth+fairWidth+stipendWidth+seedWidth,loc.y-26);
-        }
-        if(alignmentMarker){
-          ctx.fillStyle='#99f6e4';
-          ctx.fillText(alignmentMarker,labelStart+placeWidth+markerWidth+scrollWidth+furnaceWidth+guardWidth+pavilionWidth+memorialWidth+fairWidth+stipendWidth+seedWidth+toolWidth,loc.y-26);
-        }
-        if (occasionsByLocation.has(loc.id)) {
-          ctx.font = 'bold 11px sans-serif';
-          ctx.textAlign = 'center';
-          ctx.fillStyle = '#67e8f9';
-          ctx.fillText('会', loc.x + 28, loc.y - 4);
-        }
-        const sanctuary = sanctuaryMarks.get(loc.id);
-        if (sanctuary !== undefined) {
-          ctx.save();
-          ctx.textAlign = 'left';
-          ctx.font = 'bold 11px sans-serif';
-          ctx.fillStyle = sanctuary > 0 ? '#67e8f9' : '#94a3b8';
-          ctx.fillText(sanctuary > 0 ? '敕' : '敕·竭', loc.x + 20, loc.y + 25);
-          ctx.restore();
-        }
-        const localWeather = weatherAtVisibleSites.get(loc.id);
-        if (localWeather && localWeather.kind !== '平息') {
-          const appearance = WEATHER_MARK[localWeather.kind];
-          ctx.save();
-          ctx.textAlign = 'right';
-          ctx.font = 'bold 11px sans-serif';
-          ctx.fillStyle = appearance.color;
-          ctx.fillText(appearance.symbol, loc.x - 21, loc.y + 11);
-          ctx.restore();
-        }
-        const localVillage = villagesAt.get(loc.id);
-        if (localVillage && civicObservation?.locationId === loc.id) {
-          ctx.save();
-          ctx.font = 'bold 10px sans-serif';
-          ctx.textAlign = 'center';
-          ctx.fillStyle = localVillage.stress >= 55 ? '#fdba74' : '#bef264';
-          ctx.fillText(`${villageMapLabels.get(loc.id)?.stage ?? '村'} ${localVillage.population}${localGranary?.siteId === loc.id ? ' · 仓' : ''}`, loc.x, loc.y + 43);
-          ctx.restore();
-        }
-        const localCouncil = currentCouncils.get(headquarters.get(loc.id)?.id ?? '');
-        if (localCouncil && isCurrentLocation(loc.id)) {
-          ctx.font = 'bold 11px sans-serif';
-          ctx.textAlign = 'center';
-          ctx.fillStyle = '#c4b5fd';
-          ctx.fillText('议', loc.x + 28, loc.y + 11);
-        }
-        const localBeasts = beastsByLocation.get(loc.id);
-        if (localBeasts?.length) {
-          ctx.save();
-          ctx.font = 'bold 11px sans-serif';
-          ctx.textAlign = 'right';
-          ctx.shadowColor = '#020617';
-          ctx.shadowBlur = 4;
-          ctx.fillStyle = localBeasts.some(({ kind, tamedBy }) => kind === '凶兽' && !tamedBy) ? '#fda4af' : '#86efac';
-          ctx.fillText(`兽 ${localBeasts.length}`, loc.x - 22, loc.y - 4);
-          ctx.restore();
-        }
-        ctx.textAlign = 'center';
-        ctx.fillStyle = '#94a3b8';
-        ctx.font = '11px sans-serif';
-        ctx.fillText(`灵气 ${loc.spiritQi}`, loc.x, loc.y + 33);
       }
-
-      drawMapTerritoryGlyphs(ctx, territorySemantics.markers, logicalPerCssPixel);
 
       // 5. Draw only actors in the current field of view.
       const frameActors=(()=>{
@@ -925,9 +771,14 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         } finally {ctx.restore();}
       })();
       const markers = frameActors === actorPositions
-        ? (staticMarkers ??= planActorMarkers(frameActors, camera, markerSize, selectedCultivatorId))
-        : planActorMarkers(frameActors, camera, markerSize, selectedCultivatorId);
-      paintedActors.current = { markers, positions: actorPositions, camera, size: markerSize, scope: clusterScope };
+        ? (staticMarkers ??= planActorMarkers(shiftStationary(frameActors), camera, markerSize, selectedCultivatorId))
+        : planActorMarkers(shiftStationary(frameActors), camera, markerSize, selectedCultivatorId);
+      if(namePillCache?.markers!==markers)namePillCache={markers,plan:makeMapNamePills(markerSize,camera,seenLocations,
+        sitePins,isCurrentLocation,territorySemantics.markers,markers,selectedCultivatorId,avatarId??undefined,
+        strategic||compact&&camera.zoom<2,(kind,text)=>measureMapNamePill(ctx,kind,text))};
+      const {plan}=namePillCache;
+      paintedActors.current = { markers,positions:actorPositions,camera,size:markerSize,scope:clusterScope,
+        sitePins,siteLabels:plan.siteRects };
       if(realmHalos.size&&qiFlow.clip.length){
         ctx.save();
         try{
@@ -941,7 +792,6 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           }
         }finally{ctx.restore();}
       }
-      const marked = new Set<string>();
       for (const marker of markers) {
           if (marker.kind === 'cluster') {
             // Cluster circles and labels are CSS-pixel sized and hit-tested at this exact center.
@@ -1004,24 +854,12 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           ctx.lineWidth = 2;
           ctx.stroke();
 
-          // Name & Realm pill
-          ctx.fillStyle = '#f8fafc';
-          ctx.font = 'bold 11px sans-serif';
-          ctx.textAlign = 'center';
-          const labelCell = `${Math.floor(cx * camera.zoom / 75)}:${Math.floor(cy * camera.zoom / 36)}`;
-          const showName = isSelected || !strategic&&(!compact || camera.zoom >= 2 && !marked.has(labelCell));
-          if (showName) { ctx.fillText(`${cultivator.name}`, cx, cy + 24); marked.add(labelCell); }
-          if (cultivator.id === avatarId) {
-            ctx.fillStyle = '#fde68a';
-            ctx.fillText('临身', cx, cy - 20);
-          }
-          ctx.fillStyle = '#cbd5e1';
-          ctx.font = '10px sans-serif';
-          if (showName) ctx.fillText(
-            `${cultivator.realm}${cultivator.realmStage}`,
-            cx,
-            cy + 36
-          );
+      }
+      if(markerSize.width>0&&markerSize.height>0){
+        ctx.save();
+        ctx.setTransform(width/markerSize.width,0,0,height/markerSize.height,0,0);
+        drawMapNamePills(ctx,plan.pills);
+        ctx.restore();
       }
       if(actorBadgeFacts.size&&qiFlow.clip.length&&markerSize.width>0&&markerSize.height>0){
         // Layout uses the same rendered CSS centers as hit testing. Glyphs never become hit targets.
@@ -1034,7 +872,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           if(badgeLayoutCache?.markers!==markers){
             ctx.font=MAP_ACTOR_BUBBLE_FONT;
             badgeLayoutCache={markers,layout:planMapActorBadgeLayout(markers,actorBadgeFacts,markerSize,selectedCultivatorId,
-              text=>ctx.measureText(text).width)};
+              text=>ctx.measureText(text).width,plan.badgeBlockers)};
           }
           drawMapActorBadges(ctx,badgeLayoutCache.layout,elapsed,animate,scenicPhase);
         } finally {ctx.restore();}
@@ -1090,6 +928,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       const next = canvas.getBoundingClientRect();
       if (next.width === markerSize.width && next.height === markerSize.height) return;
       markerSize = next;
+      sitePins=projectMapSitePins(seenLocations,isCurrentLocation,camera,markerSize);
       staticMarkers = undefined;
       stopOrStart();
     }) : undefined;
@@ -1100,7 +939,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener?.('change',stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, atlasDrawing, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, observedSalvageSites, localGranary, villageMapLabels, civicObservation, usedVillageSegments, furnaceShift, localPavilionDesk, localMemorial, localVillageFair, localStipend, localSeedCulture, localToolLoans, localAlignedWeather, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope, scenicRelief, qiFlow, inspectionEnabled, letters, travel, canvasFlights, combatVfx, actorBadgeFacts, hasBadgeQuote, domes, strategic, arenaMarks, dungeonMark, alchemyMarks, daoMarks, auctionMark, realmHalos, clanCeremonies, ascensionMarks]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, atlasDrawing, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, civicObservation, usedVillageSegments, annotationView, annotationPins, armedBrush, preview, compact, clusterScope, scenicRelief, qiFlow, inspectionEnabled, letters, travel, canvasFlights, combatVfx, actorBadgeFacts, hasBadgeQuote, domes, strategic, arenaMarks, dungeonMark, alchemyMarks, daoMarks, auctionMark, realmHalos, clanCeremonies, ascensionMarks]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1139,7 +978,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     binding.world===world&&binding.scopeKey===scopeKey&&binding.revision===inspectionRevision&&
     binding.viewerId===selectedCultivatorId&&binding.fog===fog&&inspectionEnabled&&!armedBrush);
   const currentInspection=matchesView(inspection)?inspection:undefined;
-  const inspected=useMemo(()=>currentInspection&&projectMapEntityPopover(world,mapView,currentInspection.target,selectedCultivatorId,!historical),
+  const inspected=useMemo(()=>currentInspection&&projectMapEntityPopover(world,mapView,currentInspection.target,selectedCultivatorId,!historical,currentInspection.pinned),
     [world,mapView,currentInspection,selectedCultivatorId,historical]);
   useEffect(()=>{
     setInspection(former=>matchesView(former)?former:undefined);
@@ -1169,7 +1008,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     return true;
   };
   const pinFromIndex=(target:MapEntityTarget,point:MapPoint,trigger:HTMLButtonElement)=>{
-    if(!inspectionEnabled||armedBrush||!projectMapEntityPopover(world,mapView,target,selectedCultivatorId))return;
+    if(!inspectionEnabled||armedBrush||!projectMapEntityPopover(world,mapView,target,selectedCultivatorId,!historical,false))return;
     const screen=mapToScreen(cameraRef.current,point);
     setCluster(undefined);
     setInspection(describeInspection(target,{x:screen.x*100/MAP_WIDTH,y:screen.y*100/MAP_HEIGHT},true,trigger));

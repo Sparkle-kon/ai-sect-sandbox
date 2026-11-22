@@ -40,6 +40,40 @@ export function createTerrainMapView(world: WorldState, viewer: Cultivator | und
   };
 }
 
+const stationaryFan=[
+  {radius:48,angles:[0,-.48,.48]},
+  {radius:68,angles:[-.25,.25,-.60,.60]},
+  {radius:87,angles:[0,-.35,.35,-.63,.63]},
+] as const;
+const FAN_EDGE=99;
+const MAP_WIDTH=1000,MAP_HEIGHT=600;
+const MAX_SHOULDER_ANGLE=.64;
+const orbitOrder=(a:Cultivator,b:Cultivator)=>a.id<b.id?-1:a.id>b.id?1:0;
+
+/** Keep the north/south label lanes clear: only lateral fan slots and a dense outer fan. */
+function stationaryActorPoint(site:LocationNode,slot:number,count:number):MapPoint{
+  if(count===1)return {x:site.x,y:site.y};
+  const sides=site.x<FAN_EDGE?[1]:site.x>MAP_WIDTH-FAN_EDGE?[-1]:[1,-1];
+  const side=sides[slot%sides.length];
+  let local=Math.floor(slot/sides.length),radius=94,angle=0;
+  const vertical=site.y<62?1:site.y>MAP_HEIGHT-62?-1:0;
+  let found=false;
+  for(const ring of stationaryFan){
+    if(local>=ring.angles.length){local-=ring.angles.length;continue;}
+    radius=ring.radius;
+    angle=vertical?vertical*local*MAX_SHOULDER_ANGLE/(ring.angles.length-1):ring.angles[local];
+    found=true;
+    break;
+  }
+  if(!found){
+    // Crowds still have per-actor keys, but existing viewport clustering handles their labels/pixels.
+    const outer=Math.max(1,Math.ceil(count/sides.length)-stationaryFan.reduce((n,ring)=>n+ring.angles.length,0));
+    const spread=(local+.5)/outer;
+    angle=vertical?vertical*spread*MAX_SHOULDER_ANGLE:(2*spread-1)*MAX_SHOULDER_ANGLE;
+  }
+  return {x:site.x+side*Math.cos(angle)*radius,y:site.y+Math.sin(angle)*radius};
+}
+
 /** Same actor centers drive pixels and click hit tests, including under fog. */
 export function mapActorPositions(locations: LocationNode[], actors: Cultivator[], trailPositions?: ReadonlyMap<string, MapPoint>) {
   const groups = new Map<string, Cultivator[]>();
@@ -51,11 +85,10 @@ export function mapActorPositions(locations: LocationNode[], actors: Cultivator[
   }
   const stationary = locations.flatMap((location) => {
     const group = groups.get(location.id) ?? [];
-    return group.map((actor, index) => {
-      const angle = (index / group.length) * Math.PI * 2 - Math.PI / 4;
-      const radius = group.length === 1 ? 0 : 38;
-      return { actor, x: location.x + Math.cos(angle) * radius, y: location.y + Math.sin(angle) * radius };
-    });
+    if(group.length===1)return [{actor:group[0],x:location.x,y:location.y}];
+    if(!group.length)return [];
+    const slots=new Map(group.slice().sort(orbitOrder).map((actor,index)=>[actor,index]));
+    return group.map(actor=>({actor,...stationaryActorPoint(location,slots.get(actor)!,group.length)}));
   });
   const trailGroups = new Map<string, Array<{ actor: Cultivator; point: MapPoint }>>();
   for (const actor of actors) {

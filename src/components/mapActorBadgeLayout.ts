@@ -99,11 +99,17 @@ function bubbleLines(quote:string,maxWidth:number,measure:(text:string)=>number)
 
 /** CSS-only overlay for exactly those solo actors whose markers were already painted. */
 export function planMapActorBadgeLayout(markers:readonly MapActorMarker[],facts:ReadonlyMap<string,MapActorBadgeFact>,
-  viewport:MarkerViewport,selectedId:string|null,measure:(text:string)=>number):MapActorBadgeLayout{
+  viewport:MarkerViewport,selectedId:string|null,measure:(text:string)=>number,reserved:readonly Box[]=[]):MapActorBadgeLayout{
   const {width,height}=viewport;
   if(!finitePositive(width)||!finitePositive(height)||!Number.isSafeInteger(Math.ceil(width))||
     !Number.isSafeInteger(Math.ceil(height))||!facts.size)return {badges:[],bubbles:[]};
   const taken=occupancy();
+  for(const box of reserved){
+    if(![box.x,box.y,box.width,box.height].every(Number.isFinite)||box.width<=0||box.height<=0)continue;
+    const x=Math.max(0,box.x),y=Math.max(0,box.y);
+    const right=Math.min(width,box.x+box.width),bottom=Math.min(height,box.y+box.height);
+    if(right>x&&bottom>y)taken.add({x,y,width:right-x,height:bottom-y});
+  }
   const count=new Map<string,number>();
   const clustered=new Set<string>();
   const present=(marker:MapActorMarker)=>Number.isFinite(marker.x)&&Number.isFinite(marker.y)&&

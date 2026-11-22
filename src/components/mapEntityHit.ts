@@ -1,4 +1,5 @@
-import type { Cultivator, LocationNode } from '../types/world';
+import type {MapLabelRect} from './mapLabelLayout';
+import type { Cultivator, LocationNode,MapPoint } from '../types/world';
 import { closestViewportTarget, MAP_HEIGHT, MAP_WIDTH, mapToScreen } from './mapCamera';
 import type { CameraPoint, MapCamera } from './mapCamera';
 import { pickActorMarker, visibleMarkerMembers } from './mapActorClusters';
@@ -10,6 +11,8 @@ export interface MapEntityPaintedFrame {
   readonly camera: MapCamera;
   readonly size: MarkerViewport;
   readonly scope: string;
+  readonly sitePins?:ReadonlyMap<string,MapPoint>;
+  readonly siteLabels?:ReadonlyMap<string,MapLabelRect>;
 }
 
 interface MapEntityHitInput {
@@ -43,6 +46,16 @@ export function resolveMapEntityHit({
   if (!painted || painted.scope !== scope || painted.positions !== positions || painted.camera !== camera ||
       painted.size.width !== size.width || painted.size.height !== size.height) return { kind: 'stale' };
 
+  const current=seenLocations.filter(site=>isCurrentLocation(site.id));
+  const css={x:screen.x*size.width/MAP_WIDTH,y:screen.y*size.height/MAP_HEIGHT};
+  for(const site of current){
+    const label=painted.siteLabels?.get(site.id);
+    if(label&&css.x>=label.x&&css.y>=label.y&&css.x<=label.x+label.width&&css.y<=label.y+label.height){
+      const point=mapToScreen(camera,painted.sitePins?.get(site.id)??site);
+      return {kind:'site',id:site.id,anchor:{x:point.x*100/MAP_WIDTH,y:point.y*100/MAP_HEIGHT}};
+    }
+  }
+
   const picked = pickActorMarker(painted.markers,
     { x: screen.x * size.width / MAP_WIDTH, y: screen.y * size.height / MAP_HEIGHT }, isTouch);
   if (picked) {
@@ -57,7 +70,11 @@ export function resolveMapEntityHit({
   }
 
   const radius = isTouch ? 22 : Math.max(10, camera.zoom * 20 * size.width / MAP_WIDTH);
-  const site = closestViewportTarget(seenLocations.filter(site => isCurrentLocation(site.id)), camera, screen, size, radius);
+  const displayed=painted.sitePins?.size?current.map(site=>{
+    const pin=painted.sitePins?.get(site.id);
+    return pin?{...site,...pin}:site;
+  }):current;
+  const site = closestViewportTarget(displayed, camera, screen, size, radius);
   if (!site) return { kind: 'none' };
   const point = mapToScreen(camera, site);
   return { kind: 'site', id: site.id, anchor: { x: point.x * 100 / MAP_WIDTH, y: point.y * 100 / MAP_HEIGHT } };

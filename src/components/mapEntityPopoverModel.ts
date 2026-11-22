@@ -1,3 +1,4 @@
+import {projectMapEntitySiteDetails,type MapEntitySiteDetail} from './mapEntitySiteDetails';
 import {projectMapCultivatorPortrait,type CultivatorPortraitSpec} from './cultivatorPortraitModel';
 import {activeAvatar} from '../engine/avatarEngine';
 import {personaLine,privatePersonaText} from '../engine/wildPersonaEngine';
@@ -13,7 +14,7 @@ export type MapEntityAction='treasure'|'lightning'|'whisper';
 export type MapEntityRead=
   | {kind:'actor';target:MapEntityTarget&{kind:'actor'};name:string;realm:string;hp:number;maxHp:number;actionLabel:string;portrait?:CultivatorPortraitSpec;monologue?:string;persona?:string}
   | {kind:'site';target:MapEntityTarget&{kind:'site'};name:string;spiritQi:number;residents:readonly string[];residentCount:number;
-     population?:number;eventTitles:readonly string[]};
+     population?:number;spiritRoot?:LocationNode['spiritRoot'];details?:readonly MapEntitySiteDetail[];eventTitles:readonly string[]};
 
 type View=ReturnType<typeof createTerrainMapView>;
 const simpleActions:Partial<Record<ActionType,string>>={
@@ -74,7 +75,7 @@ function stationaryResidents(world:WorldState,view:View,site:LocationNode):Culti
   return mapActorPositions([site],visible,view.trailPositions).map(row=>row.actor);
 }
 
-export function projectMapEntityPopover(world:WorldState,view:View,target:MapEntityTarget,viewerId?:string|null,livePersonal=false):MapEntityRead|undefined{
+export function projectMapEntityPopover(world:WorldState,view:View,target:MapEntityTarget,viewerId?:string|null,livePersonal=false,includeFacilities=true):MapEntityRead|undefined{
   if(target.kind==='actor'){
     const actor=actorInView(world,view,target.id);
     if(!actor)return undefined;
@@ -90,9 +91,11 @@ export function projectMapEntityPopover(world:WorldState,view:View,target:MapEnt
   const residents=stationaryResidents(world,view,site);
   const viewers=viewerId?world.cultivators.filter(row=>row.id===viewerId):[];
   const [viewer]=viewers;
-  const local=viewers.length===1&&viewer&&trueActor(viewer)&&viewer.locationId===site.id&&
-    !view.trailPositions.has(viewer.id)?villageEvolutionLocalSettlement(world,viewer):undefined;
-  return {kind:'site',target:{kind:'site',id:site.id},name:cap(cleaned(site.name),80),spiritQi:site.spiritQi,
+  const permittedViewer=viewers.length===1&&viewer&&trueActor(viewer)?viewer:undefined;
+  const local=permittedViewer&&residents.includes(permittedViewer)?villageEvolutionLocalSettlement(world,permittedViewer):undefined;
+  const details=includeFacilities?projectMapEntitySiteDetails(world,view,site,residents,permittedViewer):[];
+  return {kind:'site',target:{kind:'site',id:site.id},name:cap(cleaned(site.name),80),spiritQi:site.spiritQi,spiritRoot:site.spiritRoot,
+    ...(details.length?{details}:{}),
     residents:residents.slice(0,MAX_RESIDENT_LABELS).map(actor=>cap(cleaned(actor.name),60)),residentCount:residents.length,
     ...(local?.locationId===site.id?{population:local.population}:{}),eventTitles:localSceneTitles(world,site.id)};
 }

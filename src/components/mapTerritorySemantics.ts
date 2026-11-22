@@ -1,3 +1,4 @@
+import { isScopedExpeditionGate } from '../engine/expeditionOmenTerms';
 import { terrainTileAt } from '../engine/terrainEngine';
 import type { MapPoint,MapTile,WorldState } from '../types/world';
 
@@ -32,11 +33,30 @@ export interface MapTerritorySemantics {
 }
 
 const WIDTH=1000,HEIGHT=600;
+const PLACE_CLEARANCE=54;
+const INSET=.32;
+const orthogonal: readonly (readonly [number,number])[]=[[-1,0],[0,1],[1,0],[0,-1]];
 const before=(a:MapTile,b:MapTile)=>a.row<b.row || a.row===b.row && a.col<b.col;
-const orthogonal: readonly (readonly [number,number])[]=[[-1,0],[1,0],[0,-1],[0,1]];
+interface BoundaryAnchor {tile:MapTile;point:MapPoint;corner:boolean;confirmed:number;distanceSquared:number;ordinal:number}
 
-/** One real in-sight ownership marker per recognized faction. Registration ordinals do not shift with visibility. */
-export function projectMapTerritories(world:WorldState,classify:TerritoryTileVisibility):MapTerritorySemantics {
+function better(candidate:BoundaryAnchor,previous:BoundaryAnchor|undefined):boolean{
+  if(!previous)return true;
+  const safe=(anchor:BoundaryAnchor)=>Number(anchor.distanceSquared>=PLACE_CLEARANCE**2);
+  if(safe(candidate)!==safe(previous))return safe(candidate)>safe(previous);
+  // Prefer an actual boundary/elbow on drawn terrain, then an elbow of the currently drawn fog edge.
+  if(Boolean(candidate.confirmed)!==Boolean(previous.confirmed))return candidate.confirmed>0;
+  if(candidate.corner!==previous.corner)return candidate.corner;
+  if(candidate.confirmed!==previous.confirmed)return candidate.confirmed>previous.confirmed;
+  if(candidate.distanceSquared!==previous.distanceSquared)return candidate.distanceSquared>previous.distanceSquared;
+  return before(candidate.tile,previous.tile)||candidate.tile===previous.tile&&candidate.ordinal<previous.ordinal;
+}
+
+/**
+ * One real currently visible boundary marker per recognized faction. Sites/pins are display
+ * obstacles only; a nearby out-of-sight site, ownership, or hidden annotation is never consulted.
+ */
+export function projectMapTerritories(world:WorldState,classify:TerritoryTileVisibility,
+  avoid:readonly MapPoint[]=[]):MapTerritorySemantics {
   const {columns,rows,tiles}=world.terrain;
   const styles=new Map(world.sects.map((sect,index)=>{
     const mark=patterns[index%patterns.length];
@@ -45,38 +65,52 @@ export function projectMapTerritories(world:WorldState,classify:TerritoryTileVis
   }));
   const visible=new Map<number,MapTile>();
   for(const tile of tiles) if(classify(tile)==='visible') visible.set(tile.row*columns+tile.col,tile);
-  const firstOwned=new Map<string,MapTile>();
-  const firstBoundary=new Map<string,MapTile>();
-  const place=(map:Map<string,MapTile>,owner:string,tile:MapTile)=>{
-    const prior=map.get(owner);
-    if(!prior || before(tile,prior)) map.set(owner,tile);
+  const landmarks=world.locations.filter(site=>{
+    if(isScopedExpeditionGate(site))return false; // only an explicitly cleared caller obstacle may include a scoped gate
+    const tile=terrainTileAt(world,site.x,site.y);
+    return tile&&visible.get(tile.row*columns+tile.col)===tile;
+  });
+  const obstacles:readonly MapPoint[]=[...landmarks,...avoid.filter(point=>{
+    const tile=terrainTileAt(world,point.x,point.y);
+    return tile&&classify(tile)!=='hidden';
+  })];
+  const anchors=new Map<string,BoundaryAnchor>();
+  const choose=(owner:string,tile:MapTile,ordinal:number,dy:number,dx:number,corner:boolean,confirmed:number)=>{
+    const point={x:(tile.col+.5+dx*INSET)*WIDTH/columns,y:(tile.row+.5+dy*INSET)*HEIGHT/rows};
+    const distanceSquared=obstacles.reduce((nearest,obstacle)=>Math.min(nearest,(point.x-obstacle.x)**2+(point.y-obstacle.y)**2),Infinity);
+    const candidate={tile,point,corner,confirmed,distanceSquared,ordinal};
+    if(better(candidate,anchors.get(owner)))anchors.set(owner,candidate);
   };
-  for(const tile of visible.values()) {
+  for(const tile of visible.values()){
     const owner=tile.ownerSectId;
-    if(!owner || !styles.has(owner)) continue;
-    place(firstOwned,owner,tile);
-    if(orthogonal.some(([dy,dx])=>{
+    if(!owner||!styles.has(owner))continue;
+    const edges=orthogonal.map(([dy,dx])=>{
       const row=tile.row+dy,col=tile.col+dx;
-      // A fog edge is only the edge of what is drawn, never a lookup of the hidden neighbour's owner.
-      return row<0 || row>=rows || col<0 || col>=columns || visible.get(row*columns+col)?.ownerSectId!==owner;
-    })) place(firstBoundary,owner,tile);
+      if(row<0||row>=rows||col<0||col>=columns)return 2;
+      const observed=visible.get(row*columns+col);
+      // The absence of a current tile says nothing about the hidden neighbour's owner.
+      return !observed?1:observed.ownerSectId!==owner?2:0;
+    });
+    for(let side=0;side<edges.length;side++){
+      const edge=edges[side];
+      if(!edge)continue;
+      const [dy,dx]=orthogonal[side],next=(side+1)%edges.length;
+      choose(owner,tile,side+orthogonal.length,dy,dx,false,Number(edge===2));
+      if(edges[next]){
+        const [otherY,otherX]=orthogonal[next];
+        choose(owner,tile,side,dy+otherY,dx+otherX,true,Number(edge===2)+Number(edges[next]===2));
+      }
+    }
   }
-  const locations=new Map(world.locations.map(site=>[site.id,site]));
   const byFaction=new Map<string,MapTerritoryStyle>();
   const markers:MapTerritoryMarker[]=[];
-  for(const sect of world.sects) {
-    const style=styles.get(sect.id);
-    const owned=firstOwned.get(sect.id);
-    if(!owned || !style || byFaction.has(sect.id)) continue;
+  for(const sect of world.sects){
+    const style=styles.get(sect.id),anchor=anchors.get(sect.id);
+    if(!anchor||!style||byFaction.has(sect.id))continue;
     byFaction.set(sect.id,style);
-    const headquarters=locations.get(sect.headquartersId);
-    const hqTile=headquarters?.type==='sect_hq' && headquarters.ownerSectId===sect.id
-      ?terrainTileAt(world,headquarters.x,headquarters.y):undefined;
-    const hqCurrent=hqTile && hqTile.ownerSectId===sect.id && visible.has(hqTile.row*columns+hqTile.col)?hqTile:undefined;
-    const tile=hqCurrent??firstBoundary.get(sect.id)??owned;
     markers.push({...style,id:`territory:${sect.id}`,kind:'territory',title:`${style.code} · ${sect.name}`,
-      summary:`${style.patternLabel} · ${hqCurrent?'当前可见宗门驻地格':'当前可见领地边缘（不推断迷雾外归属）'}`,
-      point:{x:(tile.col+.5)*WIDTH/columns,y:(tile.row+.5)*HEIGHT/rows},tileId:tile.id});
+      summary:`${style.patternLabel} · 当前可见领地边缘（不推断迷雾外归属）`,
+      point:anchor.point,tileId:anchor.tile.id});
   }
   return {byFaction,markers};
 }

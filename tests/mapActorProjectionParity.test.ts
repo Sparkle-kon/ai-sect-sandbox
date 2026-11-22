@@ -56,8 +56,20 @@ function equivalent(world: WorldState, viewer: Cultivator | undefined, fog: bool
       before.liveActors.filter(row => !excludesConvoy || !nativeTransit.has(row.id)), before.trailPositions);
     const actual = mapActorPositions(current.seenLocations,
       current.liveActors.filter(row => !excludesConvoy || !optimizedTransit.has(row.id)), current.trailPositions);
-    expect(pos(actual), why + ' projected centers').toEqual(pos(expected));
-    actual.forEach((point, index) => expect(point.actor, why + ' exact actor').toBe(expected[index].actor));
+    expect(actual.map(point=>point.actor.id),why+' old projected actor IDs and order').toEqual(expected.map(point=>point.actor.id));
+    const stationaryCounts=new Map<string,number>();
+    for(const {actor} of expected)if(!before.trailPositions.has(actor.id))
+      stationaryCounts.set(actor.locationId,(stationaryCounts.get(actor.locationId)??0)+1);
+    actual.forEach((point,index)=>{
+      expect(point.actor,why+' exact actor').toBe(expected[index].actor);
+      if(before.trailPositions.has(point.actor.id)||stationaryCounts.get(point.actor.locationId)===1)
+        expect([point.x,point.y],why+' exact legacy trail/single center').toEqual([expected[index].x,expected[index].y]);
+      else {
+        // UI1-1 changes only the placed orbit around a real station, not transport/role projection.
+        const site=current.seenLocations.find(row=>row.id===point.actor.locationId)!;
+        expect(Math.abs(point.x-site.x),why+' leaves site heading lane').toBeGreaterThan(Math.abs(point.y-site.y));
+      }
+    });
   }
   return current;
 }
