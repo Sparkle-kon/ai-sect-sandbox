@@ -65,6 +65,10 @@ export default defineConfig({
           'living-landscape': ['./src/engine/habitatEngine.ts','./src/engine/watchlistEngine.ts'],
           'furnace-damage': ['./src/engine/damageAssuranceEngine.ts'],
           'institution-terms': ['./src/engine/sectActivity.ts','./src/engine/sectCreditTerms.ts'],
+          // Small stateless records also used by save validators; don't absorb them into live scripture logic.
+          'local-work-terms': ['./src/types/waypostMeal.ts', './src/types/craftTraining.ts', './src/types/scribeCommission.ts',
+            './src/engine/staffedDutyEngine.ts', './src/engine/doctrineFoundingTerms.ts', './src/engine/doctrineMaturityTerms.ts',
+            './src/engine/alignedWeatherTerms.ts', './src/engine/careFollowupTerms.ts', './src/engine/annotationState.ts'],
           'institution-rules': ['./src/engine/estateEngine.ts', './src/engine/sectCreditEngine.ts', './src/engine/serviceRetirementEngine.ts', './src/engine/relicExhibitEngine.ts'],
           // Both native settlement and portable scenario verification use the same small leaf proofs.
           'danxia-review-proof': ['./src/engine/danxiaSeasonTerms.ts','./src/engine/danxiaMedicineTerms.ts',
@@ -76,6 +80,9 @@ export default defineConfig({
           'archive-rules': ['./src/engine/coldHistoryEngine.ts', './src/engine/memoryEngine.ts', './src/engine/scenarioObjectiveEngine.ts', './src/engine/chronicleScene.ts',
             './src/engine/chronicleLead.ts', './src/engine/protagonistSuccession.ts', './src/engine/novelGenerator.ts',
             './src/engine/publicDialogueProvenance.ts', './src/engine/chroniclePublicProse.ts'],
+          // Private theatre selection and its save proof are shared by UI, native and storage.
+          'heart-demon-rules': ['./src/engine/heartDemonEngine.ts', './src/engine/interruptedStoryChoices.ts',
+            './src/engine/storageHeartDemonValidation.ts', './src/types/heartDemon.ts'],
           'personal-rules': ['./src/engine/artifactEngine.ts', './src/engine/reincarnationEngine.ts', './src/engine/schemeEngine.ts', './src/engine/elementalEngine.ts'],
           'world-identity': ['./src/engine/worldRandom.ts', './src/engine/worldIdentity.ts', './src/engine/worldgenProfiles.ts'],
           'travel-checkpoints': ['./src/engine/expeditionRescueCheckpoint.ts', './src/engine/boundaryReliefCheckpoint.ts',

@@ -1,5 +1,6 @@
 import { regionalModelPassiveActorIds } from './regionalSimulationEngine';
 import { availableUpperPassageProviderActions,availableFrontierProviderActions,requiredBeforeOrdinaryDecision } from './llmBrain';
+import { activeHeartDemon, isHeartDemonGuided } from './heartDemonEngine';
 import { activeDestinyTraitOffer } from './destinyTraitEngine';
 import { activeRoguelikeEncounter } from './roguelikeEncounterEngine';
 import {activeDanxiaMedicineEscort} from './danxiaMedicineTerms';
@@ -62,12 +63,16 @@ export function modelDecisionCandidates(world: WorldState): Cultivator[] {
     if(!actor.alive||actor.hp<=0||actor.id===commandedId||(world.month===12&&actor.age+1>=actor.lifespan))return false;
     if(actor.positionPlane==='frontier')return availableFrontierProviderActions(actor,world,nextTick).length>0;
     if(actor.positionPlane!==undefined)return availableUpperPassageProviderActions(actor,world,nextTick).length>0;
-    const encounter = activeRoguelikeEncounter(world, actor);
+    const trial = actor.tribulation;
+    const theatre = trial?.stage === 'heart_demon' && (trial.heartTheatreArmed === true || trial.heartDemon !== undefined);
+    const heart = theatre ? activeHeartDemon(world, actor) : undefined;
+    if (theatre && (!heart || heart.queued || isHeartDemonGuided(world, actor, heart))) return false;
+    const encounter = heart ? undefined : activeRoguelikeEncounter(world, actor);
     if (encounter && (encounter.guided || encounter.openedTick !== world.tick)) return false;
-    const destiny = encounter ? undefined : activeDestinyTraitOffer(world, actor);
+    const destiny = heart || encounter ? undefined : activeDestinyTraitOffer(world, actor);
     if (destiny && avatar === actor) return false;
     // Genuine autonomous offers wake only the normal admission guard below, never an invalid body or action lane.
-    return (!passive.has(actor.id) || !!encounter || !!destiny) &&
+    return (!passive.has(actor.id) || !!heart || !!encounter || !!destiny) &&
     (!activeCourierForActor(world, actor) || availableCourierHandoffActions(actor, world, nextTick).some(({ courierHandoffMove }) => courierHandoffMove === 'offer')) &&
     !activeDanxiaMedicineEscort(world,actor)&&!activeEscortForActor(world, actor) && !activeRelocationForActor(world, actor) &&
     !activeSiegeForActor(world, actor) && isEligibleForOccasionDecision(world, actor, nextTick) &&

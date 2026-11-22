@@ -1,5 +1,8 @@
+import type { HeartDemonGuide } from '../types/heartDemon';
+import { heartDemonEffects, isHeartDemonRealm, openHeartDemonFrame, prepareHeartDemonResolution,
+  recordHeartDemonResult } from './heartDemonEngine';
 import { REALM_BASE_POWER, REALM_LIFESPAN, REALM_ORDER } from '../data/initialWorld';
-import type { CultivationRealm, Cultivator, TribulationStance, TribulationTrial, WorldEvent, WorldState } from '../types/world';
+import type { LLMDecisionPayload, CultivationRealm, Cultivator, TribulationStance, TribulationTrial, WorldEvent, WorldState } from '../types/world';
 import { artifactPowerMultiplier, wearArtifact } from './artifactEngine';
 import { recordMemory } from './memoryEngine';
 import { dropInheritance } from './techniqueEngine';
@@ -31,7 +34,7 @@ function trialEvent(world: WorldState, actor: Cultivator, token: string, title: 
     title, description, category, actorIds: participants ?? [actor.id], locationId: actor.locationId };
 }
 
-export function triggerTribulation(world: WorldState, actor: Cultivator): WorldEvent | null {
+export function triggerTribulation(world: WorldState, actor: Cultivator, guide?: Omit<HeartDemonGuide, 'trialId'>): WorldEvent | null {
   if (!actor.alive || actor.hp <= 0 || actor.qiProgress < 90 || isTribulationActive(actor)) return null;
   const target = tribulationTarget(actor);
   const storm = target ? STORMS[target] : undefined;
@@ -39,8 +42,16 @@ export function triggerTribulation(world: WorldState, actor: Cultivator): WorldE
   const previous = actor.tribulation;
   if (previous?.stage === 'failed' && previous.resolvedTick !== undefined && world.tick - previous.resolvedTick < 3) return null;
   const description = `${actor.name}引动${target}天劫，须渡过${storm.waves}重雷劫与心魔一关。`;
-  actor.tribulation = { id: `trial-${actor.id}-${world.tick}`, targetRealm: target, startedTick: world.tick, stage: 'lightning',
-    nextWave: 1, totalWaves: storm.waves, pressure: 0, interruptions: 0, lastActedTick: world.tick, lastOutcome: description };
+  const id = `trial-${actor.id}-${world.tick}`;
+  const avatar = world.playerAvatar;
+  const armed = isHeartDemonRealm(target);
+  const authorized = armed && guide && avatar.possessedId === actor.id && guide.actorId === actor.id &&
+    guide.grantedTick === world.tick && avatar.switchAvailableTick === guide.bindingGeneration &&
+    avatar.possessionUntilTick === guide.originalPossessionUntilTick && guide.originalPossessionUntilTick > world.tick;
+  actor.tribulation = { id, targetRealm: target, startedTick: world.tick, stage: 'lightning',
+    nextWave: 1, totalWaves: storm.waves, pressure: 0, interruptions: 0, lastActedTick: world.tick, lastOutcome: description,
+    ...(armed ? { heartTheatreArmed: true } : {}),
+    ...(authorized ? { heartGuide: { ...guide, trialId: id } } : {}) };
   recordMemory(actor, world.tick, description, 8, 'heavenly', 1);
   return trialEvent(world, actor, 'start', '天劫降临', description);
 }
@@ -68,14 +79,24 @@ function failTrial(world: WorldState, actor: Cultivator, trial: TribulationTrial
   return trialEvent(world, actor, 'failure', lethal ? '渡劫陨落' : '渡劫失败', trial.lastOutcome, lethal ? 'death' : 'heavenly');
 }
 
-export function resolveTribulation(world: WorldState, actor: Cultivator, stance: TribulationStance | undefined, rng: () => number): WorldEvent | null {
+interface HeartTribulationInput {
+  decision?: LLMDecisionPayload;
+  modelInput?: boolean;
+  emit?: (event: WorldEvent) => void;
+}
+export function resolveTribulation(world: WorldState, actor: Cultivator, stance: TribulationStance | undefined,
+  rng: () => number, context?: HeartTribulationInput): WorldEvent | null {
   const trial = actor.tribulation;
   if (!actor.alive || !trial || !isTribulationActive(actor) || trial.startedTick >= world.tick ||
       (trial.lastActedTick ?? trial.startedTick) >= world.tick) return null;
   const storm = STORMS[trial.targetRealm];
   if (!storm || tribulationTarget(actor) !== trial.targetRealm) return null;
+  const heart = trial.stage === 'heart_demon'
+    ? prepareHeartDemonResolution(world, actor, trial, context?.decision, context?.modelInput)
+    : undefined;
+  if (heart?.kind === 'waiting') return null;
   trial.lastActedTick = world.tick;
-  const posture = STANCES[stance ?? recommendedTribulationStance(actor)];
+  const posture = STANCES[heart?.kind === 'ready' ? 'focus' : stance ?? recommendedTribulationStance(actor)];
   if (trial.stage === 'lightning') {
     const wave = trial.nextWave;
     const equipment = Math.min(.32, (artifactPowerMultiplier(actor) - 1) * 1.7);
@@ -100,19 +121,31 @@ export function resolveTribulation(world: WorldState, actor: Cultivator, stance:
     trial.nextWave++;
     if (wave >= trial.totalWaves) trial.stage = 'heart_demon';
     trial.lastOutcome = `${actor.name}以${posture.name}扛过第${wave}/${trial.totalWaves}重劫雷，损失${damage}气血${pillUsed ? '，耗费一枚破障丹抵消部分雷力' : ''}。${trial.stage === 'heart_demon' ? '雷云消退，心魔随即浮现。' : ''}`;
-    return { ...trialEvent(world, actor, `wave-${wave}`, `第${wave}重雷劫`, trial.lastOutcome), damage: impact };
+    const bolt = { ...trialEvent(world, actor, `wave-${wave}`, `第${wave}重雷劫`, trial.lastOutcome), damage: impact };
+    if (trial.stage === 'heart_demon') openHeartDemonFrame(world, actor, trial, bolt);
+    return bolt;
   }
   const grudges = world.relationships.filter((edge) => (edge.fromId === actor.id || edge.toId === actor.id) &&
     (edge.type === '血仇' || edge.affinity <= -40)).reduce((total, edge) => total + (edge.affinity <= -60 ? 6 : 4), 0);
   const obsessions = actor.reflections.reduce((sum, reflection) => sum + (reflection.kind === 'heart_demon' ? reflection.intensity * 2 :
     reflection.kind === 'obsession' ? reflection.intensity : 0), 0);
   const beliefs = actor.reflections.reduce((sum, reflection) => sum + (reflection.kind === 'belief' ? reflection.intensity * 1.6 : 0), 0);
-  const burden = storm.heart + trial.pressure * .30 + Math.min(26, grudges) + Math.min(40, obsessions) + actor.pillToxicity * .08;
-  const stability = 44 + actor.techniqueMastery * .23 + Math.min(26, beliefs) + actor.karma * .06 + posture.will;
+  const effects = heart?.kind === 'ready' ? heartDemonEffects(world, actor, heart.frame, heart.choice) : undefined;
+  const burden = storm.heart + trial.pressure * .30 + Math.min(26, grudges) + Math.min(40, obsessions) +
+    actor.pillToxicity * .08 + (effects?.burdenDelta ?? 0);
+  const stability = 44 + actor.techniqueMastery * .23 + Math.min(26, beliefs) + actor.karma * .06 +
+    posture.will + (effects?.stabilityDelta ?? 0);
   if (stability < burden) {
     const damage = Math.max(1, Math.round(actor.maxHp * clamp(.14 + (burden - stability) * .009, .14, .48)));
+    const hp = actor.hp;
     actor.hp = Math.max(0, actor.hp - damage);
-    return failTrial(world, actor, trial, `心魔压过道心，反噬${damage}气血`);
+    const failure = failTrial(world, actor, trial, `心魔压过道心，反噬${damage}气血`);
+    if (heart?.kind === 'ready') {
+      const receipt = recordHeartDemonResult(world, actor, heart.frame, heart.choice, heart.origin,
+        actor.alive ? 'failed' : 'died', hp - actor.hp);
+      context?.emit?.(receipt);
+    }
+    return failure;
   }
   actor.realm = trial.targetRealm;
   actor.realmStage = 1;
@@ -127,6 +160,10 @@ export function resolveTribulation(world: WorldState, actor: Cultivator, stance:
   trial.resolvedTick = world.tick;
   trial.lastOutcome = `${actor.name}渡过劫雷与心魔，踏入【${actor.realm}】境！`;
   recordMemory(actor, world.tick, trial.lastOutcome, 10, 'cultivation', 5);
+  if (heart?.kind === 'ready') {
+    const receipt = recordHeartDemonResult(world, actor, heart.frame, heart.choice, heart.origin, 'passed', 0);
+    context?.emit?.(receipt);
+  }
   return trialEvent(world, actor, 'passed', '天劫圆满', trial.lastOutcome, 'breakthrough');
 }
 

@@ -1,3 +1,5 @@
+import {HEART_DEMON_CHOICES} from '../types/heartDemon';
+import {validateHeartDemonTrials} from './storageHeartDemonValidation';
 import {DESTINY_TRAIT_IDS} from '../types/destinyTrait';
 import {validateDestinyTraitHistory} from './storageDestinyTraitValidation';
 import {activeRoguelikeEncounter,roguelikeEncounterRoll,roguelikeEncounterRoute,ROGUELIKE_ENCOUNTER_ACTOR_COOLDOWN,
@@ -450,6 +452,27 @@ const destinyTraits=structure({
   pending:optional(structure(destinyOfferFields)),
 });
 
+const trueOnly:Validator=(value,path)=>{if(value!==true)fail(path);};
+const heartPersonality=one('刚正','阴险','狂傲','苟道','痴情','嗜血','逍遥','诡诈');
+const heartTheme=one('cultivation','conflict','community','heavenly');
+const heartChoice=one(...HEART_DEMON_CHOICES);
+const heartGuide=structure({actorId:id,trialId:id,grantedTick:tick,bindingGeneration:tick,originalPossessionUntilTick:tick});
+const heartEvidence:Validator=(value,path)=>{
+  const clause=value as {kind?:unknown;source?:{kind?:unknown}|null}|null;
+  if(clause?.kind==='reflection')return structure({kind:one('reflection'),reflectionId:id,reflectionTick:tick,
+    theme:heartTheme,memoryId:id,memoryTick:tick,memoryCategory:one('cultivation','combat','social','heavenly','whisper')})(value,path);
+  if(clause?.kind==='bond')return structure({kind:one('bond'),otherActorId:id,role:one('血仇','道侣','师徒','挚友'),
+    source:clause.source?.kind==='lineage'?structure({kind:one('lineage'),mentorId:id,studentId:id,tick}):
+      structure({kind:one('scene'),eventId:id,tick})})(value,path);
+  return structure({kind:one('mirror')})(value,path);
+};
+const heartFrame=structure({id,actorId:id,siteId:id,openedTick:tick,finalWaveEventId:id,evidence:heartEvidence,
+  queued:optional(structure({choice:heartChoice,queuedTick:tick})),releasedTick:otick,cancelledTick:otick,
+  result:optional(structure({choice:heartChoice,origin:one('player','utility','model'),resolvedTick:tick,
+    outcome:one('passed','failed','died'),damage:wealth,karmaDelta:num(-200,200),masteryDelta:num(-100,100),
+    personalityBefore:optional(heartPersonality),personalityAfter:optional(heartPersonality)})),
+});
+
 const shape = structure({
   roguelikeEncounters:optional(arr(SAVE_COLLECTION_LIMIT,roguelikeRecord)),
   tick, interventionSequence:tick, year:tick, month,
@@ -476,7 +499,8 @@ const shape = structure({
       witnessScope:optional(one('participants')),lead:optional(bool)})),
     activeScheme:optional(structure({id,kind:one('infiltration','foundation_pill','vengeance','artifact_heist'),title:text,status:one('active','completed','failed'),
       startedTick:tick,finishedTick:otick,stepIndex:count,steps:arr(32,structure({label:text,completedTick:otick})),targetCultivatorId:oid,targetLocationId:oid,artifactName:otext,outcome:otext})),
-    tribulation:optional(structure({id,targetRealm:realm,startedTick:tick,stage:one('lightning','heart_demon','passed','failed'),nextWave:count,totalWaves:count,
+    tribulation:optional(structure({heartTheatreArmed:optional(trueOnly),heartGuide:optional(heartGuide),heartDemon:optional(heartFrame),
+      id,targetRealm:realm,startedTick:tick,stage:one('lightning','heart_demon','passed','failed'),nextWave:count,totalWaves:count,
       pressure:percentage,interruptions:count,resolvedTick:otick,lastOutcome:otext,lastActedTick:otick})),
     service:optional(structure({status:one('retired','serving'),changedTick:tick,retiredTick:tick,formerSectId:id,formerRank:sectRank})),
     guardAssignment:optional(structure({locationId:id,assignedTick:tick,expiresTick:tick})),namedHeirId:oid,alive:bool})),
@@ -1588,6 +1612,7 @@ function verifyWorld(value: unknown): WorldState {
   const actor = unique(w.cultivators, (item) => item.id, 'cultivators.id');
   validateRoguelikeEncounterHistory(w,actor);
   validateDestinyTraitHistory(w,fail);
+  validateHeartDemonTrials(w,actor,fail);
   const ordinaryTrace = new Map(w.decisionTrace.records.map(row=>[row.id,row]));
   for(const person of w.cultivators){
     const receipt=person.ordinaryActionEvidence;

@@ -1,3 +1,5 @@
+import {activeHeartDemon, isHeartDemonGuided, recommendHeartDemonChoice} from './heartDemonEngine';
+import {HEART_DEMON_CHOICES} from '../types/heartDemon';
 import {activeDestinyTraitOffer, chooseDestinyTraitDecision, destinyDuelAppetite} from './destinyTraitEngine';
 import {activeAvatar} from './avatarEngine';
 import type {DestinyTraitOffer} from '../types/destinyTrait';
@@ -193,6 +195,22 @@ function urgentOrdinaryRecovery(actor:Cultivator,world:WorldState,alchemy?:Retur
 const holdsCivicAppendAvatar=(actor:Cultivator,world:WorldState,tick:number)=>
   world.playerAvatar.possessedId===actor.id&&(world.playerAvatar.possessionUntilTick??0)>tick;
 
+function usesHeartDemonTheatre(actor: Cultivator): boolean {
+  const trial = actor.tribulation;
+  return trial?.stage === 'heart_demon' && (trial.heartTheatreArmed === true || trial.heartDemon !== undefined);
+}
+
+function utilityHeartDemonDecision(world: WorldState, actor: Cultivator): LLMDecisionPayload | undefined {
+  if (!usesHeartDemonTheatre(actor)) return undefined;
+  const frame = activeHeartDemon(world, actor);
+  if (!frame || frame.queued || isHeartDemonGuided(world, actor, frame)) {
+    // A waiting player or queued order has no Utility choice. The native resolver owns that branch.
+    return { chosenAction: 'FACE_TRIBULATION', innerMonologue: '道心未定，只守眼下这一关。' };
+  }
+  return { chosenAction: 'FACE_TRIBULATION', targetHeartTrialId: actor.tribulation!.id,
+    heartDemonChoice: recommendHeartDemonChoice(world, actor, frame), innerMonologue: '幻象不可作实，只依此心抉择。' };
+}
+
 /**
  * Narrow live execution guard for a provider-chosen ordinary fallback only.
  * It does not run the full Utility tree or consume RNG, and must never override an actual sanctioned avatar order.
@@ -203,6 +221,8 @@ export function requiredBeforeOrdinaryDecision(actor:Cultivator,world:WorldState
       activeEscortForActor(world,actor)||activeCourierForActor(world,actor)||courierActedThisTick(world,actor)||
       activePilgrimageForActor(world,actor)||boundaryReliefCheckpoint(world,actor))return undefined;
   if(isTribulationActive(actor)){
+    const heart = utilityHeartDemonDecision(world, actor);
+    if (heart) return heart;
     const tribulationStance=recommendedTribulationStance(actor);
     return {chosenAction:'FACE_TRIBULATION',tribulationStance,innerMonologue:'雷劫已实际临身，先应付眼下的关口。'};
   }
@@ -449,6 +469,8 @@ export function computeHeuristicDecision(
     return { chosenAction: 'REST', innerMonologue: '正随迁宗队列行军，本月不单独行动。' };
   }
   if (isTribulationActive(cultivator)) {
+    const heart = utilityHeartDemonDecision(world, cultivator);
+    if (heart) return heart;
     const tribulationStance = recommendedTribulationStance(cultivator);
     return {
       chosenAction: 'FACE_TRIBULATION', tribulationStance,
@@ -1811,6 +1833,27 @@ function decodeDestinyTraitDecision(parsed: Partial<LLMDecisionPayload>, offer: 
     innerMonologue: '诸般天命已现，且取一途践行。' };
 }
 
+const heartDemonDecisionFields = ['chosenAction', 'targetHeartTrialId', 'heartDemonChoice'] as const;
+
+function decodeHeartDemonDecision(parsed: Partial<LLMDecisionPayload>, exactTrialId: string): LLMDecisionPayload | undefined {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) ||
+      Object.keys(parsed).length !== heartDemonDecisionFields.length ||
+      !heartDemonDecisionFields.every(key => Object.hasOwn(parsed, key)) ||
+      parsed.chosenAction !== 'FACE_TRIBULATION' || parsed.targetHeartTrialId !== exactTrialId) return undefined;
+  const heartDemonChoice = HEART_DEMON_CHOICES.find(choice => choice === parsed.heartDemonChoice);
+  if (!heartDemonChoice) return undefined;
+  return { chosenAction: 'FACE_TRIBULATION', targetHeartTrialId: exactTrialId, heartDemonChoice,
+    innerMonologue: '只择眼下的一条路，不把幻象错认成真的。' };
+}
+
+/** Legacy lightning posture facts are a whitelist, never a serialization of a guided heart scene. */
+function nativeTribulationPromptView(actor: Cultivator) {
+  const trial = actor.tribulation;
+  if (!trial || !isTribulationActive(actor)) return null;
+  const { targetRealm, startedTick, stage, nextWave, totalWaves, pressure, interruptions, lastActedTick } = trial;
+  return { targetRealm, startedTick, stage, nextWave, totalWaves, pressure, interruptions, lastActedTick };
+}
+
 /** A provider-only lane. Missing/invalid/unsent results never synthesize a Utility decision here. */
 export async function requestCultivatorLLMDecision(
   cultivator: Cultivator,
@@ -1854,6 +1897,22 @@ export async function requestCultivatorLLMDecision(
       `从许可中成对照抄 targetDispatchId 和 targetCourierId。不要填写路段、地点、地址、封信内容、费用或他人身份。` +
       `选项：${JSON.stringify(ids)}`;
     return requestDecisionPrompt(config, requestTick, options, prompt, (payload) => decodeCourierHandoff(payload, handoffs), 150);
+  }
+
+  if (usesHeartDemonTheatre(cultivator)) {
+    const frame = activeHeartDemon(world, cultivator);
+    const exactTrialId = cultivator.tribulation?.id;
+    if (!frame || !exactTrialId || frame.queued || isHeartDemonGuided(world, cultivator, frame) ||
+        requestTick !== world.tick + 1) return undefined;
+    const candidates = HEART_DEMON_CHOICES.map(heartDemonChoice => ({
+      chosenAction: 'FACE_TRIBULATION', targetHeartTrialId: exactTrialId, heartDemonChoice,
+    }));
+    const prompt = '眼前只是心魔幻象。sever 斩断牵念；wrath 以怒相抗；face 承认而不追随。' +
+      `只原样复制下列一个完整 JSON 对象；不填写独白、人物、证据、应劫姿态、数值或结果。许可：${JSON.stringify(candidates)}`;
+    return requestDecisionPrompt(config, requestTick, options, prompt, parsed =>
+      requestTick === world.tick + 1 && cultivator.tribulation?.id === exactTrialId &&
+      activeHeartDemon(world, cultivator) === frame && !frame.queued && !isHeartDemonGuided(world, cultivator, frame)
+        ? decodeHeartDemonDecision(parsed, exactTrialId) : undefined, 150);
   }
 
   const encounter = activeRoguelikeEncounter(world, cultivator);
@@ -2165,7 +2224,7 @@ ${waterVeinOptions.length ? `- 本人在场的水线许可，只抄 waterVeinMov
 - 并宗只有核对本人现场和全部未结职责之后才有资格；单人签字不同于结案，不可写新资金或强行迁人：${JSON.stringify(maturityOptions)}
 - 宗门经营许可：${JSON.stringify(availableSectEconomyActions(cultivator, world))}；巡守派任：${JSON.stringify(cultivator.guardAssignment ?? null)}
 - 宗门职位：${cultivator.sectRank}；贡献：${cultivator.contribution}；当前可行的宗门权力行动：${JSON.stringify(availableLeadershipActions(cultivator, world))}
-- 自身天劫：${JSON.stringify(isTribulationActive(cultivator) ? cultivator.tribulation : null)}；如果正在应劫，须选择 FACE_TRIBULATION；同地可袭扰的仇敌：${JSON.stringify(availableAmbushTargets(cultivator, world).map((target) => ({ id: target.id, name: target.name })))}
+- 自身天劫：${JSON.stringify(nativeTribulationPromptView(cultivator))}；如果正在应劫，须选择 FACE_TRIBULATION；同地可袭扰的仇敌：${JSON.stringify(availableAmbushTargets(cultivator, world).map((target) => ({ id: target.id, name: target.name })))}
 - 法宝状况：${JSON.stringify(ownArtifactView)}；本地可用炼器行动：${JSON.stringify(availableArtifactActions(cultivator, world, requestTick))}
 - 拆解旧器 SALVAGE_ARTIFACT 不可反悔；只成对复制本人于本地执行回合实有的 targetArtifactId、targetLocationId。不填写物料、回收量、耐久、归属或对白：${JSON.stringify(salvageOptions)}
 - 灵植留种只复制本人在实地可执行的许可：reserve 只填 targetLocationId；test、plant 只填 targetSeedLotId；harvest 只填 targetSeedPlotId。不要填写天气、样本量、出苗、收成或远处地点：${JSON.stringify(seedPromptOptions)}
@@ -2192,6 +2251,9 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
 ${COGNITIVE_RESPONSE_GUIDE}`;
 
   return requestDecisionPrompt(config, requestTick, options, prompt, (parsed) => {
+          // Old lightning/legacy trials cannot smuggle heart-scene fields alongside a valid stance.
+          if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) ||
+              Object.hasOwn(parsed, 'targetHeartTrialId') || Object.hasOwn(parsed, 'heartDemonChoice')) return undefined;
           const validActions: ActionType[] = [
             'CULTIVATE',
             'BREAKTHROUGH',

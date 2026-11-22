@@ -1,3 +1,4 @@
+import { interruptStoryChoicesOnDeath } from './interruptedStoryChoices';
 import {disasterShelterCheckpoint} from './disasterShelterCheckpoint';
 import {reconcileDisasterShelterDeaths} from './disasterShelterEngine';
 import { advanceProbation } from './probationEngine';
@@ -57,10 +58,7 @@ function hurt(world: WorldState, people: Cultivator[], amount: (person: Cultivat
     recordMemory(person, world.tick, `${source}波及自身，损失${old - person.hp}气血。`, 7, 'heavenly', -4);
     if (person.hp === 0) {
       person.alive = false;
-      const trial = person.tribulation;
-      if (trial && (trial.stage === 'lightning' || trial.stage === 'heart_demon')) {
-        trial.stage = 'failed'; trial.resolvedTick = world.tick; trial.lastOutcome = source + '致渡劫中断。';
-      }
+      interruptStoryChoicesOnDeath(person, world.tick, source + '致渡劫中断。');
       dropInheritance(person, world);
     }
   }

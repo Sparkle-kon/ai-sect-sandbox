@@ -1,3 +1,5 @@
+import {activeHeartDemon, isHeartDemonGuided} from './heartDemonEngine';
+import {HEART_DEMON_CHOICES} from '../types/heartDemon';
 import {disasterShelterCheckpoint} from './disasterShelterCheckpoint';
 import { cloneWorldWithColdHistory } from './coldHistoryEngine';
 import { COHORT_MAX_INVITEES } from './apprenticeCohortEngine';
@@ -23,6 +25,18 @@ function sortCandidates(candidates: DecisionTraceCandidate[]): DecisionTraceCand
 }
 function isSafeAction(action: LLMDecisionPayload['chosenAction']): action is PublicTraceAction { return SAFE_ACTIONS.has(action); }
 
+function isPrivateHeartTurn(world: WorldState, actorId: string, decision: LLMDecisionPayload): boolean {
+  // Never expose even a rejected theatre token as part of the public lightning comparison.
+  if (decision.targetHeartTrialId !== undefined || decision.heartDemonChoice !== undefined) return true;
+  const trial = world.cultivators.find(({ id }) => id === actorId)?.tribulation;
+  const frame = trial?.heartDemon;
+  if (frame?.actorId === actorId && frame.openedTick < world.tick) {
+    if (trial?.stage === 'heart_demon' || frame.result?.resolvedTick === world.tick || frame.cancelledTick === world.tick) return true;
+  }
+  // A final lightning wave is still a real public stance: do not redact the very turn that opened its next scene.
+  return trial?.stage === 'heart_demon' && trial.heartTheatreArmed === true && !frame;
+}
+
 /** Restricted comparison menu, not a log of private utility branches or model reasoning. */
 export function legalTraceCandidates(world: WorldState, actor: Cultivator): DecisionTraceCandidate[] {
   if (!actor.alive || actor.hp <= 0 || actor.positionPlane!==undefined) return [];
@@ -32,6 +46,7 @@ export function legalTraceCandidates(world: WorldState, actor: Cultivator): Deci
   if (isTribulationActive(actor)) {
     if (actor.tribulation?.lastActedTick === world.tick) return [];
     const heart = actor.tribulation?.stage === 'heart_demon';
+    if (heart && (actor.tribulation?.heartTheatreArmed === true || actor.tribulation?.heartDemon !== undefined)) return [];
     add({ action: 'FACE_TRIBULATION', reason: 'tribulation', score: !heart ? 80 + (1 - health) * 15 : 62, tribulationStance: 'guard' });
     add({ action: 'FACE_TRIBULATION', reason: 'tribulation', score: heart ? 94 : 76, tribulationStance: 'focus' });
     add({ action: 'FACE_TRIBULATION', reason: 'tribulation', score: heart ? 48 : 40 + health * 32, tribulationStance: 'defy' });
@@ -69,8 +84,9 @@ export function recordDecisionTrace(world: WorldState, actorId: string, candidat
   const reasons: Record<PublicTraceAction, DecisionTraceCandidate['reason']> = {
     REST: 'recover', CULTIVATE: 'cultivate', BREAKTHROUGH: 'ready', SOCIALIZE: 'social', EXPLORE: 'travel', FACE_TRIBULATION: 'tribulation',
   };
+  const privateTheatre = isPrivateHeartTurn(world, actorId, decision);
   const picks: DecisionTraceCandidate[] = [];
-  for (const item of candidates) {
+  for (const item of privateTheatre ? [] : candidates) {
     if (!isSafeAction(item.action) || !Number.isFinite(item.score)) continue;
     const choice: Omit<DecisionTraceCandidate, 'id'> = { action: item.action, score: clampScore(item.score), reason: reasons[item.action] };
     if (item.action === 'EXPLORE') {
@@ -91,7 +107,7 @@ export function recordDecisionTrace(world: WorldState, actorId: string, candidat
     item.targetLocationId === decision.targetLocationId && item.targetCultivatorId === decision.targetCultivatorId &&
     item.tribulationStance === decision.tribulationStance);
   const id = `decision-${world.tick}-${actorId}`;
-  const chosenAction = isSafeAction(decision.chosenAction) ? decision.chosenAction : 'redacted';
+  const chosenAction = !privateTheatre && isSafeAction(decision.chosenAction) ? decision.chosenAction : 'redacted';
   const record: DecisionTraceRecord = { id, actorId, tick: world.tick, source, applied, chosenAction, candidates: allowed,
     ...(match ? { chosenCandidateId: match.id } : {}) };
   world.decisionTrace.records = [...world.decisionTrace.records.filter((entry) => entry.id !== id), record].slice(-DECISION_TRACE_LIMIT);
@@ -103,11 +119,12 @@ export interface DecisionReplayTape {
   readonly baseTick: number;
   readonly councilMode: ReplayCouncilMode;
 }
-const runtimeTapes = new WeakMap<DecisionReplayTape, { base: WorldState; decisions: Map<string, LLMDecisionPayload>; draws: Map<string, number> }>();
+const runtimeTapes = new WeakMap<DecisionReplayTape, { base: WorldState; decisions: Map<string, LLMDecisionPayload>;
+  draws: Map<string, number>; heartModelActors: Set<string> }>();
 
 export function createDecisionReplayTape(base: WorldState, councilMode: ReplayCouncilMode): DecisionReplayTape {
   const token = Object.freeze({ baseTick: base.tick, councilMode });
-  runtimeTapes.set(token, { base: cloneWorldWithColdHistory(base), decisions: new Map(), draws: new Map() });
+  runtimeTapes.set(token, { base: cloneWorldWithColdHistory(base), decisions: new Map(), draws: new Map(), heartModelActors: new Set() });
   return token;
 }
 
@@ -119,7 +136,8 @@ const MECHANICAL_FIELDS = [
   'targetScoreId', 'observatoryMove', 'observatoryStation', 'targetObservatoryTick', 'alignedWeatherMove', 'targetAlignedWeatherId', 'arbitrationMove', 'targetTenderTick', 'roadMove', 'targetRoadId', 'probationMove', 'targetProbationId', 'targetExpulsionId', 'probationFirstVillageId', 'probationSecondVillageId', 'probationVote', 'exhibitMove', 'targetRelicExhibitId', 'workshopMove', 'toolLoanMove', 'targetToolLoanId', 'workshopCapacityMove', 'disasterShelterMove', 'targetDisasterShelterId', 'craftTrainingMove', 'targetCraftTraineeId', 'targetCraftTrainingId', 'waypostMealMove', 'targetWaypostMealId', 'workshopEstateMove', 'workshopReleaseMove', 'targetWorkshopReleaseId', 'scribeCommissionMove', 'targetScribeCommissionId', 'furnaceMove', 'targetFurnaceReservationId', 'furnaceSafetyMove', 'targetFurnaceSafetyId', 'damageAssuranceMove', 'targetDamageAssuranceId', 'sparringMove', 'targetSparringId', 'sparringRounds', 'rescueMove', 'targetExpeditionRescueId', 'shortShiftMove', 'targetShortShiftId', 'boundaryReliefMove', 'targetBoundaryReliefId', 'cohortMove', 'targetCohortId', 'nameMove', 'householdAlias', 'targetHouseholdNameId', 'restitutionMove', 'targetRestitutionId', 'granaryMove', 'villageSupplyMove', 'targetVillageSupplyId', 'villageFairMove', 'targetVillageFairId', 'targetWorkshopId', 'workshopTier', 'workshopQuantity', 'workshopQualityFloor', 'targetTerrainTileId', 'commonsMove', 'targetCommonsId', 'targetCommonsThirdSectId', 'serviceMove', 'courierMove', 'courierHandoffMove', 'targetCourierId', 'dispatchCue', 'targetDispatchId', 'targetDispatchSourceId', 'villageWorkKind', 'guardianMove', 'targetGuardianshipId', 'leaseMove', 'targetTerritorialLeaseId', 'formationMove', 'targetFormationLinkId', 'infirmaryMove', 'targetInfirmaryCaseId', 'careFollowupMove', 'targetCareFollowupId', 'stipendMove', 'targetStipendId', 'habitatMove', 'targetBeastReleaseId', 'chronicleErrataMove', 'targetChronicleSourceId', 'chronicleReliefReading', 'pilgrimageMove', 'targetPilgrimageId', 'targetPilgrimageNextStopId', 'routeWarningMove', 'targetRouteWarningId', 'targetRouteObservationId', 'creditMove', 'targetCreditId', 'sanctuaryMove', 'targetSanctuaryId', 'researchMove', 'researchTopic', 'targetResearchId', 'researchWithdrawReason', 'ceasefireMove', 'targetCeasefireId', 'escortMove', 'marketFreightMove', 'targetShipmentId', 'targetEscortId', 'targetHazardId', 'seasonMove', 'editionMove', 'targetScriptureOriginalId', 'targetScriptureEditionId', 'pavilionLoanMove', 'targetPavilionLoanId', 'relicMove', 'targetRelicFragmentId', 'targetRelicSetId', 'recollectionMove', 'relocationMove', 'targetRelocationId', 'doctrineMove', 'doctrineTheme', 'targetDoctrineSchoolId', 'targetDoctrineProposalId',
 ] as const satisfies readonly (keyof LLMDecisionPayload)[];
 
-export function rememberReplayDecision(tape: DecisionReplayTape, actorId: string, decision: LLMDecisionPayload, rngDraws = 0): void {
+export function rememberReplayDecision(tape: DecisionReplayTape, actorId: string, decision: LLMDecisionPayload,
+  rngDraws = 0, heartModel = false): void {
   const state = runtimeTapes.get(tape);
   if (!state) return;
   const details = Object.fromEntries(MECHANICAL_FIELDS.flatMap((key) => {
@@ -131,8 +149,19 @@ export function rememberReplayDecision(tape: DecisionReplayTape, actorId: string
   const cohortInviteeIds = decision.chosenAction === 'APPRENTICE_COHORT' && decision.cohortMove === 'offer' &&
     Array.isArray(ids) && ids.length >= 2 && ids.length <= COHORT_MAX_INVITEES && Array.from(ids).every((id) => typeof id === 'string' && id.length > 0) &&
     new Set(ids).size === ids.length ? ids.slice() : undefined;
+  const actor = decision.chosenAction === 'FACE_TRIBULATION' && decision.targetHeartTrialId &&
+    decision.heartDemonChoice && decision.tribulationStance === undefined ?
+      state.base.cultivators.find(({ id }) => id === actorId) : undefined;
+  const frame = actor && activeHeartDemon(state.base, actor);
+  // Retain only an exact native menu selection in the private runtime tape, never its evidence or prose.
+  const personalHeartChoice = actor && frame && !frame.queued && !isHeartDemonGuided(state.base, actor, frame) &&
+    decision.targetHeartTrialId === actor.tribulation?.id && decision.heartDemonChoice &&
+    HEART_DEMON_CHOICES.includes(decision.heartDemonChoice) ?
+    { targetHeartTrialId: decision.targetHeartTrialId, heartDemonChoice: decision.heartDemonChoice } : undefined;
   state.decisions.set(actorId, { ...details, chosenAction: decision.chosenAction, innerMonologue: '',
-    ...(cohortInviteeIds ? { cohortInviteeIds } : {}) });
+    ...(cohortInviteeIds ? { cohortInviteeIds } : {}), ...personalHeartChoice });
+  if (personalHeartChoice && heartModel) state.heartModelActors.add(actorId);
+  else state.heartModelActors.delete(actorId);
   state.draws.set(actorId, Number.isSafeInteger(rngDraws) && rngDraws > 0 ? Math.min(rngDraws, 512) : 0);
 }
 
@@ -155,7 +184,7 @@ export interface DecisionReplayComparison {
 export type DecisionReplayResult = { ok: true; comparison: DecisionReplayComparison } | { ok: false; reason: string };
 export type ReplayAdvance = (base: WorldState, decisions: Record<string, LLMDecisionPayload>, councilMode: ReplayCouncilMode,
   onActor: (actorId: string, candidates: DecisionTraceCandidate[], applied: boolean) => void,
-  decisionDraws: Readonly<Record<string, number>>) => WorldState;
+  decisionDraws: Readonly<Record<string, number>>, heartModelActors?: ReadonlySet<string>) => WorldState;
 
 function metrics(world: WorldState, actor: Cultivator): DecisionReplayMetrics {
   return { alive: actor.alive, hp: actor.hp, qiProgress: actor.qiProgress, realm: actor.realm, realmStage: actor.realmStage,
@@ -172,6 +201,7 @@ export function replayOneTurn(tape: DecisionReplayTape, baseline: WorldState, tr
   const trace = baseline.decisionTrace.records.find((item) => item.id === traceId && item.tick === baseline.tick);
   const actor = trace ? baseline.cultivators.find(({ id }) => id === trace.actorId) : undefined;
   if (!trace || !actor || !privateState.decisions.has(trace.actorId)) return { ok: false, reason: '找不到同回合的实际执行记录。' };
+  if (trace.chosenAction === 'redacted') return { ok: false, reason: '未公开行动不在自动复演范围内。' };
   const alternate = trace.candidates.find((item) => item.id === candidateIdToApply);
   if (!alternate || alternate.id === trace.chosenCandidateId) return { ok: false, reason: '请选择不同的合法备选行动。' };
   if (trace.source === 'avatar') return { ok: false, reason: '玩家接管的行动不在自动复演范围内。' };
@@ -184,6 +214,8 @@ export function replayOneTurn(tape: DecisionReplayTape, baseline: WorldState, tr
     ...(decision.cohortInviteeIds ? { cohortInviteeIds: decision.cohortInviteeIds.slice() } : {}),
   }]));
   const draws = Object.freeze(Object.fromEntries(privateState.draws));
+  // A consumer receives an isolated copy for each replay; it cannot alter the live private provenance.
+  const copyHeartModelActors = () => privateState.heartModelActors.size ? new Set(privateState.heartModelActors) : undefined;
   const decisions = copyDecisions();
   decisions[actor.id] = {
     chosenAction: alternate.action, innerMonologue: '',
@@ -198,12 +230,12 @@ export function replayOneTurn(tape: DecisionReplayTape, baseline: WorldState, tr
   try {
     control = advance(structuredClone(privateState.base), copyDecisions(), tape.councilMode, (actorId, _now, applied) => {
       if (actorId === actor.id) originalObserved = applied === trace.applied;
-    }, draws);
+    }, draws, copyHeartModelActors());
     replay = advance(structuredClone(privateState.base), decisions, tape.councilMode, (actorId, now, applied) => {
       if (actorId === actor.id) accepted = applied && now.some((option) => option.id === alternate.id && option.action === alternate.action &&
         option.targetLocationId === alternate.targetLocationId && option.targetCultivatorId === alternate.targetCultivatorId &&
         option.tribulationStance === alternate.tribulationStance);
-    }, draws);
+    }, draws, copyHeartModelActors());
   } catch {
     return { ok: false, reason: '该隔离回合未能完整复演。' };
   }

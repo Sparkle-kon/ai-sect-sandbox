@@ -1,3 +1,4 @@
+import type { HeartDemonChoice, HeartDemonFrame, HeartDemonGuide } from './heartDemon';
 import type { DestinyTraitId, DestinyTraitProgress } from './destinyTrait';
 import type {RoguelikeEncounterChoice,RoguelikeEncounterRecord} from './roguelikeEncounter';
 import type {FrontierAnchorId,FrontierMovementMove,FrontierPositionPlane,FrontierSiteId,FrontierState} from '../engine/frontierTerms';
@@ -380,6 +381,9 @@ export interface CultivatorScheme {
 export type TribulationStance = 'guard' | 'focus' | 'defy';
 
 export interface TribulationTrial {
+  heartTheatreArmed?: true;
+  heartGuide?: HeartDemonGuide;
+  heartDemon?: HeartDemonFrame;
   id: string;
   targetRealm: CultivationRealm;
   startedTick: number;
@@ -520,6 +524,8 @@ export interface LLMConfig {
 }
 
 export interface LLMDecisionPayload {
+  targetHeartTrialId?: string;
+  heartDemonChoice?: HeartDemonChoice;
   targetRoguelikeEncounterId?:string;
   roguelikeEncounterChoice?:RoguelikeEncounterChoice;
   targetDestinyOfferId?: string;

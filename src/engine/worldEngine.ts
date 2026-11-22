@@ -1,3 +1,4 @@
+import { interruptStoryChoicesOnDeath } from './interruptedStoryChoices';
 import {onLowerPlane} from './upperPassageIsolation';
 import {isUpperArrayFieldAction,resolveUpperArrayFieldAction} from './upperArrayFieldActions';
 import {advanceUpperArrayFieldTrade} from './upperArrayFieldTradeEngine';
@@ -199,11 +200,7 @@ export function adjustRelationship(
 }
 
 function closeInterruptedTrial(actor: Cultivator, tick: number): void {
-  if (actor.tribulation && isTribulationActive(actor)) {
-    actor.tribulation.stage = 'failed';
-    actor.tribulation.resolvedTick = tick;
-    actor.tribulation.lastOutcome = '应劫者已先行陨落，本次天劫中断。';
-  }
+  interruptStoryChoicesOnDeath(actor, tick, '应劫者已先行陨落，本次天劫中断。');
 }
 
 function recordAuxiliaryActionEvent(world: WorldState, event: WorldEvent, emit?: (value: WorldEvent) => void): void {
@@ -244,6 +241,7 @@ export function applyCultivatorBrainDecision(
   authorizedBountyTargetId?: string,
   emit?: (event: WorldEvent) => void,
   explicitAvatarDecision?: LLMDecisionPayload,
+  modelInput = false,
 ): WorldEvent | null {
   if (!cultivator.alive) return null;
   if(cultivator.positionPlane==='frontier'){
@@ -269,7 +267,7 @@ export function applyCultivatorBrainDecision(
     const stance = !forced && decision.tribulationStance ? decision.tribulationStance : recommendedTribulationStance(cultivator);
     cultivator.currentAction = 'FACE_TRIBULATION';
     cultivator.innerMonologue = forced ? '天劫未止，无暇旁顾，先守住雷心。' : decision.innerMonologue;
-    return resolveTribulation(world, cultivator, stance, rng);
+    return resolveTribulation(world, cultivator, stance, rng, { decision: !forced ? decision : undefined, modelInput, emit });
   }
   if(activeDanxiaMedicineEscort(world,cultivator)||danxiaMedicineActedThisTick(world,cultivator)){
     cultivator.currentAction='DANXIA_MEDICINE';
@@ -733,7 +731,15 @@ export function applyCultivatorBrainDecision(
     }
 
     case 'BREAKTHROUGH': {
-      if (tribulationTarget(cultivator)) return triggerTribulation(world, cultivator);
+      if (tribulationTarget(cultivator)) {
+        const avatar = world.playerAvatar;
+        const originalPossessionUntilTick = avatar.possessionUntilTick;
+        const guide = originalPossessionUntilTick !== undefined && activeAvatar(world) === cultivator
+          ? { actorId: cultivator.id, grantedTick: world.tick, bindingGeneration: avatar.switchAvailableTick,
+              originalPossessionUntilTick }
+          : undefined;
+        return triggerTribulation(world, cultivator, guide);
+      }
       return resolveOrdinaryBreakthrough(world,cultivator,location?.name,rng);
     }
 
@@ -971,6 +977,7 @@ export function advanceWorldTick(
     onWatchBatch?: (events: readonly WorldEvent[]) => void;
     onCompletedEvents?: (events: readonly WorldEvent[]) => void;
     replayDraws?: Readonly<Record<string, number>>;
+    replayHeartModelActors?: ReadonlySet<string>;
     onActor?: (actorId: string, candidates: DecisionTraceCandidate[], applied: boolean) => void;
   }
 ): WorldState {
@@ -1190,7 +1197,8 @@ export function advanceWorldTick(
 
     const captureTrace = traceOptions?.captureTrace !== false;
     const candidates = captureTrace || traceOptions?.onActor ? legalTraceCandidates(nextState, cultivator) : [];
-    if (traceOptions?.tape) rememberReplayDecision(traceOptions.tape, cultivator.id, decision, decisionDraws);
+    const chosenByModel = Boolean(modelProposal && !modelOrdinaryReplaced && !modelStoryChoiceReplaced);
+    if (traceOptions?.tape) rememberReplayDecision(traceOptions.tape, cultivator.id, decision, decisionDraws, chosenByModel);
     const previousLocation = cultivator.locationId;
     const previousRealm = cultivator.realm;
     const previousRealmStage = cultivator.realmStage;
@@ -1198,7 +1206,7 @@ export function advanceWorldTick(
     const evt = applyCultivatorBrainDecision(nextState, cultivator, decision, rng, undefined, (event) => {
       newEvents.push(event);
       witnessEvent(nextState, event);
-    }, avatarDecision);
+    }, avatarDecision, chosenByModel || Boolean(traceOptions?.replayHeartModelActors?.has(cultivator.id)));
     if (decision.chosenAction === 'EXPLORE' && cultivator.currentAction === 'EXPLORE' && previousLocation !== cultivator.locationId) {
       recordRegionalActorReturn(nextState,regionalTurn,cultivator,previousLocation,decision.chosenAction,evt);
       renewRegionalProtectionAfterEvent(regionalTurn);
