@@ -1,3 +1,6 @@
+import { validateDramaticBondHistory } from './storageDramaticBondValidation';
+import { DRAMATIC_BOND_FACTS_MAX, DRAMATIC_BOND_WITNESSES_MAX } from './dramaticBondTerms';
+import { DRAMATIC_BOND_FACT_KINDS } from '../types/dramaticBond';
 import {FORBIDDEN_ART_IDS} from '../types/forbiddenArt';
 import { validateGrandSiegeHistory } from './storageGrandSiegeValidation';
 import { GRAND_SIEGE_HERO_MOVES } from '../types/grandSiege';
@@ -502,6 +505,11 @@ const forbiddenContact=structure({id,attackerId:id,defenderId:id,ownerId:id,arti
   queued:optional(structure({choice:one(...FORBIDDEN_ART_IDS,'decline'),tick}))});
 
 const shape = structure({
+  dramaticBonds:optional(structure({facts:arr(DRAMATIC_BOND_FACTS_MAX,structure({
+    kind:one(...DRAMATIC_BOND_FACT_KINDS),sourceEventId:id,tick,year:tick,month,siteId:id,venueKindAtSource:one('market','sect_hq'),actorIds:arr(2,id),
+    witnessIds:optional(arr(DRAMATIC_BOND_WITNESSES_MAX,id)),
+    alignmentsAtSource:optional(arr(2,one('正道','魔道','中立'))),winnerId:oid,fallenId:oid,
+  }))})),
   forbiddenDuels:optional(arr(SAVE_COLLECTION_LIMIT,forbiddenContact)),
   roguelikeEncounters:optional(arr(SAVE_COLLECTION_LIMIT,roguelikeRecord)),
   tick, interventionSequence:tick, year:tick, month,
@@ -3695,6 +3703,7 @@ function verifyWorld(value: unknown): WorldState {
   }
   validateProtagonistHistory(w,chapters,actor,fail);
   validateWitnessedPersonalStory(w,actor,fail);
+  validateDramaticBondHistory(w,fail);
   validateEraHistory(w,fail);
   validateAuthoredEraHistory(w,fail);
   validateRegionalSimulation(w,fail);
@@ -3790,9 +3799,9 @@ function serializeWorldSave(world: WorldState): string {
   try {
     // A native turn may first attach either optional ledger after a hot-world clone.
     // Normalize that bounded extension order, leaving every pre-extension byte intact.
-    if (world.eraHeritage !== undefined || world.mortalAgeTrackingSinceTick !== undefined || world.coldWaterVein !== undefined || world.northMiningCharters !== undefined || world.northWellRevisitLaw !== undefined || world.northWellRevisitReviews !== undefined || world.upperPassage !== undefined || world.northGateRenewal !== undefined || world.frontier !== undefined || world.upperArrayField !== undefined || world.scribeCommissions !== undefined || world.waypostMeals !== undefined || world.craftTraining !== undefined || world.disasterShelter !== undefined || world.roguelikeEncounters !== undefined || world.forbiddenDuels !== undefined) {
-      const {eraHeritage,mortalAgeTrackingSinceTick,coldWaterVein,northMiningCharters,northWellRevisitLaw,northWellRevisitReviews,upperPassage,northGateRenewal,frontier,upperArrayField,scribeCommissions,waypostMeals,craftTraining,disasterShelter,roguelikeEncounters,forbiddenDuels,...legacy}=world;
-      return JSON.stringify({format:FORMAT,version:VERSION,world:{...legacy,eraHeritage,mortalAgeTrackingSinceTick,coldWaterVein,northMiningCharters,northWellRevisitLaw,northWellRevisitReviews,upperPassage,northGateRenewal,frontier,upperArrayField,scribeCommissions,waypostMeals,craftTraining,disasterShelter,roguelikeEncounters,forbiddenDuels}});
+    if (world.eraHeritage !== undefined || world.mortalAgeTrackingSinceTick !== undefined || world.coldWaterVein !== undefined || world.northMiningCharters !== undefined || world.northWellRevisitLaw !== undefined || world.northWellRevisitReviews !== undefined || world.upperPassage !== undefined || world.northGateRenewal !== undefined || world.frontier !== undefined || world.upperArrayField !== undefined || world.scribeCommissions !== undefined || world.waypostMeals !== undefined || world.craftTraining !== undefined || world.disasterShelter !== undefined || world.roguelikeEncounters !== undefined || world.forbiddenDuels !== undefined || world.dramaticBonds !== undefined) {
+      const {eraHeritage,mortalAgeTrackingSinceTick,coldWaterVein,northMiningCharters,northWellRevisitLaw,northWellRevisitReviews,upperPassage,northGateRenewal,frontier,upperArrayField,scribeCommissions,waypostMeals,craftTraining,disasterShelter,roguelikeEncounters,forbiddenDuels,dramaticBonds,...legacy}=world;
+      return JSON.stringify({format:FORMAT,version:VERSION,world:{...legacy,eraHeritage,mortalAgeTrackingSinceTick,coldWaterVein,northMiningCharters,northWellRevisitLaw,northWellRevisitReviews,upperPassage,northGateRenewal,frontier,upperArrayField,scribeCommissions,waypostMeals,craftTraining,disasterShelter,roguelikeEncounters,forbiddenDuels,dramaticBonds}});
     }
     return JSON.stringify({ format: FORMAT, version: VERSION, world });
   } catch { throw new WorldSaveError('json', '当前世界不能序列化为 JSON。'); }

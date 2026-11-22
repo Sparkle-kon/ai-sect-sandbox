@@ -1,3 +1,4 @@
+import type { DramaticBondState } from './dramaticBond';
 import type { GrandSiegeHeroMove, GrandSiegeTheatre } from './grandSiege';
 import type { ForbiddenArtChoice, ForbiddenArtScar, ForbiddenDuelContact } from './forbiddenArt';
 import type { HeartDemonChoice, HeartDemonFrame, HeartDemonGuide } from './heartDemon';
@@ -3655,6 +3656,7 @@ export interface WorldState {
   chronicleArchive: ChronicleArchive;
   protagonistSuccession: ProtagonistSuccessionState;
   witnessedPersonalStory: WitnessedPersonalStoryState;
+  dramaticBonds?: DramaticBondState;
   councils: CouncilRecord[];
   tick: number;
   interventionSequence: number;

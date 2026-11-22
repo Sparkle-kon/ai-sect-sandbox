@@ -1,3 +1,4 @@
+import {useDramaticBondRead} from './components/useDramaticBondRead';
 import {GrandSiegeMapScene} from './components/GrandSiegeMapScene';
 import {availableWaypostMealActions} from './engine/waypostMealEngine';
 import type {WaypostMealControls} from './components/WaypostMealRead';
@@ -300,6 +301,10 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   }:undefined;
   const aliveCount = visibleWorld.cultivators.filter((c) => c.alive).length;
   const activeActorId = selectedCultivator?.id ?? null;
+  const bonds=useDramaticBondRead(visibleWorld,selectedCultivator,mapFog,{
+    story:cockpitOpen||!dashboardOpen&&!storyEntryOpen,dossier:cockpitOpen||dashboardOpen&&workspace==='people',
+    allowPersonal:!preview&&visibleWorld===world,
+  });
   const {card:featuredStoryCard,pending:storyDecisionPending}=useFeaturedStoryDecision(simulation);
   const toggleStoryAutoplay=()=>{if(!storyDecisionPending||isRunning)toggleAutoplay();};
   const worldPulse=useMemo(()=>dashboardOpen||cockpitOpen?projectWorldPulse(visibleWorld,activeActorId,mapFog):undefined,
@@ -420,6 +425,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   const inspect = (workspaceSection: 'profile' | 'cultivation' | 'mind') => <React.Suspense fallback={<p role="status">载入修士档案…</p>}>
     <AgentInspector world={visibleWorld} cultivator={selectedCultivator} onSelectCultivator={setSelectedCultivatorId}
       workspaceSection={workspaceSection}
+      publicBonds={workspaceSection==='profile'?bonds.publicArcs:undefined} personalBonds={workspaceSection==='profile'?bonds.personal:undefined}
       artifactSalvage={{scopeKey:viewScopeKey,busy:isStepping||fastForwardLocked,readOnly:!!preview,onConfirm:queueSelectedSalvage}}/>
   </React.Suspense>;
   const openWorkspace = (next: WorkspaceId) => {
@@ -644,7 +650,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   const clearWorldPulse=(token:number)=>setPulseFocus(current=>current?.token===token?undefined:current);
   const pulseStrip=worldPulse&&<WorldPulseBar view={worldPulse} historical={Boolean(preview)}
     canFocus={!immersive} onFocusAlert={focusWorldPulse}/>;
-  if(cockpitOpen)return <PanoramicCockpitView world={visibleWorld} titleRef={cockpitHeading} exit={cockpitSwitch} statusStrip={pulseStrip} stageOverride={featuredStoryCard}
+  if(cockpitOpen)return <PanoramicCockpitView world={visibleWorld} titleRef={cockpitHeading} exit={cockpitSwitch} statusStrip={pulseStrip} stageOverride={featuredStoryCard} subplot={bonds.subplot}
     time={{historical:Boolean(preview),running:isRunning,busy:cockpitBusy||storyDecisionPending,onStep:()=>void handleStepTick(),
       onToggleAutoplay:toggleStoryAutoplay,onReturnLive:()=>handleTimelinePreview(null),onOpenTimeline:()=>{
         openWorkspace('chronicle');rememberFold('chronicle','timeline');setStoryEntryOpen(false);
@@ -674,7 +680,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
     {featuredStoryCard??(storyEntryOpen?<PlayerStoryEntry titleRef={storyEntryHeading} role={projectStoryPlayerRole(world,storyHome.lead)}
       revision={world} busy={isStepping||fastForwardLocked} onBack={()=>setStoryEntryOpen(false)} onTools={openDashboard}
       onFollow={storyHome.lead?followCurrentLead:undefined} onEnter={enterCurrentLead} onOrder={orderCurrentStoryAvatar} />:
-      <StoryFirstHome scene={storyHome.scene} leadName={storyHome.lead?.name} playerName={activeAvatar(world)?.name}
+      <StoryFirstHome scene={storyHome.scene} subplot={bonds.subplot} leadName={storyHome.lead?.name} playerName={activeAvatar(world)?.name}
         busy={isStepping} moreRef={storyMoreRef} notice={storyNotice} calendar={storyHome.calendar}
         outcome={storyOutcome?.world===world?storyOutcome.text:undefined} onContinue={advanceStory} onMore={openStoryEntry} />)}
   </main>;

@@ -1,3 +1,4 @@
+import {ActorDramaticBondRead,type PersonalBondRead,type PublicBondArc} from './DramaticBondRead';
 import {ForbiddenArtScarsRead} from './ForbiddenArtCard';
 import {EarnedDestinyTraits} from './DestinyTraitCard';
 import type {CraftTrainingControls} from './CraftTrainingRead';
@@ -39,6 +40,8 @@ const ScriptureEditionPanel = React.lazy(async () => ({ default: (await import('
 const RelicSetPanel = React.lazy(async () => ({ default: (await import('./RelicSetPanel')).RelicSetPanel }));
 
 interface AgentInspectorProps {
+  publicBonds?:readonly PublicBondArc[];
+  personalBonds?:PersonalBondRead;
   medicineControls?:DanxiaMedicineControlsProps;
   seasonReviewControls?:DanxiaSeasonReviewControlsProps;
   world: WorldState;
@@ -60,6 +63,7 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
   workshopReleaseControls,
   workshopEstateControls,
   craftTrainingControls,
+  publicBonds,personalBonds,
 }) => {
   if (!cultivator) {
     return (
@@ -137,6 +141,8 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
 
       {profile&&<EarnedDestinyTraits world={world} actor={cultivator}/>}
       {profile&&<ForbiddenArtScarsRead world={world} actor={cultivator}/>}
+
+      {profile&&world.cultivators.includes(cultivator)&&<ActorDramaticBondRead actorId={cultivator.id} publicArcs={publicBonds} personal={personalBonds}/>}
 
       {/* Fictional character narration */}
       {mind && <div className="p-3 rounded-lg bg-slate-950/90 border border-indigo-500/30 space-y-1.5">

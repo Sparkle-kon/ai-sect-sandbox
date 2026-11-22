@@ -1,3 +1,4 @@
+import { captureDramaticBondFact } from './dramaticBondEngine';
 import { availableGrandSiegeHeroActions } from './grandSiegeTheatreEngine';
 import type { ForbiddenDuelContact, NativeDuelRolls } from '../types/forbiddenArt';
 import { measureNativeDuel } from './nativeDuelRules';
@@ -1186,6 +1187,7 @@ export function advanceWorldTick(
       const publish=(event:WorldEvent)=>{newEvents.push(event);witnessEvent(nextState,event);};
       const event=settleNativeDuel(nextState,cultivator,defender,settled,contact.rolls,undefined,publish,{contact,activation});
       captureWitnessedPersonalScene(nextState,event);
+      captureDramaticBondFact(nextState,event);
       publish(event);
       renewRegionalProtectionAfterEvent(regionalTurn);
       if(recordDecisionEffect&&offered)recordDecisionEffect(owner.id,activation.origin==='model'||!modelInput&&
@@ -1303,6 +1305,9 @@ export function advanceWorldTick(
     }
     if (evt && (decision.chosenAction === 'DUEL' || decision.chosenAction === 'SOCIALIZE' || decision.chosenAction === 'BREAKTHROUGH'))
       captureWitnessedPersonalScene(nextState, evt);
+    // Capture only the actual emitted source after native bounty/scheme/duel wrappers have settled scope.
+    if (evt && evt.actorIds.length === 2 && evt.witnessScope === undefined &&
+        (evt.category === 'combat' || evt.category === 'death' || evt.category === 'diplomacy')) captureDramaticBondFact(nextState,evt);
     const validEffect = decision.chosenAction === cultivator.currentAction && (evt !== null ||
       decision.chosenAction === 'REST' || decision.chosenAction === 'CULTIVATE' ||
       (decision.chosenAction === 'EXPLORE' && previousLocation !== cultivator.locationId));
