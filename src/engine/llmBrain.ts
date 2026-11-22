@@ -1,3 +1,5 @@
+import { availableDaoPathActions } from './daoPathEngine';
+import { expeditionRescueCheckpoint } from './expeditionRescueCheckpoint';
 import { availableHeavenlyAlchemyActions } from './heavenlyAlchemyEngine';
 import { HEAVENLY_ALCHEMY_RECIPES } from './heavenlyAlchemyTerms';
 import { HEAVENLY_QUALITIES } from '../types/heavenlyAlchemy';
@@ -161,6 +163,79 @@ export function utilityExpeditionRescueDecision(actor: Cultivator, world: WorldS
   const thought = option.rescueMove === 'signal' ? '向确能收到的在场见证人发出求援。' : option.rescueMove === 'accept' ?
     '我自愿携实物补给接应，只沿已核实的撤离路。' : '已脱离伤势所致的求援条件；在尚未交付补给时撤信。';
   return { ...option, chosenAction: option.action, innerMonologue: thought };
+}
+
+type DaoPathOption = ReturnType<typeof availableDaoPathActions>[number];
+const daoPathFields = ['chosenAction', 'daoPathMove', 'targetDaoPathId'] as const;
+const daoPathCommand = ({ daoPathMove, targetDaoPathId }: DaoPathOption) =>
+  ({ chosenAction: 'DAO_PATH' as const, daoPathMove, targetDaoPathId });
+const daoPathSame = (a: ReturnType<typeof daoPathCommand>, b: Partial<LLMDecisionPayload>) =>
+  a.chosenAction === b.chosenAction && a.daoPathMove === b.daoPathMove && a.targetDaoPathId === b.targetDaoPathId;
+const daoPathDecision = (option: DaoPathOption): LLMDecisionPayload => ({
+  ...daoPathCommand(option), innerMonologue: {
+    choose: '在亲到的地方定下自己的道途。',
+    practice: '以实在的资粮勤修本门，不空称领悟。',
+    ready: '先备一式，惟有后来确实交手才会显效。',
+    cancel: '撤下预备的一式，不假称交手。',
+  }[option.daoPathMove],
+});
+
+/** Provider JSON names exactly one native lane option, not outcomes, a new target, or prose. */
+export function exactDaoPathDecision(input: unknown, options: readonly DaoPathOption[],
+  allowInternalThought = false): LLMDecisionPayload | undefined {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return undefined;
+  const record = input as Partial<LLMDecisionPayload>;
+  if (record.chosenAction !== 'DAO_PATH' || !daoPathFields.every(key => Object.hasOwn(record, key)) ||
+      Object.keys(record).some(key => key !== 'chosenAction' && key !== 'daoPathMove' && key !== 'targetDaoPathId' &&
+        !(allowInternalThought && key === 'innerMonologue'))) return undefined;
+  const option = options.find(row => daoPathSame(daoPathCommand(row), record));
+  return option ? daoPathDecision(option) : undefined;
+}
+
+/** Existing movements and mandatory native/offline commitments always take the actor's month. */
+export function daoPathTurnLocked(actor: Cultivator, world: WorldState): boolean {
+  return !actor.alive || actor.hp <= 0 || actor.positionPlane !== undefined || !world.cultivators.includes(actor) ||
+    isTribulationActive(actor) || Boolean(forbiddenDuelForParticipant(world, actor) || activeRoguelikeEncounter(world, actor) ||
+      activeDestinyTraitOffer(world, actor) || activeSiegeForActor(world, actor) || activeOccasionForActor(world, actor) ||
+      activeDungeonForActor(world, actor) || activeRelocationForActor(world, actor) || activeEscortForActor(world, actor) ||
+      activeCourierForActor(world, actor) || courierActedThisTick(world, actor) ||
+      activeDanxiaMedicineEscort(world, actor) || danxiaMedicineActedThisTick(world, actor) ||
+      activePilgrimageForActor(world, actor) || boundaryReliefCheckpoint(world, actor) ||
+      disasterShelterCheckpoint(world, actor) || expeditionRescueCheckpoint(world, actor) ||
+      sparringLocksActor(world, actor) || requiredBeforeOrdinaryDecision(actor, world));
+}
+
+function daoPathEligiblePreference(actor: Cultivator, world: WorldState, pathId: DaoPathOption['targetDaoPathId']): boolean {
+  if (pathId === 'sword') return actor.spiritRoot === '金' || actor.spiritRoot === '雷';
+  if (pathId === 'alchemy') return actor.spiritRoot === '火' && world.sects.some(sect =>
+    sect.id === actor.sectId && sect.headquartersId === actor.locationId && sect.facilities.alchemy_hall >= 2);
+  if (pathId === 'formation') return (actor.spiritRoot === '土' || actor.spiritRoot === '水') && world.sects.some(sect =>
+    sect.id === actor.sectId && sect.headquartersId === actor.locationId && sect.facilities.qi_array > 0);
+  if (pathId === 'shadow') return actor.spiritRoot === '暗' && (actor.personality === '诡诈' || actor.personality === '阴险');
+  return pathId === 'body' && actor.spiritRoot === '木' && actor.personality === '刚正';
+}
+
+export function availableAutonomousDaoPathActions(actor: Cultivator, world: WorldState,
+  executionTick = world.tick): readonly DaoPathOption[] {
+  // No new hobby during a wound, imminent breakthrough, assigned watch, or a player's attached turn.
+  if ((!actor.daoPath && (executionTick < 12 || executionTick % 12 !== 0 || actor.techniqueMastery < 75 ||
+        actor.spiritStones < 180 || mayAuthorTechnique(actor))) ||
+      (actor.daoPath && executionTick % 6 !== 0) || actor.hp < actor.maxHp * .85 || actor.qiProgress >= 85 ||
+      actor.guardAssignment || activeAvatar(world) === actor || daoPathTurnLocked(actor, world)) return [];
+  const native = availableDaoPathActions(actor, world, executionTick);
+  const edges = native.some(row => row.daoPathMove === 'ready') ? firstActorRelationships(world.relationships, actor.id) : undefined;
+  const hostileHere = edges && world.cultivators.some(other =>
+    other !== actor && other.alive && other.hp > 0 && other.positionPlane === undefined && other.locationId === actor.locationId &&
+    (edges.get(other.id)?.affinity ?? 0) <= -50 && !activeCeasefireBetween(world, actor.sectId, other.sectId) &&
+    !sanctuaryCanShield(world, actor, other));
+  return native.filter(row => row.daoPathMove === 'practice' || row.daoPathMove === 'ready' && hostileHere ||
+    row.daoPathMove === 'choose' && daoPathEligiblePreference(actor, world, row.targetDaoPathId));
+}
+
+export function utilityDaoPathDecision(actor: Cultivator, world: WorldState): LLMDecisionPayload | undefined {
+  const options = availableAutonomousDaoPathActions(actor, world);
+  const pick = options.find(row => row.daoPathMove === 'ready') ?? options[0];
+  return pick ? daoPathDecision(pick) : undefined;
 }
 
 type HeavenlyOption = ReturnType<typeof availableHeavenlyAlchemyActions>[number];
@@ -1449,6 +1524,8 @@ export function computeHeuristicDecision(
       [...choices].reverse().find((item) => item.action === 'FORGE_ARTIFACT');
     if (artifactAction) return { ...artifactAction, chosenAction: artifactAction.action, innerMonologue: '兵刃须磨砺温养，方能与我心神相合。' };
   }
+  const path = utilityDaoPathDecision(cultivator, world);
+  if (path) return path;
   const heavenly = utilityHeavenlyAlchemyDecision(cultivator, world);
   if (heavenly) return heavenly;
   if (world.tick % 5 === 0) {
@@ -2209,6 +2286,19 @@ export async function requestCultivatorLLMDecision(
     row.status === 'extracting' && (row.explorerId === cultivator.id || row.rescuerId === cultivator.id));
   if (rescueOnly && !rescueOptions.length) return undefined;
   if (!activeVow && !boundaryReliefOnly && !rescueOnly && requestTick === world.tick + 1) {
+    const paths = availableAutonomousDaoPathActions(cultivator, world, requestTick);
+    if (paths.length) {
+      const originalSite = cultivator.locationId;
+      const menu = paths.map(daoPathCommand);
+      const prompt = '只原样复制一项确实允许的个人道途行动。只能选定道途、实地勤修或预备一式；' +
+        '不报交手、收获、伤害、颜色、资源数、身份、场景、独白或结果。许可：' + JSON.stringify(menu);
+      return requestDecisionPrompt(config, requestTick, options, prompt, parsed => {
+        if (requestTick !== world.tick + 1 || cultivator.locationId !== originalSite) return undefined;
+        const current = availableAutonomousDaoPathActions(cultivator, world, requestTick);
+        if (current.length !== menu.length || current.some((row, i) => !daoPathSame(daoPathCommand(row), menu[i]))) return undefined;
+        return exactDaoPathDecision(parsed, current);
+      }, 150);
+    }
     const rituals = availableAutonomousHeavenlyAlchemyActions(cultivator, world, requestTick);
     if (rituals.length) {
       const originalSite = cultivator.locationId;
@@ -2516,6 +2606,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
               Object.hasOwn(parsed, 'targetForbiddenDuelId') || Object.hasOwn(parsed, 'forbiddenArtChoice') ||
               Object.hasOwn(parsed, 'targetGrandSiegeId') || Object.hasOwn(parsed, 'grandSiegeHeroMove') ||
               Object.hasOwn(parsed, 'targetDungeonRoomId') || Object.hasOwn(parsed, 'dungeonMove') ||
+              Object.hasOwn(parsed, 'targetDaoPathId') || Object.hasOwn(parsed, 'daoPathMove') ||
               ['heavenlyAlchemyMove', 'targetHeavenlyRecipeId', 'heavenlyAlchemyHeat', 'heavenlyAlchemyQuality']
                 .some(key => Object.hasOwn(parsed, key))) return undefined;
           const validActions: ActionType[] = [

@@ -1,3 +1,5 @@
+import {consumeDaoDuelIntents,previewDaoDuelIntents,recordDaoDuelIntents} from './daoPathEngine';
+import { availableDaoPathActions, resolveDaoPathAction } from './daoPathEngine';
 import { availableHeavenlyAlchemyActions, resolveHeavenlyAlchemyAction } from './heavenlyAlchemyEngine';
 import { activeDungeonForActor, availableDungeonMoves, resolveDungeonAction } from './expeditionDungeonEngine';
 import {RING_AUDIENCE_TABOO_TECHNIQUE,expireRingAudiences,finishRingAudienceExecution,pendingRingAudienceExecution} from './ringAudienceEngine';
@@ -135,7 +137,7 @@ import {
   WorldEvent,
   WorldState,
 } from '../types/world';
-import { availableAutonomousHeavenlyAlchemyActions, computeHeuristicDecision, dungeonDecisionOccasion, exactDungeonDecision, exactHeavenlyAlchemyDecision, isProviderPersonaDecision, requiredBeforeOrdinaryDecision, utilityCeasefireDecision, utilityDungeonDecision, utilityExpeditionRescueDecision } from './llmBrain';
+import { availableAutonomousDaoPathActions, availableAutonomousHeavenlyAlchemyActions, computeHeuristicDecision, daoPathTurnLocked, dungeonDecisionOccasion, exactDaoPathDecision, exactDungeonDecision, exactHeavenlyAlchemyDecision, isProviderPersonaDecision, requiredBeforeOrdinaryDecision, utilityCeasefireDecision, utilityDungeonDecision, utilityExpeditionRescueDecision } from './llmBrain';
 import { maintainMemories, recordMemory } from './memoryEngine';
 import { synthesizeReflections } from './reflectionEngine';
 import { fabricateRumor, knownRumorLead, spreadRumors, witnessEvent } from './rumorEngine';
@@ -254,7 +256,8 @@ function settleNativeDuel(world:WorldState,cultivator:Cultivator,defender:Cultiv
   rolls:NativeDuelRolls,authorizedBountyTargetId?:string,emit?:(event:WorldEvent)=>void,
   context?:ForbiddenDuelSettlement):WorldEvent{
   const location=world.locations.find(site=>site.id===cultivator.locationId);
-  const finishDuel = (proof: WorldEvent): WorldEvent => {
+  const finishDuel = (proof: WorldEvent,paid:ReturnType<typeof consumeDaoDuelIntents>=[]): WorldEvent => {
+    recordDaoDuelIntents(world,proof,paid);
     const breach = recordCeasefireHostility(world, cultivator, defender, proof);
     if (breach) recordAuxiliaryActionEvent(world, breach, emit);
     return proof;
@@ -266,9 +269,10 @@ function settleNativeDuel(world:WorldState,cultivator:Cultivator,defender:Cultiv
   }
   const modifier=context?{ownerId:context.contact.ownerId,scoreMultiplier:context.activation.scoreMultiplier,
     incomingMultiplier:context.activation.incomingMultiplier}:undefined;
+  const daoPaid=consumeDaoDuelIntents(world,cultivator,defender);
   const ordinaryWinner=context&&context.activation.choice!=='decline'
-    ?measureNativeDuel(world,cultivator,defender,rolls).winner:undefined;
-  const {winner,loser,hitLoser,hitWinner,divineArtProse}=measureNativeDuel(world,cultivator,defender,rolls,modifier);
+    ?measureNativeDuel(world,cultivator,defender,rolls,undefined,daoPaid).winner:undefined;
+  const {winner,loser,hitLoser,hitWinner,divineArtProse}=measureNativeDuel(world,cultivator,defender,rolls,modifier,daoPaid);
   const sufferedByLoser=mitigateSectArray(world,loser,winner,hitLoser);
   const sufferedByWinner=mitigateSectArray(world,winner,loser,hitWinner);
   const attachForbiddenOutcome=(event:WorldEvent):WorldEvent=>{
@@ -331,7 +335,7 @@ function settleNativeDuel(world:WorldState,cultivator:Cultivator,defender:Cultiv
     if (divineArtProse) lethalEvent.description += divineArtProse + '。';
     const fragments = transferLootedRelics(world, winner, loser, lethalEvent);
     if (fragments) lethalEvent.description += `另有${fragments}枚古器碎片循实账随战利品转移。`;
-    return finishDuel(attachForbiddenOutcome(lethalEvent));
+    return finishDuel(attachForbiddenOutcome(lethalEvent),daoPaid);
   }
 
   recordMemory(
@@ -363,7 +367,7 @@ function settleNativeDuel(world:WorldState,cultivator:Cultivator,defender:Cultiv
     locationId: cultivator.locationId,
   };
   if (divineArtProse) duelEvent.description += divineArtProse + '。';
-  return finishDuel(attachForbiddenOutcome(duelEvent));
+  return finishDuel(attachForbiddenOutcome(duelEvent),daoPaid);
 }
 
 export function applyCultivatorBrainDecision(
@@ -491,6 +495,19 @@ export function applyCultivatorBrainDecision(
     return applied;
   }
   if (decision.chosenAction !== 'EXPEDITION_RESCUE' && activeDungeonForActor(world, cultivator)) return null;
+  if (decision.chosenAction === 'DAO_PATH') {
+    if (daoPathTurnLocked(cultivator, world)) return null;
+    const autonomous = modelInput || isProviderPersonaDecision(decision);
+    const options = autonomous ? availableAutonomousDaoPathActions(cultivator, world) : availableDaoPathActions(cultivator, world);
+    const exact = exactDaoPathDecision(decision, options, true);
+    if (!exact) return null;
+    const applied = resolveDaoPathAction(world, cultivator, exact);
+    if (applied) {
+      cultivator.currentAction = 'DAO_PATH';
+      cultivator.innerMonologue = exact.innerMonologue;
+    }
+    return applied;
+  }
   if (decision.chosenAction === 'HEAVENLY_ALCHEMY') {
     if (activeSiegeForActor(world, cultivator) || activeOccasionForActor(world, cultivator)) return null;
     const autonomous = modelInput || isProviderPersonaDecision(decision);
@@ -1014,7 +1031,7 @@ export function applyCultivatorBrainDecision(
       const rolls:NativeDuelRolls=[rng(),rng(),rng(),rng()];
       if(allowForbiddenDuel&&authorizedBountyTargetId===undefined&&
           (cultivator.hp<.25*cultivator.maxHp||defender.hp<.25*defender.maxHp)){
-        const threat=measureNativeDuel(world,cultivator,defender,rolls);
+        const threat=measureNativeDuel(world,cultivator,defender,rolls,undefined,previewDaoDuelIntents(world,cultivator,defender));
         if(threat.loser.hp<.25*threat.loser.maxHp&&
           previewSectArrayDamage(world,threat.loser,threat.winner,threat.hitLoser)>=threat.loser.hp){
           const contact=openForbiddenDuelContact(world,cultivator,defender,threat.loser,rolls);
@@ -1275,6 +1292,16 @@ export function advanceWorldTick(
     const modelProposal = supplied && traceOptions?.modelActors?.has(cultivator.id) ? supplied : undefined;
     let provided = avatarDecision ?? supplied;
     let modelOrdinaryReplaced=false;
+    if (provided?.chosenAction === 'DAO_PATH') {
+      const fromProvider = !avatarDecision && Boolean(modelProposal || isProviderPersonaDecision(provided));
+      const required = requiredBeforeOrdinaryDecision(cultivator, nextState);
+      const legal = !daoPathTurnLocked(cultivator, nextState) && exactDaoPathDecision(provided, fromProvider
+        ? availableAutonomousDaoPathActions(cultivator, nextState) : availableDaoPathActions(cultivator, nextState), true);
+      if (!legal && (fromProvider || required)) {
+        provided = required;
+        modelOrdinaryReplaced = fromProvider;
+      }
+    }
     if (!avatarDecision && provided?.chosenAction === 'HEAVENLY_ALCHEMY' &&
         (modelProposal || isProviderPersonaDecision(provided))) {
       const required = requiredBeforeOrdinaryDecision(cultivator, nextState);
@@ -1389,7 +1416,7 @@ export function advanceWorldTick(
 
     const captureTrace = traceOptions?.captureTrace !== false;
     const candidates = (captureTrace || traceOptions?.onActor) && decision.chosenAction !== 'EXPEDITION_DUNGEON' &&
-      decision.chosenAction !== 'HEAVENLY_ALCHEMY' ?
+      decision.chosenAction !== 'HEAVENLY_ALCHEMY' && decision.chosenAction !== 'DAO_PATH' ?
       legalTraceCandidates(nextState, cultivator) : [];
     const chosenByModel = Boolean(modelProposal && !modelOrdinaryReplaced && !modelStoryChoiceReplaced && !expeditionModelReplaced);
     if (traceOptions?.tape) rememberReplayDecision(traceOptions.tape, cultivator.id, decision, decisionDraws, chosenByModel);

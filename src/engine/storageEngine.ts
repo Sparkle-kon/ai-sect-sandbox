@@ -4,6 +4,9 @@ import { isBuiltinScenarioOrigin } from './highDramaPresetTerms';
 import { validateBuiltinScenarioOrigin } from './storageBuiltinScenarioValidation';
 import { validatePublicAlchemyPractice } from './storagePublicAlchemyValidation';
 import { validateHeavenlyAlchemyHistory } from './storageHeavenlyAlchemyValidation';
+import { validateDaoPathHistory } from './storageDaoPathValidation';
+import { DAO_INTENT_HISTORY, DAO_INTENT_QI, DAO_PATH_MAX_PRACTICES } from './daoPathTerms';
+import { DAO_PATH_IDS } from '../types/daoPath';
 import { HEAVENLY_ALCHEMY_MAX_ATTEMPTS } from './heavenlyAlchemyTerms';
 import { HEAVENLY_HEATS, HEAVENLY_QUALITIES, HEAVENLY_RECIPE_IDS } from '../types/heavenlyAlchemy';
 import { RING_AUDIENCE_MAX_SESSIONS, RING_AUDIENCE_MAX_TURNS } from './ringAudienceTerms';
@@ -282,7 +285,7 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE ROGUELIKE_ENCOUNTER AWAKEN_DESTINY FORBIDDEN_ART GRAND_SIEGE_HERO AUDIENCE_PLEDGE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL HEAVENLY_ALCHEMY USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT SALVAGE_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE DOCTRINE_FOUNDING DOCTRINE_MATURITY RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT MARKET_FREIGHT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE WAYPOST_MEAL DISASTER_SHELTER CHRONICLE_ERRATA HABITAT INFIRMARY CARE_FOLLOWUP DANXIA_MEDICINE DANXIA_REVIEW FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER COURIER_HANDOFF SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP CRAFT_TRAINING WORKSHOP_ESTATE WORKSHOP_RELEASE SCRIBE_COMMISSION FURNACE_RESERVATION FURNACE_SAFETY DAMAGE_ASSURANCE SPARRING EXPEDITION_RESCUE EXPEDITION_DUNGEON SHORT_SHIFT BOUNDARY_RELIEF MENTOR_TRANSFER APPRENTICE_COHORT SEASONAL_HOUSING HOUSEHOLD_NAME CARAVAN_RESTITUTION VILLAGE_GRANARY VILLAGE_SUPPLY ROUTE_WARNING PAVILION_LOAN WORKSHOP_CAPACITY CIVIC_MEMORIAL VILLAGE_FAIR SECT_STIPEND SEED_CULTURE WATER_VEIN NORTH_MINING_CHARTER NORTH_WELL_REVIEW UPPER_PASSAGE UPPER_ARRAY_FIELD UPPER_ARRAY_FIELD_LOCAL UPPER_ARRAY_FIELD_TRADE NORTH_GATE_RENEWAL FRONTIER FRONTIER_PRODUCTION FRONTIER_TRADE FRONTIER_PORT FRONTIER_PORT_TRADE FRONTIER_DRYLAND FRONTIER_DRYLAND_TRADE TOOL_LOAN RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY ALIGNED_WEATHER SEASON_REVIEW REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE ROGUELIKE_ENCOUNTER AWAKEN_DESTINY FORBIDDEN_ART GRAND_SIEGE_HERO AUDIENCE_PLEDGE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL HEAVENLY_ALCHEMY DAO_PATH USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT SALVAGE_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE DOCTRINE_FOUNDING DOCTRINE_MATURITY RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT MARKET_FREIGHT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE WAYPOST_MEAL DISASTER_SHELTER CHRONICLE_ERRATA HABITAT INFIRMARY CARE_FOLLOWUP DANXIA_MEDICINE DANXIA_REVIEW FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER COURIER_HANDOFF SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP CRAFT_TRAINING WORKSHOP_ESTATE WORKSHOP_RELEASE SCRIBE_COMMISSION FURNACE_RESERVATION FURNACE_SAFETY DAMAGE_ASSURANCE SPARRING EXPEDITION_RESCUE EXPEDITION_DUNGEON SHORT_SHIFT BOUNDARY_RELIEF MENTOR_TRANSFER APPRENTICE_COHORT SEASONAL_HOUSING HOUSEHOLD_NAME CARAVAN_RESTITUTION VILLAGE_GRANARY VILLAGE_SUPPLY ROUTE_WARNING PAVILION_LOAN WORKSHOP_CAPACITY CIVIC_MEMORIAL VILLAGE_FAIR SECT_STIPEND SEED_CULTURE WATER_VEIN NORTH_MINING_CHARTER NORTH_WELL_REVIEW UPPER_PASSAGE UPPER_ARRAY_FIELD UPPER_ARRAY_FIELD_LOCAL UPPER_ARRAY_FIELD_TRADE NORTH_GATE_RENEWAL FRONTIER FRONTIER_PRODUCTION FRONTIER_TRADE FRONTIER_PORT FRONTIER_PORT_TRADE FRONTIER_DRYLAND FRONTIER_DRYLAND_TRADE TOOL_LOAN RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY ALIGNED_WEATHER SEASON_REVIEW REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const waypostPoint=structure({x:num(0,1000),y:num(0,600)});
 const waypostVisit=structure({journeyId:id,organizerId:id,companionId:id,spentByEach:one(PILGRIMAGE_LEG_COST,2*PILGRIMAGE_LEG_COST),
@@ -562,6 +565,19 @@ const heavenlyAlchemy = structure({
   })),
   ward:optional(structure({brewId:id,expiresTick:tick})),
 });
+const daoActivation=structure({
+  actorId:id,pathId:one(...DAO_PATH_IDS),rank:one(1,2,3),tick,readyTick:tick,readySiteId:id,siteId:id,eventId:id,
+  qiPaid:one(DAO_INTENT_QI),artifactId:oid,
+});
+const daoPath=structure({
+  pathId:one(...DAO_PATH_IDS),chosenTick:tick,chosenSiteId:id,bladeId:oid,lastActedTick:tick,
+  practices:arr(DAO_PATH_MAX_PRACTICES,structure({
+    tick,siteId:id,qiPaid:percentage,herbPaid:optional(one('earth_root','jade_leaf','shadow_moss')),
+    stonesPaid:optional(wealth),hpPaid:optional(wealth),artifactId:oid,durabilityGain:optional(wealth),
+  })),
+  ready:optional(structure({tick,siteId:id,artifactId:oid})),
+  activations:arr(DAO_INTENT_HISTORY,daoActivation),
+});
 const shape = structure({
   tournamentWagers:optional(tournamentWagers),
   dramaticBonds:optional(structure({facts:arr(DRAMATIC_BOND_FACTS_MAX,structure({
@@ -584,6 +600,7 @@ const shape = structure({
   cultivators:arr(SAVE_COLLECTION_LIMIT,structure({id,name:id,title:text,sectId:strings(240),sectRank,contribution:wealth,transgressions:percentage,disciplineRevision:otick,realm,realmStage:num(1,9,true),
     publicAlchemy:optional(arr(1200,structure({siteId:id,firstTick:tick,lastTick:tick,successes:num(1,100_000_000,true),bestGrade:one(1,2,3)}))),
     heavenlyAlchemy:optional(heavenlyAlchemy),
+    daoPath:optional(daoPath),
     destinyTraits:optional(destinyTraits),
     forbiddenScars:optional(arr(FORBIDDEN_ART_IDS.length,forbiddenScar)),
     ordinaryActionEvidence:optional((value,path)=>{if(!isOrdinaryActionEvidence(value))fail(path);}),
@@ -604,7 +621,7 @@ const shape = structure({
     service:optional(structure({status:one('retired','serving'),changedTick:tick,retiredTick:tick,formerSectId:id,formerRank:sectRank})),
     guardAssignment:optional(structure({locationId:id,assignedTick:tick,expiresTick:tick})),namedHeirId:oid,alive:bool})),
   relationships:arr(SAVE_COLLECTION_LIMIT,structure({fromId:id,toId:id,type:one('师徒','同门','道侣','血仇','挚友','竞争'),affinity,note:text})),
-  events:arr(200,structure({...publicFact,forbiddenArt:optional(forbiddenScar),witnessScope:optional(one('participants')),duelWinnerId:oid,damage:optional(arr(SAVE_COLLECTION_LIMIT,structure({cultivatorId:id,amount:wealth})))})),
+  events:arr(200,structure({...publicFact,daoIntents:optional(arr(2,daoActivation)),forbiddenArt:optional(forbiddenScar),witnessScope:optional(one('participants')),duelWinnerId:oid,damage:optional(arr(SAVE_COLLECTION_LIMIT,structure({cultivatorId:id,amount:wealth})))})),
   chronicleCausality:structure({nextSequence:num(1,Number.MAX_SAFE_INTEGER,true), nodes:arr(CAUSAL_CHRONICLE_MAX_NODES,structure({
     eventId:id,tick,sequence:num(1,Number.MAX_SAFE_INTEGER,true),locationId:oid,entityId:id,
     kind:one('siege_launched','truce_signed','sect_vacancy','sect_election','market_buy_order','market_sell_order','market_shipment','market_settlement'),
@@ -3771,6 +3788,7 @@ function verifyWorld(value: unknown): WorldState {
   validateRingAudienceHistory(w,fail);
   validatePublicAlchemyPractice(w,fail);
   validateHeavenlyAlchemyHistory(w,fail);
+  validateDaoPathHistory(w,fail);
   validateTournamentArenaHistory(w,fail);
   validateExpeditionDungeonHistory(w,fail);
   validateEraHistory(w,fail);

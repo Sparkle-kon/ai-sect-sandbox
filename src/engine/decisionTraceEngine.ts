@@ -1,3 +1,4 @@
+import { availableDaoPathActions } from './daoPathEngine';
 import { availableHeavenlyAlchemyActions } from './heavenlyAlchemyEngine';
 import { availableDungeonMoves } from './expeditionDungeonEngine';
 import { activeAvatar } from './avatarEngine';
@@ -93,6 +94,7 @@ export function recordDecisionTrace(world: WorldState, actorId: string, candidat
     decision.targetForbiddenDuelId !== undefined || decision.forbiddenArtChoice !== undefined ||
     decision.chosenAction === 'GRAND_SIEGE_HERO' || decision.targetGrandSiegeId !== undefined || decision.grandSiegeHeroMove !== undefined ||
     decision.chosenAction === 'EXPEDITION_DUNGEON' || decision.targetDungeonRoomId !== undefined || decision.dungeonMove !== undefined ||
+    decision.chosenAction === 'DAO_PATH' || decision.targetDaoPathId !== undefined || decision.daoPathMove !== undefined ||
     decision.chosenAction === 'HEAVENLY_ALCHEMY' || decision.heavenlyAlchemyMove !== undefined ||
     decision.targetHeavenlyRecipeId !== undefined || decision.heavenlyAlchemyHeat !== undefined || decision.heavenlyAlchemyQuality !== undefined;
   const picks: DecisionTraceCandidate[] = [];
@@ -204,9 +206,14 @@ export function rememberReplayDecision(tape: DecisionReplayTape, actorId: string
   const chosenAlchemy = recipe ? { heavenlyAlchemyMove: recipe.heavenlyAlchemyMove,
     targetHeavenlyRecipeId: recipe.targetHeavenlyRecipeId, ...(recipe.heavenlyAlchemyMove === 'brew'
       ? { heavenlyAlchemyHeat: recipe.heavenlyAlchemyHeat } : { heavenlyAlchemyQuality: recipe.heavenlyAlchemyQuality }) } : undefined;
-  state.decisions.set(actorId, { ...(forbiddenAction || grandSiegeAction || dungeonAction || heavenlyAction ? {} : details),
+  const daoPathAction = decision.chosenAction === 'DAO_PATH';
+  const pathActor = daoPathAction && state.base.cultivators.find(({ id }) => id === actorId);
+  const pathOption = pathActor && availableDaoPathActions(pathActor, state.base, state.base.tick + 1).find(option =>
+    option.daoPathMove === decision.daoPathMove && option.targetDaoPathId === decision.targetDaoPathId);
+  const pathFields = pathOption ? { daoPathMove: pathOption.daoPathMove, targetDaoPathId: pathOption.targetDaoPathId } : undefined;
+  state.decisions.set(actorId, { ...(forbiddenAction || grandSiegeAction || dungeonAction || heavenlyAction || daoPathAction ? {} : details),
     chosenAction: decision.chosenAction, innerMonologue: '', ...(cohortInviteeIds ? { cohortInviteeIds } : {}),
-    ...personalHeartChoice, ...personalForbiddenChoice, ...personalHeroChoice, ...dungeonFields, ...chosenAlchemy });
+    ...personalHeartChoice, ...personalForbiddenChoice, ...personalHeroChoice, ...dungeonFields, ...chosenAlchemy, ...pathFields });
   if (personalHeartChoice && heartModel) state.heartModelActors.add(actorId);
   else state.heartModelActors.delete(actorId);
   if (personalForbiddenChoice && forbiddenModel) state.forbiddenModelActors.add(actorId);

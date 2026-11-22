@@ -1,3 +1,5 @@
+import {buildDaoIntentMapVfx,drawDaoIntentMapVfx} from './daoIntentMapVfx';
+import {DAO_PATHS} from '../engine/daoPathTerms';
 import {buildHeavenlyAlchemyMapVfx,drawHeavenlyAlchemyMapVfx} from './heavenlyAlchemyMapVfx';
 import {drawDungeonMapMark,DUNGEON_MAP_LABELS,expeditionDungeonMapMark} from './expeditionDungeonMapMark';
 import {drawTournamentArenaMark,tournamentArenaMapMarks} from './tournamentArenaMapMark';
@@ -307,6 +309,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   }, [world, selected]);
   const { seenLocations, isCurrentLocation } = mapView;
   const arenaMarks=useMemo(()=>tournamentArenaMapMarks(world,isCurrentLocation),[world,isCurrentLocation]);
+  const daoMarks=useMemo(()=>buildDaoIntentMapVfx(world,isCurrentLocation,!!preview),[world,isCurrentLocation,preview]);
   const alchemyMarks=useMemo(()=>buildHeavenlyAlchemyMapVfx(world,isCurrentLocation,!!preview),[world,isCurrentLocation,preview]);
   const dungeonMark=useMemo(()=>expeditionDungeonMapMark(world,selected,isCurrentLocation),[world,selected,isCurrentLocation]);
   // Turning off terrain fog does not create a civic observation.
@@ -568,7 +571,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     let staticMarkers: ReturnType<typeof planActorMarkers> | undefined;
     let badgeLayoutCache:{markers:ReturnType<typeof planActorMarkers>;layout:ReturnType<typeof planMapActorBadgeLayout>}|undefined;
 
-    const hasMotion=alchemyMarks.length>0||presentation.routes.size>0||combatVfx.hasTransient||letters.length>0||travel.hasMotion||hasBadgeQuote;
+    const hasMotion=daoMarks.length>0||alchemyMarks.length>0||presentation.routes.size>0||combatVfx.hasTransient||letters.length>0||travel.hasMotion||hasBadgeQuote;
     if (playback.current?.source !== world.mapPresentation) {
       playback.current = { source: world.mapPresentation, start: performance.now() };
     }
@@ -901,6 +904,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           for(const {x,y,width:spanWidth,height:spanHeight} of qiFlow.clip)ctx.rect(x,y,spanWidth,spanHeight);
           ctx.clip();
           drawMapCombatVfx(ctx,combatVfx,elapsed,animate,logicalPerCssPixel,scenicPhase,camera);
+          if(daoMarks.length)drawDaoIntentMapVfx(ctx,daoMarks,elapsed,animate,logicalPerCssPixel);
           if(alchemyMarks.length)drawHeavenlyAlchemyMapVfx(ctx,alchemyMarks,elapsed,animate,logicalPerCssPixel);
           if(letters.length||travel.markers.length)drawMapTrajectoryVfx(ctx,letters,travel.markers,elapsed,animate,logicalPerCssPixel);
           return presentation.routes.size
@@ -1071,7 +1075,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener?.('change',stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, atlasDrawing, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, observedSalvageSites, localGranary, villageMapLabels, civicObservation, usedVillageSegments, furnaceShift, localPavilionDesk, localMemorial, localVillageFair, localStipend, localSeedCulture, localToolLoans, localAlignedWeather, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope, scenicRelief, qiFlow, inspectionEnabled, letters, travel, flightAlignments, combatVfx, actorBadgeFacts, hasBadgeQuote, domes, strategic, arenaMarks, dungeonMark, alchemyMarks]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, atlasDrawing, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, observedSalvageSites, localGranary, villageMapLabels, civicObservation, usedVillageSegments, furnaceShift, localPavilionDesk, localMemorial, localVillageFair, localStipend, localSeedCulture, localToolLoans, localAlignedWeather, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope, scenicRelief, qiFlow, inspectionEnabled, letters, travel, flightAlignments, combatVfx, actorBadgeFacts, hasBadgeQuote, domes, strategic, arenaMarks, dungeonMark, alchemyMarks, daoMarks]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1670,6 +1674,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                 {tile && <span className="text-slate-400">· {tile.biome} · 地格灵气 {tile.spiritQi} · {world.sects.find(({ id }) => id === tile.ownerSectId)?.name ?? '无所属宗门'}</span>}
                 {fog && (visibleActorsAtSite.get(location.id) ?? 0) > 0 &&
                   <span className="text-slate-300">· 可见修士 {visibleActorsAtSite.get(location.id)} 位（山河索引可查）</span>}
+                {daoMarks.filter(mark=>mark.siteId===location.id).map((mark,index)=><span key={index} className="text-cyan-200">· 本月实见{DAO_PATHS[mark.pathId].name}招式</span>)}
                 {alchemyMarks.some(mark=>mark.siteId===location.id)&&<span className="text-amber-200">· 本月实有丹雷</span>}
                 {dungeonMark?.siteId===location.id&&<span className="text-cyan-200">· 本人秘境层：{DUNGEON_MAP_LABELS[dungeonMark.room]}</span>}
                 {arenaMarks.has(location.id)&&<span className="text-amber-200">· 演武擂台（已过 {arenaMarks.get(location.id)} 轮）</span>}

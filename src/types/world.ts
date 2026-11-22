@@ -1,3 +1,5 @@
+import type { DaoIntentActivation, DaoPathState } from './daoPath';
+import type { DaoPathId, DaoPathMove } from './daoPath';
 import type { HeavenlyAlchemyMove, HeavenlyHeat, HeavenlyQuality, HeavenlyRecipeId } from './heavenlyAlchemy';
 import type { HeavenlyAlchemyState } from './heavenlyAlchemy';
 import type {DungeonMove, DungeonRoom, ExpeditionDungeon} from './expeditionDungeon';
@@ -179,6 +181,7 @@ export type ActionType =
   | 'GATHER_HERBS'
   | 'BREW_PILL'
   | 'HEAVENLY_ALCHEMY'
+  | 'DAO_PATH'
   | 'USE_PILL'
   | 'VILLAGE_CENSUS'
   | 'FIELD_OBSERVATORY'
@@ -427,6 +430,7 @@ export interface PublicAlchemyPractice {
 export interface Cultivator {
   publicAlchemy?: PublicAlchemyPractice[];
   heavenlyAlchemy?: HeavenlyAlchemyState;
+  daoPath?: DaoPathState;
   destinyTraits?: DestinyTraitProgress;
   forbiddenScars?: ForbiddenArtScar[];
   positionPlane?:UpperPositionPlane|FrontierPositionPlane;
@@ -501,6 +505,7 @@ export type EraHistoryReceipt = EraHistoryIdentity & (
 export interface EraHistoryState {receipts:EraHistoryReceipt[]}
 
 export interface WorldEvent {
+  daoIntents?: DaoIntentActivation[];
   forbiddenArt?: ForbiddenArtScar;
   id: string;
   tick: number;
@@ -688,6 +693,8 @@ export interface LLMDecisionPayload {
   targetTechniqueId?: string;
   targetHerbId?: HerbId;
   targetPillId?: PillId;
+  daoPathMove?: DaoPathMove;
+  targetDaoPathId?: DaoPathId;
   heavenlyAlchemyMove?: HeavenlyAlchemyMove;
   targetHeavenlyRecipeId?: HeavenlyRecipeId;
   heavenlyAlchemyHeat?: HeavenlyHeat;

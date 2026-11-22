@@ -1,3 +1,5 @@
+import {DaoPathRead,type DaoPathControls} from './DaoPathRead';
+import {projectDaoPath} from '../engine/daoPathEngine';
 import {canReadOwnPersona,personaDossierMemories,PersonaDossierRead} from './personaDossierRead';
 import {ActorDramaticBondRead,type PersonalBondRead,type PublicBondArc} from './DramaticBondRead';
 import {ForbiddenArtScarsRead} from './ForbiddenArtCard';
@@ -56,6 +58,7 @@ interface AgentInspectorProps {
   workshopEstateControls?:WorkshopEstateControls;
   craftTrainingControls?:CraftTrainingControls;
   heavenlyAlchemyControls?:HeavenlyAlchemyControls;
+  daoPathControls?:DaoPathControls;
 }
 
 export const AgentInspector: React.FC<AgentInspectorProps> = ({
@@ -67,7 +70,7 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
   workshopReleaseControls,
   workshopEstateControls,
   craftTrainingControls,
-  heavenlyAlchemyControls,
+  heavenlyAlchemyControls,daoPathControls,
   publicBonds,personalBonds,allowPersonalThought=false,
 }) => {
   if (!cultivator) {
@@ -85,6 +88,7 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
   const bounty = relevantBounty(world.bounties, cultivator.id);
   const profile = !workspaceSection || workspaceSection === 'profile';
   const cultivation = !workspaceSection || workspaceSection === 'cultivation';
+  const daoPath=cultivation?projectDaoPath(world,cultivator):undefined;
   const mind = !workspaceSection || workspaceSection === 'mind';
   const ownThought=mind&&canReadOwnPersona(world,cultivator,allowPersonalThought);
   const readableMind=mind?personaDossierMemories(cultivator,ownThought):cultivator;
@@ -251,6 +255,7 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
       {cultivation && <>
       <TribulationPanel cultivator={cultivator} />
       <TechniquePanel world={world} cultivator={cultivator} sect={sect} location={location} cultivators={world.cultivators} />
+      {daoPath&&<DaoPathRead key={daoPath.actorId} view={daoPath} tick={world.tick} controls={daoPathControls}/>}
       {scriptureCatalog?.original && <React.Suspense fallback={<p role="status" className="text-xs text-slate-400">载入经义校勘…</p>}>
         <ScriptureEditionPanel world={world} actor={cultivator} catalog={scriptureCatalog} />
       </React.Suspense>}

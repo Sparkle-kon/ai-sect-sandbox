@@ -1,3 +1,4 @@
+import {resolveGuidedDaoPathTurn,type GuidedDaoPathTurn} from './guidedDaoPathTurn';
 import {resolveGuidedHeavenlyAlchemyTurn,type GuidedHeavenlyAlchemyTurn} from './guidedHeavenlyAlchemyTurn';
 import {resolveGuidedDungeonTurn,type GuidedDungeonTurn} from './guidedDungeonTurn';
 import {useCallback,useEffect,useRef,useState} from 'react';
@@ -131,15 +132,16 @@ export function useWorldSimulationController({
     setLlmConfig(config);
   };
 
-  const handleStepTick = useCallback(async (guide?:GuidedDungeonTurn|GuidedHeavenlyAlchemyTurn) => {
+  const handleStepTick = useCallback(async (guide?:GuidedDungeonTurn|GuidedHeavenlyAlchemyTurn|GuidedDaoPathTurn) => {
     if (fastForwardRun.current || campaignGuard.current || !tryBeginInteraction()) return;
     let modelAbort: AbortController | undefined;
     try {
       const starting = authority.current;
       const branchId = history.current.activeBranchId;
+      const revision=saveContextVersion.current;
       const directed=guide&&('kind' in guide
-        ?resolveGuidedHeavenlyAlchemyTurn(guide,starting,branchId,saveContextVersion.current)
-        :resolveGuidedDungeonTurn(guide,starting,branchId,saveContextVersion.current));
+        ?guide.kind==='dao-path'?resolveGuidedDaoPathTurn(guide,starting,branchId,revision):resolveGuidedHeavenlyAlchemyTurn(guide,starting,branchId,revision)
+        :resolveGuidedDungeonTurn(guide,starting,branchId,revision));
       if(guide&&!directed)return;
       if (llmConfig.enabled && llmConfig.apiKey.trim()) {
         const controller = new AbortController();

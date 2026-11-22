@@ -1,3 +1,4 @@
+import { daoPathEventId } from './daoPathTerms';
 import {isUpperPassageEvent,onLowerPlane} from './upperPassageIsolation';
 import { captureHeritageRelay } from './eraHeritageCapture';
 import { isScopedExpeditionGate } from './expeditionOmenTerms';
@@ -24,6 +25,11 @@ function learn(cultivator: Cultivator, rumor: Rumor, tick: number): void {
 
 export function witnessEvent(world: WorldState, event: WorldEvent): void {
   if (isUpperPassageEvent(event)) return;
+  // The Dao ledger is private even to the generic self-witness buffer. Replaying a local receipt as a rumor
+  // would disclose the actual path/prepared intent outside the scoped read; true DUEL remains ordinary news.
+  if (event.witnessScope === 'participants' && event.category === 'breakthrough' && event.actorIds.length === 1 &&
+      (['choose', 'practice', 'ready', 'cancel'] as const).some(move =>
+        event.id === daoPathEventId(event.actorIds[0], event.tick, move))) return;
   capturePublicWitnessFact(world, event);
   if (event.duelWinnerId || event.id.startsWith('evt-settlement-')) captureChronicleErrataSource(world, event);
   const involved = new Set(event.actorIds);
