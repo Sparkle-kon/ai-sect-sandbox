@@ -1,3 +1,5 @@
+import { drawSiegeFormationVfx, SIEGE_FORMATION_LIFETIME_MS } from './siegeFormationVfxDraw';
+import { projectSiegeFormationVfx } from './siegeFormationVfxPlan';
 import {buildProtagonistFlightEdges,drawProtagonistFlightEdges,withoutReplacedProtagonistFlightTrajectory} from './protagonistFlightMap';
 import {projectProtagonistFlight} from '../engine/protagonistFlightEngine';
 import {resolveMapDossierFocus,type MapDossierFocusRequest} from './mapDossierFocus';
@@ -429,6 +431,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   useEffect(() => { abandonGesture(); }, [gestureScope]);
 
   const actorPositions = useMemo(() => mapActorPositions(seenLocations, liveActors, mapView.trailPositions), [seenLocations, liveActors, mapView.trailPositions]);
+
   const selectedPoint = actorPositions.find(({ actor }) => actor.id === selectedCultivatorId);
   const followedActorId = selectedPoint?.actor.id;
   const followedX = selectedPoint?.x;
@@ -452,6 +455,10 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const selectedBadgeFact=selectedCultivatorId?actorBadgeFacts.get(selectedCultivatorId):undefined;
   // The canvas, keyboard index, and text summary all use the same authorized combat evidence.
   const presentation=useMemo(()=>({routes:motionSnapshot.routes,effects:combatVfx.effects}),[motionSnapshot,combatVfx]);
+  const formationFrames=useMemo(()=>projectSiegeFormationVfx(
+    world,new Map(seenLocations.map(location=>[location.id,location])),isCurrentLocation,
+    actorPositions.filter(({actor})=>!mapView.trailPositions.has(actor.id)&&!presentation.routes.has(actor.id)),
+  ),[world,seenLocations,isCurrentLocation,actorPositions,mapView.trailPositions,presentation.routes]);
   const canvasFlights=useMemo(()=>compileCanvasFlights(actorPositions,presentation.routes,actor=>flightAlignments.get(actor.sectId)),
     [actorPositions,presentation.routes,flightAlignments]);
   const routeWarningMarks=useMemo(()=>world.routeWarnings.notices.length ? paintedRouteWarningGeometry(world,
@@ -479,6 +486,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     return counts;
   }, [actorPositions, mapView.trailPositions]);
   const playback = useRef<{ source: WorldState['mapPresentation']; start: number } | undefined>();
+  const formationPlayback=useRef<{scope:string;start:number}>();
   const selectedScheme = selected?.activeScheme;
   const selectedSect = selected && world.sects.find((sect) => sect.id === selected.sectId);
   const avatarId = activeAvatar(world)?.id;
@@ -617,6 +625,14 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       playback.current = { source: world.mapPresentation, start: performance.now() };
     }
     const motionStart = playback.current?.start ?? performance.now();
+    const formationScope=formationFrames.length?JSON.stringify([clusterScope,formationFrames.map(frame=>frame.sourceId)]):'';
+    if(formationPlayback.current?.scope!==formationScope)formationPlayback.current={
+      scope:formationScope,start:performance.now(),
+    };
+    const formationStart=formationPlayback.current?.start??motionStart;
+    const animateFormation=!historical&&preview.length===0;
+    const movingAt=(now:number)=>hasMotion&&now-motionStart<MOTION_MS||
+      animateFormation&&formationFrames.length>0&&now-formationStart<SIEGE_FORMATION_LIFETIME_MS;
     const draw = (phase: number, elapsed: number, animate: boolean) => {
       const logicalPerCssPixel = width / (markerSize.width || width) / camera.zoom;
       ctx.save();
@@ -759,6 +775,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           for(const {x,y,width:spanWidth,height:spanHeight} of qiFlow.clip)ctx.rect(x,y,spanWidth,spanHeight);
           ctx.clip();
           drawMapCombatVfx(ctx,combatVfx,elapsed,animate,logicalPerCssPixel,scenicPhase,camera);
+          if(formationFrames.length)drawSiegeFormationVfx(ctx,formationFrames,performance.now()-formationStart,animate&&animateFormation,logicalPerCssPixel);
           if(ascensionMarks.length)drawAscensionMapVfx(ctx,ascensionMarks,elapsed,animate,logicalPerCssPixel);
           if(daoMarks.length)drawDaoIntentMapVfx(ctx,daoMarks,elapsed,animate,logicalPerCssPixel);
           if(alchemyMarks.length)drawHeavenlyAlchemyMapVfx(ctx,alchemyMarks,elapsed,animate,logicalPerCssPixel);
@@ -891,7 +908,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     const run = (now: number) => {
       if(!active()){frame=undefined;return;}
       const elapsed=now-motionStart;
-      const moving=hasMotion&&elapsed<MOTION_MS;
+      const moving=movingAt(now);
       const delay=mapScenicFrameDelay({moving,heat,ambient:qiFlow.hasMotion,width:markerSize.width});
       if(now-previous>=delay||wasMoving&&!moving){
         draw(now/1350,elapsed,true);
@@ -905,7 +922,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       frame=undefined;
       const now=performance.now(),animate=active();
       previous=now;
-      wasMoving=hasMotion&&now-motionStart<MOTION_MS;
+      wasMoving=movingAt(now);
       draw(0,now-motionStart,animate);
       if(animate&&(heat||wasMoving||qiFlow.hasMotion))frame=window.requestAnimationFrame(run);
     };
@@ -927,7 +944,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener?.('change',stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, atlasDrawing, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, civicObservation, usedVillageSegments, annotationView, annotationPins, armedBrush, preview, compact, clusterScope, scenicRelief, qiFlow, inspectionEnabled, letters, travel, flightMap, canvasFlights, combatVfx, actorBadgeFacts, hasBadgeQuote, domes, strategic, arenaMarks, dungeonMark, alchemyMarks, daoMarks, auctionMark, realmHalos, clanCeremonies, ascensionMarks]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, atlasDrawing, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, civicObservation, usedVillageSegments, annotationView, annotationPins, armedBrush, preview, compact, clusterScope, scenicRelief, qiFlow, inspectionEnabled, letters, travel, flightMap, canvasFlights, combatVfx, actorBadgeFacts, hasBadgeQuote, domes, strategic, arenaMarks, dungeonMark, alchemyMarks, daoMarks, auctionMark, realmHalos, clanCeremonies, ascensionMarks, formationFrames, historical]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
