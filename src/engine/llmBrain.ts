@@ -1,3 +1,5 @@
+import {activeForbiddenDuel, availableForbiddenArtOptions, chooseForbiddenArtDecision, forbiddenDuelForParticipant} from './forbiddenArtEngine';
+import type {ForbiddenArtChoice} from '../types/forbiddenArt';
 import {activeHeartDemon, isHeartDemonGuided, recommendHeartDemonChoice} from './heartDemonEngine';
 import {HEART_DEMON_CHOICES} from '../types/heartDemon';
 import {activeDestinyTraitOffer, chooseDestinyTraitDecision, destinyDuelAppetite} from './destinyTraitEngine';
@@ -477,6 +479,9 @@ export function computeHeuristicDecision(
       innerMonologue: tribulationStance === 'focus' ? '抱守道心，不为幻象所动。' : '雷云不散，且运转护身法诀抵挡。',
     };
   }
+  const contact = forbiddenDuelForParticipant(world, cultivator);
+  if (contact) return chooseForbiddenArtDecision(world, cultivator) ??
+    { chosenAction: 'REST', innerMonologue: '且待眼前交手依实况分明。' };
   const roguelikeDecision = chooseRoguelikeEncounterDecision(world, cultivator);
   if (roguelikeDecision) return roguelikeDecision;
   const destinyDecision = chooseDestinyTraitDecision(world, cultivator);
@@ -1846,6 +1851,20 @@ function decodeHeartDemonDecision(parsed: Partial<LLMDecisionPayload>, exactTria
     innerMonologue: '只择眼下的一条路，不把幻象错认成真的。' };
 }
 
+const forbiddenArtDecisionFields = ['chosenAction', 'targetForbiddenDuelId', 'forbiddenArtChoice'] as const;
+
+function decodeForbiddenArtDecision(parsed: Partial<LLMDecisionPayload>, id: string,
+  choices: readonly ForbiddenArtChoice[]): LLMDecisionPayload | undefined {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) ||
+      Object.keys(parsed).length !== forbiddenArtDecisionFields.length ||
+      !forbiddenArtDecisionFields.every(key => Object.hasOwn(parsed, key)) ||
+      parsed.chosenAction !== 'FORBIDDEN_ART' || parsed.targetForbiddenDuelId !== id) return undefined;
+  const forbiddenArtChoice = choices.find(choice => choice === parsed.forbiddenArtChoice);
+  if (!forbiddenArtChoice) return undefined;
+  return { chosenAction: 'FORBIDDEN_ART', targetForbiddenDuelId: id, forbiddenArtChoice,
+    innerMonologue: '胜负未定，只从眼前确可一试的路里选。' };
+}
+
 /** Legacy lightning posture facts are a whitelist, never a serialization of a guided heart scene. */
 function nativeTribulationPromptView(actor: Cultivator) {
   const trial = actor.tribulation;
@@ -1913,6 +1932,28 @@ export async function requestCultivatorLLMDecision(
       requestTick === world.tick + 1 && cultivator.tribulation?.id === exactTrialId &&
       activeHeartDemon(world, cultivator) === frame && !frame.queued && !isHeartDemonGuided(world, cultivator, frame)
         ? decodeHeartDemonDecision(parsed, exactTrialId) : undefined, 150);
+  }
+
+  const suspended = forbiddenDuelForParticipant(world, cultivator);
+  if (suspended) {
+    // Only the already threatened owner acts; the counterpart is held by the same actual contact.
+    const contact = activeForbiddenDuel(world, cultivator);
+    if (contact !== suspended || contact.guided || contact.queued || requestTick !== world.tick + 1) return undefined;
+    const exactId = contact.id;
+    const choices = availableForbiddenArtOptions(world, contact).map(option => option.choice);
+    if (!choices.some(choice => choice !== 'decline')) return undefined;
+    const menu = choices.map(forbiddenArtChoice => ({
+      chosenAction: 'FORBIDDEN_ART', targetForbiddenDuelId: exactId, forbiddenArtChoice,
+    }));
+    const prompt = '眼下真实的斗法已经接触。可以按常法继续（decline），或选一项当下确已可用的禁术。' +
+      `只原样复制下列一个完整 JSON 对象；不得补充人物、地点、独白、代价、出手数值或胜负。许可：${JSON.stringify(menu)}`;
+    return requestDecisionPrompt(config, requestTick, options, prompt, parsed => {
+      if (requestTick !== world.tick + 1 || contact.id !== exactId || activeForbiddenDuel(world, cultivator) !== contact ||
+          contact.guided || contact.queued) return undefined;
+      const current = availableForbiddenArtOptions(world, contact).map(option => option.choice);
+      if (current.length !== choices.length || current.some((choice, index) => choice !== choices[index])) return undefined;
+      return decodeForbiddenArtDecision(parsed, exactId, choices);
+    }, 160);
   }
 
   const encounter = activeRoguelikeEncounter(world, cultivator);
@@ -2251,9 +2292,10 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
 ${COGNITIVE_RESPONSE_GUIDE}`;
 
   return requestDecisionPrompt(config, requestTick, options, prompt, (parsed) => {
-          // Old lightning/legacy trials cannot smuggle heart-scene fields alongside a valid stance.
+          // Generic actions cannot smuggle proof-bound fields from either private choice lane.
           if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) ||
-              Object.hasOwn(parsed, 'targetHeartTrialId') || Object.hasOwn(parsed, 'heartDemonChoice')) return undefined;
+              Object.hasOwn(parsed, 'targetHeartTrialId') || Object.hasOwn(parsed, 'heartDemonChoice') ||
+              Object.hasOwn(parsed, 'targetForbiddenDuelId') || Object.hasOwn(parsed, 'forbiddenArtChoice')) return undefined;
           const validActions: ActionType[] = [
             'CULTIVATE',
             'BREAKTHROUGH',

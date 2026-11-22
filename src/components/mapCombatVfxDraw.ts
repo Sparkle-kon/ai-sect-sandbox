@@ -27,6 +27,17 @@ function clash(ctx:CanvasRenderingContext2D,s:number,p:number){
   }
 }
 
+// A small broken sigil around an existing clash. It neither draws another hit nor labels a cost.
+function forbiddenArtAccent(ctx:CanvasRenderingContext2D,s:number,p:number){
+  const radius=(11+p*3)*s;
+  for(const offset of [0,Math.PI]){
+    ctx.beginPath();
+    ctx.ellipse(0,0,radius,radius*.74,-.26,offset+.23,offset+Math.PI*.83);
+    stroke(ctx,'#522864',3*s);
+    stroke(ctx,'#dab5ff',1.35*s);
+  }
+}
+
 function storm(ctx:CanvasRenderingContext2D,s:number,phase:number){
   const lift=(2*Math.sin(phase))*s;
   ctx.fillStyle='rgba(77,35,115,.35)';
@@ -93,12 +104,18 @@ export function drawMapCombatVfx(ctx:CanvasRenderingContext2D,plan:MapCombatVfxP
   }
   if(live){
     const labels=new Map<string,number>();
+    const accentedSites=new Set<string>();
     for(const effect of plan.effects){
       if(!valid(effect.location))continue;
       const {x,y}=effect.location;
       ctx.save();ctx.translate(x,y);ctx.globalAlpha=1-p*.68;
       switch(effect.kind){
-        case 'clash':clash(ctx,s,p);break;
+        case 'clash':
+          clash(ctx,s,p);
+          if(effect.forbiddenArtAccent&&!accentedSites.has(effect.location.id)){
+            accentedSites.add(effect.location.id);forbiddenArtAccent(ctx,s,p);
+          }
+          break;
         case 'lightning':bolt(ctx,s);break;
         case 'breakthrough':
           if(effect.majorAdvance)lotus(ctx,s,p);

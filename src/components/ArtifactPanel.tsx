@@ -1,3 +1,4 @@
+import {ForbiddenArtScarsRead} from './ForbiddenArtCard';
 import { useEffect, useRef, useState } from 'react';
 import type { Artifact, Cultivator, WorldState } from '../types/world';
 import { durabilityOf, equippedArtifact, maxDurabilityOf } from '../engine/artifactEngine';
@@ -102,6 +103,7 @@ export function ArtifactPanel({ cultivator, cultivators, world, salvage }: {
                   {artifact.resonance !== undefined && <span>共鸣 {artifact.resonance}</span>}
                   {artifact.soul && <span>器灵：{artifact.soul.name} · 经验 {artifact.soul.experience}</span>}
                 </div>
+                {world&&artifact.id&&<ForbiddenArtScarsRead world={world} actor={cultivator} artifactId={artifact.id}/>}
                 {origin && blankMaker && finisher && <p className="text-slate-400 [overflow-wrap:anywhere]">
                   合练原器：{blankMaker}制坯，{finisher}成器。
                 </p>}

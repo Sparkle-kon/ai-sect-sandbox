@@ -164,14 +164,23 @@ export function sectQiBonus(world: WorldState, actor: Cultivator): number {
     ? 1 + sect.facilities.qi_array * .09 : 1;
 }
 
-/** Spend the defender's array HP to absorb external damage at its own headquarters. */
-export function mitigateSectArray(world: WorldState, defender: Cultivator, attacker: Cultivator, damage: number): number {
-  if (damage <= 0 || defender.sectId === attacker.sectId || defender.locationId !== attacker.locationId) return damage;
+function arrayDuelAbsorption(world: WorldState, defender: Cultivator, attacker: Cultivator, damage: number) {
+  if (damage <= 0 || defender.sectId === attacker.sectId || defender.locationId !== attacker.locationId) return undefined;
   const sect = world.sects.find(({ id }) => id === defender.sectId);
   const hq = world.locations.find(({ id }) => id === defender.locationId);
   if (!sect || !hq || hq.id !== sect.headquartersId || (hq.ownerSectId && hq.ownerSectId !== sect.id) ||
-      sect.facilities.defense_array <= 0 || sect.arrayHp <= 0) return damage;
-  const absorbed = Math.min(sect.arrayHp, Math.floor(damage * (.15 + .10 * sect.facilities.defense_array)));
-  sect.arrayHp -= absorbed;
-  return damage - absorbed;
+      sect.facilities.defense_array <= 0 || sect.arrayHp <= 0) return undefined;
+  return {sect, absorbed: Math.min(sect.arrayHp, Math.floor(damage * (.15 + .10 * sect.facilities.defense_array)))};
+}
+
+export function previewSectArrayDamage(world: WorldState, defender: Cultivator, attacker: Cultivator, damage: number): number {
+  return damage - (arrayDuelAbsorption(world,defender,attacker,damage)?.absorbed ?? 0);
+}
+
+/** Spend the defender's array HP only when the same native attack actually lands. */
+export function mitigateSectArray(world: WorldState, defender: Cultivator, attacker: Cultivator, damage: number): number {
+  const cover = arrayDuelAbsorption(world,defender,attacker,damage);
+  if (!cover) return damage;
+  cover.sect.arrayHp -= cover.absorbed;
+  return damage - cover.absorbed;
 }

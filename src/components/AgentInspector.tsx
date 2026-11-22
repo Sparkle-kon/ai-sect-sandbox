@@ -1,3 +1,4 @@
+import {ForbiddenArtScarsRead} from './ForbiddenArtCard';
 import {EarnedDestinyTraits} from './DestinyTraitCard';
 import type {CraftTrainingControls} from './CraftTrainingRead';
 import type {WorkshopEstateControls} from './WorkshopEstateRead';
@@ -135,6 +136,7 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
       </div>}
 
       {profile&&<EarnedDestinyTraits world={world} actor={cultivator}/>}
+      {profile&&<ForbiddenArtScarsRead world={world} actor={cultivator}/>}
 
       {/* Fictional character narration */}
       {mind && <div className="p-3 rounded-lg bg-slate-950/90 border border-indigo-500/30 space-y-1.5">

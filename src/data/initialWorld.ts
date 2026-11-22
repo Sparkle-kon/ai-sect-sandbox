@@ -60,7 +60,7 @@ import { createReincarnationState } from '../engine/reincarnationEngine';
 import { createRelocationState } from '../engine/relocationEngine';
 import { initializeWorldProfile } from '../engine/worldgenEngine';
 import { createDoctrineState } from '../engine/doctrineEngine';
-import { createDecisionTraceState } from '../engine/decisionTraceEngine';
+import { createDecisionTraceState } from '../engine/decisionTraceState';
 import { createEstateState } from '../engine/estateEngine';
 import { createWitnessState } from '../engine/witnessEngine';
 import { createSettlementState } from '../engine/settlementEngine';

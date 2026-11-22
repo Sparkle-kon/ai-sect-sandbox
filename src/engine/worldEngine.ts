@@ -1,3 +1,8 @@
+import type { ForbiddenDuelContact, NativeDuelRolls } from '../types/forbiddenArt';
+import { measureNativeDuel } from './nativeDuelRules';
+import { consumeForbiddenDuelContact, forbiddenDuelForParticipant, openForbiddenDuelContact,
+  prepareForbiddenDuelResolution, pruneInvalidForbiddenDuelContacts, recordForbiddenArtOutcome,
+  type ForbiddenArtActivation } from './forbiddenArtEngine';
 import { interruptStoryChoicesOnDeath } from './interruptedStoryChoices';
 import {onLowerPlane} from './upperPassageIsolation';
 import {isUpperArrayFieldAction,resolveUpperArrayFieldAction} from './upperArrayFieldActions';
@@ -110,8 +115,8 @@ import { activeAvatar, consumeAvatarOrder, maintainPlayerAvatar } from './avatar
 import {activeRoguelikeEncounter,chooseRoguelikeEncounterDecision,finalizeRoguelikeEncounters,
   maybeOpenRoguelikeEncounter,settleRoguelikeEncounter} from './roguelikeEncounterEngine';
 import {ROGUELIKE_ENCOUNTER_CHOICES} from '../types/roguelikeEncounter';
-import { activeDestinyTraitOffer, chooseDestinyTraitDecision, destinyCultivationDetox, destinyCultivationMultiplier, destinyDuelDamageMultiplier,
-  destinyDuelPower, finalizeDestinyTraitOffers, maybeOpenDestinyTrait, settleDestinyTrait } from './destinyTraitEngine';
+import { activeDestinyTraitOffer, chooseDestinyTraitDecision, destinyCultivationDetox, destinyCultivationMultiplier,
+  finalizeDestinyTraitOffers, maybeOpenDestinyTrait, settleDestinyTrait } from './destinyTraitEngine';
 import { archiveChronicleEvents } from './novelGenerator';
 import { advanceWitnessedPersonalStory, captureWitnessedPersonalScene } from './witnessedPersonalStory';
 import { advanceProtagonistSuccession } from './protagonistSuccession';
@@ -131,13 +136,13 @@ import { fabricateRumor, knownRumorLead, spreadRumors, witnessEvent } from './ru
 import { expireScheme, pursueScheme } from './schemeEngine';
 import { scriptedDialogue } from './dialogueEngine';
 import { resolveEncounter } from './encounterEngine';
-import { cultivationMultiplier, strikeMultiplier } from './elementalEngine';
+import { cultivationMultiplier } from './elementalEngine';
 import { authorTechnique, dropInheritance, gainMastery, masteryMultiplier, studyTechnique } from './techniqueEngine';
 import { maintainAlchemy, resolveAlchemy } from './alchemyEngine';
 import { lootStorageRing, resolveArtifactAction, wearArtifact } from './artifactEngine';
 import { interfereTribulation, isTribulationActive, recommendedTribulationStance, resolveTribulation, tribulationTarget, triggerTribulation } from './tribulationEngine';
 import { maintainSectPolitics, resolveLeadershipAction, rewardContribution } from './sectPoliticsEngine';
-import { maintainSectEconomy, mitigateSectArray, resolveSectEconomyAction, sectQiBonus } from './sectEconomyEngine';
+import { maintainSectEconomy, mitigateSectArray, previewSectArrayDamage, resolveSectEconomyAction, sectQiBonus } from './sectEconomyEngine';
 import { activeSiegeForActor, advanceDiplomacy, resolveDiplomacyAction } from './diplomacyEngine';
 import { activeOccasionForActor, advanceOccasions, joinOccasion } from './occasionEngine';
 import { advanceBounties, pursueBounty, recordTransgression } from './bountyEngine';
@@ -146,7 +151,7 @@ import { deriveMapPresentation } from './mapMotionEngine';
 import { advanceMapHazards } from './mapBrushEngine';
 import { resolveFurnaceSafetyAction } from './furnaceSafetyEngine';
 import { resolveArtifactSalvageAction } from './artifactSalvageEngine';
-import { advanceSpiritBeasts, petCombatBonus, tameSpiritBeast } from './spiritBeastEngine';
+import { advanceSpiritBeasts, tameSpiritBeast } from './spiritBeastEngine';
 
 export type GodInterventionType =
   | 'SPAWN_TREASURE'
@@ -233,6 +238,128 @@ function applyFrontierDecision(world:WorldState,actor:Cultivator,payload:LLMDeci
   return event;
 }
 
+interface ForbiddenDuelSettlement {
+  contact: ForbiddenDuelContact;
+  activation: ForbiddenArtActivation;
+}
+
+/** Ordinary and suspended contact finish through the same real damage, witnesses, and inheritance. */
+function settleNativeDuel(world:WorldState,cultivator:Cultivator,defender:Cultivator,decision:LLMDecisionPayload,
+  rolls:NativeDuelRolls,authorizedBountyTargetId?:string,emit?:(event:WorldEvent)=>void,
+  context?:ForbiddenDuelSettlement):WorldEvent{
+  const location=world.locations.find(site=>site.id===cultivator.locationId);
+  const finishDuel = (proof: WorldEvent): WorldEvent => {
+    const breach = recordCeasefireHostility(world, cultivator, defender, proof);
+    if (breach) recordAuxiliaryActionEvent(world, breach, emit);
+    return proof;
+  };
+
+  if(context?.activation.escape){
+    const release=recordForbiddenArtOutcome(world,context.contact,context.activation,'escape');
+    if(release)return finishDuel(release);
+  }
+  const modifier=context?{ownerId:context.contact.ownerId,scoreMultiplier:context.activation.scoreMultiplier,
+    incomingMultiplier:context.activation.incomingMultiplier}:undefined;
+  const ordinaryWinner=context&&context.activation.choice!=='decline'
+    ?measureNativeDuel(world,cultivator,defender,rolls).winner:undefined;
+  const {winner,loser,hitLoser,hitWinner,divineArtProse}=measureNativeDuel(world,cultivator,defender,rolls,modifier);
+  const sufferedByLoser=mitigateSectArray(world,loser,winner,hitLoser);
+  const sufferedByWinner=mitigateSectArray(world,winner,loser,hitWinner);
+  const attachForbiddenOutcome=(event:WorldEvent):WorldEvent=>{
+    if(!context||context.activation.choice==='decline')return event;
+    const owner=context.contact.ownerId===cultivator.id?cultivator:defender;
+    const receipt=recordForbiddenArtOutcome(world,context.contact,context.activation,
+      !owner.alive?'fallen':winner===owner&&ordinaryWinner!==owner?'reversal':'survived');
+    if(receipt?.forbiddenArt){
+      event.forbiddenArt=receipt.forbiddenArt;
+      event.description+=receipt.description;
+    }
+    return event;
+  };
+  const loserBeforeHp = loser.hp;
+  const winnerBeforeHp = winner.hp;
+  loser.hp = Math.max(context?.activation.lastStand && context.contact.ownerId === loser.id ? 1 : 0, loser.hp - sufferedByLoser);
+  winner.hp = Math.max(1, winner.hp - sufferedByWinner);
+  const damage = [{cultivatorId: loser.id, amount: loserBeforeHp - loser.hp},
+    {cultivatorId: winner.id, amount: winnerBeforeHp - winner.hp}].filter((item) => item.amount > 0);
+  wearArtifact(winner, true);
+  wearArtifact(loser, false);
+
+  adjustRelationship(
+    world,
+    cultivator.id,
+    defender.id,
+    -40,
+    '血仇',
+    `在${location?.name ?? '荒野'}发生生死斗法，结下深仇`
+  );
+
+  if (loser.hp <= 0) {
+    loser.alive = false;
+    if (loser.id !== authorizedBountyTargetId) recordTransgression(winner, 'killing');
+    closeInterruptedTrial(loser, world.tick);
+    dropInheritance(loser, world);
+    const loot = lootStorageRing(winner, loser);
+    const lootedStones = loot.stones;
+    recordMemory(
+      winner,
+      world.tick,
+      `在生死斗法中斩杀【${loser.name}】，接收其储物戒，得 ${lootedStones} 灵石及 ${loot.artifacts} 件法宝！`,
+      10,
+      'combat', 4
+    );
+    const lethalEvent: WorldEvent = {
+      id: `evt-${world.tick}-${cultivator.id}-kill`,
+      tick: world.tick,
+      year: world.year,
+      month: world.month,
+      title: `陨落：${winner.name}斩杀${loser.name}！`,
+      description: `【${location?.name ?? '秘境'}】剑气纵横，${cultivator.name}与${defender.name}爆发生死决战！最终${winner.name}技高一筹，将${loser.name}当场斩杀并收缴其储物戒：${lootedStones} 灵石及 ${loot.artifacts} 件法宝。`,
+      category: 'death',
+      actorIds: [cultivator.id, defender.id],
+      duelWinnerId: winner.id,
+      damage,
+      dialogue: scriptedDialogue('combat', cultivator, defender, `${winner.name}胜出，${loser.name}当场陨落。`, decision.spokenLine),
+      locationId: cultivator.locationId,
+    };
+    if (divineArtProse) lethalEvent.description += divineArtProse + '。';
+    const fragments = transferLootedRelics(world, winner, loser, lethalEvent);
+    if (fragments) lethalEvent.description += `另有${fragments}枚古器碎片循实账随战利品转移。`;
+    return finishDuel(attachForbiddenOutcome(lethalEvent));
+  }
+
+  recordMemory(
+    winner,
+    world.tick,
+    `与【${loser.name}】激战一场将其击败重创。`,
+    8,
+    'combat', 3
+  );
+  recordMemory(
+    loser,
+    world.tick,
+    `不敌【${winner.name}】身受重伤，燃血遁走，此仇必报！`,
+    9,
+    'combat', -5
+  );
+  const duelEvent: WorldEvent = {
+    id: `evt-${world.tick}-${cultivator.id}-duel`,
+    tick: world.tick,
+    year: world.year,
+    month: world.month,
+    title: `惊天斗法：${cultivator.name}激战${defender.name}`,
+    description: `${cultivator.name}于【${location?.name ?? '秘境'}】向${defender.name}悍然出手！一番激斗后，${winner.name}占据上风，${loser.name}受创（-${loserBeforeHp - loser.hp} HP）化作血光遁走。`,
+    category: 'combat',
+    actorIds: [cultivator.id, defender.id],
+    duelWinnerId: winner.id,
+    damage,
+    dialogue: scriptedDialogue('combat', cultivator, defender, `${winner.name}占得上风，${loser.name}负伤离去。`, decision.spokenLine),
+    locationId: cultivator.locationId,
+  };
+  if (divineArtProse) duelEvent.description += divineArtProse + '。';
+  return finishDuel(attachForbiddenOutcome(duelEvent));
+}
+
 export function applyCultivatorBrainDecision(
   world: WorldState,
   cultivator: Cultivator,
@@ -242,6 +369,7 @@ export function applyCultivatorBrainDecision(
   emit?: (event: WorldEvent) => void,
   explicitAvatarDecision?: LLMDecisionPayload,
   modelInput = false,
+  allowForbiddenDuel = true,
 ): WorldEvent | null {
   if (!cultivator.alive) return null;
   if(cultivator.positionPlane==='frontier'){
@@ -438,7 +566,7 @@ export function applyCultivatorBrainDecision(
       return pursueBounty(world, cultivator, decision, (target) => {
         const result = applyCultivatorBrainDecision(world, cultivator, {
           chosenAction: 'DUEL', innerMonologue: decision.innerMonologue, targetCultivatorId: target.id,
-        }, rng, target.id, emit);
+        }, rng, target.id, emit, undefined, false, false);
         cultivator.currentAction = 'PURSUE_BOUNTY';
         return result?.duelWinnerId ? { event: result, winnerId: result.duelWinnerId } : result;
       });
@@ -642,7 +770,7 @@ export function applyCultivatorBrainDecision(
       return pursueScheme(cultivator, world, decision.proposedScheme, (target) => {
         const result = applyCultivatorBrainDecision(world, cultivator, {
           chosenAction: 'DUEL', innerMonologue: decision.innerMonologue, targetCultivatorId: target.id,
-        }, rng, undefined, emit);
+        }, rng, undefined, emit, undefined, false, false);
         cultivator.currentAction = 'PURSUE_SCHEME';
         return result;
       }, (target, delta) => adjustRelationship(world, cultivator.id, target.id, delta, '竞争'), rng);
@@ -831,117 +959,33 @@ export function applyCultivatorBrainDecision(
       };
     }
 
+    case 'FORBIDDEN_ART':
+      // The owner can only answer through an actual suspended duel's native monthly slot.
+      return null;
     case 'DUEL': {
       const defender = world.cultivators.find((c) =>
         c.alive && c.id !== cultivator.id && c.locationId === cultivator.locationId && !activeDanxiaMedicineEscort(world,c) && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) && !courierCheckpoint(world, c) && !expeditionRescueCheckpoint(world, c) && !boundaryReliefCheckpoint(world, c) && !disasterShelterCheckpoint(world,c) &&
         (decision.targetCultivatorId === undefined || c.id === decision.targetCultivatorId)
       );
-      if (!defender) return null;
+      if (!defender || forbiddenDuelForParticipant(world,defender) || forbiddenDuelForParticipant(world,cultivator)) return null;
       const ward = interceptSanctuaryDuel(world, cultivator, defender);
       if (ward?.blocked) return ward.event;
       if (ward) recordAuxiliaryActionEvent(world, ward.event, emit);
-      const finishDuel = (proof: WorldEvent): WorldEvent => {
-        const breach = recordCeasefireHostility(world, cultivator, defender, proof);
-        if (breach) recordAuxiliaryActionEvent(world, breach, emit);
-        return proof;
-      };
-
-      const attackerArt = destinyDuelPower(cultivator, defender);
-      const defenderArt = destinyDuelPower(defender, cultivator);
-      const attackerScore = cultivator.combatPower * (0.85 + rng() * 0.3) * strikeMultiplier(cultivator, defender) * masteryMultiplier(cultivator) * petCombatBonus(world, cultivator) * attackerArt.multiplier;
-      const defenderScore = defender.combatPower * (0.85 + rng() * 0.3) * strikeMultiplier(defender, cultivator) * masteryMultiplier(defender) * petCombatBonus(world, defender) * defenderArt.multiplier;
-      const divineArts = [[cultivator.name, attackerArt.arts], [defender.name, defenderArt.arts]] as const;
-      const divineArtProse = divineArts.map(([name, arts]) => arts.length ? name + '使出' + arts.map(art => '「' + art + '」').join('、') : '')
-        .filter(Boolean).join('；');
-      const winner = attackerScore >= defenderScore ? cultivator : defender;
-      const loser = winner.id === cultivator.id ? defender : cultivator;
-
-      const dmgToLoser = Math.round(loser.maxHp * (0.35 + rng() * 0.35) * strikeMultiplier(winner, loser));
-      const dmgToWinner = Math.round(winner.maxHp * (0.1 + rng() * 0.15) * strikeMultiplier(loser, winner));
-      const sufferedByLoser = mitigateSectArray(world, loser, winner, Math.round(dmgToLoser * destinyDuelDamageMultiplier(loser, winner)));
-      const sufferedByWinner = mitigateSectArray(world, winner, loser, Math.round(dmgToWinner * destinyDuelDamageMultiplier(winner, loser)));
-      const loserBeforeHp = loser.hp;
-      const winnerBeforeHp = winner.hp;
-      loser.hp = Math.max(0, loser.hp - sufferedByLoser);
-      winner.hp = Math.max(1, winner.hp - sufferedByWinner);
-      const damage = [{cultivatorId: loser.id, amount: loserBeforeHp - loser.hp},
-        {cultivatorId: winner.id, amount: winnerBeforeHp - winner.hp}].filter((item) => item.amount > 0);
-      wearArtifact(winner, true);
-      wearArtifact(loser, false);
-
-      adjustRelationship(
-        world,
-        cultivator.id,
-        defender.id,
-        -40,
-        '血仇',
-        `在${location?.name ?? '荒野'}发生生死斗法，结下深仇`
-      );
-
-      if (loser.hp <= 0) {
-        loser.alive = false;
-        if (loser.id !== authorizedBountyTargetId) recordTransgression(winner, 'killing');
-        closeInterruptedTrial(loser, world.tick);
-        dropInheritance(loser, world);
-        const loot = lootStorageRing(winner, loser);
-        const lootedStones = loot.stones;
-        recordMemory(
-          winner,
-          world.tick,
-          `在生死斗法中斩杀【${loser.name}】，接收其储物戒，得 ${lootedStones} 灵石及 ${loot.artifacts} 件法宝！`,
-          10,
-          'combat', 4
-        );
-        const lethalEvent: WorldEvent = {
-          id: `evt-${world.tick}-${cultivator.id}-kill`,
-          tick: world.tick,
-          year: world.year,
-          month: world.month,
-          title: `陨落：${winner.name}斩杀${loser.name}！`,
-          description: `【${location?.name ?? '秘境'}】剑气纵横，${cultivator.name}与${defender.name}爆发生死决战！最终${winner.name}技高一筹，将${loser.name}当场斩杀并收缴其储物戒：${lootedStones} 灵石及 ${loot.artifacts} 件法宝。`,
-          category: 'death',
-          actorIds: [cultivator.id, defender.id],
-          duelWinnerId: winner.id,
-          damage,
-          dialogue: scriptedDialogue('combat', cultivator, defender, `${winner.name}胜出，${loser.name}当场陨落。`, decision.spokenLine),
-          locationId: cultivator.locationId,
-        };
-        if (divineArtProse) lethalEvent.description += divineArtProse + '。';
-        const fragments = transferLootedRelics(world, winner, loser, lethalEvent);
-        if (fragments) lethalEvent.description += `另有${fragments}枚古器碎片循实账随战利品转移。`;
-        return finishDuel(lethalEvent);
+      const rolls:NativeDuelRolls=[rng(),rng(),rng(),rng()];
+      if(allowForbiddenDuel&&authorizedBountyTargetId===undefined&&
+          (cultivator.hp<.25*cultivator.maxHp||defender.hp<.25*defender.maxHp)){
+        const threat=measureNativeDuel(world,cultivator,defender,rolls);
+        if(threat.loser.hp<.25*threat.loser.maxHp&&
+          previewSectArrayDamage(world,threat.loser,threat.winner,threat.hitLoser)>=threat.loser.hp){
+          const contact=openForbiddenDuelContact(world,cultivator,defender,threat.loser,rolls);
+          if(contact)return {
+            id:`evt-${contact.id}-contact`,tick:world.tick,year:world.year,month:world.month,
+            title:'刃下绝境',description:'两道锋芒已在此地相抵；交锋尚未落定。',
+            category:'combat',actorIds:[cultivator.id,defender.id],locationId:contact.siteId,witnessScope:'participants',
+          };
+        }
       }
-
-      recordMemory(
-        winner,
-        world.tick,
-        `与【${loser.name}】激战一场将其击败重创。`,
-        8,
-        'combat', 3
-      );
-      recordMemory(
-        loser,
-        world.tick,
-        `不敌【${winner.name}】身受重伤，燃血遁走，此仇必报！`,
-        9,
-        'combat', -5
-      );
-      const duelEvent: WorldEvent = {
-        id: `evt-${world.tick}-${cultivator.id}-duel`,
-        tick: world.tick,
-        year: world.year,
-        month: world.month,
-        title: `惊天斗法：${cultivator.name}激战${defender.name}`,
-        description: `${cultivator.name}于【${location?.name ?? '秘境'}】向${defender.name}悍然出手！一番激斗后，${winner.name}占据上风，${loser.name}受创（-${loserBeforeHp - loser.hp} HP）化作血光遁走。`,
-        category: 'combat',
-        actorIds: [cultivator.id, defender.id],
-        duelWinnerId: winner.id,
-        damage,
-        dialogue: scriptedDialogue('combat', cultivator, defender, `${winner.name}占得上风，${loser.name}负伤离去。`, decision.spokenLine),
-        locationId: cultivator.locationId,
-      };
-      if (divineArtProse) duelEvent.description += divineArtProse + '。';
-      return finishDuel(duelEvent);
+      return settleNativeDuel(world,cultivator,defender,decision,rolls,authorizedBountyTargetId,emit);
     }
   }
 }
@@ -978,6 +1022,7 @@ export function advanceWorldTick(
     onCompletedEvents?: (events: readonly WorldEvent[]) => void;
     replayDraws?: Readonly<Record<string, number>>;
     replayHeartModelActors?: ReadonlySet<string>;
+    replayForbiddenModelActors?: ReadonlySet<string>;
     onActor?: (actorId: string, candidates: DecisionTraceCandidate[], applied: boolean) => void;
   }
 ): WorldState {
@@ -1009,6 +1054,8 @@ export function advanceWorldTick(
   beginClinicDutyTurn(nextState);
   recordRegionalEarlyPromotions(nextState,prevState);
   const regionalTurn=beginRegionalSimulationTurn(nextState);
+  const finishedDuelActors=new Set<string>();
+  pruneInvalidForbiddenDuelContacts(nextState);
 
   for (const cultivator of [...nextState.cultivators]) {
     if (!cultivator.alive) continue;
@@ -1108,6 +1155,40 @@ export function advanceWorldTick(
     if (activeRelocationForActor(nextState, cultivator)) {
       cultivator.currentAction = 'RELOCATE';
       cultivator.innerMonologue = '山门迁徙尚在途中，须领护送之责。';
+      continue;
+    }
+
+    if(finishedDuelActors.has(cultivator.id))continue;
+    const contact=nextState.forbiddenDuels?.length?forbiddenDuelForParticipant(nextState,cultivator):undefined;
+    if(contact){
+      cultivator.currentAction='FORBIDDEN_ART';
+      cultivator.innerMonologue='刃势未歇，此番交锋尚未落定。';
+      if(contact.attackerId!==cultivator.id||contact.openedTick>=nextState.tick)continue;
+      const defender=nextState.cultivators.find(actor=>actor.id===contact.defenderId);
+      const owner=contact.ownerId===cultivator.id?cultivator:defender;
+      if(!defender||!owner)continue;
+      const offered=precomputedDecisions&&Object.hasOwn(precomputedDecisions,owner.id)?precomputedDecisions[owner.id]:undefined;
+      const modelInput=Boolean(offered&&(traceOptions?.modelActors?.has(owner.id)||traceOptions?.replayForbiddenModelActors?.has(owner.id)));
+      const response=prepareForbiddenDuelResolution(nextState,contact,offered,modelInput);
+      if(response.kind!=='ready')continue;
+      const activation=consumeForbiddenDuelContact(nextState,contact,response.choice,response.origin)??
+        consumeForbiddenDuelContact(nextState,contact,'decline','utility');
+      if(!activation)continue;
+      const settled:LLMDecisionPayload={chosenAction:'FORBIDDEN_ART',targetForbiddenDuelId:contact.id,
+        forbiddenArtChoice:activation.choice,innerMonologue:'只在眼前实有的刃下落定此念。'};
+      if(traceOptions?.tape)rememberReplayDecision(traceOptions.tape,owner.id,settled,0,false,activation.origin==='model');
+      finishedDuelActors.add(cultivator.id);finishedDuelActors.add(defender.id);
+      const publish=(event:WorldEvent)=>{newEvents.push(event);witnessEvent(nextState,event);};
+      const event=settleNativeDuel(nextState,cultivator,defender,settled,contact.rolls,undefined,publish,{contact,activation});
+      captureWitnessedPersonalScene(nextState,event);
+      publish(event);
+      renewRegionalProtectionAfterEvent(regionalTurn);
+      if(recordDecisionEffect&&offered)recordDecisionEffect(owner.id,activation.origin==='model'||!modelInput&&
+        activation.origin==='utility'&&offered.chosenAction==='FORBIDDEN_ART'&&offered.targetForbiddenDuelId===contact.id&&
+        offered.forbiddenArtChoice===activation.choice);
+      traceOptions?.onActor?.(owner.id,[],true);
+      if(traceOptions?.captureTrace!==false)recordDecisionTrace(nextState,owner.id,[],settled,
+        activation.origin==='player'?'avatar':activation.origin,true);
       continue;
     }
 
@@ -1312,6 +1393,7 @@ export function advanceWorldTick(
   settleUpperPassageMortality(nextState);
   settleFrontierMortality(nextState);
   finalizeDestinyTraitOffers(nextState);
+  pruneInvalidForbiddenDuelContacts(nextState);
   recordEraHistoryTurn(prevState,nextState,completedEvents);
   recordRegionalTurnRegistry(nextState);
   traceOptions?.onCompletedEvents?.(completedEvents);
@@ -1475,5 +1557,6 @@ export function executeGodIntervention(
     nextState.events = nextState.events.slice(0, 120);
     nextState.mapPresentation = deriveMapPresentation(prevState, nextState, [head]);
   }
+  pruneInvalidForbiddenDuelContacts(nextState);
   return nextState;
 }

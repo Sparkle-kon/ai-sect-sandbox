@@ -1,3 +1,4 @@
+import { FORBIDDEN_ART_IDS } from '../types/forbiddenArt';
 import { isScopedExpeditionGate } from '../engine/expeditionOmenTerms';
 import { isTribulationActive, tribulationTarget } from '../engine/tribulationEngine';
 import { terrainTileAt } from '../engine/terrainEngine';
@@ -15,6 +16,7 @@ export interface MapCombatEffect extends PresentationEffect {
   wave?: number;
   totalWaves?: number;
   majorAdvance?: boolean;
+  forbiddenArtAccent?: true;
 }
 
 export interface MapCombatVfxPlan {
@@ -59,8 +61,30 @@ export function buildMapCombatVfxPlan(world: WorldState, view: Terrain, presenta
     return event?.tick === tick && event.year === year && event.month === month && event.locationId && sites.has(event.locationId) &&
       event.witnessScope !== 'participants' && !isUpperPassageEvent(event) ? event : undefined;
   };
+  const visibleActors = new Set(view.liveActors);
   const travellers = mapTransitActorIds(world);
   const grounded = (actor: Cultivator) => onLowerPlane(actor) && !travellers.has(actor.id) && !view.trailPositions.has(actor.id);
+
+  // This decorates only an already-proven native duel clash, never a free-standing combat or damage mark.
+  const hasCommittedForbiddenArt = (event: WorldEvent, locationId: string) => {
+    const scar = event.forbiddenArt;
+    if (!scar || scar.siteId !== locationId || scar.tick !== tick || !Number.isSafeInteger(scar.openedTick) ||
+        scar.openedTick < 0 || scar.openedTick > tick || !scar.id || !scar.contactId || !scar.artifactId ||
+        !FORBIDDEN_ART_IDS.includes(scar.artId) || !['player', 'utility', 'model'].includes(scar.origin) ||
+        scar.ownerId === scar.opponentId || !event.actorIds.includes(scar.ownerId) || !event.actorIds.includes(scar.opponentId)) return false;
+    const paid = [scar.paid?.hp, scar.paid?.lifespan, scar.paid?.durability];
+    if (!paid.every(amount => Number.isFinite(amount) && amount >= 0) || !paid.some(positiveAmount)) return false;
+    const owner = actors.get(scar.ownerId), opponent = actors.get(scar.opponentId);
+    if (!owner || !opponent || !grounded(owner) || !grounded(opponent) || owner.locationId !== locationId ||
+        opponent.locationId !== locationId) return false;
+    // A native kill can leave one participant absent from the living actor layer. Otherwise both must be visible.
+    const visibleOrNativeFallen = (actor: Cultivator) => visibleActors.has(actor) ||
+      (event.category === 'death' && !actor.alive && actor.hp === 0 && event.duelWinnerId !== actor.id);
+    if (!visibleOrNativeFallen(owner) || !visibleOrNativeFallen(opponent)) return false;
+    return scar.result === 'reversal' ? event.duelWinnerId === owner.id :
+      scar.result === 'fallen' ? event.category === 'death' && !owner.alive && owner.hp === 0 && event.duelWinnerId !== owner.id :
+      scar.result === 'survived' && living(owner);
+  };
 
   const storms: MapCombatVfxPlan['storms'][number][] = [];
   for (const actor of view.liveActors) {
@@ -119,7 +143,8 @@ export function buildMapCombatVfxPlan(world: WorldState, view: Terrain, presenta
       if (first && second && actorIds.length === 2 && second !== first && (event.duelWinnerId === first || event.duelWinnerId === second) &&
           ((event.id === prefix + '-duel' && event.category === 'combat') ||
            (event.id === prefix + '-kill' && event.category === 'death'))) {
-        add({ id: id + '-clash', kind: 'clash', locationId, actorIds });
+        add({ id: id + '-clash', kind: 'clash', locationId, actorIds,
+          ...(hasCommittedForbiddenArt(event, locationId) ? { forbiddenArtAccent: true } : {}) });
       }
 
       const trial = lone && lead ? genuineTrial(lead, tick) : undefined;

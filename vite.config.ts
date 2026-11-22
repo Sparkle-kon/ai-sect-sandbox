@@ -82,12 +82,17 @@ export default defineConfig({
             './src/engine/publicDialogueProvenance.ts', './src/engine/chroniclePublicProse.ts'],
           // Private theatre selection and its save proof are shared by UI, native and storage.
           'heart-demon-rules': ['./src/engine/heartDemonEngine.ts', './src/engine/interruptedStoryChoices.ts',
-            './src/engine/storageHeartDemonValidation.ts', './src/types/heartDemon.ts'],
+            './src/engine/storageHeartDemonValidation.ts', './src/types/heartDemon.ts', './src/engine/tribulationTerms.ts'],
+          // The game seed depends only on trace state; keep the optional replay rules separate.
+          'decision-replay': ['./src/engine/decisionTraceEngine.ts'],
+          // One shared chunk for authored arts, native costs and their strict save proof.
+          'forbidden-art-rules': ['./src/types/forbiddenArt.ts', './src/engine/forbiddenArtCatalog.ts',
+            './src/engine/forbiddenArtEngine.ts', './src/engine/storageForbiddenArtValidation.ts'],
           'personal-rules': ['./src/engine/artifactEngine.ts', './src/engine/reincarnationEngine.ts', './src/engine/schemeEngine.ts', './src/engine/elementalEngine.ts'],
           'world-identity': ['./src/engine/worldRandom.ts', './src/engine/worldIdentity.ts', './src/engine/worldgenProfiles.ts'],
           'travel-checkpoints': ['./src/engine/expeditionRescueCheckpoint.ts', './src/engine/boundaryReliefCheckpoint.ts',
             './src/engine/disasterShelterCheckpoint.ts','./src/engine/marketFreightCheckpoint.ts'],
-          'journey-rules': ['./src/engine/terrainEngine.ts', './src/engine/mapMotionEngine.ts', './src/engine/roadEngine.ts',
+          'journey-rules': ['./src/engine/terrainEngine.ts', './src/engine/simulationRegionGeometry.ts', './src/engine/mapMotionEngine.ts', './src/engine/roadEngine.ts',
             './src/engine/sealedCourierEngine.ts', './src/engine/escortEngine.ts', './src/engine/pilgrimageEngine.ts', './src/engine/expeditionRescueEngine.ts',
             './src/engine/boundaryReliefEngine.ts','./src/engine/routeWarningProof.ts','./src/engine/routeWarningEngine.ts'],
           'workspace-shell': ['./src/components/SandboxWorkspace.tsx', './src/components/workspacePreferences.ts'],

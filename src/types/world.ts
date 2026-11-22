@@ -1,3 +1,4 @@
+import type { ForbiddenArtChoice, ForbiddenArtScar, ForbiddenDuelContact } from './forbiddenArt';
 import type { HeartDemonChoice, HeartDemonFrame, HeartDemonGuide } from './heartDemon';
 import type { DestinyTraitId, DestinyTraitProgress } from './destinyTrait';
 import type {RoguelikeEncounterChoice,RoguelikeEncounterRecord} from './roguelikeEncounter';
@@ -105,6 +106,7 @@ export type PersonalityTrait =
 export type ActionType =
   | 'ROGUELIKE_ENCOUNTER'
   | 'AWAKEN_DESTINY'
+  | 'FORBIDDEN_ART'
   | 'CULTIVATE'
   | 'BREAKTHROUGH'
   | 'EXPLORE'
@@ -404,6 +406,7 @@ export interface OrdinaryActionEvidence {
 }
 export interface Cultivator {
   destinyTraits?: DestinyTraitProgress;
+  forbiddenScars?: ForbiddenArtScar[];
   positionPlane?:UpperPositionPlane|FrontierPositionPlane;
   ordinaryActionEvidence?: OrdinaryActionEvidence;
   id: string;
@@ -476,6 +479,7 @@ export type EraHistoryReceipt = EraHistoryIdentity & (
 export interface EraHistoryState {receipts:EraHistoryReceipt[]}
 
 export interface WorldEvent {
+  forbiddenArt?: ForbiddenArtScar;
   id: string;
   tick: number;
   year: number;
@@ -526,6 +530,8 @@ export interface LLMConfig {
 export interface LLMDecisionPayload {
   targetHeartTrialId?: string;
   heartDemonChoice?: HeartDemonChoice;
+  targetForbiddenDuelId?: string;
+  forbiddenArtChoice?: ForbiddenArtChoice;
   targetRoguelikeEncounterId?:string;
   roguelikeEncounterChoice?:RoguelikeEncounterChoice;
   targetDestinyOfferId?: string;
@@ -3545,6 +3551,7 @@ export interface NorthWellRevisitReviewState {
 
 export interface WorldState {
   roguelikeEncounters?:RoguelikeEncounterRecord[];
+  forbiddenDuels?: ForbiddenDuelContact[];
   scribeCommissions?: ScribeCommissionState;
   waypostMeals?: WaypostMealState;
   disasterShelter?: DisasterShelterState;

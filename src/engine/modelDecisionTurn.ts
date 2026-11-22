@@ -1,5 +1,6 @@
 import { regionalModelPassiveActorIds } from './regionalSimulationEngine';
 import { availableUpperPassageProviderActions,availableFrontierProviderActions,requiredBeforeOrdinaryDecision } from './llmBrain';
+import { activeForbiddenDuel, availableForbiddenArtOptions, forbiddenDuelForParticipant } from './forbiddenArtEngine';
 import { activeHeartDemon, isHeartDemonGuided } from './heartDemonEngine';
 import { activeDestinyTraitOffer } from './destinyTraitEngine';
 import { activeRoguelikeEncounter } from './roguelikeEncounterEngine';
@@ -67,12 +68,15 @@ export function modelDecisionCandidates(world: WorldState): Cultivator[] {
     const theatre = trial?.stage === 'heart_demon' && (trial.heartTheatreArmed === true || trial.heartDemon !== undefined);
     const heart = theatre ? activeHeartDemon(world, actor) : undefined;
     if (theatre && (!heart || heart.queued || isHeartDemonGuided(world, actor, heart))) return false;
-    const encounter = heart ? undefined : activeRoguelikeEncounter(world, actor);
+    const contact = heart ? undefined : forbiddenDuelForParticipant(world, actor);
+    if (contact && (contact.guided || contact.queued || activeForbiddenDuel(world, actor) !== contact ||
+      !availableForbiddenArtOptions(world, contact).some(option => option.choice !== 'decline'))) return false;
+    const encounter = heart || contact ? undefined : activeRoguelikeEncounter(world, actor);
     if (encounter && (encounter.guided || encounter.openedTick !== world.tick)) return false;
-    const destiny = heart || encounter ? undefined : activeDestinyTraitOffer(world, actor);
+    const destiny = heart || contact || encounter ? undefined : activeDestinyTraitOffer(world, actor);
     if (destiny && avatar === actor) return false;
     // Genuine autonomous offers wake only the normal admission guard below, never an invalid body or action lane.
-    return (!passive.has(actor.id) || !!heart || !!encounter || !!destiny) &&
+    return (!passive.has(actor.id) || !!heart || !!contact || !!encounter || !!destiny) &&
     (!activeCourierForActor(world, actor) || availableCourierHandoffActions(actor, world, nextTick).some(({ courierHandoffMove }) => courierHandoffMove === 'offer')) &&
     !activeDanxiaMedicineEscort(world,actor)&&!activeEscortForActor(world, actor) && !activeRelocationForActor(world, actor) &&
     !activeSiegeForActor(world, actor) && isEligibleForOccasionDecision(world, actor, nextTick) &&

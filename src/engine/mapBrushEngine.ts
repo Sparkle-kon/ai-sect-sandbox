@@ -137,6 +137,18 @@ export function applyMapBrush(prev: WorldState, kind: GodBrushKind, points: MapP
   archiveChronicleEvents(world, brushEvents);
   world.events = [...brushEvents, ...world.events].slice(0, 120);
   world.mapPresentation = deriveMapPresentation(prev, world, brushEvents);
+  // A direct map intervention can kill or move one of the two actual parties before a monthly pass.
+  if(world.forbiddenDuels?.length){
+    const people=new Map(world.cultivators.map(person=>[person.id,person]));
+    const available=(id:string,siteId:string)=>{
+      const person=people.get(id);
+      return !!person?.alive&&person.hp>0&&person.positionPlane===undefined&&person.locationId===siteId;
+    };
+    world.forbiddenDuels=world.forbiddenDuels.filter(contact=>available(contact.attackerId,contact.siteId)&&
+      available(contact.defenderId,contact.siteId)&&people.get(contact.ownerId)?.artifacts.some(item=>
+        item.id===contact.artifactId&&item.boundTo===contact.ownerId&&item.soul));
+    if(!world.forbiddenDuels.length)delete world.forbiddenDuels;
+  }
   return world;
 }
 
