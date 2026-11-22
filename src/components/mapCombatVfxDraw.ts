@@ -82,9 +82,20 @@ function perimeter(ctx:CanvasRenderingContext2D,s:number,impact:boolean,p:number
   }
 }
 
+// A durable broken relief on the ground, distinct from the live dashed siege perimeter.
+function battlefield(ctx:CanvasRenderingContext2D,s:number){
+  for(const [from,to] of [[.16,2.55],[3.45,5.72]]){
+    ctx.beginPath();ctx.ellipse(0,19*s,19*s,7*s,0,from,to);
+    stroke(ctx,'#643b37',4*s);stroke(ctx,'#e1a173',1.6*s);
+  }
+  ctx.beginPath();ctx.moveTo(-8*s,12*s);ctx.lineTo(-1*s,18*s);ctx.lineTo(-4*s,22*s);ctx.lineTo(3*s,27*s);
+  ctx.moveTo(5*s,12*s);ctx.lineTo(9*s,17*s);ctx.lineTo(6*s,21*s);
+  stroke(ctx,'#7c4d41',3*s);stroke(ctx,'#f2bb87',1.2*s);
+}
+
 export function drawMapCombatVfx(ctx:CanvasRenderingContext2D,plan:MapCombatVfxPlan,
   elapsed:number,animate:boolean,logicalPerCssPixel:number,phase=0,camera:MapCamera=DEFAULT_CAMERA){
-  if(!plan.effects.length&&!plan.storms.length&&!plan.sieges.length)return;
+  if(!plan.effects.length&&!plan.storms.length&&!plan.sieges.length&&!plan.battlefields?.length)return;
   const s=Number.isFinite(logicalPerCssPixel)?bounded(logicalPerCssPixel,.05,16):1;
   const time=Number.isFinite(elapsed)?Math.max(0,elapsed):duration;
   const live=!animate||time<duration;
@@ -92,6 +103,10 @@ export function drawMapCombatVfx(ctx:CanvasRenderingContext2D,plan:MapCombatVfxP
   const ambient=animate&&Number.isFinite(phase)?phase:0;
   ctx.save();ctx.lineCap='round';ctx.lineJoin='round';ctx.setLineDash([]);
   ctx.globalAlpha=1;ctx.shadowBlur=0;
+  for(const site of plan.battlefields??[]){
+    if(!valid(site.location))continue;
+    ctx.save();ctx.translate(site.location.x,site.location.y);battlefield(ctx,s);ctx.restore();
+  }
   for(const siege of plan.sieges){
     if(!valid(siege.location))continue;
     ctx.save();ctx.translate(siege.location.x,siege.location.y);

@@ -5,6 +5,7 @@ import { terrainTileAt } from '../engine/terrainEngine';
 import { isUpperPassageEvent, onLowerPlane } from '../engine/upperPassageIsolation';
 import type { Cultivator, LocationNode, TribulationTrial, WorldEvent, WorldState } from '../types/world';
 import { mapTransitActorIds } from './mapConvoyView';
+import { projectMapBattlefields, type MapBattlefield } from './mapBattlefieldView';
 import type { buildMapPresentation } from './mapPresentationView';
 import type { createTerrainMapView } from './terrainMapView';
 
@@ -24,6 +25,7 @@ export interface MapCombatVfxPlan {
   storms: readonly { id: string; location: LocationNode; wave: number; totalWaves: number }[];
   sieges: readonly { id: string; location: LocationNode; impact: boolean }[];
   hasTransient: boolean;
+  battlefields?: readonly MapBattlefield[];
 }
 
 type EffectProof = Omit<MapCombatEffect, 'location' | 'tick'> & { locationId: string };
@@ -192,5 +194,6 @@ export function buildMapCombatVfxPlan(world: WorldState, view: Terrain, presenta
         proof.locationId !== location.id || !sameActors(proof.actorIds, row.actorIds)) continue;
     effects.push({ ...proof, actorIds: [...proof.actorIds], tick, location });
   }
-  return { effects, storms, sieges, hasTransient: effects.length > 0 || sieges.some(({ impact }) => impact) };
+  const battlefields = projectMapBattlefields(world, sites);
+  return { effects, storms, sieges, ...(battlefields.length ? { battlefields } : {}), hasTransient: effects.length > 0 || sieges.some(({ impact }) => impact) };
 }

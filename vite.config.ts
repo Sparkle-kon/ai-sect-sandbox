@@ -83,6 +83,8 @@ export default defineConfig({
           // Private theatre selection and its save proof are shared by UI, native and storage.
           'heart-demon-rules': ['./src/engine/heartDemonEngine.ts', './src/engine/interruptedStoryChoices.ts',
             './src/engine/storageHeartDemonValidation.ts', './src/types/heartDemon.ts', './src/engine/tribulationTerms.ts'],
+          // Truce and storage need the typed siege proof, not the active combat graph.
+          'grand-siege-proof': ['./src/engine/grandSiegeProof.ts', './src/engine/storageGrandSiegeValidation.ts', './src/types/grandSiege.ts'],
           // The game seed depends only on trace state; keep the optional replay rules separate.
           'decision-replay': ['./src/engine/decisionTraceEngine.ts'],
           // One shared chunk for authored arts, native costs and their strict save proof.

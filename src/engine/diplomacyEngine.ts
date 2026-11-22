@@ -1,3 +1,7 @@
+import { finishGrandSiegeTheatre } from './grandSiegeProof';
+import type { GrandSiegeHeroResult, GrandSiegeRound } from '../types/grandSiege';
+import { applyGrandSiegeHero, beginGrandSiegeRound, finishGrandSiegeRound,
+  isGrandSiegeFighterPresent, openGrandSiegeTheatre, recordGrandSiegeArrival } from './grandSiegeTheatreEngine';
 import {isSectActive} from './sectActivity';
 import {onLowerPlane} from './upperPassageIsolation';
 import { activeCourierForActor } from './sealedCourierEngine';
@@ -127,6 +131,7 @@ export function resolveDiplomacyAction(world: WorldState, actor: Cultivator, dec
   const launched = makeEvent(world, token, '宗门集结攻山', `${own.name}耗费${SIEGE_COST}灵石，集结${participants.length}名修士向${target.name}出征。`,
     siege.participantIds, own.headquartersId);
   recordCausalChronicleNode(world, launched, { kind: 'siege_launched', entityId: siege.id });
+  openGrandSiegeTheatre(world,siege,launched);
   return launched;
 }
 
@@ -138,9 +143,9 @@ function injure(force: Cultivator[], fraction: number): void {
   for (const person of force) person.hp = Math.max(1, person.hp - Math.round(person.maxHp * fraction));
 }
 
-function settleSiege(world: WorldState, siege: SectSiege, attacker: Sect, defender: Sect, raiders: Cultivator[], defenders: Cultivator[], won: boolean): WorldEvent {
+function settleSiege(world: WorldState, siege: SectSiege, attacker: Sect, defender: Sect, raiders: Cultivator[], defenders: Cultivator[], won: boolean, displaced = false): WorldEvent {
   siege.status = won ? 'victory' : 'repelled';
-  if (siege.rounds > 0) {
+  if (siege.rounds > 0 && !displaced) {
     injure(raiders, won ? .09 : .22);
     injure(defenders, won ? .23 : .10);
   }
@@ -154,12 +159,38 @@ function settleSiege(world: WorldState, siege: SectSiege, attacker: Sect, defend
     const home = world.sects.find(({ id }) => id === person.sectId)?.headquartersId;
     if (home && world.locations.some(({ id }) => id === home)) person.locationId = home;
   }
-  siege.outcome = won ? `${attacker.name}攻破${defender.name}防线，夺得${indemnity}灵石战赔后撤离。` :
+  siege.outcome = displaced ? '原山门已不是这场战事可守、可攻的宗门要地。联军撤回，未再交锋。' :
+    won ? `${attacker.name}攻破${defender.name}防线，夺得${indemnity}灵石战赔后撤离。` :
     `${attacker.name}未能攻破${defender.name}防线，联军撤退。`;
   return makeEvent(world, siege.id, won ? '攻山告捷' : '攻山退兵', siege.outcome, [...belowRoster(world,siege.participantIds),...defenders.map(({id})=>id)], siege.destinationId);
 }
 
-export function advanceDiplomacy(world: WorldState, rng: () => number): WorldEvent[] {
+function grandSiegeSceneEvent(world:WorldState,siege:SectSiege,round:GrandSiegeRound):WorldEvent|undefined{
+  if(!round.clash&&!round.hero)return undefined;
+  const name=(id:string)=>world.cultivators.find(actor=>actor.id===id)?.name??'阵中修士';
+  const rows:string[]=[];
+  const people=new Set<string>();
+  if(round.clash){
+    const {attackerId,defenderId,winnerId}=round.clash;
+    people.add(attackerId);people.add(defenderId);
+    rows.push(`鼓声忽断。${name(attackerId)}与${name(defenderId)}越出阵前，各受一击，${name(winnerId)}占得上风。`);
+  }
+  if(round.hero){
+    const {actorId,move,paidHp,paidQi,wallSaved}=round.hero;
+    people.add(actorId);
+    rows.push(`${name(actorId)}以${paidQi}灵气与${paidHp}气血${move==='elder-rescue'?'托起阵眼':'守住阵门'}，阵光又明了一息，挡下${wallSaved}阵力。`);
+  }
+  return {id:`evt-${world.tick}-${siege.id}-front-theatre`,tick:world.tick,year:world.year,month:world.month,
+    title:round.hero?'重阵将倾，有人死守':'叩关之际，两锋出阵',description:rows.join(''),
+    category:round.clash?'combat':'diplomacy',actorIds:[...people],locationId:siege.destinationId};
+}
+
+export interface GrandSiegeTurnContext {
+  chosenHero:(siege: SectSiege)=>{actorId:string;decision:LLMDecisionPayload}|undefined;
+  applied?:(siege: SectSiege, result: GrandSiegeHeroResult)=>void;
+  heldByModel?:(siege: SectSiege, actorId:string)=>void;
+}
+export function advanceDiplomacy(world: WorldState, rng: () => number, theatre?:GrandSiegeTurnContext): WorldEvent[] {
   const events: WorldEvent[] = [];
   for (const demand of world.tributeDemands) {
     if (demand.status !== 'pending' || demand.startedTick >= world.tick) continue;
@@ -186,14 +217,29 @@ export function advanceDiplomacy(world: WorldState, rng: () => number): WorldEve
     const attacker = world.sects.find(({ id }) => id === siege.attackerSectId);
     const defender = world.sects.find(({ id }) => id === siege.defenderSectId);
     if (!attacker || !defender || !world.locations.some(({ id }) => id === siege.destinationId)) {
-      siege.status = 'repelled'; siege.outcome = '出征目的地或宗门不复存在。'; continue;
+      siege.status = 'repelled'; siege.outcome = '出征目的地或宗门不复存在。';
+      if(siege.theatre)delete siege.theatre.queued;
+      continue;
     }
     const raiders = [...new Set(siege.participantIds)].map((id) => world.cultivators.find((person) => person.id === id))
       .filter((person): person is Cultivator => Boolean(person && isPresentBelow(person) && isAlly(world, person.sectId, attacker.id)));
     const defenders = world.cultivators.filter((person) => isPresentBelow(person) && !siege.participantIds.includes(person.id) &&
       person.locationId === siege.destinationId && !activeCourierForActor(world, person) && isAlly(world, defender.id, person.sectId));
-    if (raiders.length < MIN_FORCE || sectRelation(world, attacker.id, defender.id)?.pact !== 'war') {
-      events.push(settleSiege(world, siege, attacker, defender, raiders, defenders, false)); continue;
+    const site=world.locations.find(row=>row.id===siege.destinationId);
+    const displaced=!!siege.theatre&&(!isSectActive(attacker)||!isSectActive(defender)||defender.headquartersId!==siege.destinationId||
+      !!site?.ownerSectId&&site.ownerSectId!==defender.id||attacker.alignment===defender.alignment||
+      attacker.alignment==='中立'||defender.alignment==='中立');
+    if(displaced){
+      const returned=settleSiege(world,siege,attacker,defender,raiders,[],false,true);
+      finishGrandSiegeTheatre(world,siege,returned);events.push(returned);continue;
+    }
+    const liveTheatre=!!siege.theatre&&siege.status==='sieging';
+    const forefront=liveTheatre?raiders.filter(actor=>isGrandSiegeFighterPresent(world,actor,siege.destinationId)):raiders;
+    const holdingFront=liveTheatre?defenders.filter(actor=>isGrandSiegeFighterPresent(world,actor,siege.destinationId)):defenders;
+    if (forefront.length < MIN_FORCE || sectRelation(world, attacker.id, defender.id)?.pact !== 'war') {
+      const event=settleSiege(world,siege,attacker,defender,raiders,defenders,false);
+      finishGrandSiegeTheatre(world,siege,event);
+      events.push(event);continue;
     }
     if (siege.status === 'marching') {
       if (world.tick === siege.startedTick + 1) {
@@ -202,26 +248,46 @@ export function advanceDiplomacy(world: WorldState, rng: () => number): WorldEve
       } else {
         for (const person of raiders) person.locationId = siege.destinationId;
         siege.status = 'sieging';
-        events.push(makeEvent(world, siege.id, '联军抵达山门', `${attacker.name}联军抵达${defender.name}山门，准备破阵。`, belowRoster(world,siege.participantIds), siege.destinationId));
+        const event=makeEvent(world,siege.id,'联军抵达山门',`${attacker.name}联军抵达${defender.name}山门，准备破阵。`,
+          belowRoster(world,siege.participantIds),siege.destinationId);
+        recordGrandSiegeArrival(world,siege,event);
+        events.push(event);
       }
       continue;
     }
     siege.rounds++;
     const wall = defender.arrayHp;
-    const effectiveAttack = livedPower(raiders) * (.82 + .36 * rng());
-    const effectiveDefense = livedPower(defenders) * (.82 + .36 * rng());
+    const attackRoll=rng(),defenseRoll=rng();
+    const theatricalRound=beginGrandSiegeRound(world,siege,forefront,holdingFront,attackRoll,defenseRoll);
+    const effectiveAttack = livedPower(forefront) * (.82 + .36 * attackRoll);
+    const effectiveDefense = livedPower(holdingFront) * (.82 + .36 * defenseRoll);
     if (wall > 0) {
-      const harm = clamp(Math.round(38 + 90 * effectiveAttack / Math.max(1, effectiveAttack + effectiveDefense)), 38, 128);
+      const projected = clamp(Math.round(38 + 90 * effectiveAttack / Math.max(1, effectiveAttack + effectiveDefense)), 38, 128);
+      const harm=theatricalRound
+        ?applyGrandSiegeHero(world,siege,theatricalRound,projected,theatre?.chosenHero(siege),
+          actorId=>theatre?.heldByModel?.(siege,actorId))
+        :projected;
+      if(theatricalRound?.hero)theatre?.applied?.(siege,theatricalRound.hero);
       defender.arrayHp = Math.max(0, wall - harm);
-      injure(raiders, .045 + .055 * effectiveDefense / Math.max(1, effectiveAttack + effectiveDefense));
-      injure(defenders, .035);
+      injure(forefront, .045 + .055 * effectiveDefense / Math.max(1, effectiveAttack + effectiveDefense));
+      injure(holdingFront, .035);
       if (siege.rounds < MAX_ROUNDS) {
-        events.push(makeEvent(world, siege.id, '护山阵接战', `护山阵受损${wall - defender.arrayHp}，尚余${defender.arrayHp}阵力。`, belowRoster(world,siege.participantIds), siege.destinationId));
+        const event=makeEvent(world,siege.id,'护山阵接战',`护山阵受损${wall - defender.arrayHp}，尚余${defender.arrayHp}阵力。`,
+          belowRoster(world,siege.participantIds),siege.destinationId);
+        if(theatricalRound)finishGrandSiegeRound(world,siege,theatricalRound,event,defender.arrayHp);
+        events.push(event);
+        const scene=theatricalRound&&grandSiegeSceneEvent(world,siege,theatricalRound);
+        if(scene)events.push(scene);
         continue;
       }
     }
     const won = defender.arrayHp <= 0 && effectiveAttack > effectiveDefense * 1.07;
-    events.push(settleSiege(world, siege, attacker, defender, raiders, defenders, won));
+    const event=settleSiege(world,siege,attacker,defender,forefront,holdingFront,won);
+    if(theatricalRound)finishGrandSiegeRound(world,siege,theatricalRound,event,defender.arrayHp);
+    finishGrandSiegeTheatre(world,siege,event);
+    events.push(event);
+    const scene=theatricalRound&&grandSiegeSceneEvent(world,siege,theatricalRound);
+    if(scene)events.push(scene);
   }
   return events;
 }

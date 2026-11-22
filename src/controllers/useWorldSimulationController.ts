@@ -484,9 +484,9 @@ export function useWorldSimulationController({
     const saved = trace && replayTapes.current.get(history.current.activeBranchId)?.get(trace.tick);
     if (!saved) return { ok: false, reason: '原始决策快照不在本分支最近 12 轮的复演缓存中。' };
     return replayOneTurn(saved.tape, saved.committed, traceId, candidateId,
-      (base, orders, mode, onActor, replayDraws, replayHeartModelActors, replayForbiddenModelActors) =>
+      (base, orders, mode, onActor, replayDraws, replayHeartModelActors, replayForbiddenModelActors, replayGrandSiegeModelActors) =>
         advanceWorldTick(base, orders, undefined, mode, undefined, {
-          captureTrace: false, onActor, replayDraws, replayHeartModelActors, replayForbiddenModelActors,
+          captureTrace: false, onActor, replayDraws, replayHeartModelActors, replayForbiddenModelActors, replayGrandSiegeModelActors,
         }));
   };
   const toggleAutoplay = () => { if (!fastForwardRun.current && !campaignGuard.current) setIsRunning((current) => !current); };

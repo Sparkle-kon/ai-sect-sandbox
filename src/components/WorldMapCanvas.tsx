@@ -44,6 +44,7 @@ import {drawMapTrajectoryVfx} from './trajectoryVfxDraw';
 import {drawFlights} from './mapPresentationDraw';
 import {buildMapCombatVfxPlan} from './mapCombatVfxView';
 import {drawMapCombatVfx} from './mapCombatVfxDraw';
+import {mapBattlefieldSummary} from './mapBattlefieldView';
 import {buildProtectiveArrayDomes} from './protectiveArrayDomeView';
 import {drawProtectiveArrayDomes} from './protectiveArrayDomeDraw';
 import {StrategicMinimap} from './StrategicMinimap';
@@ -403,6 +404,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   }, [followsSelection, followedActorId, followedX, followedY]);
   const motionSnapshot=useMemo(()=>buildMapPresentation(world,mapView,actorPositions),[world,mapView,actorPositions]);
   const combatVfx=useMemo(()=>buildMapCombatVfxPlan(world,mapView,motionSnapshot),[world,mapView,motionSnapshot]);
+  const battlefieldBySite=useMemo(()=>new Map(combatVfx.battlefields?.map(row=>[row.location.id,row])),[combatVfx]);
   const domes=useMemo(()=>buildProtectiveArrayDomes(world,mapView,combatVfx),[world,mapView,combatVfx]);
   const domesBySite=useMemo(()=>new Map(domes.map(dome=>[dome.location.id,dome])),[domes]);
   const selectedDome=selected?domes.find(dome=>dome.sectId===selected.sectId):undefined;
@@ -1546,6 +1548,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           <MapKeyboardExplorer world={world} view={mapView} actorPositions={actorPositions} presentation={presentation}
             selected={selectedPoint?.actor} follows={followsSelection} zoom={camera.zoom} onCamera={activateCamera}
             onActor={(actor) => locateActor(actor.id)} onSite={focusSite} marks={semanticMarks} villageLabels={villageMapLabels}
+            battlefields={battlefieldBySite}
             onInspectActor={(actor,trigger)=>{
               const point=actorPositions.find(row=>row.actor===actor);
               if(point)pinFromIndex({kind:'actor',id:actor.id},point,trigger);
@@ -1635,6 +1638,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
             const trialCount = trialsByLocation.get(location.id) ?? 0;
             const guardCount = guardsByLocation.get(location.id) ?? 0;
             const dome=domesBySite.get(location.id);
+            const battlefield=battlefieldBySite.get(location.id);
             const localOccasions = occasionsByLocation.get(location.id) ?? [];
             const localCouncil = currentCouncils.get(headquarters.get(location.id)?.id ?? '');
             const localVillage = civicObservation?.locationId === location.id ? civicObservation : undefined;
@@ -1721,6 +1725,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                 {leaseMark && <span className="text-amber-200">· {leaseMark.role === 'owner' ? '本宗授权' : '本宗采集许可'} · 余 {leaseMark.remaining} 株</span>}
                 {assessed && <span className="text-cyan-200">· 剧本末回合 #{assessed.tick} 凭证：灵气 {assessed.qi}（{assessed.passed ? '通过' : '未通过'}）</span>}
                 {localCouncil && <span className="text-violet-300">· 本月议决：{localCouncil.title}</span>}
+                {battlefield && <span className="text-orange-200">· {mapBattlefieldSummary(battlefield)}</span>}
                 {besiegedLocationIds.has(location.id) && <span className="text-rose-300">· 围攻中</span>}
                 {localOccasions.map((occasion) => (
                   <span key={occasion.id} className="text-cyan-300">

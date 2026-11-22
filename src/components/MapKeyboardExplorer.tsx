@@ -9,6 +9,7 @@ import type { createTerrainMapView, mapActorPositions } from './terrainMapView';
 import { MAP_ACTOR_PAGE_SIZE, mapActorPage } from './mapActorClusters';
 import type { MapCameraCommand } from './mapKeyboard';
 import type { PaintedMapMark } from './mapPaintedSemantics';
+import { mapBattlefieldSummary, type MapBattlefield } from './mapBattlefieldView';
 
 type Terrain = ReturnType<typeof createTerrainMapView>;
 type ActorPositions = ReturnType<typeof mapActorPositions>;
@@ -100,7 +101,7 @@ export function mapExplorerIndex(world: WorldState, view: Terrain, actorPosition
   return { sites, actors, events };
 }
 
-export function MapKeyboardExplorer({ world, view, actorPositions, presentation, selected, follows, zoom, marks = noMarks, villageLabels,
+export function MapKeyboardExplorer({ world, view, actorPositions, presentation, selected, follows, zoom, marks = noMarks, villageLabels, battlefields,
   onFollow, onCamera, onSite, onActor, onInspectSite, onInspectActor, onPoint, onFocusLost }: {
   world: WorldState;
   view: Terrain;
@@ -111,6 +112,7 @@ export function MapKeyboardExplorer({ world, view, actorPositions, presentation,
   zoom: number;
   marks?: readonly PaintedMapMark[];
   villageLabels?: ReadonlyMap<string, { name: string; stage?: string }>;
+  battlefields?: ReadonlyMap<string, MapBattlefield>;
   onFollow: () => void;
   onCamera: (command: MapCameraCommand) => void;
   onSite: (site: LocationNode) => void;
@@ -136,8 +138,9 @@ export function MapKeyboardExplorer({ world, view, actorPositions, presentation,
   const rows: ExplorerRow[] = kind === 'sites' ? index.sites.filter(({ site }) => !villageLabels?.size || !siteQuery ||
     [site.name, villageLabels.get(site.id)?.name].some((name) => name?.toLowerCase().includes(siteQuery))).map(({ site, current }) => {
     const village = villageLabels?.get(site.id);
+    const battlefield = current ? battlefields?.get(site.id) : undefined;
     return { key: site.id, title: site.name,
-      summary: [village && village.name !== site.name ? village.name : undefined, village?.stage, current ? '当前可定位' : '已探索，当前不可见']
+      summary: [village && village.name !== site.name ? village.name : undefined, village?.stage, battlefield?.location === site ? mapBattlefieldSummary(battlefield) : undefined, current ? '当前可定位' : '已探索，当前不可见']
         .filter(Boolean).join(' · '), activate: () => onSite(site),
       inspection: current && onInspectSite ? { kind: 'site', entity: site } : undefined };
   })

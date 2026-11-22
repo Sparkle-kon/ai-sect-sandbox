@@ -1,5 +1,6 @@
 import { regionalModelPassiveActorIds } from './regionalSimulationEngine';
-import { availableUpperPassageProviderActions,availableFrontierProviderActions,requiredBeforeOrdinaryDecision } from './llmBrain';
+import { availableUpperPassageProviderActions,availableFrontierProviderActions,grandSiegeHeroReservedForPlayer,requiredBeforeOrdinaryDecision } from './llmBrain';
+import { availableGrandSiegeHeroActions, hasQueuedGrandSiegeHero } from './grandSiegeTheatreEngine';
 import { activeForbiddenDuel, availableForbiddenArtOptions, forbiddenDuelForParticipant } from './forbiddenArtEngine';
 import { activeHeartDemon, isHeartDemonGuided } from './heartDemonEngine';
 import { activeDestinyTraitOffer } from './destinyTraitEngine';
@@ -75,8 +76,18 @@ export function modelDecisionCandidates(world: WorldState): Cultivator[] {
     if (encounter && (encounter.guided || encounter.openedTick !== world.tick)) return false;
     const destiny = heart || contact || encounter ? undefined : activeDestinyTraitOffer(world, actor);
     if (destiny && avatar === actor) return false;
+    const priorScene = !!(heart || contact || encounter || destiny);
+    if (!priorScene && hasQueuedGrandSiegeHero(world, actor)) return false;
+    const hero = priorScene ? [] : availableGrandSiegeHeroActions(actor, world);
+    if (hero.length) {
+      const siegeId = hero[0].targetGrandSiegeId;
+      const sieges = world.sieges.filter(row => row.id === siegeId);
+      const moves = new Set(hero.map(choice => choice.grandSiegeHeroMove));
+      if (sieges.length !== 1 || sieges[0].theatre?.queued || grandSiegeHeroReservedForPlayer(world, siegeId) ||
+          hero.some(choice => choice.targetGrandSiegeId !== siegeId) || hero.length !== 2 || moves.size !== 2 || !moves.has('hold')) return false;
+    }
     // Genuine autonomous offers wake only the normal admission guard below, never an invalid body or action lane.
-    return (!passive.has(actor.id) || !!heart || !!contact || !!encounter || !!destiny) &&
+    return (!passive.has(actor.id) || !!heart || !!contact || !!encounter || !!destiny || hero.length > 0) &&
     (!activeCourierForActor(world, actor) || availableCourierHandoffActions(actor, world, nextTick).some(({ courierHandoffMove }) => courierHandoffMove === 'offer')) &&
     !activeDanxiaMedicineEscort(world,actor)&&!activeEscortForActor(world, actor) && !activeRelocationForActor(world, actor) &&
     !activeSiegeForActor(world, actor) && isEligibleForOccasionDecision(world, actor, nextTick) &&

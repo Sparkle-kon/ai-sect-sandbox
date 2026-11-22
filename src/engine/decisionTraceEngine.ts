@@ -1,3 +1,5 @@
+import { activeAvatar } from './avatarEngine';
+import { availableGrandSiegeHeroActions } from './grandSiegeTheatreEngine';
 import { activeForbiddenDuel, availableForbiddenArtOptions, forbiddenDuelForParticipant } from './forbiddenArtEngine';
 import {activeHeartDemon, isHeartDemonGuided} from './heartDemonEngine';
 import {HEART_DEMON_CHOICES} from '../types/heartDemon';
@@ -86,7 +88,8 @@ export function recordDecisionTrace(world: WorldState, actorId: string, candidat
     REST: 'recover', CULTIVATE: 'cultivate', BREAKTHROUGH: 'ready', SOCIALIZE: 'social', EXPLORE: 'travel', FACE_TRIBULATION: 'tribulation',
   };
   const privateDecision = isPrivateHeartTurn(world, actorId, decision) || decision.chosenAction === 'FORBIDDEN_ART' ||
-    decision.targetForbiddenDuelId !== undefined || decision.forbiddenArtChoice !== undefined;
+    decision.targetForbiddenDuelId !== undefined || decision.forbiddenArtChoice !== undefined ||
+    decision.chosenAction === 'GRAND_SIEGE_HERO' || decision.targetGrandSiegeId !== undefined || decision.grandSiegeHeroMove !== undefined;
   const picks: DecisionTraceCandidate[] = [];
   for (const item of privateDecision ? [] : candidates) {
     if (!isSafeAction(item.action) || !Number.isFinite(item.score)) continue;
@@ -122,11 +125,11 @@ export interface DecisionReplayTape {
   readonly councilMode: ReplayCouncilMode;
 }
 const runtimeTapes = new WeakMap<DecisionReplayTape, { base: WorldState; decisions: Map<string, LLMDecisionPayload>;
-  draws: Map<string, number>; heartModelActors: Set<string>; forbiddenModelActors: Set<string> }>();
+  draws: Map<string, number>; heartModelActors: Set<string>; forbiddenModelActors: Set<string>; grandSiegeModelActors: Set<string> }>();
 
 export function createDecisionReplayTape(base: WorldState, councilMode: ReplayCouncilMode): DecisionReplayTape {
   const token = Object.freeze({ baseTick: base.tick, councilMode });
-  runtimeTapes.set(token, { base: cloneWorldWithColdHistory(base), decisions: new Map(), draws: new Map(), heartModelActors: new Set(), forbiddenModelActors: new Set() });
+  runtimeTapes.set(token, { base: cloneWorldWithColdHistory(base), decisions: new Map(), draws: new Map(), heartModelActors: new Set(), forbiddenModelActors: new Set(), grandSiegeModelActors: new Set() });
   return token;
 }
 
@@ -139,7 +142,7 @@ const MECHANICAL_FIELDS = [
 ] as const satisfies readonly (keyof LLMDecisionPayload)[];
 
 export function rememberReplayDecision(tape: DecisionReplayTape, actorId: string, decision: LLMDecisionPayload,
-  rngDraws = 0, heartModel = false, forbiddenModel = false): void {
+  rngDraws = 0, heartModel = false, forbiddenModel = false, grandSiegeModel = false): void {
   const state = runtimeTapes.get(tape);
   if (!state) return;
   const details = Object.fromEntries(MECHANICAL_FIELDS.flatMap((key) => {
@@ -170,12 +173,25 @@ export function rememberReplayDecision(tape: DecisionReplayTape, actorId: string
     decision.targetForbiddenDuelId === contact.id && decision.forbiddenArtChoice &&
     availableForbiddenArtOptions(state.base, contact).some(option => option.choice === decision.forbiddenArtChoice) ?
     { targetForbiddenDuelId: decision.targetForbiddenDuelId, forbiddenArtChoice: decision.forbiddenArtChoice } : undefined;
-  state.decisions.set(actorId, { ...(forbiddenAction ? {} : details), chosenAction: decision.chosenAction, innerMonologue: '',
-    ...(cohortInviteeIds ? { cohortInviteeIds } : {}), ...personalHeartChoice, ...personalForbiddenChoice });
+  const grandSiegeAction = decision.chosenAction === 'GRAND_SIEGE_HERO';
+  const defender = grandSiegeAction && decision.targetGrandSiegeId && decision.grandSiegeHeroMove &&
+    Object.keys(decision).every(key => key === 'chosenAction' || key === 'innerMonologue' ||
+      key === 'targetGrandSiegeId' || key === 'grandSiegeHeroMove')
+    ? state.base.cultivators.find(({ id }) => id === actorId) : undefined;
+  const exactHero = defender && activeAvatar(state.base) !== defender &&
+    !state.base.sieges.some(siege => siege.id === decision.targetGrandSiegeId && !!siege.theatre?.queued) &&
+    availableGrandSiegeHeroActions(defender, state.base).find(option => option.targetGrandSiegeId === decision.targetGrandSiegeId &&
+      option.grandSiegeHeroMove === decision.grandSiegeHeroMove);
+  const personalHeroChoice = exactHero ? { targetGrandSiegeId: exactHero.targetGrandSiegeId,
+    grandSiegeHeroMove: exactHero.grandSiegeHeroMove } : undefined;
+  state.decisions.set(actorId, { ...(forbiddenAction || grandSiegeAction ? {} : details), chosenAction: decision.chosenAction, innerMonologue: '',
+    ...(cohortInviteeIds ? { cohortInviteeIds } : {}), ...personalHeartChoice, ...personalForbiddenChoice, ...personalHeroChoice });
   if (personalHeartChoice && heartModel) state.heartModelActors.add(actorId);
   else state.heartModelActors.delete(actorId);
   if (personalForbiddenChoice && forbiddenModel) state.forbiddenModelActors.add(actorId);
   else state.forbiddenModelActors.delete(actorId);
+  if (personalHeroChoice && grandSiegeModel) state.grandSiegeModelActors.add(actorId);
+  else state.grandSiegeModelActors.delete(actorId);
   state.draws.set(actorId, Number.isSafeInteger(rngDraws) && rngDraws > 0 ? Math.min(rngDraws, 512) : 0);
 }
 
@@ -199,7 +215,7 @@ export type DecisionReplayResult = { ok: true; comparison: DecisionReplayCompari
 export type ReplayAdvance = (base: WorldState, decisions: Record<string, LLMDecisionPayload>, councilMode: ReplayCouncilMode,
   onActor: (actorId: string, candidates: DecisionTraceCandidate[], applied: boolean) => void,
   decisionDraws: Readonly<Record<string, number>>, heartModelActors?: ReadonlySet<string>,
-  forbiddenModelActors?: ReadonlySet<string>) => WorldState;
+  forbiddenModelActors?: ReadonlySet<string>, grandSiegeModelActors?: ReadonlySet<string>) => WorldState;
 
 function metrics(world: WorldState, actor: Cultivator): DecisionReplayMetrics {
   return { alive: actor.alive, hp: actor.hp, qiProgress: actor.qiProgress, realm: actor.realm, realmStage: actor.realmStage,
@@ -232,6 +248,7 @@ export function replayOneTurn(tape: DecisionReplayTape, baseline: WorldState, tr
   // A consumer receives an isolated copy for each replay; it cannot alter the live private provenance.
   const copyHeartModelActors = () => privateState.heartModelActors.size ? new Set(privateState.heartModelActors) : undefined;
   const copyForbiddenModelActors = () => privateState.forbiddenModelActors.size ? new Set(privateState.forbiddenModelActors) : undefined;
+  const copyGrandSiegeModelActors = () => privateState.grandSiegeModelActors.size ? new Set(privateState.grandSiegeModelActors) : undefined;
   const decisions = copyDecisions();
   decisions[actor.id] = {
     chosenAction: alternate.action, innerMonologue: '',
@@ -246,12 +263,12 @@ export function replayOneTurn(tape: DecisionReplayTape, baseline: WorldState, tr
   try {
     control = advance(structuredClone(privateState.base), copyDecisions(), tape.councilMode, (actorId, _now, applied) => {
       if (actorId === actor.id) originalObserved = applied === trace.applied;
-    }, draws, copyHeartModelActors(), copyForbiddenModelActors());
+    }, draws, copyHeartModelActors(), copyForbiddenModelActors(), copyGrandSiegeModelActors());
     replay = advance(structuredClone(privateState.base), decisions, tape.councilMode, (actorId, now, applied) => {
       if (actorId === actor.id) accepted = applied && now.some((option) => option.id === alternate.id && option.action === alternate.action &&
         option.targetLocationId === alternate.targetLocationId && option.targetCultivatorId === alternate.targetCultivatorId &&
         option.tribulationStance === alternate.tribulationStance);
-    }, draws, copyHeartModelActors(), copyForbiddenModelActors());
+    }, draws, copyHeartModelActors(), copyForbiddenModelActors(), copyGrandSiegeModelActors());
   } catch {
     return { ok: false, reason: '该隔离回合未能完整复演。' };
   }

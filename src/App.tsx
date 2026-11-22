@@ -1,3 +1,4 @@
+import {GrandSiegeMapScene} from './components/GrandSiegeMapScene';
 import {availableWaypostMealActions} from './engine/waypostMealEngine';
 import type {WaypostMealControls} from './components/WaypostMealRead';
 import {useAuthoredEraLaunch} from './components/useAuthoredEraLaunch';
@@ -656,6 +657,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
           fogEnabled={mapFog} onFogChange={setMapFog} pulseFocus={pulseFocus} pulseFocusActive={canInspectMap}
           onPulseFocusHandled={clearWorldPulse}
           onSelectCultivator={setSelectedCultivatorId} onBrushStroke={preview?undefined:handleBrushStroke}/>
+        <GrandSiegeMapScene world={visibleWorld} viewer={selectedCultivator} fog={mapFog} visible={!featuredStoryCard}/>
       </React.Suspense>}
     inspector={<>{inspect('profile')}{inspect('mind')}</>}
     relationships={<React.Suspense fallback={<p role="status">载入关系图…</p>}>
@@ -737,6 +739,8 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
               className={`${action} bg-slate-800 text-emerald-100 sm:hidden`}><Play aria-hidden="true" className="h-4 w-4" />自动推演</button> : undefined}
             chronicleFocus={trail?.request.kind === 'site' && focusTarget ? trail : undefined} onChronicleFocusUnavailable={reportMapFocusFailure}
             onSelectCultivator={setSelectedCultivatorId} onBrushStroke={preview ? undefined : handleBrushStroke} />
+            <GrandSiegeMapScene world={visibleWorld} viewer={selectedCultivator} fog={mapFog}
+              visible={workspace==='map'&&!featuredStoryCard}/>
           </React.Suspense></div>
           <aside className={`${panel} min-w-0`} aria-label="当前修士">
             <div className="flex flex-wrap items-center justify-between gap-1.5">

@@ -1,3 +1,4 @@
+import type { GrandSiegeHeroMove, GrandSiegeTheatre } from './grandSiege';
 import type { ForbiddenArtChoice, ForbiddenArtScar, ForbiddenDuelContact } from './forbiddenArt';
 import type { HeartDemonChoice, HeartDemonFrame, HeartDemonGuide } from './heartDemon';
 import type { DestinyTraitId, DestinyTraitProgress } from './destinyTrait';
@@ -107,6 +108,7 @@ export type ActionType =
   | 'ROGUELIKE_ENCOUNTER'
   | 'AWAKEN_DESTINY'
   | 'FORBIDDEN_ART'
+  | 'GRAND_SIEGE_HERO'
   | 'CULTIVATE'
   | 'BREAKTHROUGH'
   | 'EXPLORE'
@@ -532,6 +534,8 @@ export interface LLMDecisionPayload {
   heartDemonChoice?: HeartDemonChoice;
   targetForbiddenDuelId?: string;
   forbiddenArtChoice?: ForbiddenArtChoice;
+  targetGrandSiegeId?: string;
+  grandSiegeHeroMove?: GrandSiegeHeroMove;
   targetRoguelikeEncounterId?:string;
   roguelikeEncounterChoice?:RoguelikeEncounterChoice;
   targetDestinyOfferId?: string;
@@ -758,6 +762,7 @@ export interface SectDiplomaticRelation {
 }
 
 export interface SectSiege {
+  theatre?: GrandSiegeTheatre;
   id: string;
   attackerSectId: string;
   defenderSectId: string;

@@ -4,6 +4,7 @@ import {activeAvatar} from '../engine/avatarEngine';
 import {projectGuidedForbiddenDuel,queueGuidedForbiddenArt} from '../engine/forbiddenArtEngine';
 import type {ForbiddenArtChoice} from '../types/forbiddenArt';
 import {ForbiddenArtCard} from './ForbiddenArtCard';
+import {useGrandSiegeSpotlight} from './useGrandSiegeSpotlight';
 import {projectGuidedHeartDemon,queueGuidedHeartDemonChoice,releaseGuidedHeartDemon} from '../engine/heartDemonEngine';
 import type {WorldState} from '../types/world';
 import type {HeartDemonChoice} from '../types/heartDemon';
@@ -50,7 +51,8 @@ export function useFeaturedStoryDecision(simulation:Simulation){
   const traitReceipt=actor?.destinyTraits?.earned.find(row=>row.actorId===actor.id&&row.chosenTick===world.tick&&
     `${viewScopeKey}:${row.id}`===chosenTrait);
   const revision=saveContextVersion.current;
-  const pending=Boolean(heartPending||contact||encounterPending||traitOffer);
+  const siege=useGrandSiegeSpotlight(simulation,Boolean(heart&&heartScope!==dismissedHeart||contact||artScar));
+  const pending=Boolean(heartPending||contact||siege.pending||encounterPending||traitOffer);
   const busy=isStepping||fastForwardLocked;
   useEffect(()=>{if(pending&&isRunning)setIsRunning(false);},[pending,isRunning,setIsRunning]);
 
@@ -115,14 +117,14 @@ export function useFeaturedStoryDecision(simulation:Simulation){
     artScar?<ForbiddenArtCard key={`${viewScopeKey}:${artScar.contactId}`} scar={artScar} busy={busy}
       onContinue={()=>setTrackedArt(undefined)}/>:undefined;
   const chooseEncounter=(choice:RoguelikeEncounterChoice)=>{
-    if(heartCard||forbiddenCard||!encounterPending||!encounter||!stillCurrent())return;
+    if(heartCard||forbiddenCard||siege.card||!encounterPending||!encounter||!stillCurrent())return;
     updateWorld(current=>current===world?resolveGuidedRoguelikeChoice(current,encounter.id,choice):current);
   };
   const encounterCard=encounter&&actor&&at&&encounterScope!==dismissedEncounter?
     <RoguelikeEncounterCard key={encounterScope} encounter={encounter} actorName={actor.name} siteName={at.name}
       witnessName={witness?.name} busy={busy} onChoose={chooseEncounter} onContinue={()=>setDismissedEncounter(encounterScope)}/>:undefined;
   const chooseTrait=(trait:DestinyTraitId)=>{
-    if(heartCard||forbiddenCard||encounterCard||!actor||!traitOffer?.options.includes(trait)||!stillCurrent()||activeDestinyTraitOffer(world,actor)!==traitOffer)return;
+    if(heartCard||forbiddenCard||siege.card||encounterCard||!actor||!traitOffer?.options.includes(trait)||!stillCurrent()||activeDestinyTraitOffer(world,actor)!==traitOffer)return;
     const changed=updateWorld(current=>current===world?resolveGuidedDestinyTrait(current,traitOffer.id,trait):current);
     if(changed!==world)setChosenTrait(`${viewScopeKey}:${traitOffer.id}`);
   };
@@ -130,5 +132,5 @@ export function useFeaturedStoryDecision(simulation:Simulation){
     <DestinyTraitCard key={`${viewScopeKey}:${traitOffer.id}`} offer={traitOffer} actorName={actor.name} busy={busy} onChoose={chooseTrait}/>:
     traitReceipt?<DestinyTraitCard key={chosenTrait} awakening={traitReceipt} actorName={actor.name} busy={busy}
       onContinue={()=>setChosenTrait(undefined)}/>:undefined);
-  return {card:heartCard??forbiddenCard??encounterCard??traitCard,pending};
+  return {card:heartCard??forbiddenCard??siege.card??encounterCard??traitCard,pending};
 }

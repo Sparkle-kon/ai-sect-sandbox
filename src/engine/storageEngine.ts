@@ -1,4 +1,6 @@
 import {FORBIDDEN_ART_IDS} from '../types/forbiddenArt';
+import { validateGrandSiegeHistory } from './storageGrandSiegeValidation';
+import { GRAND_SIEGE_HERO_MOVES } from '../types/grandSiege';
 import {validateForbiddenArtHistory} from './storageForbiddenArtValidation';
 import {HEART_DEMON_CHOICES} from '../types/heartDemon';
 import {validateHeartDemonTrials} from './storageHeartDemonValidation';
@@ -244,6 +246,21 @@ const oid = optional(id), otick = optional(tick), otext = optional(text);
 const spirit = one('金','木','水','火','土','雷','暗','天灵根');
 const realm = one('练气','筑基','金丹','元婴','化神','炼虚','合体','大乘','渡劫');
 const sectRank = one('外门弟子','内门弟子','真传弟子','长老','太上长老','掌门');
+const grandSiegeFighter = structure({ actorId:id, sectId:id, rank:optional(sectRank) });
+const grandSiegeTheatre = structure({
+  openedTick:tick, sourceLaunchId:id, arrivedTick:otick,
+  rounds:arr(7,structure({
+    round:num(1,7,true), tick, sourceEventId:id, wallBefore:wealth, wallAfter:wealth, wallMax:wealth,
+    attackers:arr(8,grandSiegeFighter), defenders:arr(SAVE_COLLECTION_LIMIT,grandSiegeFighter),
+    clash:optional(structure({ attackerId:id, defenderId:id, winnerId:id, attackerDamage:wealth, defenderDamage:wealth })),
+    hero:optional(structure({
+      actorId:id, move:one('elder-rescue','leader-last-stand'), origin:one('player','utility','model'), rank:sectRank,
+      paidQi:percentage, paidHp:wealth, wallSaved:wealth,
+    })),
+  })),
+  queued:optional(structure({ actorId:id, move:one(...GRAND_SIEGE_HERO_MOVES), queuedTick:tick })),
+  terminal:optional(structure({ tick, status:one('victory','repelled','withdrawn'), sourceEventId:id, battlefield:bool })),
+});
 const source = one('utility','llm');
 const doctrineTheme = one('cultivation','conflict','community','heavenly');
 const doctrineAmount = num(0, 1_000_000_000, true);
@@ -251,7 +268,7 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE ROGUELIKE_ENCOUNTER AWAKEN_DESTINY FORBIDDEN_ART SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT SALVAGE_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE DOCTRINE_FOUNDING DOCTRINE_MATURITY RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT MARKET_FREIGHT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE WAYPOST_MEAL DISASTER_SHELTER CHRONICLE_ERRATA HABITAT INFIRMARY CARE_FOLLOWUP DANXIA_MEDICINE DANXIA_REVIEW FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER COURIER_HANDOFF SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP CRAFT_TRAINING WORKSHOP_ESTATE WORKSHOP_RELEASE SCRIBE_COMMISSION FURNACE_RESERVATION FURNACE_SAFETY DAMAGE_ASSURANCE SPARRING EXPEDITION_RESCUE SHORT_SHIFT BOUNDARY_RELIEF MENTOR_TRANSFER APPRENTICE_COHORT SEASONAL_HOUSING HOUSEHOLD_NAME CARAVAN_RESTITUTION VILLAGE_GRANARY VILLAGE_SUPPLY ROUTE_WARNING PAVILION_LOAN WORKSHOP_CAPACITY CIVIC_MEMORIAL VILLAGE_FAIR SECT_STIPEND SEED_CULTURE WATER_VEIN NORTH_MINING_CHARTER NORTH_WELL_REVIEW UPPER_PASSAGE UPPER_ARRAY_FIELD UPPER_ARRAY_FIELD_LOCAL UPPER_ARRAY_FIELD_TRADE NORTH_GATE_RENEWAL FRONTIER FRONTIER_PRODUCTION FRONTIER_TRADE FRONTIER_PORT FRONTIER_PORT_TRADE FRONTIER_DRYLAND FRONTIER_DRYLAND_TRADE TOOL_LOAN RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY ALIGNED_WEATHER SEASON_REVIEW REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE ROGUELIKE_ENCOUNTER AWAKEN_DESTINY FORBIDDEN_ART GRAND_SIEGE_HERO SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT SALVAGE_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE DOCTRINE_FOUNDING DOCTRINE_MATURITY RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT MARKET_FREIGHT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE WAYPOST_MEAL DISASTER_SHELTER CHRONICLE_ERRATA HABITAT INFIRMARY CARE_FOLLOWUP DANXIA_MEDICINE DANXIA_REVIEW FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER COURIER_HANDOFF SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP CRAFT_TRAINING WORKSHOP_ESTATE WORKSHOP_RELEASE SCRIBE_COMMISSION FURNACE_RESERVATION FURNACE_SAFETY DAMAGE_ASSURANCE SPARRING EXPEDITION_RESCUE SHORT_SHIFT BOUNDARY_RELIEF MENTOR_TRANSFER APPRENTICE_COHORT SEASONAL_HOUSING HOUSEHOLD_NAME CARAVAN_RESTITUTION VILLAGE_GRANARY VILLAGE_SUPPLY ROUTE_WARNING PAVILION_LOAN WORKSHOP_CAPACITY CIVIC_MEMORIAL VILLAGE_FAIR SECT_STIPEND SEED_CULTURE WATER_VEIN NORTH_MINING_CHARTER NORTH_WELL_REVIEW UPPER_PASSAGE UPPER_ARRAY_FIELD UPPER_ARRAY_FIELD_LOCAL UPPER_ARRAY_FIELD_TRADE NORTH_GATE_RENEWAL FRONTIER FRONTIER_PRODUCTION FRONTIER_TRADE FRONTIER_PORT FRONTIER_PORT_TRADE FRONTIER_DRYLAND FRONTIER_DRYLAND_TRADE TOOL_LOAN RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY ALIGNED_WEATHER SEASON_REVIEW REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const waypostPoint=structure({x:num(0,1000),y:num(0,600)});
 const waypostVisit=structure({journeyId:id,organizerId:id,companionId:id,spentByEach:one(PILGRIMAGE_LEG_COST,2*PILGRIMAGE_LEG_COST),
@@ -529,7 +546,7 @@ const shape = structure({
   }))}),
   diplomacy:arr(1200,structure({sectAId:id,sectBId:id,affinity,pact:one('neutral','alliance','war'),sinceTick:tick,lastActionTick:otick})),
   sieges:arr(2000,structure({id,attackerSectId:id,defenderSectId:id,destinationId:id,participantIds:ids,status:one('marching','sieging','victory','repelled','withdrawn'),
-    startedTick:tick,rounds:count,lastResolvedTick:otick,outcome:otext})),
+    startedTick:tick,rounds:count,lastResolvedTick:otick,outcome:otext,theatre:optional(grandSiegeTheatre)})),
   tributeDemands:arr(2000,structure({id,demanderSectId:id,targetSectId:id,amount:wealth,status:one('pending','paid','rejected'),startedTick:tick,resolvedTick:otick})),
   occasions:arr(2000,structure({id,kind:one('tournament','expedition'),title:text,locationId:id,startedTick:tick,registrationClosesTick:tick,expiresTick:tick,
     status:one('registration','running','completed','cancelled'),participantIds:ids,remainingIds:ids,
@@ -1627,6 +1644,7 @@ function verifyWorld(value: unknown): WorldState {
   validateDestinyTraitHistory(w,fail);
   validateHeartDemonTrials(w,actor,fail);
   validateForbiddenArtHistory(w,fail);
+  validateGrandSiegeHistory(w,fail);
   const ordinaryTrace = new Map(w.decisionTrace.records.map(row=>[row.id,row]));
   for(const person of w.cultivators){
     const receipt=person.ordinaryActionEvidence;

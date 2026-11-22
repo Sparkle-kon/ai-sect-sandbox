@@ -1,3 +1,4 @@
+import { finishGrandSiegeTheatre } from './grandSiegeProof';
 import type { CeasefireMove, CeasefireState, Cultivator, LLMDecisionPayload, Sect, SectCeasefire, SectSiege, WorldEvent, WorldState } from '../types/world';
 import { noteTerrainVisit } from './terrainEngine';
 import { causalChronicleEventId, recordCausalChronicleNode } from './chronicleCausalityEngine';
@@ -179,6 +180,10 @@ function sign(world: WorldState, deal: SectCeasefire, proposer: Sect, recipient:
   const signed = event(world, deal, 'signed', '两宗签署停战撤军议约',
     `双方托管实际保证金及${deal.terms.aidAmount}灵石重建款，有序撤回${deal.withdrawnSiegeIds.length}支参战队伍，暂停敌对行为。`,
     actors, false, proposer.headquartersId);
+  for(const id of withdrawn){
+    const siege=world.sieges.find(row=>row.id===id);
+    if(siege)finishGrandSiegeTheatre(world,siege,signed);
+  }
   const predecessors = withdrawn.flatMap(siegeId => {
     const eventId = causalChronicleEventId(world, 'siege_launched', siegeId);
     return eventId ? [{ eventId, relation: 'withdrew_siege' as const }] : [];

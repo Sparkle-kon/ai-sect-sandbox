@@ -1,3 +1,4 @@
+import { availableGrandSiegeHeroActions } from './grandSiegeTheatreEngine';
 import type { ForbiddenDuelContact, NativeDuelRolls } from '../types/forbiddenArt';
 import { measureNativeDuel } from './nativeDuelRules';
 import { consumeForbiddenDuelContact, forbiddenDuelForParticipant, openForbiddenDuelContact,
@@ -689,6 +690,9 @@ export function applyCultivatorBrainDecision(
       return resolveInfirmaryAction(world, cultivator, decision);
     case 'CARE_FOLLOWUP':
       return resolveCareFollowupAction(world, cultivator, decision);
+    case 'GRAND_SIEGE_HERO':
+      // The native attack round, not this individual turn, owns actual array and resource settlement.
+      return null;
     case 'AWAKEN_DESTINY':
       return decision.targetDestinyOfferId && decision.destinyTraitChoice
         ? settleDestinyTrait(world, cultivator, decision.targetDestinyOfferId, decision.destinyTraitChoice)
@@ -1023,6 +1027,7 @@ export function advanceWorldTick(
     replayDraws?: Readonly<Record<string, number>>;
     replayHeartModelActors?: ReadonlySet<string>;
     replayForbiddenModelActors?: ReadonlySet<string>;
+    replayGrandSiegeModelActors?: ReadonlySet<string>;
     onActor?: (actorId: string, candidates: DecisionTraceCandidate[], applied: boolean) => void;
   }
 ): WorldState {
@@ -1347,7 +1352,43 @@ export function advanceWorldTick(
     witnessEvent(nextState,event);
   }
   finishRegionalSimulationTurn(nextState,regionalTurn);
-  for (const event of [...advanceApprenticeCohorts(nextState), ...advanceBoundaryReliefs(nextState), ...advanceShortShifts(nextState), ...advanceSparring(nextState), ...advanceDiplomacy(nextState, rng), ...advanceOccasions(nextState, rng), ...advanceOaths(nextState), ...advanceMarkets(nextState), ...advanceWitnesses(nextState), ...advanceSeasonReviews(nextState, (state, seasonId) =>
+  const grandReplies=new Map<string,{actorId:string;decision:LLMDecisionPayload}>();
+  if(precomputedDecisions&&prevState.sieges.some(siege=>siege.status==='sieging'&&siege.theatre)){
+    for(const actor of prevState.cultivators){
+      if(!traceOptions?.modelActors?.has(actor.id)&&!traceOptions?.replayGrandSiegeModelActors?.has(actor.id))continue;
+      const answer=Object.hasOwn(precomputedDecisions,actor.id)?precomputedDecisions[actor.id]:undefined;
+      if(answer?.chosenAction!=='GRAND_SIEGE_HERO'||!answer.targetGrandSiegeId||!answer.grandSiegeHeroMove||
+        !Object.keys(answer).every(key=>key==='chosenAction'||key==='targetGrandSiegeId'||key==='grandSiegeHeroMove'||key==='innerMonologue')||
+        (prevState.roguelikeEncounters?.length&&activeRoguelikeEncounter(prevState,actor))||activeDestinyTraitOffer(prevState,actor)||
+        grandReplies.has(answer.targetGrandSiegeId)||!availableGrandSiegeHeroActions(actor,prevState).some(option=>
+          option.targetGrandSiegeId===answer.targetGrandSiegeId&&option.grandSiegeHeroMove===answer.grandSiegeHeroMove))continue;
+      grandReplies.set(answer.targetGrandSiegeId,{actorId:actor.id,decision:answer});
+    }
+  }
+  for (const event of [...advanceApprenticeCohorts(nextState), ...advanceBoundaryReliefs(nextState), ...advanceShortShifts(nextState), ...advanceSparring(nextState), ...advanceDiplomacy(nextState,rng,{
+    chosenHero:siege=>grandReplies.get(siege.id),
+    heldByModel:(siege,actorId)=>{
+      const held=grandReplies.get(siege.id);
+      if(held?.actorId!==actorId||held.decision.grandSiegeHeroMove!=='hold')return;
+      if(traceOptions?.tape)rememberReplayDecision(traceOptions.tape,actorId,held.decision,0,false,false,true);
+      recordDecisionEffect?.(actorId,true);
+    },
+    applied:(siege,result)=>{
+      const decision:LLMDecisionPayload={chosenAction:'GRAND_SIEGE_HERO',targetGrandSiegeId:siege.id,grandSiegeHeroMove:result.move,
+        innerMonologue:'山门前亲身护阵，所付代价已经落定。'};
+      const actor=nextState.cultivators.find(person=>person.id===result.actorId);
+      if(actor?.alive){
+        actor.currentAction='GRAND_SIEGE_HERO';actor.innerMonologue=decision.innerMonologue;
+        // The current turn's redacted frontline action supersedes its ordinary receipt, not earlier retained facts.
+        if(actor.ordinaryActionEvidence?.tick===nextState.tick)delete actor.ordinaryActionEvidence;
+      }
+      if(traceOptions?.tape)rememberReplayDecision(traceOptions.tape,result.actorId,decision,0,false,false,result.origin==='model');
+      if(result.origin==='model')recordDecisionEffect?.(result.actorId,true);
+      traceOptions?.onActor?.(result.actorId,[],true);
+      if(traceOptions?.captureTrace!==false)recordDecisionTrace(nextState,result.actorId,[],decision,
+        result.origin==='player'?'avatar':result.origin,true);
+    },
+  }), ...advanceOccasions(nextState, rng), ...advanceOaths(nextState), ...advanceMarkets(nextState), ...advanceWitnesses(nextState), ...advanceSeasonReviews(nextState, (state, seasonId) =>
     publicCompetitionStandings(state, seasonId).find(({ rank }) => rank === 1)), ...maintainSectPolitics(nextState), ...advanceDoctrineFoundings(nextState), ...advanceDoctrineMaturity(nextState,prevState), ...advanceBounties(nextState), ...advanceResearch(nextState), ...advanceWorkshops(nextState), ...advanceCraftTraining(nextState), ...advanceScribeCommissions(nextState), ...advanceDamageAssurance(nextState), ...advanceRelicExhibits(nextState), ...advanceProbation(nextState), ...advanceToolLoans(nextState), ...advanceWaypostMeals(nextState), ...advanceEstates(nextState), ...advanceDoctrines(nextState), ...advanceSectCredit(nextState), ...advanceSanctuaries(nextState), ...advancePilgrimages(nextState), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceCareFollowups(nextState), ...advanceDanxiaShortages(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...reconcileCourierDeaths(nextState), ...advanceHouseholds(nextState), ...advanceHouseholdNames(nextState)]) {
     newEvents.push(event);
     witnessEvent(nextState, event);

@@ -1,3 +1,5 @@
+import { availableGrandSiegeHeroActions, chooseGrandSiegeHeroDecision, hasQueuedGrandSiegeHero } from './grandSiegeTheatreEngine';
+import type { GrandSiegeHeroMove } from '../types/grandSiege';
 import {activeForbiddenDuel, availableForbiddenArtOptions, chooseForbiddenArtDecision, forbiddenDuelForParticipant} from './forbiddenArtEngine';
 import type {ForbiddenArtChoice} from '../types/forbiddenArt';
 import {activeHeartDemon, isHeartDemonGuided, recommendHeartDemonChoice} from './heartDemonEngine';
@@ -486,6 +488,9 @@ export function computeHeuristicDecision(
   if (roguelikeDecision) return roguelikeDecision;
   const destinyDecision = chooseDestinyTraitDecision(world, cultivator);
   if (destinyDecision) return destinyDecision;
+  const grandSiegeDecision = chooseGrandSiegeHeroDecision(world, cultivator);
+  if (grandSiegeDecision?.targetGrandSiegeId &&
+      !grandSiegeHeroReservedForPlayer(world, grandSiegeDecision.targetGrandSiegeId)) return grandSiegeDecision;
   const freight=utilityMarketFreightDecision(cultivator,world);
   if(freight)return freight;
   const disasterShelter = utilityDisasterShelterDecision(cultivator,world);
@@ -1865,6 +1870,26 @@ function decodeForbiddenArtDecision(parsed: Partial<LLMDecisionPayload>, id: str
     innerMonologue: '胜负未定，只从眼前确可一试的路里选。' };
 }
 
+/** An eligible attached defender reserves this battlefield's extra hero choice. */
+export function grandSiegeHeroReservedForPlayer(world: WorldState, id: string): boolean {
+  const owner = activeAvatar(world);
+  return !!owner && availableGrandSiegeHeroActions(owner, world).some(option => option.targetGrandSiegeId === id);
+}
+
+const grandSiegeDecisionFields = ['chosenAction', 'targetGrandSiegeId', 'grandSiegeHeroMove'] as const;
+
+function decodeGrandSiegeHeroDecision(parsed: Partial<LLMDecisionPayload>, id: string,
+  moves: readonly GrandSiegeHeroMove[]): LLMDecisionPayload | undefined {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) ||
+      Object.keys(parsed).length !== grandSiegeDecisionFields.length ||
+      !grandSiegeDecisionFields.every(key => Object.hasOwn(parsed, key)) ||
+      parsed.chosenAction !== 'GRAND_SIEGE_HERO' || parsed.targetGrandSiegeId !== id) return undefined;
+  const grandSiegeHeroMove = moves.find(move => move === parsed.grandSiegeHeroMove);
+  if (!grandSiegeHeroMove) return undefined;
+  return { chosenAction: 'GRAND_SIEGE_HERO', targetGrandSiegeId: id, grandSiegeHeroMove,
+    innerMonologue: '只在实际阵前择定一法，能否护住仍须战场亲见。' };
+}
+
 /** Legacy lightning posture facts are a whitelist, never a serialization of a guided heart scene. */
 function nativeTribulationPromptView(actor: Cultivator) {
   const trial = actor.tribulation;
@@ -1988,6 +2013,31 @@ export async function requestCultivatorLLMDecision(
       destiny.options.length === submittedMenu.options.length &&
       destiny.options.every((choice, index) => choice === submittedMenu.options[index])
         ? decodeDestinyTraitDecision(parsed, submittedMenu) : undefined, 160);
+  }
+
+  if (hasQueuedGrandSiegeHero(world, cultivator)) return undefined;
+  const hero = availableGrandSiegeHeroActions(cultivator, world);
+  if (hero.length) {
+    // This is the actor's own tactical menu for an already arrived real siege, not a battle forecast.
+    const exactId = hero[0].targetGrandSiegeId;
+    const candidates = world.sieges.filter(row => row.id === exactId);
+    const exact = candidates[0];
+    if (candidates.length !== 1 || exact.theatre?.queued || hero.some(row => row.targetGrandSiegeId !== exactId) ||
+        requestTick !== world.tick + 1 || grandSiegeHeroReservedForPlayer(world, exactId)) return undefined;
+    const moves = hero.map(row => row.grandSiegeHeroMove);
+    if (moves.length !== 2 || new Set(moves).size !== 2 || !moves.includes('hold')) return undefined;
+    const menu = moves.map(grandSiegeHeroMove => ({ chosenAction: 'GRAND_SIEGE_HERO',
+      targetGrandSiegeId: exactId, grandSiegeHeroMove }));
+    const prompt = '本宗阵前出现实机，只可用当下许可支援或按兵（hold）。只原样复制下列一个完整 JSON 对象；' +
+      `不填写人物、位置、独白、伤势、境界、代价、阵力、战果或其他字段。许可：${JSON.stringify(menu)}`;
+    return requestDecisionPrompt(config, requestTick, options, prompt, parsed => {
+      if (requestTick !== world.tick + 1 || !world.sieges.includes(exact) || exact.theatre?.queued ||
+          grandSiegeHeroReservedForPlayer(world, exactId)) return undefined;
+      const current = availableGrandSiegeHeroActions(cultivator, world);
+      if (current.length !== moves.length || current.some((row, index) =>
+        row.targetGrandSiegeId !== exactId || row.grandSiegeHeroMove !== moves[index])) return undefined;
+      return decodeGrandSiegeHeroDecision(parsed, exactId, moves);
+    }, 160);
   }
 
   const activeVow = activePilgrimageForActor(world, cultivator);
@@ -2292,10 +2342,11 @@ ${JSON.stringify(cultivator.reflections.map(({ kind, theme, intensity, statement
 ${COGNITIVE_RESPONSE_GUIDE}`;
 
   return requestDecisionPrompt(config, requestTick, options, prompt, (parsed) => {
-          // Generic actions cannot smuggle proof-bound fields from either private choice lane.
+          // Generic actions cannot smuggle proof-bound fields from a separate native choice lane.
           if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) ||
               Object.hasOwn(parsed, 'targetHeartTrialId') || Object.hasOwn(parsed, 'heartDemonChoice') ||
-              Object.hasOwn(parsed, 'targetForbiddenDuelId') || Object.hasOwn(parsed, 'forbiddenArtChoice')) return undefined;
+              Object.hasOwn(parsed, 'targetForbiddenDuelId') || Object.hasOwn(parsed, 'forbiddenArtChoice') ||
+              Object.hasOwn(parsed, 'targetGrandSiegeId') || Object.hasOwn(parsed, 'grandSiegeHeroMove')) return undefined;
           const validActions: ActionType[] = [
             'CULTIVATE',
             'BREAKTHROUGH',
