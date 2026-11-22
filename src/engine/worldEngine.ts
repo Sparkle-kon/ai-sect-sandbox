@@ -4,6 +4,7 @@ import { recordRegionalActorReturn, recordRegionalEarlyPromotions, recordRegiona
 import { beginRegionalSimulationTurn, deferRegionalActorTurn, finishRegionalSimulationTurn, recordRegionalTurnRegistry, renewRegionalProtectionAfterEvent } from './regionalSimulationEngine';
 import {advanceDoctrineMaturity,resolveDoctrineMaturityAction} from './doctrineMaturityEngine';
 import { resolveUpperPassageAction } from './upperPassageEngine';
+import { advanceNorthGateRenewal,resolveNorthGateRenewalAction } from './northGateRenewalEngine';
 import { resolveNorthWellReviewAction } from './northWellRevisitEngine';
 import { resolveNorthMiningCharterAction } from './northMiningCharterEngine';
 import { resolveWaterVeinAction } from './waterVeinEngine';
@@ -277,6 +278,15 @@ export function applyCultivatorBrainDecision(
     return null;
   }
   if(decision.chosenAction==='UPPER_PASSAGE')return applyUpperPassageDecision(world,cultivator,decision,explicitAvatarDecision);
+  if(decision.chosenAction==='NORTH_GATE_RENEWAL'){
+    if(activeAvatar(world)?.id===cultivator.id&&decision!==explicitAvatarDecision)return null;
+    const applied=resolveNorthGateRenewalAction(world,cultivator,decision);
+    if(applied){
+      cultivator.innerMonologue=decision.innerMonologue;
+      cultivator.currentAction='NORTH_GATE_RENEWAL';
+    }
+    return applied;
+  }
   if(decision.chosenAction==='NORTH_WELL_REVIEW'){
     if(activeAvatar(world)?.id===cultivator.id&&decision!==explicitAvatarDecision)return null;
     const applied=resolveNorthWellReviewAction(world,cultivator,decision);
@@ -913,6 +923,7 @@ export function advanceWorldTick(
   advanceProtagonistSuccession(nextState, prevState);
   openResourceFlowMonth(nextState);
   advanceNorthMiningCharters(nextState);
+  advanceNorthGateRenewal(nextState);
   advanceRouteWarnings(nextState);
   maintainPlayerAvatar(nextState);
   maintainMentorship(nextState);

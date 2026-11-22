@@ -1,10 +1,10 @@
 import type {SeedWeather,WorldEvent,WorldState} from '../types/world';
 import {terrainTileAt} from './terrainEngine';
 import {WATER_VEIN_BORROW_UNITS,WATER_VEIN_COOLDOWN_TICKS,WATER_VEIN_ID,WATER_VEIN_OPEN_STONES,
-  WATER_VEIN_ORE_CAPACITY,WATER_VEIN_RECOVERY_TICKS,WATER_VEIN_SITE,WATER_VEIN_SURVEY_STONES,WATER_VEIN_TILES,
+  WATER_VEIN_ORE_CAPACITY,WATER_VEIN_RECOVERY_TICKS,WATER_VEIN_RENEWAL_FUNDING,WATER_VEIN_SITE,WATER_VEIN_SURVEY_STONES,WATER_VEIN_TILES,
   waterVeinOpeningAt,waterVeinPhase} from './waterVeinTerms';
 
-type FlowWitness={tick:number;actorId:string;amount:number;reason:string;fromSect?:string};
+type FlowWitness={tick:number;actors:readonly string[];amount:number;fromSect?:string;fromGranary?:string};
 export function validateColdWaterVein(world:WorldState,fail:(path:string)=>never):void{
   const water=world.coldWaterVein;
   const checkWeather=(siteId:string,weather:SeedWeather)=>{
@@ -47,22 +47,37 @@ export function validateColdWaterVein(world:WorldState,fail:(path:string)=>never
   const exactActors=new Set<string>();
   const reference=(tick:number,actorId:string)=>`${tick}:${actorId}`;
   const money=new Map<string,FlowWitness>();
+  const flowKey=(id:string,reason:string)=>JSON.stringify([id,reason]);
   let priorTick=-WATER_VEIN_COOLDOWN_TICKS;
   for(const row of water.openings){
     const well=allWells.get(row.wellProjectId);
     const due=row.openedTick+WATER_VEIN_RECOVERY_TICKS;
     const key=reference(row.openedTick,row.openerId);
+    const renewal=row.renewal;
+    const variant=renewal&&WATER_VEIN_RENEWAL_FUNDING[renewal.stance];
     const openedId=`water-gate-${row.openedTick}`;
     if(!safeTick(row.openedTick)||!date(row.year,row.month,row.openedTick)||row.id!==openedId||
       exactActors.has(key)||!ids.has(row.openerId)||!sects.has(row.sectId)||row.openedTick-priorTick<WATER_VEIN_COOLDOWN_TICKS||
-      row.paidStones!==WATER_VEIN_OPEN_STONES||row.borrowedUnits!==WATER_VEIN_BORROW_UNITS||
+      row.paidStones!==WATER_VEIN_OPEN_STONES||row.borrowedUnits!==(variant?.borrowedUnits??WATER_VEIN_BORROW_UNITS)||
       row.completedTick!==undefined&&(row.completedTick!==due||row.completedTick>world.tick||
         (water.lastAdvancedTick??0)<row.completedTick)||
       row.completedTick===undefined&&(water.lastAdvancedTick??0)>=due||
       !wellEvidence(well,row.openedTick)||
       !newsMatches(events.get(`evt-${openedId}-opened`),row.openerId,row.openedTick,row.year,row.month))fail('coldWaterVein.opening');
     exactActors.add(key);priorTick=row.openedTick;
-    money.set(row.id,{tick:row.openedTick,actorId:row.openerId,amount:WATER_VEIN_OPEN_STONES,reason:'cold_gate_opened',fromSect:row.sectId});
+    const standard={tick:row.openedTick,actors:[row.openerId],amount:WATER_VEIN_OPEN_STONES,fromSect:row.sectId};
+    money.set(flowKey(row.id,'cold_gate_opened'),standard);
+    if(renewal&&variant){
+      const hearing=world.northGateRenewal?.hearing;
+      if(!hearing||hearing.id!==renewal.id)fail('coldWaterVein.renewal');
+      const endorser=renewal.stance==='accord'?hearing.endorsement?.actorId:undefined;
+      if(renewal.stance==='accord'&&!endorser)fail('coldWaterVein.renewal.endorsement');
+      const actors=endorser?[row.openerId,endorser]:[row.openerId];
+      if(variant.extraStones)money.set(flowKey(row.id,'cold_gate_renewal_sect'),
+        {...standard,actors,amount:variant.extraStones});
+      if(variant.roots)money.set(flowKey(row.id,'cold_gate_renewal_granary'),
+        {tick:row.openedTick,actors,amount:variant.roots,fromGranary:water.settlementId});
+    }
   }
   let observedTick=0;
   for(const row of water.observations){
@@ -73,7 +88,7 @@ export function validateColdWaterVein(world:WorldState,fail:(path:string)=>never
       row.wellDepth!==phase.wellDepth||row.fieldDeficit!==phase.fieldDeficit||row.mineYield!==phase.mineYield||row.symptom!==phase.symptom||
       !newsMatches(events.get(`evt-${row.id}`),row.actorId,row.tick,row.year,row.month))fail('coldWaterVein.observation');
     exactActors.add(key);observedTick=row.tick;
-    money.set(row.id,{tick:row.tick,actorId:row.actorId,amount:WATER_VEIN_SURVEY_STONES,reason:'north_well_measured'});
+    money.set(flowKey(row.id,'north_well_measured'),{tick:row.tick,actors:[row.actorId],amount:WATER_VEIN_SURVEY_STONES});
   }
   let stock=WATER_VEIN_ORE_CAPACITY,miningTick=0;
   for(const row of water.mining){
@@ -82,21 +97,23 @@ export function validateColdWaterVein(world:WorldState,fail:(path:string)=>never
       row.id!==`water-mine-${row.tick}-${row.actorId}`||row.units!==Math.min(stock,phase.mineYield)||
       !newsMatches(events.get(`evt-${row.id}`),row.actorId,row.tick))fail('coldWaterVein.mining');
     exactActors.add(key);stock-=row.units;miningTick=row.tick;
-    money.set(row.id,{tick:row.tick,actorId:row.actorId,amount:row.units,reason:'cold_ore_recovered'});
+    money.set(flowKey(row.id,'cold_ore_recovered'),{tick:row.tick,actors:[row.actorId],amount:row.units});
   }
   if(water.oreRemaining!==stock)fail('coldWaterVein.ore');
   const audited=new Set<string>();
   for(const month of world.resourceFlow.months)for(const entry of month.entries){
     if(entry.mechanism!=='water_vein')continue;
-    const row=money.get(entry.refId);
-    if(!row||audited.has(entry.refId)||entry.tick!==row.tick||entry.reason!==row.reason||entry.amount!==row.amount||entry.good!=='stone'||
-      entry.visibility.kind!=='participants'||entry.visibility.actorIds.length!==1||entry.visibility.actorIds[0]!==row.actorId)
+    const key=flowKey(entry.refId,entry.reason);
+    const row=money.get(key);
+    if(!row||audited.has(key)||entry.tick!==row.tick||entry.amount!==row.amount||
+      entry.good!==(row.fromGranary?'earth_root':'stone')||entry.visibility.kind!=='participants'||
+      entry.visibility.actorIds.length!==row.actors.length||!row.actors.every(actor=>entry.visibility.kind==='participants'&&entry.visibility.actorIds.includes(actor)))
       fail('coldWaterVein.flow');
-    if(row.reason==='cold_ore_recovered'){
-      if(entry.kind!=='production'||entry.to.kind!=='actor'||entry.to.id!==row.actorId)fail('coldWaterVein.flow.mining');
-    }else if(entry.kind!=='consumption'||entry.from.kind!==(row.fromSect?'sect':'actor')||
-      entry.from.id!==(row.fromSect??row.actorId))fail('coldWaterVein.flow.payment');
-    audited.add(entry.refId);
+    if(entry.reason==='cold_ore_recovered'){
+      if(entry.kind!=='production'||entry.to.kind!=='actor'||entry.to.id!==row.actors[0])fail('coldWaterVein.flow.mining');
+    }else if(entry.kind!=='consumption'||entry.from.kind!==(row.fromGranary?'granary':row.fromSect?'sect':'actor')||
+      entry.from.id!==(row.fromGranary??row.fromSect??row.actors[0]))fail('coldWaterVein.flow.payment');
+    audited.add(key);
   }
   const completeMonths=new Set(world.resourceFlow.months.filter(month=>month.totalEntries===month.entries.length).map(month=>month.tick));
   for(const [id,row] of money)if(completeMonths.has(row.tick)&&!audited.has(id))fail('coldWaterVein.flow.missing');

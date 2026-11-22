@@ -5,6 +5,7 @@ import { VILLAGE_GRANARY_CAPACITY, VILLAGE_GRANARY_DISASTER_WINDOW, VILLAGE_GRAN
   VILLAGE_GRANARY_MIN_STRESS, VILLAGE_GRANARY_RECEIPT_LIMIT, VILLAGE_GRANARY_RELIEF_COOLDOWN,
   VILLAGE_GRANARY_STRESS_REDUCTION, villageGranaryDonationAssets } from './villageGranaryEngine';
 import { villageSupplyNativeDeltas,villageSupplyNet } from './villageSupplyAccounting';
+import { northRenewalGranaryRootDeltas } from './waterVeinTerms';
 import { furnaceSafetyDamage, FURNACE_SAFETY_INSPECT_STONES, FURNACE_SAFETY_REOPEN_INTEGRITY,
   FURNACE_SAFETY_REPAIR } from './furnaceSafetyEngine';
 import { terrainTileAt } from './terrainEngine';
@@ -489,12 +490,13 @@ export function validateVillageGranaryRelationships(world: WorldState, actors: R
     const draws=granary.spentRoots/VILLAGE_GRANARY_DRAW.roots;
     const lifetime=allDonations+draws;
     const supply=villageSupplyNet(world,id);
-    const external=villageSupplyNativeDeltas(world,id);
+    const renewed=northRenewalGranaryRootDeltas(world,id);
+    const external=[...villageSupplyNativeDeltas(world,id),...renewed];
     if (!village || oldestReceipt.has(id) || ![rootsOnly,stonesOnly,mixed,draws,lifetime].every(n=>Number.isSafeInteger(n)&&n>=0) ||
         allDonations < 1 || granary.rootOnlyDonations===0 || granary.stoneOnlyDonations===0 ||
         granary.donatedStones !== (mixed+stonesOnly)*VILLAGE_GRANARY_DONATION.stones ||
         granary.spentStones !== draws*VILLAGE_GRANARY_DRAW.stones ||
-        granary.roots !== granary.donatedRoots-granary.spentRoots+supply.roots ||
+        granary.roots !== granary.donatedRoots-granary.spentRoots+supply.roots+renewed.reduce((sum,row)=>sum+row.roots,0) ||
         granary.stones !== granary.donatedStones-granary.spentStones+supply.stones ||
         !withinVault(granary.roots+supply.reserveRoots,granary.stones+supply.reserveStones) ||
         receipts.length !== Math.min(VILLAGE_GRANARY_RECEIPT_LIMIT,lifetime))

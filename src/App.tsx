@@ -73,7 +73,7 @@ import {projectRegionalPromotions} from './engine/regionalPromotionEngine';
 import {isScopedExpeditionGate} from './engine/expeditionOmenTerms';
 import {REGIONAL_BENCHMARK} from './components/regionalBenchmark';
 import type {RegionalFocusOption,RegionalSimulationControls} from './components/RegionalSimulationPanel';
-import { possessAvatar, queueAvatarOrder, queueAvatarSalvage, queueAvatarWaterVein, queueAvatarNorthMiningCharter, queueAvatarNorthWellReview, queueAvatarUpperPassage,
+import { possessAvatar, queueAvatarOrder, queueAvatarSalvage, queueAvatarWaterVein, queueAvatarNorthMiningCharter, queueAvatarNorthWellReview, queueAvatarUpperPassage, queueAvatarNorthGateRenewal,
   AVATAR_POSSESSION_COST, canPossessUpperPassageAvatar, possessUpperPassageAvatar } from './engine/avatarEngine';
 import { availableWaterVeinActions, projectWaterVein } from './engine/waterVeinEngine';
 import type { ColdWaterControls } from './components/ColdWaterVeinPanel';
@@ -82,6 +82,8 @@ import type {NorthWellRevisitControls} from './components/NorthWellRevisitPanel'
 import type {UpperPassageControls,UpperPassageHostControls} from './components/UpperPassagePanel';
 import {availableUpperPassageActions,projectUpperPassage} from './engine/upperPassageEngine';
 import {upperPassagePlane} from './engine/upperPassageTerms';
+import type {NorthGateRenewalControls} from './components/NorthGateRenewalPanel';
+import {availableNorthGateRenewalActions,projectNorthGateRenewal} from './engine/northGateRenewalEngine';
 import {northWellPanelEvidence} from './components/northWellRevisitView';
 import {availableNorthWellReviewActions,projectNorthWellRevisit,type NorthWellReviewOption} from './engine/northWellRevisitEngine';
 import {useNorthWellRevisitAuthor} from './components/useNorthWellRevisitAuthor';
@@ -128,6 +130,7 @@ const ChronicleLibraryPanel = React.lazy(async () => ({ default: (await import('
 const WorldOccasionsPanel = React.lazy(async () => ({ default: (await import('./components/WorldOccasionsPanel')).WorldOccasionsPanel }));
 const ExpeditionRescuePanel = React.lazy(async () => ({ default: (await import('./components/ExpeditionRescuePanel')).ExpeditionRescuePanel }));
 const BoundaryReliefPanel = React.lazy(async () => ({ default: (await import('./components/BoundaryReliefPanel')).BoundaryReliefPanel }));
+const NorthGateRenewalPanel = React.lazy(async()=>({default:(await import('./components/NorthGateRenewalPanel')).NorthGateRenewalPanel}));
 const UpperPassagePanel = React.lazy(async () => ({default:(await import('./components/UpperPassagePanel')).UpperPassagePanel}));
 const NorthWellRevisitPanel = React.lazy(async () => ({default:(await import('./components/NorthWellRevisitPanel')).NorthWellRevisitPanel}));
 const NorthMiningCharterPanel = React.lazy(async () => ({ default: (await import('./components/NorthMiningCharterPanel')).NorthMiningCharterPanel }));
@@ -1037,8 +1040,32 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
       return next!==world;
     },
   }:undefined;
+  const northGateRenewalView=upperPassageActive?projectNorthGateRenewal(visibleWorld,selectedCultivator):undefined;
+  const northGateRenewalAtWell=workspace==='world'&&northGateRenewalView?.scope==='lower'?northGateRenewalView:undefined;
+  const northGateRenewalAvatar=northGateRenewalAtWell&&!preview&&selectedCultivator&&
+    activeAvatar(world)?.id===selectedCultivator.id?selectedCultivator:undefined;
+  const northGateRenewalControls:NorthGateRenewalControls|undefined=northGateRenewalAvatar&&northGateRenewalAtWell?{
+    scopeKey:`${viewScopeKey}:${northGateRenewalAvatar.id}:${northGateRenewalAtWell.id}`,revisionKey:visibleWorld,
+    choices:canQueueAvatarSalvage(world,northGateRenewalAvatar.id)?
+      availableNorthGateRenewalActions(northGateRenewalAvatar,world,world.tick+1):[],
+    pending:waterVeinPending?.actorId===northGateRenewalAvatar.id&&waterVeinPending.action==='NORTH_GATE_RENEWAL'?
+      waterVeinPending:undefined,
+    disabled:isRunning||isStepping||fastForwardLocked,
+    onQueue:(choice,revision)=>{
+      if(revision!==world||isRunning||isStepping||fastForwardLocked||browsing.current||stepInFlight.current||
+        fastForwardRun.current||campaignGuard.current||history.current!==timeline||authority.current!==world||
+        saveContextVersion.current!==waterVeinContextVersion)return false;
+      const updated=updateWorld(current=>{
+        if(current!==world)return current;
+        const next=structuredClone(current);
+        return queueAvatarNorthGateRenewal(next,northGateRenewalAvatar.id,choice)?next:current;
+      });
+      return updated!==world;
+    },
+  }:undefined;
   const realmView=upperPassageView&&<React.Suspense fallback={<p role="status">查验脚下界路…</p>}>
     <UpperPassagePanel view={upperPassageView} controls={upperPassageControls} host={upperPassageHost}/>
+    {northGateRenewalView?.scope==='upper'&&<NorthGateRenewalPanel view={northGateRenewalView} nowTick={visibleWorld.tick} now={visibleWorld}/>}
   </React.Suspense>;
   const medicineContextVersion=saveContextVersion.current;
   const medicineAvatar=!preview&&selectedCultivator&&activeAvatar(world)?.id===selectedCultivator.id&&
@@ -1528,9 +1555,10 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
         world: upperPassageAway?realmView:<WorkspaceSections label="世界与设置" initialOpen={opened('world', 'weather')} {...fold('world')} sections={[
           { id: 'weather', label: '灵候图与观测', content: <div className="space-y-2.5">
             <React.Suspense fallback={<p role="status">载入世界记录…</p>}><WeatherAtlasPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense>
-            {(waterVeinView||showMiningCharter||northWellView||upperPassageAtWell)&&<React.Suspense fallback={null}><ColdWaterVeinPanel view={waterVeinView} controls={waterVeinControls}>
+            {(waterVeinView||showMiningCharter||northWellView||upperPassageAtWell||northGateRenewalAtWell)&&<React.Suspense fallback={null}><ColdWaterVeinPanel view={waterVeinView} controls={waterVeinControls}>
               {showMiningCharter&&miningCharterView&&<NorthMiningCharterPanel view={miningCharterView} controls={miningCharterControls}/>}
               {northWellView&&<NorthWellRevisitPanel view={northWellView} controls={northWellControls} author={northWellRevisitAuthor}/>}
+              {northGateRenewalAtWell&&<NorthGateRenewalPanel view={northGateRenewalAtWell} nowTick={visibleWorld.tick} now={visibleWorld} controls={northGateRenewalControls}/>}
               {upperPassageAtWell&&realmView}
             </ColdWaterVeinPanel></React.Suspense>}
             {activeActorId && visibleWorld.shortShifts.shifts.some(({ hostId, workerId }) => activeActorId === hostId || activeActorId === workerId) &&

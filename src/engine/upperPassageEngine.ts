@@ -1,12 +1,13 @@
 import type { Cultivator, LLMDecisionPayload, WorldEvent, WorldState } from '../types/world';
+import { northGateRenewalApertureAuthorized } from './northGateRenewalTerms';
 import { doctrineFoundingPhysicallyAt } from './doctrineFoundingEngine';
 import { northMiningIsSealed } from './northMiningCharterTerms';
 import { northWellPrecinctRestricted } from './northWellRevisitTerms';
 import { flowActor, recordResourceFlow } from './resourceFlowEngine';
 import { routeWarningHazardValid } from './routeWarningProof';
 import { completedNorthWaterWell, northWaterAddress } from './waterVeinEngine';
-import { WATER_VEIN_ID, WATER_VEIN_OPEN_STONES, WATER_VEIN_SITE, WATER_VEIN_TILES, latestWaterRow,
-  waterVeinOpeningAt, waterVeinPhase } from './waterVeinTerms';
+import { WATER_VEIN_ID, WATER_VEIN_SITE, WATER_VEIN_TILES, latestWaterRow,
+  waterVeinApertureActive, waterVeinOpeningAt, waterVeinPhase } from './waterVeinTerms';
 import { UPPER_PASSAGE_PATH, UPPER_PASSAGE_FEE, UPPER_PASSAGE_RELIEF_PETITION, UPPER_PASSAGE_STANDARD_PETITION,
   upperPassageId, upperPassageIndex, upperPassagePlane, upperPassageThroat,
   type UpperPassageJourney, type UpperPassageMove, type UpperPassageNodeId, type UpperPassagePetition, type UpperPassageReading } from './upperPassageTerms';
@@ -26,7 +27,7 @@ export function usableUpperPassageOpening(world:WorldState,tick:number){
   const address=northWaterAddress(world), state=world.coldWaterVein;
   const gate=waterVeinOpeningAt(state,tick-1);
   if(!address||!state||state.veinId!==WATER_VEIN_ID||state.settlementId!==address.village.id||!gate||
-    gate.openedTick>=tick||waterVeinPhase(gate,tick).remainingUnits<=0||gate.paidStones!==WATER_VEIN_OPEN_STONES||
+    !waterVeinApertureActive(gate,tick)||!northGateRenewalApertureAuthorized(world,gate)||
     northMiningIsSealed(world,tick)||northWellPrecinctRestricted(world,tick)||
     (address.site.ownerSectId&&address.site.ownerSectId!==gate.sectId)||
     world.mapHazards.some(row=>row.tileId===WATER_VEIN_TILES[0]&&row.intensity>=2&&routeWarningHazardValid(world,row,tick)))return undefined;

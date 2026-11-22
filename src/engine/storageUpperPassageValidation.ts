@@ -1,7 +1,8 @@
 import type {WorldState} from '../types/world';
+import { northGateRenewalApertureAuthorized } from './northGateRenewalTerms';
 import {UPPER_PASSAGE_FEE,UPPER_PASSAGE_PATH,UPPER_PASSAGE_RELIEF_PETITION,UPPER_PASSAGE_STANDARD_PETITION,
   upperPassageId,upperPassageIndex,upperPassagePlane,upperPassageThroat,type UpperPassageJourney,type UpperPassageNodeId} from './upperPassageTerms';
-import {waterVeinPhase} from './waterVeinTerms';
+import {waterVeinApertureActive,waterVeinPhase} from './waterVeinTerms';
 
 type Receipt={actorId:string;nodeId?:UpperPassageNodeId;tick:number;category?:'death'};
 type FlowProof={actorId:string;tick:number;amount:number;payment:'realm_passage_paid'|'upper_array_fund_paid'};
@@ -27,7 +28,7 @@ export function validateUpperPassage(world:WorldState,fail:(path:string)=>never)
   const goodTick=(tick:number)=>tick>=1&&tick<=world.tick;
   const touchedAperture=(id:string,tick:number)=>{
     const opening=openings.get(id);
-    return !!opening&&opening.openedTick<tick&&tick-opening.openedTick<=5&&opening.paidStones===40;
+    return !!opening&&waterVeinApertureActive(opening,tick)&&northGateRenewalApertureAuthorized(world,opening);
   };
   const flowKey=(id:string,reason:string)=>`${id}:${reason}`;
   const nodeAt=(row:UpperPassageJourney,tick:number)=>{

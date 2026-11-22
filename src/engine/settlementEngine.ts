@@ -184,6 +184,9 @@ function annualCohort(world: WorldState, village: MortalSettlement, stressedByHa
 
   const referenced = new Set(world.settlements.records.filter(({ settlementId }) => settlementId === village.id)
     .flatMap(({ volunteerId }) => volunteerId ? [volunteerId] : []));
+  // Keep the native identity behind an actual enduring signature, even after the ordinary roster window.
+  const renewal=world.northGateRenewal?.hearing;
+  if(renewal?.source.settlementId===village.id&&renewal.endorsement)referenced.add(renewal.endorsement.volunteerId);
   const latestEnlisted = new Set(village.volunteers.filter((person) => person.enlistedCultivatorId)
     .slice(-RETAIN_ENLISTED_PER_VILLAGE).map(({ id }) => id));
   village.volunteers = village.volunteers.filter((person) => {

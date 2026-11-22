@@ -17,6 +17,7 @@ import { availableVillageGranaryActions, projectVillageGranary } from './village
 import { availableVillageFairActions } from './villageFairEngine';
 import { availableUpperPassageActions,utilityUpperPassageDecision,type UpperPassageOption } from './upperPassageEngine';
 import { UPPER_PASSAGE_PATH } from './upperPassageTerms';
+import { availableNorthGateRenewalActions,type NorthGateRenewalOption } from './northGateRenewalEngine';
 import { availableNorthWellReviewActions, utilityNorthWellReviewDecision } from './northWellRevisitEngine';
 import { availableNorthMiningCharterActions, utilityNorthMiningDecision } from './northMiningCharterEngine';
 import { availableWaterVeinActions, utilityWaterVeinDecision } from './waterVeinEngine';
@@ -350,6 +351,32 @@ function decodeUpperPassage(parsed:Partial<LLMDecisionPayload>,choices:readonly 
   const line=(typeof parsed.innerMonologue==='string'&&parsed.innerMonologue.trim().slice(0,160))||
     '沿本人所在的实址与当轮许可行事，不猜界外。';
   return upperPassageDecision(selected,line);
+}
+
+function northGateRenewalDecision(option:NorthGateRenewalOption,innerMonologue:string):LLMDecisionPayload{
+  return {chosenAction:option.action,northGateRenewalMove:option.northGateRenewalMove,
+    targetNorthGateRenewalId:option.targetNorthGateRenewalId,innerMonologue};
+}
+export function availableNorthGateRenewalProviderActions(actor:Cultivator,world:WorldState,tick:number):NorthGateRenewalOption[]{
+  if(actor.positionPlane!==undefined||actor.locationId!==UPPER_PASSAGE_PATH[0]||
+    (world.playerAvatar.possessedId===actor.id&&(world.playerAvatar.possessionUntilTick??0)>tick))return [];
+  return availableNorthGateRenewalActions(actor,world,tick);
+}
+/** Utility does not invent signatures or assume every local will intervene. Only an inclined sponsor may honor already-given consent. */
+export function utilityNorthGateRenewalDecision(actor:Cultivator,world:WorldState):LLMDecisionPayload|undefined{
+  if(actor.personality!=='刚正')return undefined;
+  const exact=availableNorthGateRenewalProviderActions(actor,world,world.tick).find(option=>option.northGateRenewalMove==='accord');
+  return exact?northGateRenewalDecision(exact,'乡席已亲自署明，只办当世合议可负担的阵事。'):undefined;
+}
+function decodeNorthGateRenewal(parsed:Partial<LLMDecisionPayload>,choices:readonly NorthGateRenewalOption[]):LLMDecisionPayload|undefined{
+  if(parsed.chosenAction!=='NORTH_GATE_RENEWAL'||Object.keys(parsed).some(field=>
+    !['chosenAction','innerMonologue','northGateRenewalMove','targetNorthGateRenewalId'].includes(field)))return undefined;
+  const selected=choices.find(row=>row.northGateRenewalMove===parsed.northGateRenewalMove&&
+    row.targetNorthGateRenewalId===parsed.targetNorthGateRenewalId);
+  if(!selected)return undefined;
+  const line=(typeof parsed.innerMonologue==='string'&&parsed.innerMonologue.trim().slice(0,160))||
+    '只以本月实在的身份与资粮作答，不替旁人落笔。';
+  return northGateRenewalDecision(selected,line);
 }
 
 export function computeHeuristicDecision(
@@ -948,6 +975,8 @@ export function computeHeuristicDecision(
     if (choice) return { ...choice, chosenAction: 'SCRIPTURE', innerMonologue: '经义须以原本核证，异读不可混同。' };
   }
 
+  const renewal=utilityNorthGateRenewalDecision(cultivator,world);
+  if(renewal)return renewal;
   // A possessed body signs only via its own explicit next-month order.
   const charter=world.playerAvatar.possessedId===cultivator.id&&(world.playerAvatar.possessionUntilTick??0)>world.tick ?
     undefined : utilityNorthMiningDecision(cultivator,world);
@@ -1737,6 +1766,9 @@ export async function requestCultivatorLLMDecision(
   const arbitrationOptions = availableOathArbitrationActions(cultivator, world);
   const oathOptions = availableOathActions(cultivator, world);
   const marketOptions = availableMarketActions(cultivator, world);
+  const renewalOptions=availableNorthGateRenewalProviderActions(cultivator,world,requestTick);
+  const renewalMoves=renewalOptions.map(({action,northGateRenewalMove,targetNorthGateRenewalId})=>
+    ({chosenAction:action,northGateRenewalMove,targetNorthGateRenewalId}));
   const pendingUpperEntry=availableUpperPassageProviderActions(cultivator,world,requestTick)
     .filter(row=>row.upperPassageMove==='enter');
   const oldWellOptions=world.playerAvatar.possessedId===cultivator.id&&(world.playerAvatar.possessionUntilTick??0)>requestTick ?
@@ -1875,6 +1907,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 本宗邦交：${JSON.stringify(world.diplomacy.filter((relation) => relation.sectAId === cultivator.sectId || relation.sectBId === cultivator.sectId))}；公示的外事权限：${JSON.stringify(availableDiplomacyActions(cultivator, world))}
 - 赛季复核只选真实可核验收据；提交不会改写原榜：${JSON.stringify(honorReviewOptions)}
 - 临时观象只复制实际地点的 fund、到期 measure 或带原日期 relay。仅 fund 任选列表中的观测位（现地中心省略、边位用 observatoryStation:'edge'）；不填写读数或强度：${JSON.stringify(observatoryOptions)}
+${renewalMoves.length?`- 三千年重开会，只能复制本人当轮许可，或不参与。续旧阵 reuse、由本宗扶阵 sect、只由当世乡席署名 endorse、已取得当世真签方能合议 accord。只采用当前列出的动作：${JSON.stringify(renewalMoves)}。不得代签、填写资粮、日期或开门结果。`:''}
 ${pendingUpperEntry.length?`- 只有本人现场的界路准入，只复制当前准入与确切门槛节点，不报已登入界：${JSON.stringify(
   pendingUpperEntry.map(({action,upperPassageMove,targetUpperPassageNodeId})=>({chosenAction:action,upperPassageMove,targetUpperPassageNodeId}))) }`:''}
 ${oldWellOptions.length?`- 旧井复核只复制本人的现场许可、动作与原采契编号；不得补填写水尺、缴款、开门、律令或矿量：${JSON.stringify(oldWellOptions.map(({action,northWellReviewMove,targetNorthMiningCharterId})=>
@@ -1981,6 +2014,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'NORTH_MINING_CHARTER',
             'NORTH_WELL_REVIEW',
             'UPPER_PASSAGE',
+            'NORTH_GATE_RENEWAL',
             'BREW_PILL',
             'USE_PILL',
             'FORGE_ARTIFACT',
@@ -2096,6 +2130,8 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
           if (rescueOnly && chosenAction !== 'EXPEDITION_RESCUE') return undefined;
           if (activeVow && chosenAction !== 'PILGRIMAGE' &&
               (onPilgrimagePath || (chosenAction !== 'REST' && chosenAction !== 'ROUTE_WARNING'))) return undefined;
+          if(chosenAction==='NORTH_GATE_RENEWAL')return decodeNorthGateRenewal(parsed,renewalOptions);
+          if(parsed.northGateRenewalMove!==undefined||parsed.targetNorthGateRenewalId!==undefined)return undefined;
           if((parsed.upperPassageMove!==undefined||parsed.targetUpperPassageNodeId!==undefined)&&
             chosenAction!=='UPPER_PASSAGE')return undefined;
           if(chosenAction==='UPPER_PASSAGE')return decodeUpperPassage(parsed,pendingUpperEntry,false);

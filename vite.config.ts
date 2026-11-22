@@ -42,6 +42,9 @@ export default defineConfig({
           // Shared leaf callbacks never put historical custody into the native action chunks.
           'heritage-capture': ['./src/engine/eraHeritageCapture.ts'],
           'cold-water-rules': ['./src/engine/waterVeinTerms.ts'],
+          'gate-renewal-proof': ['./src/engine/northGateRenewalTerms.ts'],
+          'seed-culture': ['./src/engine/seedCultureEngine.ts','./src/engine/seedCultureTerms.ts'],
+          'formation-local': ['./src/engine/formationNetworkEngine.ts'],
           'north-charter-terms': ['./src/engine/northMiningCharterTerms.ts'],
           'old-well-source': ['./src/engine/northWellRevisitTerms.ts','./src/engine/northWellRevisitEvidence.ts'],
           'upper-positions': ['./src/engine/upperPassageTerms.ts','./src/engine/upperPassageIsolation.ts'],

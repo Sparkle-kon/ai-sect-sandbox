@@ -1,6 +1,7 @@
 import {onLowerPlane} from './upperPassageIsolation';
 import {availableDoctrineMaturityActions,type DoctrineMaturityOption} from './doctrineMaturityEngine';
 import {availableDoctrineFoundingActions,type DoctrineFoundingOption} from './doctrineFoundingEngine';
+import { availableNorthGateRenewalActions,type NorthGateRenewalOption } from './northGateRenewalEngine';
 import { availableUpperPassageActions,type UpperPassageOption } from './upperPassageEngine';
 import { availableNorthWellReviewActions,type NorthWellReviewOption } from './northWellRevisitEngine';
 import { availableNorthMiningCharterActions,type NorthMiningOption } from './northMiningCharterEngine';
@@ -152,6 +153,17 @@ export function queueAvatarNorthMiningCharter(world:WorldState,actorId:string,op
 }
 
 /** Queue only an explicit exact old-well review; payment and any permit require actual execution. */
+export function queueAvatarNorthGateRenewal(world:WorldState,actorId:string,option:NorthGateRenewalOption):boolean {
+  const host=activeAvatar(world);
+  if(!host||!canQueueAvatarSalvage(world,actorId)||option.action!=='NORTH_GATE_RENEWAL')return false;
+  const exact=availableNorthGateRenewalActions(host,world,world.tick+1).find(row=>row.northGateRenewalMove===option.northGateRenewalMove&&
+    row.targetNorthGateRenewalId===option.targetNorthGateRenewalId);
+  if(!exact)return false;
+  world.playerAvatar.essence-=AVATAR_ORDER_COST;
+  world.playerAvatar.pendingOrder={actorId,queuedTick:world.tick,...exact};
+  return true;
+}
+
 export function queueAvatarNorthWellReview(world:WorldState,actorId:string,option:NorthWellReviewOption):boolean {
   const host=activeAvatar(world);
   if(!host||!canQueueAvatarSalvage(world,actorId)||option.action!=='NORTH_WELL_REVIEW')return false;
@@ -233,7 +245,9 @@ export function consumeAvatarOrder(world: WorldState): { actorId: string; decisi
   if (!order || world.tick <= order.queuedTick) return undefined;
   delete state.pendingOrder;
   if (world.tick !== order.queuedTick + 1 || activeAvatar(world)?.id !== order.actorId) return undefined;
-  const targets = order.action === 'UPPER_PASSAGE' ?
+  const targets = order.action === 'NORTH_GATE_RENEWAL' ?
+    {northGateRenewalMove:order.northGateRenewalMove,targetNorthGateRenewalId:order.targetNorthGateRenewalId} :
+    order.action === 'UPPER_PASSAGE' ?
     {upperPassageMove:order.upperPassageMove,targetUpperPassageNodeId:order.targetUpperPassageNodeId} :
     order.action === 'NORTH_WELL_REVIEW' ?
     {northWellReviewMove:order.northWellReviewMove,targetNorthMiningCharterId:order.targetNorthMiningCharterId} :

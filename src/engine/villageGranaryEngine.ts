@@ -4,6 +4,7 @@ import type {
 } from '../types/world';
 import { flowActor, flowGranary, recordResourceFlow } from './resourceFlowEngine';
 import { villageSupplyNet } from './villageSupplyAccounting';
+import { northRenewalGranaryRootSpent } from './waterVeinTerms';
 
 export const VILLAGE_GRANARY_CAPACITY = { roots:20,stones:80 } as const;
 export const VILLAGE_GRANARY_DONATION = { roots:2,stones:8 } as const;
@@ -84,10 +85,10 @@ export const villageGranaryDonationAssets = (kind: VillageGranaryDonationMove): 
 export const villageGranaryDonationReason = (kind: VillageGranaryDonationMove) =>
   kind==='donate_roots'?'granary_donation_roots':kind==='donate_stones'?'granary_donation_stones':'granary_donation';
 
-function validBook(book: VillageGranary, supply: ReturnType<typeof villageSupplyNet>): boolean {
+export function validVillageGranaryBook(world: WorldState, book: VillageGranary, supply = villageSupplyNet(world,book.settlementId)): boolean {
   return count(book.roots) && count(book.stones) && book.roots <= VILLAGE_GRANARY_CAPACITY.roots &&
     book.stones <= VILLAGE_GRANARY_CAPACITY.stones && count(book.donatedRoots) && count(book.donatedStones) &&
-    count(book.spentRoots) && count(book.spentStones) && book.donatedRoots-book.spentRoots+supply.roots === book.roots &&
+    count(book.spentRoots) && count(book.spentStones) && book.donatedRoots-book.spentRoots+supply.roots-northRenewalGranaryRootSpent(world,book.settlementId) === book.roots &&
     book.donatedStones-book.spentStones+supply.stones === book.stones &&
     book.roots+supply.reserveRoots <= VILLAGE_GRANARY_CAPACITY.roots &&
     book.stones+supply.reserveStones <= VILLAGE_GRANARY_CAPACITY.stones;
@@ -115,7 +116,7 @@ export function availableVillageGranaryActions(actor: Cultivator,world: WorldSta
   if (!village || !count(village.population,1)) return [];
   const book = granaryAt(world,village.id) ?? empty(village.id);
   const supply = villageSupplyNet(world,village.id);
-  if (!validBook(book,supply) || book.receipts.some(row => row.actorId === actor.id && row.tick === executionTick)) return [];
+  if (!validVillageGranaryBook(world,book,supply) || book.receipts.some(row => row.actorId === actor.id && row.tick === executionTick)) return [];
   const options: VillageGranaryOption[] = [];
   const add = (granaryMove: VillageGranaryOption['granaryMove']) =>
     options.push({action:'VILLAGE_GRANARY',granaryMove,targetSettlementId:village.id});
@@ -198,7 +199,7 @@ export function projectVillageGranary(world: WorldState,viewer?: Cultivator,sett
   const village = presentAt(world,viewer,world.tick);
   if (!village || (settlementId !== undefined && settlementId !== village.id)) return undefined;
   const book = granaryAt(world,village.id) ?? empty(village.id);
-  if (!validBook(book,villageSupplyNet(world,village.id))) return undefined;
+  if (!validVillageGranaryBook(world,book)) return undefined;
   const {receipts,lastDrawTick,...balances} = book;
   const lastDisasterTick = localDisasterTick(world,village);
   return {...balances,siteId:village.locationId,stress:village.stress,

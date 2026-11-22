@@ -3,6 +3,7 @@ import {projectWaterVein} from '../engine/waterVeinEngine';
 import {WATER_VEIN_SITE} from '../engine/waterVeinTerms';
 import {projectNorthMiningCharters} from '../engine/northMiningCharterEngine';
 import {projectNorthWellRevisit} from '../engine/northWellRevisitEngine';
+import {projectNorthGateRenewal} from '../engine/northGateRenewalEngine';
 import {projectEraHeritage} from '../engine/eraHeritageEngine';
 import {localDoctrineFoundingNotice} from '../engine/doctrineFoundingEngine';
 import {localDanxiaSeasonReviewSite} from '../engine/danxiaSeasonReviewEngine';
@@ -385,6 +386,12 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     if(!toolsExpanded||!selected||selectedLocation?.id!==WATER_VEIN_SITE||!projectNorthWellRevisit(world,selected))return false;
     const tile=terrainTileAt(world,selectedLocation.x,selectedLocation.y);
     return !!tile&&currentVisibleTileIds(world,selected).has(tile.id);
+  },[toolsExpanded,world,selected,selectedLocation]);
+  const localNorthGateRenewalNotice=useMemo(()=>{
+    if(!toolsExpanded||!selected||selectedLocation?.id!==WATER_VEIN_SITE)return undefined;
+    const tile=terrainTileAt(world,selectedLocation.x,selectedLocation.y);
+    if(!tile||!currentVisibleTileIds(world,selected).has(tile.id))return undefined;
+    return projectNorthGateRenewal(world,selected)?.status;
   },[toolsExpanded,world,selected,selectedLocation]);
   const selectedTrial = selected?.tribulation;
   const selectedBounty = selected && relevantBounty(world.bounties, selected.id);
@@ -1253,9 +1260,13 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           {fog ? `${selected?.name ?? '无修士'}视角 · 已探索 ${mapView.known?.size ?? 0}/${world.terrain.tiles.length} 格 · 视野内 ${mapView.current?.size ?? 0} 格` : '天道全图 · 宗门色线为领地边界'}
         </span>
         {heat && <span className="text-[11px] text-slate-400">蓝色至橙红色表示灵气由低到高。</span>}
-        {localWaterVeinNotice&&<span className="text-[11px] text-sky-200">此人正在寒玉井边，可核看水势。</span>}
-        {localMiningCharterNotice&&!localNorthWellRevisitNotice&&<span className="text-[11px] text-amber-200">此处仍有在行的采契。</span>}
-        {localNorthWellRevisitNotice&&<span className="text-[11px] text-sky-200">原井仍在此地，可核当年的旧卷。</span>}
+        {localWaterVeinNotice&&!localNorthGateRenewalNotice&&<span className="text-[11px] text-sky-200">此人正在寒玉井边，可核看水势。</span>}
+        {localMiningCharterNotice&&!localNorthWellRevisitNotice&&!localNorthGateRenewalNotice&&<span className="text-[11px] text-amber-200">此处仍有在行的采契。</span>}
+        {localNorthWellRevisitNotice&&!localNorthGateRenewalNotice&&<span className="text-[11px] text-sky-200">原井仍在此地，可核当年的旧卷。</span>}
+        {localNorthGateRenewalNotice&&<span className="text-[11px] text-sky-200">{
+          localNorthGateRenewalNotice==='hearing'?'寒玉井边，可翻看正在审议的门卷。':
+          '寒玉井边，可翻看天门再议的实录。'
+        }</span>}
         {toolsExpanded && selectedKnownRegion && <span className="text-[11px] text-emerald-200">
           所选已知地点所属地域：{SIMULATION_REGION_NAMES[selectedKnownRegion]}
         </span>}

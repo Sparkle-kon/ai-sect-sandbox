@@ -1,3 +1,4 @@
+import type {NorthGateRenewalMove,NorthGateRenewalState} from '../engine/northGateRenewalTerms';
 import type {UpperPassageMove,UpperPassageNodeId,UpperPositionPlane,UpperPassageState} from '../engine/upperPassageTerms';
 
 export type SpiritRoot = '金' | '木' | '水' | '火' | '土' | '雷' | '暗' | '天灵根';
@@ -170,6 +171,7 @@ export type ActionType =
   | 'NORTH_MINING_CHARTER'
   | 'NORTH_WELL_REVIEW'
   | 'UPPER_PASSAGE'
+  | 'NORTH_GATE_RENEWAL'
   | 'TOOL_LOAN'
   | 'FORGE_ARTIFACT'
   | 'BIND_ARTIFACT'
@@ -476,6 +478,8 @@ export interface LLMDecisionPayload {
   innerMonologue: string;
   chosenAction: ActionType;
   waterVeinMove?: WaterVeinMove;
+  northGateRenewalMove?: NorthGateRenewalMove;
+  targetNorthGateRenewalId?: string;
   upperPassageMove?: UpperPassageMove;
   targetUpperPassageNodeId?: UpperPassageNodeId;
   northWellReviewMove?: NorthWellReviewMove;
@@ -1025,6 +1029,7 @@ export type AvatarPendingOrder = { actorId: string; queuedTick: number } & (
   | { action:'NORTH_MINING_CHARTER'; northMiningMove:'sign'; targetNorthMiningCharterId:string; northMiningStance?:never }
   | { action:'NORTH_WELL_REVIEW'; northWellReviewMove:NorthWellReviewMove;targetNorthMiningCharterId:string }
   | { action:'UPPER_PASSAGE';upperPassageMove:UpperPassageMove;targetUpperPassageNodeId:UpperPassageNodeId }
+  | { action:'NORTH_GATE_RENEWAL';northGateRenewalMove:NorthGateRenewalMove;targetNorthGateRenewalId:string }
   | { action: 'SALVAGE_ARTIFACT'; targetArtifactId: string; targetLocationId: string }
   | { action:'DOCTRINE_MATURITY';doctrineMaturityMove:DoctrineMaturityMove;targetDoctrineFoundingId:string }
   | { action:'DOCTRINE_FOUNDING'; doctrineFoundingMove:DoctrineFoundingMove; targetDoctrineFoundingId?:string;
@@ -3318,12 +3323,14 @@ export interface EraHeritageState {
 
 export type WaterVeinMove = 'observe' | 'open' | 'mine';
 export type WaterVeinSymptom = 'well' | 'field' | 'mine' | 'recovered';
+export type WaterVeinRenewalStance = 'reuse'|'sect'|'accord';
 
 export interface WaterVeinOpening {
   id: string;
   openedTick: number; year: number; month: number;
   openerId: string; sectId: string; wellProjectId: string;
   paidStones: number; borrowedUnits: number;
+  renewal?: {id:string;stance:WaterVeinRenewalStance};
   completedTick?: number;
 }
 export interface WaterVeinObservation {
@@ -3394,6 +3401,7 @@ export interface NorthWellRevisitReviewState {
 
 export interface WorldState {
   upperPassage?:UpperPassageState;
+  northGateRenewal?:NorthGateRenewalState;
   northWellRevisitLaw?:NorthWellRevisitLaw;
   northWellRevisitReviews?:NorthWellRevisitReviewState;
   northMiningCharters?:NorthMiningCharterState;
