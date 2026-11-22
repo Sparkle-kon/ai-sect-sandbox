@@ -41,7 +41,11 @@ describe('public chronicle engine integration', () => {
       expect(modelRequest.messages[1].content).not.toContain('不能外送的隐私');
       expect(modelRequest.messages[0].content).toContain('不用纪元、年表、逐轮或纪年标题');
       expect(modelRequest.messages[0].content).toContain('对白由应用照录公开原文');
-      const data = JSON.parse(modelRequest.messages[1].content) as { anchors: Array<{ id: string }> };
+      const data = JSON.parse(modelRequest.messages[1].content) as { anchors: Array<{ id: string }>;
+        pacing: Array<{kind:string;eventIds:string[]}> };
+      expect(modelRequest.messages[0].content).toContain('约七成平实');
+      expect(data.pacing.filter(row=>row.kind==='focal').length).toBeLessThanOrEqual(2);
+      expect(data.pacing.flatMap(row=>row.eventIds).every(id=>data.anchors.some(anchor=>anchor.id===id))).toBe(true);
       return envelope({ title: '风自山门起', body: '风声掠过山门，史官循案核对这一年的所见。', anchorIds: data.anchors.map(({ id }) => id) });
     });
     vi.stubGlobal('fetch', fetchMock);

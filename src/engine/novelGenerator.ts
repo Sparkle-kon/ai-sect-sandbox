@@ -2,7 +2,9 @@ import { compactColdHistory } from './coldHistoryEngine';
 import { isChronicleStoryFact, projectChronicleLead } from './chronicleLead';
 import type { ChronicleLead } from './chronicleLead';
 import { projectEarnedChronicleLead } from './protagonistSuccession';
-import { writePublicChronicleScene } from './chroniclePublicProse';
+import { publicChronicleExcerpt, writePublicChronicleScene } from './chroniclePublicProse';
+import { buildSerializedChapterPacing, type ChronicleReadingBeat } from './serializedChapterPacing';
+export type { ChronicleReadingBeat } from './serializedChapterPacing';
 import { writeChronicleScene } from './chronicleScene';
 import type { ChronicleAnchor, ChronicleArchive, ChronicleChapter, ChronicleChapterPlan, WorldEvent, WorldState } from '../types/world';
 
@@ -82,6 +84,27 @@ function sampleAnchors(values: ChronicleAnchor[]): ChronicleAnchor[] {
   return [...indices].sort((a,b) => a - b).map((i) => values[i]);
 }
 
+/** Narrative source identity excludes compatible alternate wordings of the same public dialogue. */
+function chapterNarrativeDisputes(world:WorldState,cutoff:number):ReadonlySet<string>{
+  const known=new Set(world.cultivators.map(actor=>actor.id));
+  const fields=new Map<string,string>(),nativeOutcomes=new Map<string,string>(),disputed=new Set<string>();
+  for(const event of world.events){
+    const outcome=JSON.stringify([event.duelWinnerId,event.damage]);
+    const prior=nativeOutcomes.get(event.id);
+    if(prior!==undefined&&prior!==outcome)disputed.add(event.id);
+    nativeOutcomes.set(event.id,outcome);
+  }
+  for(const fact of [...world.events,...world.chronicleArchive.anchors]){
+    if(!isChronicleStoryFact(fact,cutoff)){disputed.add(fact.id);continue;}
+    const signature=JSON.stringify([fact.tick,fact.year,fact.month,fact.category,cutText(fact.title,80),
+      cutText(fact.description,220),[...new Set(fact.actorIds.filter(id=>known.has(id)))].slice(0,12),fact.locationId??null]);
+    const prior=fields.get(fact.id);
+    if(prior!==undefined&&prior!==signature)disputed.add(fact.id);
+    fields.set(fact.id,signature);
+  }
+  return disputed;
+}
+
 export function availableChronicleChapter(world: WorldState, force = false, endTick = world.tick): ChronicleChapterPlan | undefined {
   const archive = world.chronicleArchive;
   const previous = archive?.chapters[0];
@@ -89,8 +112,8 @@ export function availableChronicleChapter(world: WorldState, force = false, endT
   const unrecordedFrom = (previous?.endTick ?? 0) + 1;
   if (!force && endTick - unrecordedFrom + 1 < CHRONICLE_INTERVAL) return undefined;
   const startTick = Math.max(unrecordedFrom, endTick - CHRONICLE_INTERVAL * 2 + 1);
-  // A currently retained private/future original overrides an archival display copy with the same ID.
-  const unavailable = new Set(world.events.filter((event) => !isChronicleStoryFact(event, endTick)).map(({ id }) => id));
+  // The current proof index also rejects contradictory public copies, not just future/private replacements.
+  const unavailable = chapterNarrativeDisputes(world,endTick);
   const anchors = sampleAnchors(archive.anchors.filter((anchor) => anchor.tick >= startTick &&
     isChronicleStoryFact(anchor, endTick) && !unavailable.has(anchor.id)));
   if (!anchors.length) return undefined;
@@ -124,7 +147,11 @@ export interface ChronicleReadingSection {
   paragraph: string;
   dialogue?: WorldEvent['dialogue'];
 }
-export interface ChronicleReading { title: string; sections: ChronicleReadingSection[] }
+export interface ChronicleReading {
+  title:string;
+  sections:ChronicleReadingSection[];
+  beats:ChronicleReadingBeat[];
+}
 
 const drama: Record<ChronicleAnchor['category'], number> = {
   death: 5, combat: 4, breakthrough: 3, intrigue: 2, diplomacy: 1, heavenly: 0,
@@ -168,9 +195,16 @@ export function stampedChronicleLead(chapter: ChronicleChapterPlan): ChronicleLe
 
 /** Novel-first view of existing public facts. Saved prose, chronology and proof are left untouched. */
 export function projectChronicleReading(chapter: ChronicleChapter, lead?: ChronicleLead, publicAttributionOnly = false): ChronicleReading {
-  const scenes = readScenes(chapter.anchors.filter((anchor) =>
-    anchor.tick >= chapter.startTick && isChronicleStoryFact(anchor, chapter.endTick)), publicAttributionOnly);
-  return { title: chapterReadingTitle(chapter.chapterNumber, scenes, lead), sections: scenes.map(({ section }) => section) };
+  const counts=new Map<string,number>();
+  for(const anchor of chapter.anchors)counts.set(anchor.id,(counts.get(anchor.id)??0)+1);
+  const anchors=chapter.anchors.filter(anchor=>counts.get(anchor.id)===1&&
+    anchor.tick>=chapter.startTick&&isChronicleStoryFact(anchor,chapter.endTick));
+  const scenes=readScenes(anchors,publicAttributionOnly);
+  // Manuscript prose and raw attributed dialogue never supply a paced paragraph, even for legacy chapters.
+  const sourced=anchors.filter(anchor=>Boolean(publicChronicleExcerpt(anchor.description).trim()||publicChronicleExcerpt(anchor.title).trim()))
+    .map(anchor=>({anchor,section:writePublicChronicleScene(anchor)}));
+  return {title:chapterReadingTitle(chapter.chapterNumber,scenes,lead),sections:scenes.map(({section})=>section),
+    beats:buildSerializedChapterPacing(sourced,lead)};
 }
 
 const calendricalHeading = /(?:^|\n)\s*(?:[#*]+\s*)?(?:仙历\s*\d+|第[零〇一二三四五六七八九十百千万两\d]+(?:大?纪元|大世纪|(?:至第?[零〇一二三四五六七八九十百千万两\d]+)?轮)|(?:大?纪元|纪年|编年史)[:：])/u;
@@ -183,9 +217,13 @@ export function isChronicleDraftNovelStyle(title: string, body: string): boolean
 }
 
 function deterministicBody(chapter: ChronicleChapterPlan): string {
-  return projectChronicleReading({ ...chapter, body: '', source: 'utility' }).sections.map(({ title, paragraph, dialogue }) => {
-    const quoted = dialogue?.turns.map(({ speakerName, text }) => `${speakerName}：「${text}」`).join('\n') ?? '';
-    return [title, paragraph === title ? '' : paragraph, quoted].filter(Boolean).join('\n');
+  const reading=projectChronicleReading({...chapter,body:'',source:'utility'},stampedChronicleLead(chapter),true);
+  const sources=new Map(reading.sections.map(section=>[section.eventId,section]));
+  return reading.beats.map(beat=>{
+    // Exact lines remain in the manuscript and evidence panel; they don't become independent headlines.
+    const quoted=beat.eventIds.flatMap(id=>sources.get(id)?.dialogue?.turns.map(
+      ({speakerName,text})=>`${speakerName}：「${text}」`)??[]);
+    return [beat.title,...beat.paragraphs,...quoted].filter(Boolean).join('\n');
   }).join('\n\n');
 }
 

@@ -11,11 +11,16 @@ const library=(world:WorldState, viewerId?:string)=>
   renderToStaticMarkup(<ChronicleLibraryPanel world={world} cultivator={viewerId?turningPerson(world,viewerId):undefined} />);
 const arcLabel='有据转折';
 
+const renderedText=(text:string)=>renderToStaticMarkup(<span>{text}</span>).slice(6,-7);
 function regularScenes(html:string){
   const archive=html.match(/<article aria-label="章节正文"[^>]*>([\s\S]*?)<\/article>/)?.[1]??'';
-  const exact=new RegExp('<section[^>]*><h5[^>]*>([^<]+)</h5>','g');
-  return Array.from(archive.matchAll(exact),match=>match[1]);
+  return [...archive.matchAll(/<div[^>]*data-chronicle-beat="([^"]+)"[^>]*>([\s\S]*?)<\/div>/g)]
+    .map(([,kind,body])=>({kind,prose:[...body.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/g)].map(match=>match[1]),
+      title:body.match(/<h5[^>]*>([^<]+)<\/h5>/)?.[1]}));
 }
+const expectedBeats=(chapter:Parameters<typeof projectChronicleReading>[0])=>
+  projectChronicleReading(chapter,undefined,true).beats.map(({kind,paragraphs,title})=>({kind,
+    prose:paragraphs.map(renderedText),title:title===undefined?undefined:renderedText(title)}));
 
 describe('the existing Library reads only the exact scoped chapter turning points',()=>{
   it('adds only one optional fold for the eligible viewer, preserving the ordinary scenes and their order for everyone',()=>{
@@ -31,9 +36,12 @@ describe('the existing Library reads only the exact scoped chapter turning point
     expect(remote).not.toContain(arcLabel);
     expect(unknown).not.toContain(arcLabel);
     const regular=projectChronicleReading(chapter);
-    expect(regularScenes(local).slice(0,regular.sections.length)).toEqual(regular.sections.map(row=>row.title));
-    expect(regularScenes(remote)).toEqual(regular.sections.map(row=>row.title));
-    expect(regularScenes(unknown)).toEqual(regular.sections.map(row=>row.title));
+    expect(regular.sections.map(row=>row.eventId)).toEqual(chapter.anchors.map(row=>row.id));
+    const beats=expectedBeats(chapter);
+    expect(beats.length).toBeGreaterThan(0);
+    expect(regularScenes(local)).toEqual(beats);
+    expect(regularScenes(remote)).toEqual(beats);
+    expect(regularScenes(unknown)).toEqual(beats);
     const projection=projectChapterTurningPoints(world,chapter.id,viewerId);
     const [arc]=projection.arcs;
     expect(arc.consequenceEventId).toBe(sourceIds.terminal);
@@ -50,7 +58,7 @@ describe('the existing Library reads only the exact scoped chapter turning point
     const unlinked=structuredClone(world);
     unlinked.chronicleCausality.nodes=unlinked.chronicleCausality.nodes.filter(row=>row.eventId!==sourceIds.sell);
     expect(library(unlinked,viewerId)).not.toContain(arcLabel);
-    expect(regularScenes(library(unlinked,viewerId))).toEqual(projectChronicleReading(chapter).sections.map(row=>row.title));
+    expect(regularScenes(library(unlinked,viewerId))).toEqual(expectedBeats(chapter));
     expect(JSON.stringify(unlinked.chronicleArchive.chapters[0])).toBe(oldChapter);
 
     const next=structuredClone(world);
@@ -64,7 +72,7 @@ describe('the existing Library reads only the exact scoped chapter turning point
     expect(projectChapterTurningPoints(next,current.id,viewerId).arcs).toEqual([]);
     const html=library(next,viewerId);
     expect(html).not.toContain(arcLabel);
-    expect(regularScenes(html)).toEqual(projectChronicleReading(current).sections.map(row=>row.title));
+    expect(regularScenes(html)).toEqual(expectedBeats(current));
     expect(JSON.stringify(next.chronicleArchive.chapters.find(row=>row.id===chapter.id))).toBe(oldChapter);
   });
 

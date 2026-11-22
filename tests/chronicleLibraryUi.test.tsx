@@ -68,6 +68,24 @@ describe('public chronicle library', () => {
     expect(JSON.stringify(chapter)).toBe(before);
   });
 
+  it('reads quiet passages as prose without an event heading and keeps the original proof shelf', () => {
+    const { world } = fixture();
+    const html = renderToStaticMarkup(<ChronicleLibraryPanel world={world} />);
+    const prose = html.split('data-chronicle-prose')[1]?.split('本章公开史料')[0] ?? '';
+    expect(prose).toContain('data-chronicle-beat="opening"');
+    expect(prose).toContain('两宗在坊市公开立誓。');
+    expect(prose).not.toMatch(/<h5[^>]*>公开立誓/);
+    expect(html).toContain('本章公开史料 · 2 条');
+  });
+
+  it('does not read an archived anchor that contradicts another retained copy', () => {
+    const { world, chapter } = fixture();
+    world.chronicleArchive.anchors = [{ ...chapter.anchors[0], title: '旧卷异文' }];
+    const html = renderToStaticMarkup(<ChronicleLibraryPanel world={world} />);
+    expect(html).toContain('本章公开史料 · 1 条');
+    expect(html).not.toMatch(/旧卷异文|公开立誓|原存档稿/);
+  });
+
   it('uses saved biography identity and only that person’s public anchors from this chapter', () => {
     const { chapter, world } = fixture();
     const html = renderToStaticMarkup(<ChapterBiographies chapter={chapter} />);

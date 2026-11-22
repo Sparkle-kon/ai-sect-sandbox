@@ -8,7 +8,7 @@ import { projectChapterTurningPoints, type ChapterTurningPoint } from '../engine
 import { ChapterTurningPoints } from './ChapterTurningPoints';
 import { projectChronicleReading, stampedChronicleLead } from '../engine/novelGenerator';
 import { isChronicleStoryFact, projectChronicleLead, publicChronicleSceneEvents, type ChronicleLead } from '../engine/chronicleLead';
-import type { ChronicleChapter, Cultivator, WorldEvent, WorldState } from '../types/world';
+import type { ChronicleAnchor, ChronicleChapter, Cultivator, WorldEvent, WorldState } from '../types/world';
 
 
 import { PublicDialogueTranscript } from './PublicDialogueTranscript';
@@ -29,7 +29,25 @@ const PAGE_NAMES: Record<Page, string> = { chapter: '故事正文', biography: '
 
 const canonicalExcerpt = (text: string, limit: number) => text.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').trim().slice(0, limit);
 
-function chapterForReading(chapter: ChronicleChapter, liveIds: ReadonlySet<string>, publicById: ReadonlyMap<string, WorldEvent>): ChronicleChapter {
+const sameArchiveFact = (a: ChronicleAnchor, b: ChronicleAnchor) =>
+  a.tick === b.tick && a.year === b.year && a.month === b.month && a.category === b.category &&
+  a.locationId === b.locationId && a.title === b.title && a.description === b.description &&
+  a.actorIds.length === b.actorIds.length && a.actorIds.every((id, index) => id === b.actorIds[index]);
+
+function disputedArchiveFacts(world: WorldState, chapters: readonly ChronicleChapter[]): ReadonlySet<string> {
+  const first = new Map<string, ChronicleAnchor>();
+  const disputed = new Set<string>();
+  const index = (anchor: ChronicleAnchor) => {
+    const old = first.get(anchor.id);
+    if (!isChronicleStoryFact(anchor, world.tick) || (old && !sameArchiveFact(old, anchor))) disputed.add(anchor.id);
+    if (!old) first.set(anchor.id, anchor);
+  };
+  world.chronicleArchive.anchors.forEach(index);
+  for (const chapter of chapters) chapter.anchors.forEach(index);
+  return disputed;
+}
+
+function chapterForReading(chapter: ChronicleChapter, liveIds: ReadonlySet<string>, publicById: ReadonlyMap<string, WorldEvent>, disputed: ReadonlySet<string>): ChronicleChapter {
   const seen = new Set<string>();
   const duplicate = new Set<string>();
   for (const anchor of chapter.anchors) {
@@ -37,7 +55,7 @@ function chapterForReading(chapter: ChronicleChapter, liveIds: ReadonlySet<strin
     seen.add(anchor.id);
   }
   const anchors = chapter.anchors.filter((anchor) => {
-    if (anchor.tick < chapter.startTick || !isChronicleStoryFact(anchor, chapter.endTick) || duplicate.has(anchor.id)) return false;
+    if (anchor.tick < chapter.startTick || !isChronicleStoryFact(anchor, chapter.endTick) || duplicate.has(anchor.id) || disputed.has(anchor.id)) return false;
     if (!liveIds.has(anchor.id)) return true; // A genuine older anchor need not still be in the live feed.
     const live = publicById.get(anchor.id);
     if (!live || live.tick !== anchor.tick || live.category !== anchor.category || live.locationId !== anchor.locationId ||
@@ -65,13 +83,17 @@ function ChapterArchive({ chapter, reading, lead, turningPoints, sharedTurningPo
   return (
     <article aria-label="章节正文" className="space-y-3">
       {hasLead && <p className="break-words text-xs text-amber-200">此篇随{lead.name}一路读去。</p>}
-      {reading.sections.length > 0 ? reading.sections.map((section) => (
-        <section key={section.eventId} className="min-w-0 space-y-1">
-          <h5 className="break-words font-serif text-sm font-semibold text-amber-100">{section.title}</h5>
-          {section.paragraph && section.paragraph !== section.title &&
-            <p className="whitespace-pre-wrap break-words font-serif text-sm leading-7 text-slate-100">{section.paragraph}</p>}
-        </section>
-      )) : <p className="text-sm text-slate-400">本章没有可写成场景的公开史料。</p>}
+      {reading.beats.length > 0 ? <div className="space-y-4 font-serif" data-chronicle-prose>
+        {reading.beats.map((beat, index) => (
+          <div key={`${beat.kind}:${index}`} data-chronicle-beat={beat.kind} className="min-w-0 space-y-2">
+            {beat.kind === 'focal' && beat.title &&
+              <h5 className="break-words text-sm font-semibold text-amber-100">{beat.title}</h5>}
+            {beat.paragraphs.map((paragraph, paragraphIndex) => (
+              <p key={paragraphIndex} className="whitespace-pre-wrap break-words text-sm leading-7 text-slate-100">{paragraph}</p>
+            ))}
+          </div>
+        ))}
+      </div> : <p className="text-sm text-slate-400">本章没有可写成场景的公开史料。</p>}
       <ChapterTurningPoints arcs={turningPoints} shared={sharedTurningPoints} />
       {excerpt&&<ChapterExcerptPanel {...excerpt} chapterId={chapter.id}/>}
       <details className="rounded border border-slate-800 bg-slate-950/70 p-2">
@@ -158,10 +180,14 @@ export function ChronicleLibraryPanel({ world, cultivator, scopeKey, scribeContr
   },[world,cultivator]);
 
   const recentIds = new Set((world.chronicleArchive?.chapters ?? []).map(({ id }) => id));
-  const liveIds = new Set(world.events.map(({ id }) => id));
-  const publicById = new Map(publicChronicleSceneEvents(world).map((entry) => [entry.id, entry]));
-  const readable = (entry: ChronicleChapter) => chapterForReading(entry, liveIds, publicById);
-  const chapters = publicChronicleChapters(world).filter(({ id }) => recentIds.has(id)).map(readable);
+  const { liveIds, publicById } = useMemo(() => ({
+    liveIds: new Set(world.events.map(({ id }) => id)),
+    publicById: new Map(publicChronicleSceneEvents(world).map((entry) => [entry.id, entry])),
+  }), [world]);
+  const publicChapters = useMemo(() => publicChronicleChapters(world), [world]);
+  const disputed = useMemo(() => disputedArchiveFacts(world, publicChapters), [world, publicChapters]);
+  const readable = (entry: ChronicleChapter) => chapterForReading(entry, liveIds, publicById, disputed);
+  const chapters = publicChapters.filter(({ id }) => recentIds.has(id)).map(readable);
   const chapter = chapters.find(({ id }) => id === requestedChapter) ?? chapters[0];
   const lead = chapter && (chapter.storyFocal ? stampedChronicleLead(chapter) :
     projectChronicleLead(world, chapter.anchors, chapter.endTick));
