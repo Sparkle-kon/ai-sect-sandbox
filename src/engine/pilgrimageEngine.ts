@@ -1,3 +1,8 @@
+import type {WaypostMealVisit} from '../types/waypostMeal';
+import {waypostMealServedThisTick} from './waypostMealTerms';
+import {onLowerPlane} from './upperPassageIsolation';
+import {boundaryReliefCheckpoint} from './boundaryReliefCheckpoint';
+import {expeditionRescueCheckpoint} from './expeditionRescueCheckpoint';
 import { ROAD_FARE, availableRoadPilgrimageRoutes, beginRoadPilgrimageCrossing, roadCrossingForLeg } from './roadEngine';
 import type { Cultivator, LocationNode, LLMDecisionPayload, MapPoint, PilgrimageCamp, PilgrimageEndReason, PilgrimageJourney, PilgrimageMove,
   PilgrimageState, WorldEvent, WorldState } from '../types/world';
@@ -29,7 +34,7 @@ export interface PilgrimageOption {
   targetCultivatorId?: string;
 }
 export interface PilgrimageView {
-  journey: Omit<PilgrimageJourney, 'path'>;
+  journey: Omit<PilgrimageJourney, 'path'|'waypostMealWitnesses'>;
   checkpoint?: MapPoint;
   knownStopIds: string[];
 }
@@ -72,7 +77,7 @@ export function visiblePilgrimages(world: WorldState, selected?: Cultivator): Pi
   const own = world.pilgrimages.journeys.filter((journey) => journey.proposedTick <= world.tick && member(journey, actor.id));
   if (!own.length) return [];
   const known = new Set(knownMapLocations(world, actor).map(({ id }) => id));
-  return own.map(({ path: _path, ...journey }) => ({
+  return own.map(({ path: _path,waypostMealWitnesses:_waypostMealWitnesses,...journey }) => ({
       journey: { ...journey, ...(journey.camps ? { camps:journey.camps.map(camp => ({
         ...camp,point:pointOf(camp.point),...(camp.recovery ? {recovery:camp.recovery.map(row => ({...row}))} : {}),
       })) } : {}) },
@@ -116,6 +121,32 @@ function actualCampAnchor(world: WorldState, journey: PilgrimageJourney) {
   const point = journey.path[index];
   const tile = point && Number.isFinite(point.x) && Number.isFinite(point.y) ? terrainTileAt(world,point.x,point.y) : undefined;
   return tile ? { point,tileId:tile.id } : undefined;
+}
+
+export interface PilgrimageWaypostCheckpoint {
+  visit:WaypostMealVisit;
+  tileId:string;
+  point:MapPoint;
+  leader:Cultivator;
+  companion:Cultivator;
+}
+
+/** Real paid, stationary lower-world checkpoint; a route preview or location label cannot supply it. */
+export function pilgrimageWaypostCheckpoint(world:WorldState,journey:PilgrimageJourney,tick=world.tick):PilgrimageWaypostCheckpoint|undefined {
+  if((tick!==world.tick&&tick!==world.tick+1)||!world.pilgrimages.journeys.includes(journey)||
+    !liveJourney(world,journey,tick)||journey.organizerId===journey.companionId||journey.lastMovedTick===undefined||
+    journey.lastMovedTick>=tick||pitchedCamp(journey)||campActedAt(journey,tick))return undefined;
+  const group=actualCampOccupants(world,journey),pin=actualCampAnchor(world,journey);
+  if(!group||!pin||!onLowerPlane(group.leader)||!onLowerPlane(group.companion)||
+    [group.leader,group.companion].some(person=>boundaryReliefCheckpoint(world,person)||expeditionRescueCheckpoint(world,person)))return undefined;
+  const tile=terrainTileAt(world,pin.point.x,pin.point.y);
+  if(!tile||tile.biome==='魔渊'||world.mapHazards.some(hazard=>hazard.tileId===pin.tileId&&hazard.createdTick<=tick&&
+      tick<hazard.expiresTick&&hazard.intensity>=2))return undefined;
+  const originId=journey.stopIds[journey.legIndex],destinationId=journey.stopIds[journey.legIndex+1];
+  if(!originId||!destinationId)return undefined;
+  return {visit:{journeyId:journey.id,organizerId:journey.organizerId,companionId:journey.companionId,
+    spentByEach:journey.spentByEach,legIndex:journey.legIndex,pathIndex:journey.pathIndex,reachedTick:journey.lastMovedTick,originId,destinationId},
+    point:pointOf(pin.point),tileId:pin.tileId,...group};
 }
 
 function stillAtCamp(world: WorldState, journey: PilgrimageJourney, camp: PilgrimageCamp) {
@@ -231,10 +262,11 @@ export function availablePilgrimageActions(actor: Cultivator, world: WorldState,
     if (!both || executionTick <= (existing.startedTick ?? executionTick) || existing.lastMovedTick === executionTick ||
       campActedAt(existing,executionTick) ||
       !existing.stopIds.every((id) => getSite(world, id))) return options;
+    const served=waypostMealServedThisTick(world,actor.id,executionTick);
     const camp = pitchedCamp(existing);
     if (camp) {
       if (executionTick === camp.openedTick + 1 && stillAtCamp(world,existing,camp)) {
-        if (actor.id === existing.organizerId && campCanResume(world,existing,camp,executionTick)) add('resume');
+        if (actor.id === existing.organizerId && !served && campCanResume(world,existing,camp,executionTick)) add('resume');
         add('dismantle');
       }
       return options; // A pitched camp locks ordinary advance; even a missed camp needs authoritative cleanup first.
@@ -242,9 +274,9 @@ export function availablePilgrimageActions(actor: Cultivator, world: WorldState,
     if (actor.id === existing.organizerId) {
       if (existing.path.length > 1) {
         if (campEligible(world,existing,executionTick)) add('camp');
-        add('advance');
+        if(!served)add('advance');
       }
-      else {
+      else if(!served){
         const normal = canDepart(world, existing, both.leader, both.companion);
         if (normal.length > 1) {
           add('advance');
@@ -456,7 +488,8 @@ export function advancePilgrimages(world: WorldState): WorldEvent[] {
   }
   const terminal = new Set(state.journeys.filter((journey) => journey.status !== 'proposed' && journey.status !== 'active')
     .sort((a, b) => (a.settledTick ?? 0) - (b.settledTick ?? 0)).slice(-RETAIN_TERMINAL).map(({ id }) => id));
+  const mealProof=new Set((world.waypostMeals?.meals??[]).flatMap(row=>[row.hostVisit.journeyId,row.guestVisit.journeyId]));
   state.journeys = state.journeys.filter((journey) => journey.status === 'proposed' || journey.status === 'active' ||
-    terminal.has(journey.id) || (journey.settledTick !== undefined && world.tick - journey.settledTick < COOLDOWN));
+    mealProof.has(journey.id) || terminal.has(journey.id) || (journey.settledTick !== undefined && world.tick - journey.settledTick < COOLDOWN));
   return events;
 }

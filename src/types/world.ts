@@ -13,6 +13,8 @@ import type {UpperPassageMove,UpperPassageNodeId,UpperPositionPlane,UpperPassage
 
 import type { ScribeCommissionMove, ScribeCommissionState } from './scribeCommission';
 
+import type { WaypostMealMove, WaypostMealState, WaypostMealWitness } from './waypostMeal';
+
 export type SpiritRoot = '金' | '木' | '水' | '火' | '土' | '雷' | '暗' | '天灵根';
 
 export type HerbId = 'jade_leaf' | 'earth_root' | 'star_bloom' | 'shadow_moss';
@@ -158,6 +160,7 @@ export type ActionType =
   | 'SEASON_REVIEW'
   | 'PROBATION'
   | 'SCRIBE_COMMISSION'
+  | 'WAYPOST_MEAL'
   | 'WORKSHOP_ESTATE'
   | 'WORKSHOP_RELEASE'
   | 'WORKSHOP'
@@ -638,6 +641,8 @@ export interface LLMDecisionPayload {
   workshopMove?: WorkshopMove;
   workshopReleaseMove?: WorkshopReleaseMove;
   workshopEstateMove?: WorkshopEstateMove;
+  waypostMealMove?: WaypostMealMove;
+  targetWaypostMealId?: string;
   scribeCommissionMove?: ScribeCommissionMove;
   targetScribeCommissionId?: string;
   targetWorkshopReleaseId?: string;
@@ -1071,6 +1076,8 @@ export type AvatarInteractionCommand = AvatarInteractionRequest;
 export type AvatarOrder = 'REST' | 'CULTIVATE';
 export type AvatarPendingOrder = { actorId: string; queuedTick: number } & (
   | { action: AvatarOrder }
+  | {action:'WAYPOST_MEAL';waypostMealMove:'offer';targetCultivatorId:string;targetWaypostMealId?:never}
+  | {action:'WAYPOST_MEAL';waypostMealMove:'accept'|'decline'|'withdraw';targetWaypostMealId:string;targetCultivatorId?:never}
   | {action:'WORKSHOP_ESTATE';workshopEstateMove:'offer'|'accept'|'decline';targetWorkshopId:string}
   | {action:'SCRIBE_COMMISSION';scribeCommissionMove:'offer';targetCultivatorId:string;targetChronicleSourceId:string;targetScribeCommissionId?:never}
   | {action:'SCRIBE_COMMISSION';scribeCommissionMove:'accept'|'decline'|'withdraw'|'verify'|'deliver';targetScribeCommissionId:string;targetCultivatorId?:never;targetChronicleSourceId?:never}
@@ -2122,6 +2129,7 @@ export interface PilgrimageJourney {
   spentByEach: number;
   aid: PilgrimageAid[];
   camps?: PilgrimageCamp[];
+  waypostMealWitnesses?: WaypostMealWitness[];
 }
 export interface PilgrimageState {
   journeys: PilgrimageJourney[];
@@ -2651,7 +2659,7 @@ export interface SharedCommonsState { pacts: SharedCommonsPact[]; nextId: number
 export type ResourceFlowGood = 'stone' | 'jade_seed' | 'frost_dose' | 'ward_reed' | 'frontier_water' | 'reef_salt' | 'port_rigging' | 'rift_salt' | 'stormstone' | 'upper_lattice' | MarketGood;
 export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation' | 'terrain' | 'workshop' | 'road' | 'observatory' | 'pilgrimage' | 'granary' | 'furnace_safety' | 'artifact_salvage' | 'village_supply' | 'civic_memorial' | 'village_fair' | 'sect_stipend' | 'seed_culture' | 'care_followup' | 'danxia_medicine' | 'water_vein' | 'north_mining_charter' | 'north_well_review' | 'upper_passage' | 'upper_array_field' | 'frontier' | 'scribe_commission';
 export type ResourceFlowAccount =
-  | { kind: 'actor' | 'site' | 'sect' | 'order' | 'shipment' | 'relocation' | 'workshop' | 'salvage' | 'granary' | 'village_supply' | 'village_fair' | 'seed_lot' | 'seed_plot' | 'danxia_medicine' | 'upper_passage' | 'frontier_store' | 'upper_array_store' | 'scribe_commission'; id: string }
+  | { kind: 'actor' | 'site' | 'sect' | 'order' | 'shipment' | 'relocation' | 'workshop' | 'salvage' | 'granary' | 'village_supply' | 'village_fair' | 'seed_lot' | 'seed_plot' | 'danxia_medicine' | 'upper_passage' | 'frontier_store' | 'upper_array_store' | 'scribe_commission' | 'waypost_meal'; id: string }
   | { kind: 'oath'; id: string; pocket: 'payment' | 'collateral' };
 export type ResourceFlowVisibility =
   | { kind: 'observer' }
@@ -3495,6 +3503,7 @@ export interface NorthWellRevisitReviewState {
 
 export interface WorldState {
   scribeCommissions?: ScribeCommissionState;
+  waypostMeals?: WaypostMealState;
   upperPassage?:UpperPassageState;
   upperArrayField?:UpperArrayFieldState;
   northGateRenewal?:NorthGateRenewalState;

@@ -1,3 +1,5 @@
+import {WaypostMealRead,type WaypostMealControls} from './WaypostMealRead';
+import {visibleWaypostMeals} from '../engine/waypostMealEngine';
 import { PILGRIMAGE_LEG_COST, PILGRIMAGE_RELIEF_HP, visiblePilgrimages } from '../engine/pilgrimageEngine';
 import type { Cultivator, PilgrimageCamp, PilgrimageJourney, WorldState } from '../types/world';
 import { visibleRoadCrossings } from '../engine/roadEngine';
@@ -11,13 +13,14 @@ const END: Record<NonNullable<PilgrimageJourney['reason']>, string> = {
   withdrawn: '一位参与者主动退出', lost_site: '原路线站点已失效', member_missing: '至少一位同行者无法继续',
 };
 
-export function PilgrimagePanel({ world, cultivator }: { world: WorldState; cultivator?: Cultivator }) {
-  const selected = world.cultivators.find(({ id }) => id === cultivator?.id);
+export function PilgrimagePanel({ world, cultivator, mealControls }: { world: WorldState; cultivator?: Cultivator; mealControls?:WaypostMealControls }) {
+  const selected = cultivator&&world.cultivators.includes(cultivator)?cultivator:undefined;
   const rows = visiblePilgrimages(world, selected).sort((a, b) => (
     Number(b.journey.status === 'active' || b.journey.status === 'proposed') -
     Number(a.journey.status === 'active' || a.journey.status === 'proposed')
   ) || b.journey.proposedTick - a.journey.proposedTick);
   if (!selected || rows.length === 0) return null;
+  const meals=visibleWaypostMeals(world,selected);
   const crossings = visibleRoadCrossings(world, selected).filter(({ departedTick }) => departedTick <= world.tick);
   const people = new Map(world.cultivators.map(({ id, name }) => [id, name]));
   const sites = new Map(world.locations.map(({ id, name }) => [id, name]));
@@ -27,7 +30,7 @@ export function PilgrimagePanel({ world, cultivator }: { world: WorldState; cult
       <header className="space-y-1">
         <h4 className="text-sm font-semibold text-teal-100">本人巡礼与共愿档案</h4>
         <p className="break-words text-xs text-slate-300">{selected.name} · Tick #{world.tick}</p>
-        <p className="text-xs leading-relaxed text-slate-400">须由同地的受邀修士自行接受。两段实际启程各耗每人 {PILGRIMAGE_LEG_COST} 灵石；途中不能远程施援。到站后每人每站最多用一株翡翠灵叶施援，为同伴回复最多 {PILGRIMAGE_RELIEF_HP} 点气血。此页只读。</p>
+        <p className="text-xs leading-relaxed text-slate-400">须由同地的受邀修士自行接受。两段实际启程各耗每人 {PILGRIMAGE_LEG_COST} 灵石；途中不能远程施援。到站后每人每站最多用一株翡翠灵叶施援，为同伴回复最多 {PILGRIMAGE_RELIEF_HP} 点气血。行程凭据只供查阅。</p>
       </header>
       <div className="max-h-[29rem] space-y-2 overflow-y-auto">
         {rows.map(({ journey, checkpoint, knownStopIds }) => {
@@ -63,6 +66,8 @@ export function PilgrimagePanel({ world, cultivator }: { world: WorldState; cult
                   </div>;
                 })}
                 <PilgrimageCampReceipts camps={journey.camps} tick={world.tick} viewerId={selected.id} />
+                <WaypostMealRead key={mealControls?.scopeKey??selected.id} meals={meals} journey={journey} actor={selected}
+                  people={people} tick={world.tick} controls={mealControls}/>
                 <ol aria-label="按顺序查看起点和两处检查站" className="space-y-1">
                   {journey.stopIds.map((id, index) => {
                     const tick = visited.get(id);

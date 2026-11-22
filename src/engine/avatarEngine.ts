@@ -1,3 +1,4 @@
+import {availableWaypostMealActions,type WaypostMealOption} from './waypostMealEngine';
 import {availableWorkshopEstateActions,type WorkshopEstateOption} from './workshopEngine';
 import {availableScribeCommissionActions,type ScribeCommissionOption} from './scribeCommissionEngine';
 import {availableWorkshopReleaseActions,type WorkshopReleaseOption} from './workshopEngine';
@@ -310,6 +311,18 @@ export function queueAvatarWorkshopEstate(world:WorldState,actorId:string,choice
   return true;
 }
 
+export function queueAvatarWaypostMeal(world:WorldState,actorId:string,choice:WaypostMealOption):boolean {
+  const host=activeAvatar(world);
+  if(!host||!onLowerPlane(host)||!canQueueAvatarSalvage(world,actorId)||choice.action!=='WAYPOST_MEAL')return false;
+  const options=availableWaypostMealActions(host,world,world.tick+1).filter(option=>
+    option.waypostMealMove===choice.waypostMealMove&&option.targetCultivatorId===choice.targetCultivatorId&&
+    option.targetWaypostMealId===choice.targetWaypostMealId);
+  if(options.length!==1)return false;
+  world.playerAvatar.essence-=AVATAR_ORDER_COST;
+  world.playerAvatar.pendingOrder={actorId,queuedTick:world.tick,...options[0]};
+  return true;
+}
+
 export function consumeAvatarOrder(world: WorldState): { actorId: string; decision: LLMDecisionPayload } | undefined {
   const state = world.playerAvatar;
   const order = state?.pendingOrder;
@@ -324,6 +337,9 @@ export function consumeAvatarOrder(world: WorldState): { actorId: string; decisi
     ...(order.scribeCommissionMove==='offer'?
       {targetChronicleSourceId:order.targetChronicleSourceId,targetCultivatorId:order.targetCultivatorId}:
       {targetScribeCommissionId:order.targetScribeCommissionId})}};
+  if(order.action==='WAYPOST_MEAL')return {actorId:order.actorId,decision:{
+    chosenAction:order.action,innerMonologue:'只在实到的山驿，与原同行人分茶。',waypostMealMove:order.waypostMealMove,
+    ...(order.waypostMealMove==='offer'?{targetCultivatorId:order.targetCultivatorId}:{targetWaypostMealId:order.targetWaypostMealId})}};
   if(order.action==='WORKSHOP_ESTATE')return {actorId:order.actorId,decision:{chosenAction:order.action,
     innerMonologue:'只按旧工单、原承制人与实际继承权复核。',
     workshopEstateMove:order.workshopEstateMove,targetWorkshopId:order.targetWorkshopId}};

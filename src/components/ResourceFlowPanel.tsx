@@ -48,6 +48,7 @@ const REASONS: Readonly<Record<string, string>> = {
   treasury_upkeep: '宗门维护', treasury_overflow: '库容溢出', facility_construction: '设施建设',
   oath_funded: '天道契书托管', oath_paid: '契书价金支付', oath_refunded: '契书托管退款', oath_forfeited: '契书抵押罚没',
   oath_goods: '契书实物交付', commons_upkeep: '中立灵地共管维护', terrain_recovery: '地脉修复实耗',
+  waypost_meal_deposit: '山驿茶叶托管', waypost_meal_consumed: '两位同行者实分茶叶', waypost_meal_refund: '茶未分饮，退回原叶',
   scribe_deposit: '书约托管', scribe_ink: '核卷实用纸墨', scribe_wage: '原稿交割实付酬劳', scribe_refund: '退还书约余款',
   workshop_deposit: '委制备料入库', workshop_fuel: '工坊实耗炉钱', workshop_material: '工坊实耗材料',
   workshop_wage: '合格成品工钱', workshop_refund: '工坊退还未用款料', workshop_capacity_release: '容量变动后实退未开工一件备料',
@@ -117,6 +118,7 @@ export function ResourceFlowMonth({ ledger, world, scope, visibleSiteIds }: {
       case 'seed_plot': return '在地苗圃与实收暂存';
       case 'salvage': return '货损幸存物封存';
       case 'relocation': return '迁址在途公库';
+      case 'waypost_meal': return '山驿茶叶托管';
       case 'scribe_commission': return '掌卷书约托管';
       case 'workshop': return '工坊备料托管';
       case 'upper_array_store': return '阵原在地仓';

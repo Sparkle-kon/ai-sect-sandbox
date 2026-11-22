@@ -56,6 +56,8 @@ import { availableFormationActions } from './formationNetworkEngine';
 import { availableInfirmaryActions, infirmaryCapacity } from './infirmaryEngine';
 import { availableHabitatActions } from './habitatEngine';
 import { availableChronicleErrataActions, pickChronicleReading } from './chronicleErrataEngine';
+import { decodeWaypostMealDecision, utilityWaypostMealDecision, waypostMealProviderOptions,
+  waypostMealTargets } from './waypostMealCognition';
 import { activePilgrimageForActor, availablePilgrimageActions, pilgrimageCheckpoint } from './pilgrimageEngine';
 import { availableRouteWarningActions } from './routeWarningEngine';
 import { availableSectCreditActions } from './sectCreditEngine';
@@ -460,6 +462,8 @@ export function computeHeuristicDecision(
   const pilgrim = activePilgrimageForActor(world, cultivator);
   const pendingVow = world.pilgrimages.journeys.some((journey) => journey.status === 'proposed' && journey.companionId === cultivator.id);
   if (pilgrim || pendingVow) {
+    const tea = pilgrim ? utilityWaypostMealDecision(cultivator, world) : undefined;
+    if (tea) return tea;
     const moves = availablePilgrimageActions(cultivator, world, false);
     const worried = cultivator.hp < cultivator.maxHp * .35 || (pendingVow && cultivator.hp < cultivator.maxHp * .65);
     const resume = moves.find(({ pilgrimageMove }) => pilgrimageMove === 'resume');
@@ -1794,12 +1798,13 @@ export async function requestCultivatorLLMDecision(
 
   const activeVow = activePilgrimageForActor(world, cultivator);
   const onPilgrimagePath = activeVow && Boolean(pilgrimageCheckpoint(world, cultivator));
+  const mealOptions = onPilgrimagePath ? waypostMealProviderOptions(cultivator, world, requestTick) : [];
   const pilgrimageOptions = availablePilgrimageActions(cultivator, world, true, requestTick);
   const routeWarningOptions = (onPilgrimagePath ? [] : availableRouteWarningActions(cultivator, world, requestTick))
     .map(({ routeWarningMove, targetRouteWarningId, targetRouteObservationId }) =>
       ({ routeWarningMove, targetRouteWarningId, targetRouteObservationId }));
   const routeWarningGuide = `驿路警示只在真实停站时复制已有许可：post 只填本人一次亲历的 targetRouteObservationId；corroborate 同填另一趟独立见闻和现有警示编号；retract 只填本人警示的 targetRouteWarningId。不能填路线、坐标、地名、灾害、期限或新事实；没有许可不得编造。选项：${JSON.stringify(routeWarningOptions)}`;
-  if (onPilgrimagePath && !pilgrimageOptions.length) return undefined;
+  if (onPilgrimagePath && !pilgrimageOptions.length && !mealOptions.length) return undefined;
   const boundaryReliefOptions = availableBoundaryReliefActions(cultivator, world, requestTick);
   const boundaryReliefOnly = Boolean(boundaryReliefCheckpoint(world, cultivator));
   if (boundaryReliefOnly && !boundaryReliefOptions.length) return undefined;
@@ -1965,7 +1970,8 @@ export async function requestCultivatorLLMDecision(
 当前已实到 ${activeVow.stopsVisited.length - 1} 个巡礼站点；${onPilgrimagePath ? '仍在道路途中，不在旧站。' : '当前在已到达的实站，可调息。'}
 只允许复制执行回合的以下巡礼选项：${JSON.stringify(pilgrimageOptions)}
 宿营、接续与撤营只抄本人合法动作和巡礼编号，不填写坐标、营地名称、临时目的地或费用。
-返回 JSON {"chosenAction":"PILGRIMAGE","pilgrimageMove":"照抄选项","targetPilgrimageId":"照抄","innerMonologue":"简短"}；${onPilgrimagePath ? '途中只选所列巡礼行动。' : '若留站调息可选 REST，不填写目标。'}
+返回 JSON {"chosenAction":"PILGRIMAGE","pilgrimageMove":"照抄选项","targetPilgrimageId":"照抄","innerMonologue":"简短"}；${onPilgrimagePath ? (mealOptions.length ? '途中只选明列的巡礼或当面分茶选项。' : '途中只选所列巡礼行动。') : '若留站调息可选 REST，不填写目标。'}
+${mealOptions.length ? `实到同一个关口才可改选 WAYPOST_MEAL，照抄以下本人许可，不填移动、补给数量、气血结果或他人身份：${JSON.stringify(mealOptions.map(waypostMealTargets))}。` : ''}
 ${!onPilgrimagePath && routeWarningOptions.length ? `停站可另选 ROUTE_WARNING。
 ${routeWarningGuide}` : ''}` : `你是修仙沙盒世界中的修士【${cultivator.name}】（称号：${cultivator.title}）。
 【自身状态】
@@ -2193,6 +2199,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'WORKSHOP_CAPACITY',
             'WORKSHOP_RELEASE',
             'WORKSHOP_ESTATE',
+            'WAYPOST_MEAL',
             'SCRIBE_COMMISSION',
             'FURNACE_RESERVATION',
             'FURNACE_SAFETY',
@@ -2227,6 +2234,8 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
 
           if (boundaryReliefOnly && chosenAction !== 'BOUNDARY_RELIEF') return undefined;
           if (rescueOnly && chosenAction !== 'EXPEDITION_RESCUE') return undefined;
+          if (chosenAction === 'WAYPOST_MEAL') return decodeWaypostMealDecision(parsed, cultivator, mealOptions);
+          if (parsed.waypostMealMove !== undefined || parsed.targetWaypostMealId !== undefined) return undefined;
           if (activeVow && chosenAction !== 'PILGRIMAGE' &&
               (onPilgrimagePath || (chosenAction !== 'REST' && chosenAction !== 'ROUTE_WARNING'))) return undefined;
           if(isFrontierAction(chosenAction))return exactFrontierDecision(parsed,frontierOptions);

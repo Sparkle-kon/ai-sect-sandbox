@@ -77,6 +77,7 @@ import { advanceCareFollowups, resolveCareFollowupAction } from './careFollowupE
 import { advanceInfirmaries, beginClinicDutyTurn, resolveInfirmaryAction } from './infirmaryEngine';
 import { advanceHabitats, resolveHabitatAction } from './habitatEngine';
 import { advanceChronicleErrata, resolveChronicleErrataAction } from './chronicleErrataEngine';
+import { advanceWaypostMeals, resolveWaypostMealAction } from './waypostMealEngine';
 import { activePilgrimageForActor, advancePilgrimages, pilgrimageActedThisTick, pilgrimageCheckpoint, resolvePilgrimageAction } from './pilgrimageEngine';
 import { advanceSectCredit, resolveSectCreditAction } from './sectCreditEngine';
 import { advanceSanctuaries, interceptSanctuaryDuel, resolveSanctuaryAction } from './sanctuaryEngine';
@@ -279,6 +280,21 @@ export function applyCultivatorBrainDecision(
     }
     cultivator.currentAction = 'SEALED_COURIER';
     cultivator.innerMonologue = '信使正沿实路前进，本轮不能在旧站另作行动。';
+    return null;
+  }
+  if (decision.chosenAction === 'WAYPOST_MEAL') {
+    if (activeAvatar(world)?.id === cultivator.id && decision !== explicitAvatarDecision) return null;
+    const applied = resolveWaypostMealAction(world, cultivator, decision);
+    if (applied) {
+      cultivator.currentAction = 'WAYPOST_MEAL';
+      cultivator.innerMonologue = decision.innerMonologue;
+    }
+    return applied;
+  }
+  if (decision.chosenAction === 'PILGRIMAGE' && world.waypostMeals?.meals.some((row) => row.status === 'served' &&
+      row.closedTick === world.tick && (row.hostId === cultivator.id || row.guestId === cultivator.id))) {
+    cultivator.currentAction = 'WAYPOST_MEAL';
+    cultivator.innerMonologue = '已经在本处停歇分茶，这月没有迈过下一个关口。';
     return null;
   }
   const mayIssueRouteWarning = decision.chosenAction === 'ROUTE_WARNING' &&
@@ -1155,7 +1171,7 @@ export function advanceWorldTick(
   }
   finishRegionalSimulationTurn(nextState,regionalTurn);
   for (const event of [...advanceApprenticeCohorts(nextState), ...advanceBoundaryReliefs(nextState), ...advanceShortShifts(nextState), ...advanceSparring(nextState), ...advanceDiplomacy(nextState, rng), ...advanceOccasions(nextState, rng), ...advanceOaths(nextState), ...advanceMarkets(nextState), ...advanceWitnesses(nextState), ...advanceSeasonReviews(nextState, (state, seasonId) =>
-    publicCompetitionStandings(state, seasonId).find(({ rank }) => rank === 1)), ...maintainSectPolitics(nextState), ...advanceDoctrineFoundings(nextState), ...advanceDoctrineMaturity(nextState,prevState), ...advanceBounties(nextState), ...advanceResearch(nextState), ...advanceWorkshops(nextState), ...advanceScribeCommissions(nextState), ...advanceDamageAssurance(nextState), ...advanceRelicExhibits(nextState), ...advanceProbation(nextState), ...advanceToolLoans(nextState), ...advanceEstates(nextState), ...advanceDoctrines(nextState), ...advanceSectCredit(nextState), ...advanceSanctuaries(nextState), ...advancePilgrimages(nextState), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceCareFollowups(nextState), ...advanceDanxiaShortages(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...reconcileCourierDeaths(nextState), ...advanceHouseholds(nextState), ...advanceHouseholdNames(nextState)]) {
+    publicCompetitionStandings(state, seasonId).find(({ rank }) => rank === 1)), ...maintainSectPolitics(nextState), ...advanceDoctrineFoundings(nextState), ...advanceDoctrineMaturity(nextState,prevState), ...advanceBounties(nextState), ...advanceResearch(nextState), ...advanceWorkshops(nextState), ...advanceScribeCommissions(nextState), ...advanceDamageAssurance(nextState), ...advanceRelicExhibits(nextState), ...advanceProbation(nextState), ...advanceToolLoans(nextState), ...advanceWaypostMeals(nextState), ...advanceEstates(nextState), ...advanceDoctrines(nextState), ...advanceSectCredit(nextState), ...advanceSanctuaries(nextState), ...advancePilgrimages(nextState), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceCareFollowups(nextState), ...advanceDanxiaShortages(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...reconcileCourierDeaths(nextState), ...advanceHouseholds(nextState), ...advanceHouseholdNames(nextState)]) {
     newEvents.push(event);
     witnessEvent(nextState, event);
   }
