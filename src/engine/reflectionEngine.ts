@@ -1,3 +1,4 @@
+import {sealedHeartDemonMemoryIds,sealedHeartDemonReflection} from './heartDemonPrivacy';
 import { llmScheduler } from './llmScheduler';
 import type {
   Cultivator, CultivatorReflection, LLMConfig, MemoryEntry, ReflectionKind, ReflectionTheme, WorldState,
@@ -85,9 +86,14 @@ export async function enrichAnnualReflections(world: WorldState, config: LLMConf
   if (!config.enabled || !config.apiKey.trim() || world.month !== 1 || world.tick <= 1) return world;
   const endpoint = `${config.apiBaseUrl.replace(/\/+$/, '')}/chat/completions`;
   const cultivators = await Promise.all(world.cultivators.map(async (cultivator) => {
-    const findings = cultivator.reflections.filter((entry) => entry.tick === world.tick);
-    if (!cultivator.alive || cultivator.positionPlane === 'immortal' || !findings.length) return cultivator;
+    if (!cultivator.alive || cultivator.positionPlane === 'immortal') return cultivator;
     const recalled = new Map(recallMemories(cultivator, world.tick, Infinity).map((memory) => [memory.id, memory]));
+    const privateIds=sealedHeartDemonMemoryIds(cultivator);
+    // Statements and the classification itself may paraphrase the private source; omit the whole finding.
+    const findings=cultivator.reflections.filter(entry=>entry.tick===world.tick&&
+      !sealedHeartDemonReflection(cultivator,entry,privateIds)&&entry.sourceMemoryIds.every(id=>recalled.has(id)));
+    if(!findings.length)return cultivator;
+    const allowedIds=new Set(findings.map(entry=>entry.id));
     const observations = findings.map((entry) => ({
       id: entry.id, kind: entry.kind, theme: entry.theme, baseStatement: entry.statement,
       evidence: entry.sourceMemoryIds.flatMap((id) => {
@@ -116,6 +122,8 @@ export async function enrichAnnualReflections(world: WorldState, config: LLMConf
         if (!isRecord(first) || !isRecord(first.message) || typeof first.message.content !== 'string') return undefined;
         const text = first.message.content.trim().replace(/^(?:```(?:json)?\s*)|(?:```$)/gi, '').trim();
         const payload: unknown = JSON.parse(text);
+        if(!isRecord(payload)||!Array.isArray(payload.reflections)||
+          payload.reflections.some((row:unknown)=>!isRecord(row)||typeof row.id!=='string'||!allowedIds.has(row.id)))return undefined;
         const decoded = applyReflectionLanguage(cultivator.reflections, world.tick, payload);
         return decoded.some((entry, index) => entry !== cultivator.reflections[index]) ? decoded : undefined;
       } });

@@ -45,3 +45,15 @@ export interface HeartDemonFrame {
   cancelledTick?: number;
   result?: HeartDemonResult;
 }
+
+/** Owner-only receipt of a real survived resolution. No remembered content or subjects. */
+export interface HeartDemonAftermath {
+  trialId: string;
+  resultEventId: string;
+  siteId: string;
+  resolvedTick: number;
+  choice: HeartDemonChoice;
+  outcome: Exclude<HeartDemonOutcome, 'died'>;
+  endsTick: number;
+  recovery?: {tick:number;siteId:string;qiBefore:number;qiPaid:number;eventId:string};
+}

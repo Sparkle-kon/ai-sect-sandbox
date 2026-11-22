@@ -1,3 +1,4 @@
+import {HeartDemonAftermathRead,type HeartDemonRecoveryControls} from './HeartDemonAftermathRead';
 import {labelAction} from './actionLabels';
 import {AscensionPanel,type AscensionControls} from './AscensionPanel';
 import {projectAscension} from '../engine/ascensionEngine';
@@ -70,6 +71,7 @@ interface AgentInspectorProps {
   clanControls?:ClanControls;
   ascensionControls?:AscensionControls;
   onListenAscension?:()=>Promise<boolean>;
+  heartDemonRecoveryControls?:HeartDemonRecoveryControls;
 }
 
 export const AgentInspector: React.FC<AgentInspectorProps> = ({
@@ -81,7 +83,7 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
   workshopReleaseControls,
   workshopEstateControls,
   craftTrainingControls,
-  heavenlyAlchemyControls,daoPathControls,clanControls,ascensionControls,onListenAscension,
+  heavenlyAlchemyControls,daoPathControls,clanControls,ascensionControls,onListenAscension,heartDemonRecoveryControls,
   publicBonds,personalBonds,allowPersonalThought=false,
 }) => {
   if (!cultivator) {
@@ -177,6 +179,8 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
         named={id=>world.cultivators.find(actor=>actor.id===id)?.name??'修士未详'}/>}
 
       {mind&&<PersonaDossierRead world={world} actor={cultivator} live={allowPersonalThought}/>}
+      {mind&&<HeartDemonAftermathRead key={cultivator.id} world={world} actor={cultivator} live={allowPersonalThought}
+        controls={heartDemonRecoveryControls}/>}
 
       {profile && <>
       {/* Vital Stats Grid */}

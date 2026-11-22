@@ -1,3 +1,4 @@
+import {sealedHeartDemonEventId} from './heartDemonPrivacy';
 import { IMMORTAL_AUCTION_SITE } from './immortalAuctionTerms';
 import { daoPathEventId } from './daoPathTerms';
 import {isUpperPassageEvent,onLowerPlane} from './upperPassageIsolation';
@@ -25,7 +26,7 @@ function learn(cultivator: Cultivator, rumor: Rumor, tick: number): void {
 }
 
 export function witnessEvent(world: WorldState, event: WorldEvent): void {
-  if (isUpperPassageEvent(event)) return;
+  if (isUpperPassageEvent(event) || event.witnessScope==='participants'&&sealedHeartDemonEventId(event.id)) return;
   // The Dao ledger is private even to the generic self-witness buffer. Replaying a local receipt as a rumor
   // would disclose the actual path/prepared intent outside the scoped read; true DUEL remains ordinary news.
   if (event.witnessScope === 'participants' && event.category === 'breakthrough' && event.actorIds.length === 1 &&

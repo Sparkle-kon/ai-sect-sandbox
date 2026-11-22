@@ -58,10 +58,10 @@ function pilgrimageReceipt(events:readonly WorldEvent[],scene:ProtagonistFlight,
 }
 
 export function activeProtagonistFlight(world:WorldState,actor:Cultivator):ProtagonistFlight|undefined{
-  if(!local(actor)||unique(world.cultivators,actor.id)!==actor)return undefined;
-  const rows=world.protagonistFlights?.filter(row=>row.actorId===actor.id&&row.openedTick<=world.tick&&
-    world.tick<=row.openedTick+FLIGHT_ROUNDS&&row.rounds.length<FLIGHT_ROUNDS&&!roundEnded(row))??[];
-  return rows.length===1?rows[0]:undefined;
+  if(!local(actor)||!world.protagonistFlights?.length)return undefined;
+  const rows=world.protagonistFlights.filter(row=>row.actorId===actor.id&&row.openedTick<=world.tick&&
+    world.tick<=row.openedTick+FLIGHT_ROUNDS&&row.rounds.length<FLIGHT_ROUNDS&&!roundEnded(row));
+  return rows.length===1&&unique(world.cultivators,actor.id)===actor?rows[0]:undefined;
 }
 
 const responseMoves=new Set(['advance','camp','resume','relieve','withdraw','dismantle']);

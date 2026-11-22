@@ -3,8 +3,12 @@ import type {Cultivator,WorldEvent,WorldState} from '../types/world';
 import {matchesWitnessedPersonalScene,witnessedPersonalSceneKind} from './witnessedPersonalStory';
 import {heartDemonEffects,heartDemonFinalWaveId,heartDemonFrameId,heartDemonResultEventId} from './heartDemonEngine';
 
+import {HEART_DEMON_AFTERMATH_MONTHS,heartDemonRecoveryEventId,heartDemonRecoveryQi,isHeartDemonRecoveryEvent} from './heartDemonAftermathTerms';
+import {isScopedExpeditionGate} from './expeditionOmenTerms';
+
 const privatePrefix='evt-heart-demon-';
 const isPrivateReceipt=(id:string)=>id.startsWith(privatePrefix);
+const privateProofId=(id:string)=>isPrivateReceipt(id)||isHeartDemonRecoveryEvent(id);
 const waveTotals={金丹:3,元婴:4,化神:5} as const;
 const pair=(ids:readonly string[],a:string,b:string)=>ids.length===2&&ids.includes(a)&&ids.includes(b);
 const own=(event:WorldEvent,actorId:string)=>event.actorIds.length===1&&event.actorIds[0]===actorId;
@@ -72,19 +76,19 @@ function resultNumbers(world:WorldState,actor:Cultivator,frame:HeartDemonFrame,r
 
 /** Stable source stamps, not mutable relationship prose, establish the native trial checkpoint. */
 export function validateHeartDemonTrials(world:WorldState,actorIds:ReadonlySet<string>,fail:Fail):void{
-  const publicRows=(rows:readonly {id:string}[])=>rows.some(row=>isPrivateReceipt(row.id));
+  const publicRows=(rows:readonly {id:string}[])=>rows.some(row=>privateProofId(row.id));
   if(publicRows(world.chronicleArchive.anchors)||world.chronicleArchive.chapters.some(chapter=>publicRows(chapter.anchors))||
     world.coldHistory.chapters.some(chapter=>publicRows(chapter.anchors))||
-    world.chronicleCausality.nodes.some(row=>isPrivateReceipt(row.eventId))||
-    world.chronicleErrata.sources.some(row=>isPrivateReceipt(row.sourceEventId))||
-    world.eraHeritage?.facts.some(row=>isPrivateReceipt(row.source.sourceEventId))||
-    world.witnessedPersonalStory.scenes.some(row=>isPrivateReceipt(row.eventId))||
-    world.mapPresentation?.effects.some(row=>isPrivateReceipt(row.id))||
-    world.protagonistSuccession.arcs.some(row=>[...row.opening,...row.support,...(row.death?[row.death]:[])].some(proof=>isPrivateReceipt(proof.eventId))))
+    world.chronicleCausality.nodes.some(row=>privateProofId(row.eventId))||
+    world.chronicleErrata.sources.some(row=>privateProofId(row.sourceEventId))||
+    world.eraHeritage?.facts.some(row=>privateProofId(row.source.sourceEventId))||
+    world.witnessedPersonalStory.scenes.some(row=>privateProofId(row.eventId))||
+    world.mapPresentation?.effects.some(row=>privateProofId(row.id))||
+    world.protagonistSuccession.arcs.some(row=>[...row.opening,...row.support,...(row.death?[row.death]:[])].some(proof=>privateProofId(proof.eventId))))
     return fail('cultivators.tribulation.heartDemon.publicArchive');
 
-  if(!world.events.some(event=>isPrivateReceipt(event.id))&&!world.cultivators.some(actor=>
-    actor.tribulation?.heartTheatreArmed||actor.tribulation?.heartGuide||actor.tribulation?.heartDemon))return;
+  if(!world.events.some(event=>privateProofId(event.id))&&!world.cultivators.some(actor=>
+    actor.heartDemonAftermath||actor.tribulation?.heartTheatreArmed||actor.tribulation?.heartGuide||actor.tribulation?.heartDemon))return;
   const expected=new Map<string,HeartDemonFrame>();
   const actors=new Map<string,Cultivator>();
   const sourceEvents=new Map<string,WorldEvent[]>();
@@ -92,7 +96,37 @@ export function validateHeartDemonTrials(world:WorldState,actorIds:ReadonlySet<s
     const list=sourceEvents.get(event.id);
     if(list)list.push(event);else sourceEvents.set(event.id,[event]);
   }
+  const knownSites=new Map(world.locations.map(site=>[site.id,site]));
+  const recoveryProof=new Map<string,{actorId:string;siteId:string;tick:number}>();
   for(const actor of world.cultivators){
+    const after=actor.heartDemonAftermath;
+    if(after){
+      const {trialId,resultEventId,resolvedTick,siteId,endsTick,recovery}=after;
+      const trial=actor.tribulation;
+      const trialPrefix=`trial-${actor.id}-`;
+      const started=trialId.startsWith(trialPrefix)?trialId.slice(trialPrefix.length):'';
+      const epoch=Number(started);
+      const exactTrial=trial?.id===trialId;
+      const frame=exactTrial?trial?.heartDemon:undefined;
+      if(!/^[1-9]\d*$/u.test(started)||!Number.isSafeInteger(epoch)||resolvedTick<epoch+4||resolvedTick>world.tick||
+        endsTick!==resolvedTick+HEART_DEMON_AFTERMATH_MONTHS||!knownSites.has(siteId)||
+        resultEventId!==heartDemonResultEventId(heartDemonFrameId(trialId))||
+        (exactTrial?(!frame?.result||frame.actorId!==actor.id||frame.siteId!==siteId||frame.result.resolvedTick!==resolvedTick||
+          frame.result.choice!==after.choice||frame.result.outcome!==after.outcome):!trial||trial.startedTick<=resolvedTick))
+        return fail('cultivators.heartDemonAftermath.source');
+      const publicTerminal=sourceEvents.get(`evt-${resolvedTick}-${actor.id}-tribulation-${after.outcome==='passed'?'passed':'failure'}`)??[];
+      if(publicTerminal.length>1||publicTerminal.some(event=>!own(event,actor.id)||event.witnessScope!==undefined||
+        event.locationId!==siteId||event.tick!==resolvedTick||event.category!==(after.outcome==='passed'?'breakthrough':'heavenly')))
+        return fail('cultivators.heartDemonAftermath.source');
+      if(recovery){
+        const site=knownSites.get(recovery.siteId);
+        if(recovery.tick<=resolvedTick||recovery.tick>endsTick||recovery.tick>world.tick||
+          recovery.qiPaid!==heartDemonRecoveryQi(after)||recovery.qiBefore<recovery.qiPaid||
+          recovery.eventId!==heartDemonRecoveryEventId(trialId,recovery.tick)||!site||isScopedExpeditionGate(site))
+          return fail('cultivators.heartDemonAftermath.recovery');
+        recoveryProof.set(recovery.eventId,{actorId:actor.id,siteId:recovery.siteId,tick:recovery.tick});
+      }
+    }
     actors.set(actor.id,actor);
     const trial=actor.tribulation;
     if(!trial)continue;
@@ -149,6 +183,20 @@ export function validateHeartDemonTrials(world:WorldState,actorIds:ReadonlySet<s
   }
   const seen=new Set<string>();
   for(const event of world.events){
+    if(isHeartDemonRecoveryEvent(event.id)){
+      const actorId=event.actorIds[0],proof=recoveryProof.get(event.id),actor=actors.get(actorId);
+      const olderPrefix=`evt-dao-heart-mending-trial-${actorId}-`;
+      const parts=event.id.startsWith(olderPrefix)?event.id.slice(olderPrefix.length).match(/^([1-9]\d*)-([1-9]\d*)$/u):null;
+      const latest=actor?.heartDemonAftermath;
+      if(!actor||!own(event,actorId)||seen.has(event.id)||event.category!=='intrigue'||event.witnessScope!=='participants'||
+        !event.locationId||event.dialogue!==undefined||event.damage!==undefined||event.duelWinnerId!==undefined||
+        (proof?(proof.actorId!==actorId||proof.siteId!==event.locationId||proof.tick!==event.tick):
+          !latest||!parts||Number(parts[1])+4>=event.tick||Number(parts[2])!==event.tick||event.tick>=latest.resolvedTick||
+          latest.trialId===`trial-${actorId}-${parts[1]}`))
+        return fail('cultivators.heartDemonAftermath.privateReceipt');
+      seen.add(event.id);
+      continue;
+    }
     if(!isPrivateReceipt(event.id))continue;
     const actorId=event.actorIds[0],actor=actorId&&actors.get(actorId);
     const frame=expected.get(event.id);

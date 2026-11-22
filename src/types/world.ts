@@ -16,7 +16,7 @@ import type {RingAudienceState} from './ringAudience';
 import type { DramaticBondState } from './dramaticBond';
 import type { GrandSiegeHeroMove, GrandSiegeTheatre } from './grandSiege';
 import type { ForbiddenArtChoice, ForbiddenArtScar, ForbiddenDuelContact } from './forbiddenArt';
-import type { HeartDemonChoice, HeartDemonFrame, HeartDemonGuide } from './heartDemon';
+import type { HeartDemonAftermath, HeartDemonChoice, HeartDemonFrame, HeartDemonGuide } from './heartDemon';
 import type { DestinyTraitId, DestinyTraitProgress } from './destinyTrait';
 import type {RoguelikeEncounterChoice,RoguelikeEncounterRecord} from './roguelikeEncounter';
 import type {FrontierAnchorId,FrontierMovementMove,FrontierPositionPlane,FrontierSiteId,FrontierState} from '../engine/frontierTerms';
@@ -441,6 +441,7 @@ export interface PublicAlchemyPractice {
 export type FictionalGender = 'woman' | 'man';
 
 export interface Cultivator {
+  heartDemonAftermath?: HeartDemonAftermath;
   gender?: FictionalGender;
   clanHeritage?: CultivationClanHeritage;
   publicAlchemy?: PublicAlchemyPractice[];
@@ -572,6 +573,7 @@ export interface LLMConfig {
 export interface LLMDecisionPayload {
   targetHeartTrialId?: string;
   heartDemonChoice?: HeartDemonChoice;
+  targetHeartDemonAftermathId?: string;
   targetForbiddenDuelId?: string;
   forbiddenArtChoice?: ForbiddenArtChoice;
   targetGrandSiegeId?: string;

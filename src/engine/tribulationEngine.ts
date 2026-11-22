@@ -1,3 +1,4 @@
+import {recordHeartDemonAftermath} from './heartDemonAftermathEngine';
 import {spendHeavenlyPillWard} from './heavenlyAlchemyEngine';
 import { STANCES, STORMS } from './tribulationTerms';
 import type { HeartDemonGuide } from '../types/heartDemon';
@@ -139,6 +140,7 @@ export function resolveTribulation(world: WorldState, actor: Cultivator, stance:
     if (heart?.kind === 'ready') {
       const receipt = recordHeartDemonResult(world, actor, heart.frame, heart.choice, heart.origin,
         actor.alive ? 'failed' : 'died', hp - actor.hp);
+      recordHeartDemonAftermath(world,actor,trial,receipt);
       context?.emit?.(receipt);
     }
     return failure;
@@ -158,6 +160,7 @@ export function resolveTribulation(world: WorldState, actor: Cultivator, stance:
   recordMemory(actor, world.tick, trial.lastOutcome, 10, 'cultivation', 5);
   if (heart?.kind === 'ready') {
     const receipt = recordHeartDemonResult(world, actor, heart.frame, heart.choice, heart.origin, 'passed', 0);
+    recordHeartDemonAftermath(world,actor,trial,receipt);
     context?.emit?.(receipt);
   }
   return trialEvent(world, actor, 'passed', '天劫圆满', trial.lastOutcome, 'breakthrough');

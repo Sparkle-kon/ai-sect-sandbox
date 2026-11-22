@@ -1,3 +1,4 @@
+import {preferredHeartDemonSocialTarget,voluntaryHeartDemonChoiceEffect} from './heartDemonChoicePolicy';
 import {activeDanxiaMedicineEscort} from './danxiaMedicineTerms';
 import type {Cultivator,HerbId,LLMDecisionPayload,LocationNode,PersonalityTrait,WorldState} from '../types/world';
 import {availableAlchemy} from './alchemyEngine';
@@ -160,11 +161,30 @@ export function rankOrdinaryIntents(world:WorldState,actor:Cultivator,executionT
   return candidates.sort((left,right)=>right.score-left.score||cmp(ordinaryKey(left),ordinaryKey(right)));
 }
 
+export function preferredOrdinarySocialIntent(world:WorldState,actor:Cultivator,executionTick=world.tick,
+  ranked?:readonly OrdinaryIntentCandidate[]):OrdinaryIntentCandidate|undefined{
+  if(!voluntaryHeartDemonChoiceEffect(world,actor,executionTick))return undefined;
+  const social=(ranked??rankOrdinaryIntents(world,actor,executionTick))
+    .filter(row=>row.action==='SOCIALIZE'&&world.cultivators.some(peer=>peer.id===row.targetCultivatorId&&peer.positionPlane===undefined));
+  const preferred=preferredHeartDemonSocialTarget(world,actor,social.map(row=>row.targetCultivatorId!),executionTick);
+  return social.find(row=>row.targetCultivatorId===preferred);
+}
+
 /** A bounded projection of this actor's legal present choices, not narration or private source details. */
 export function modelOrdinaryIntentOptions(world:WorldState,actor:Cultivator,executionTick:number):OrdinaryIntentCandidate[]{
-  if(!hasOrdinaryIntentHistory(world,actor,executionTick))return [];
+  const effect=voluntaryHeartDemonChoiceEffect(world,actor,executionTick);
+  const history=hasOrdinaryIntentHistory(world,actor,executionTick);
+  if(!history&&!effect)return [];
+  if(!history){
+    // An aftermath supplies authority for one affected social preference, not an ordinary menu.
+    const preferred=preferredOrdinarySocialIntent(world,actor,executionTick);
+    return preferred?[preferred]:[];
+  }
+  const ranked=rankOrdinaryIntents(world,actor,executionTick);
+  const preferred=effect?preferredOrdinarySocialIntent(world,actor,executionTick,ranked):undefined;
   const count=new Map<OrdinaryIntentAction,number>();
-  return rankOrdinaryIntents(world,actor,executionTick).filter(candidate=>{
+  return ranked.filter(candidate=>{
+    if(effect&&candidate.action==='SOCIALIZE')return candidate===preferred;
     const kept=count.get(candidate.action)??0;
     if(kept>=2)return false;
     count.set(candidate.action,kept+1);

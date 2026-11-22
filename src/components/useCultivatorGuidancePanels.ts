@@ -1,3 +1,4 @@
+import {useHeartDemonRecoveryControls} from './useHeartDemonRecoveryControls';
 import type {ComponentProps} from 'react';
 import type {useWorldSimulationController} from '../controllers/useWorldSimulationController';
 import {activeAvatar,canQueueAvatarSalvage,queueAvatarSalvage,queueAvatarWaypostMeal} from '../engine/avatarEngine';
@@ -16,7 +17,7 @@ import {useHeavenlyAlchemyControls} from './useHeavenlyAlchemyControls';
 type Simulation=ReturnType<typeof useWorldSimulationController>;
 export type CultivatorInspectorPanels=Pick<ComponentProps<typeof AgentInspector>,
   'heavenlyAlchemyControls'|'daoPathControls'|'clanControls'|'ascensionControls'|'onListenAscension'|
-  'allowPersonalThought'|'publicBonds'|'personalBonds'|'artifactSalvage'>;
+  'heartDemonRecoveryControls'|'allowPersonalThought'|'publicBonds'|'personalBonds'|'artifactSalvage'>;
 
 export function useCultivatorGuidancePanels(simulation:Simulation,selected:Cultivator|undefined,{
   fog,story,dossier,showPilgrimage,onClearAvatarNotice,
@@ -28,6 +29,7 @@ export function useCultivatorGuidancePanels(simulation:Simulation,selected:Culti
   const clanControls=useCultivationClanControls(simulation,selected);
   const ascensionControls=useAscensionControls(simulation,selected);
   const onListenAscension=useAscensionChime(simulation,selected);
+  const heartDemonRecoveryControls=useHeartDemonRecoveryControls(simulation,selected);
   const allowPersonalThought=!preview&&visibleWorld===world;
   const bonds=useDramaticBondRead(visibleWorld,selected,fog,{story,dossier,allowPersonal:allowPersonalThought});
 
@@ -64,7 +66,7 @@ export function useCultivatorGuidancePanels(simulation:Simulation,selected:Culti
   }:undefined;
 
   const inspector:CultivatorInspectorPanels={
-    heavenlyAlchemyControls,daoPathControls,clanControls,ascensionControls,onListenAscension,allowPersonalThought,
+    heavenlyAlchemyControls,daoPathControls,clanControls,ascensionControls,onListenAscension,heartDemonRecoveryControls,allowPersonalThought,
     publicBonds:bonds.publicArcs,personalBonds:bonds.personal,
     artifactSalvage:{scopeKey:viewScopeKey,busy:isStepping||fastForwardLocked,readOnly:!!preview,onConfirm:queueSelectedSalvage},
   };

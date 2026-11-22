@@ -1,3 +1,5 @@
+import {autonomousExpeditionRescueOptions,canPauseAftermathRescue,voluntaryHeartDemonChoiceEffect} from './heartDemonChoicePolicy';
+import {availableHeartDemonRecovery,resolveHeartDemonRecovery} from './heartDemonAftermathEngine';
 import {activeProtagonistFlight,availableProtagonistFlightActions} from './protagonistFlightEngine';
 import {matchesProtagonistFlightOption} from './protagonistFlightCognition';
 import { availableAscensionActions, reconcileAscensionInterruptions, resolveAscensionAction } from './ascensionEngine';
@@ -48,7 +50,7 @@ import { activeDanxiaMedicineEscort, danxiaMedicineActedThisTick } from './danxi
 import {advanceDanxiaShortages,openDanxiaShortage} from './danxiaShortageEngine';
 import { isScopedExpeditionGate } from './expeditionOmenTerms';
 import { recordOrdinaryActionEvidence, snapshotOrdinaryAction } from './ordinaryActionEvidence';
-import { isOrdinaryIntentAction, matchesOrdinaryIntent, modelOrdinaryIntentOptions, rankOrdinaryIntents } from './ordinaryIntentEngine';
+import { hasOrdinaryIntentHistory, isOrdinaryIntentAction, matchesOrdinaryIntent, modelOrdinaryIntentOptions, preferredOrdinarySocialIntent, rankOrdinaryIntents } from './ordinaryIntentEngine';
 import {recordEraHistoryTurn} from './eraHistoryIndex';
 import { advanceSeasonalHousing, recordSeasonalHousingMovement, resolveSeasonalHousingAction } from './seasonalHousingEngine';
 import { advanceMentorTransfers, resolveMentorTransferAction } from './mentorTransferEngine';
@@ -394,6 +396,7 @@ export function applyCultivatorBrainDecision(
   allowForbiddenDuel = true,
 ): WorldEvent | null {
   if (!cultivator.alive || cultivator.positionPlane === 'immortal') return null;
+  if(decision.targetHeartDemonAftermathId!==undefined&&decision.chosenAction!=='REST')return null;
   if (decision.chosenAction === 'ASCENSION' || ascensionDutyActive(world, cultivator)) {
     if (decision.chosenAction !== 'ASCENSION') return null;
     const autonomous = modelInput || isProviderPersonaDecision(decision);
@@ -739,6 +742,9 @@ export function applyCultivatorBrainDecision(
     case 'SPARRING':
       return resolveSparringAction(world, cultivator, decision);
     case 'EXPEDITION_RESCUE':
+      if(decision.rescueMove==='accept'&&(modelInput||isProviderPersonaDecision(decision))&&
+        !autonomousExpeditionRescueOptions(cultivator,world).some(option=>option.rescueMove==='accept'&&
+          option.targetExpeditionRescueId===decision.targetExpeditionRescueId))return null;
       return resolveExpeditionRescueAction(world, cultivator, decision);
     case 'SHORT_SHIFT':
       return resolveShortShiftAction(world, cultivator, decision);
@@ -921,6 +927,10 @@ export function applyCultivatorBrainDecision(
     }
 
     case 'REST': {
+      if(decision.targetHeartDemonAftermathId!==undefined){
+        if(activeAvatar(world)===cultivator&&(modelInput||isProviderPersonaDecision(decision)))return null;
+        return resolveHeartDemonRecovery(world,cultivator,decision.targetHeartDemonAftermathId);
+      }
       cultivator.pillToxicity = Math.max(0, cultivator.pillToxicity - 4);
       const previousHp = cultivator.hp;
       const heal = Math.round(cultivator.maxHp * 0.35);
@@ -1399,6 +1409,46 @@ export function advanceWorldTick(
     const modelProposal = supplied && traceOptions?.modelActors?.has(cultivator.id) ? supplied : undefined;
     let provided = avatarDecision ?? supplied;
     let modelOrdinaryReplaced=false;
+    const fromProvider=Boolean(!avatarDecision&&provided&&(modelProposal||isProviderPersonaDecision(provided)));
+    const replaying=traceOptions?.replayDraws!==undefined;
+    const exactPlainRest=provided?.chosenAction==='REST'&&Object.keys(provided).every(
+      key=>key==='chosenAction'||key==='innerMonologue');
+    const pauseBody=exactPlainRest&&!avatarDecision&&(fromProvider||replaying)
+      ?prevState.cultivators.find(actor=>actor.id===cultivator.id):undefined;
+    const pauseOption=pauseBody&&activeOccasionForActor(prevState,pauseBody)?.kind==='expedition'&&
+      canPauseAftermathRescue(pauseBody,prevState,nextState.tick)
+      ?autonomousExpeditionRescueOptions(pauseBody,prevState,nextState.tick).find(option=>option.rescueMove==='accept'):undefined;
+    let suppressRescueAccept=Boolean(pauseOption);
+    let holdAftermathRescue=Boolean(pauseOption);
+    if(!avatarDecision&&provided?.targetHeartDemonAftermathId!==undefined&&
+      (modelProposal||isProviderPersonaDecision(provided))){
+      const earlier=prevState.cultivators.find(actor=>actor.id===cultivator.id);
+      if(!earlier||activeAvatar(nextState)===cultivator||
+        availableHeartDemonRecovery(prevState,earlier,nextState.tick)?.targetHeartDemonAftermathId!==provided.targetHeartDemonAftermathId||
+        availableHeartDemonRecovery(nextState,cultivator)?.targetHeartDemonAftermathId!==provided.targetHeartDemonAftermathId){
+        provided={chosenAction:'REST',innerMonologue:'只在眼前停一停；不沿用已不合时的闭关之约。'};
+        modelOrdinaryReplaced=true;
+      }
+    }
+    if(!avatarDecision&&provided?.chosenAction==='EXPEDITION_RESCUE'&&provided.rescueMove==='accept'&&
+      (modelProposal||isProviderPersonaDecision(provided))){
+      const earlier=prevState.cultivators.find(actor=>actor.id===cultivator.id);
+      const rescueId=provided.targetExpeditionRescueId;
+      const exact=(options:ReturnType<typeof autonomousExpeditionRescueOptions>)=>
+        options.some(option=>option.rescueMove==='accept'&&option.targetExpeditionRescueId===rescueId);
+      if(!earlier||!exact(autonomousExpeditionRescueOptions(earlier,prevState,nextState.tick))||
+        !exact(autonomousExpeditionRescueOptions(cultivator,nextState))){
+        provided={chosenAction:'REST',innerMonologue:'此时不能接下这份求援，不代签也不报已出发。'};
+        modelOrdinaryReplaced=true;
+        // A stale private offer cannot be substituted with a new voluntary signature or room progression.
+        if((earlier&&voluntaryHeartDemonChoiceEffect(prevState,earlier,nextState.tick)||
+            voluntaryHeartDemonChoiceEffect(nextState,cultivator))&&
+            activeOccasionForActor(nextState,cultivator)?.kind==='expedition'){
+          suppressRescueAccept=true;
+          holdAftermathRescue=true;
+        }
+      }
+    }
     if (provided?.chosenAction === 'ASCENSION') {
       const provider = !avatarDecision && Boolean(modelProposal || isProviderPersonaDecision(provided));
       const earlier = provider ? prevState.cultivators.find(actor => actor.id === cultivator.id) : undefined;
@@ -1462,20 +1512,39 @@ export function advanceWorldTick(
         modelOrdinaryReplaced = true;
       }
     }
-    if(!avatarDecision&&modelProposal&&traceOptions?.replayDraws===undefined&&isOrdinaryIntentAction(modelProposal.chosenAction)){
-      const required=requiredBeforeOrdinaryDecision(cultivator,nextState);
+    if(suppressRescueAccept){
+      const required=requiredBeforeOrdinaryDecision(cultivator,nextState,true);
+      if(required){
+        provided=required;
+        modelOrdinaryReplaced=fromProvider;
+        holdAftermathRescue=false;
+      }
+    }
+    const ordinaryProposal=!avatarDecision&&fromProvider&&!replaying&&supplied&&isOrdinaryIntentAction(supplied.chosenAction)
+      ?supplied:undefined;
+    if(ordinaryProposal&&!holdAftermathRescue&&!modelOrdinaryReplaced){
+      const required=modelProposal?requiredBeforeOrdinaryDecision(cultivator,nextState,suppressRescueAccept):undefined;
       if(required){
         provided=required;modelOrdinaryReplaced=true;
       }else{
         const earlier=prevState.cultivators.find(actor=>actor.id===cultivator.id);
-        const offered=earlier?modelOrdinaryIntentOptions(prevState,earlier,nextState.tick):[];
-        if(earlier&&offered.length){
-          const target=modelProposal.targetLocationId;
-          const independentTrail=modelProposal.chosenAction==='EXPLORE'&&target!==undefined&&
+        if(earlier){
+          const history=Boolean(modelProposal)&&hasOrdinaryIntentHistory(prevState,earlier,nextState.tick);
+          const social=ordinaryProposal.chosenAction==='SOCIALIZE';
+          const oldEffect=social&&voluntaryHeartDemonChoiceEffect(prevState,earlier,nextState.tick);
+          const effect=social&&voluntaryHeartDemonChoiceEffect(nextState,cultivator);
+          const earlierPreferred=oldEffect?preferredOrdinarySocialIntent(prevState,earlier,nextState.tick):undefined;
+          const nowPreferred=effect?preferredOrdinarySocialIntent(nextState,cultivator):undefined;
+          const validPreference=!(earlierPreferred||nowPreferred)||Boolean(oldEffect&&effect&&
+            oldEffect.trialId===effect.trialId&&oldEffect.resolvedTick===effect.resolvedTick&&oldEffect.choice===effect.choice&&
+            earlierPreferred&&nowPreferred&&matchesOrdinaryIntent(earlierPreferred,ordinaryProposal)&&matchesOrdinaryIntent(nowPreferred,ordinaryProposal));
+          const target=ordinaryProposal.targetLocationId;
+          const independentTrail=ordinaryProposal.chosenAction==='EXPLORE'&&target!==undefined&&
             knownRumorLead(earlier,prevState)===target&&knownRumorLead(cultivator,nextState)===target;
-          const stillLegal=offered.some(option=>matchesOrdinaryIntent(option,modelProposal))&&
-            rankOrdinaryIntents(nextState,cultivator).some(option=>matchesOrdinaryIntent(option,modelProposal));
-          if(!stillLegal&&!independentTrail){provided=undefined;modelOrdinaryReplaced=true;}
+          const offered=history?modelOrdinaryIntentOptions(prevState,earlier,nextState.tick):[];
+          const stillLegal=!history||!offered.length||offered.some(option=>matchesOrdinaryIntent(option,ordinaryProposal))&&
+            rankOrdinaryIntents(nextState,cultivator).some(option=>matchesOrdinaryIntent(option,ordinaryProposal));
+          if(!validPreference||!stillLegal&&!independentTrail){provided=undefined;modelOrdinaryReplaced=true;}
         }
       }
     }
@@ -1494,14 +1563,32 @@ export function advanceWorldTick(
     }
 
     const occasion = activeOccasionForActor(nextState, cultivator);
+    if(holdAftermathRescue){
+      const stillOffered=Boolean(pauseOption&&occasion?.kind==='expedition'&&
+        canPauseAftermathRescue(cultivator,nextState)&&
+        autonomousExpeditionRescueOptions(cultivator,nextState).some(option=>option.rescueMove==='accept'&&
+          option.targetExpeditionRescueId===pauseOption.targetExpeditionRescueId&&option.targetOccasionId===pauseOption.targetOccasionId));
+      if(replaying){
+        const draws=traceOptions?.replayDraws?.[cultivator.id]??0;
+        for(let draw=0;draw<Math.min(64,draws);draw++)rng();
+      }
+      cultivator.currentAction=occasion?.kind==='expedition'?'JOIN_OCCASION':'REST';
+      cultivator.innerMonologue='眼下先停一停，不认一份新约，也不另取机缘。';
+      const waiting:LLMDecisionPayload={chosenAction:'REST',innerMonologue:cultivator.innerMonologue};
+      if(traceOptions?.tape)rememberReplayDecision(traceOptions.tape,cultivator.id,waiting,0,stillOffered&&Boolean(modelProposal),false,false,nextState);
+      if(modelProposal)recordDecisionEffect?.(cultivator.id,stillOffered&&!modelOrdinaryReplaced);
+      continue;
+    }
     let expeditionOrder: LLMDecisionPayload | undefined;
     let expeditionModelReplaced = false;
     if (occasion) {
       const dungeon = occasion.kind === 'expedition' ? dungeonDecisionOccasion(cultivator, nextState) : undefined;
       const isModel = Boolean(modelProposal || provided && isProviderPersonaDecision(provided));
       const explicitEntry = occasion.kind === 'expedition' && provided?.chosenAction === 'EXPEDITION_DUNGEON' && !isModel;
-      const rescue = occasion.kind === 'expedition' && (!provided || dungeon || explicitEntry)
+      const naturalRescue = occasion.kind === 'expedition' && (!provided || dungeon || explicitEntry)
         ? utilityExpeditionRescueDecision(cultivator, nextState) : undefined;
+      const rescue=suppressRescueAccept&&naturalRescue?.chosenAction==='EXPEDITION_RESCUE'&&naturalRescue.rescueMove==='accept'
+        ?undefined:naturalRescue;
       const action = provided ?? rescue;
       if (dungeon && provided?.chosenAction === 'REST' && !isModel && !rescue) {
         // A deliberate trusted wait is not a cultivation/rest action or an invitation to substitute progression.
@@ -1573,7 +1660,7 @@ export function advanceWorldTick(
       decision.chosenAction !== 'HEAVENLY_ALCHEMY' && decision.chosenAction !== 'DAO_PATH' &&
       decision.chosenAction !== 'IMMORTAL_AUCTION' && decision.targetAuctionAmbushLotId === undefined &&
       decision.chosenAction !== 'CULTIVATION_CLAN' && decision.chosenAction !== 'ASCENSION' &&
-      !activeProtagonistFlight(nextState,cultivator) ?
+      !activeProtagonistFlight(nextState,cultivator) && decision.targetHeartDemonAftermathId===undefined ?
       legalTraceCandidates(nextState, cultivator) : [];
     const chosenByModel = Boolean(modelProposal && !modelOrdinaryReplaced && !modelStoryChoiceReplaced && !expeditionModelReplaced);
     if (traceOptions?.tape) rememberReplayDecision(traceOptions.tape, cultivator.id, decision, decisionDraws, chosenByModel, false, false, nextState);
@@ -1599,7 +1686,7 @@ export function advanceWorldTick(
     if (evt && evt.actorIds.length === 2 && evt.witnessScope === undefined &&
         (evt.category === 'combat' || evt.category === 'death' || evt.category === 'diplomacy')) captureDramaticBondFact(nextState,evt);
     const validEffect = decision.chosenAction === cultivator.currentAction && (evt !== null ||
-      decision.chosenAction === 'REST' || decision.chosenAction === 'CULTIVATE' ||
+      (decision.chosenAction === 'REST' && decision.targetHeartDemonAftermathId===undefined) || decision.chosenAction === 'CULTIVATE' ||
       (decision.chosenAction === 'EXPLORE' && previousLocation !== cultivator.locationId));
     recordOrdinaryActionEvidence(cultivator,nextState.tick,decision,ordinaryBefore,
       {applied:validEffect,avatar:avatarOrder?.actorId===cultivator.id,event:evt});

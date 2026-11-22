@@ -516,6 +516,10 @@ const ringAudience=structure({nextId:num(1,Number.MAX_SAFE_INTEGER,true),
 });
 const heartTheme=one('cultivation','conflict','community','heavenly');
 const heartChoice=one(...HEART_DEMON_CHOICES);
+const heartAftermath=structure({trialId:id,resultEventId:id,siteId:id,resolvedTick:tick,choice:heartChoice,
+  outcome:one('passed','failed'),endsTick:tick,
+  recovery:optional(structure({tick,siteId:id,qiBefore:percentage,qiPaid:one(4,8,12,16),eventId:id})),
+});
 const heartGuide=structure({actorId:id,trialId:id,grantedTick:tick,bindingGeneration:tick,originalPossessionUntilTick:tick});
 const heartEvidence:Validator=(value,path)=>{
   const clause=value as {kind?:unknown;source?:{kind?:unknown}|null}|null;
@@ -675,6 +679,7 @@ const shape = structure({
     heavenlyAlchemy:optional(heavenlyAlchemy),
     daoPath:optional(daoPath),
     destinyTraits:optional(destinyTraits),
+    heartDemonAftermath:optional(heartAftermath),
     forbiddenScars:optional(arr(FORBIDDEN_ART_IDS.length,forbiddenScar)),
     ordinaryActionEvidence:optional((value,path)=>{if(!isOrdinaryActionEvidence(value))fail(path);}),
     qiProgress:percentage,hp:wealth,maxHp:num(1,1_000_000_000),combatPower:wealth,age:wealth,lifespan:wealth,

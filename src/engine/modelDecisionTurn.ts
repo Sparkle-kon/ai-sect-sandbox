@@ -13,7 +13,7 @@ import { activeAvatar } from './avatarEngine';
 import { activeSiegeForActor } from './diplomacyEngine';
 import { activeEscortForActor } from './escortEngine';
 import { activeOccasionForActor } from './occasionEngine';
-import { availableExpeditionRescueActions } from './expeditionRescueEngine';
+import {autonomousExpeditionRescueOptions} from './heartDemonChoicePolicy';
 import { availableBoundaryReliefActions } from './boundaryReliefEngine';
 import { boundaryReliefCheckpoint } from './boundaryReliefCheckpoint';
 import { activeRelocationForActor } from './relocationEngine';
@@ -107,7 +107,7 @@ export function modelDecisionCandidates(world: WorldState): Cultivator[] {
 
 function isEligibleForOccasionDecision(world: WorldState, actor: Cultivator, nextTick: number): boolean {
   const occasion = activeOccasionForActor(world, actor);
-  return !occasion || occasion.kind === 'expedition' && availableExpeditionRescueActions(actor, world, nextTick).length > 0;
+  return !occasion || occasion.kind === 'expedition' && autonomousExpeditionRescueOptions(actor, world, nextTick).length > 0;
 }
 
 /** The whole batch expires together; late callbacks cannot write orders, fairness or world state. */
