@@ -93,12 +93,18 @@ export class LocalDetachedArchive<T> {
     return new LocalDetachedArchive(path,decodeValue);
   }
   static async open<T>(requested:string,decodeValue:(value:unknown)=>T):Promise<LocalDetachedArchive<T>>{
+    return (await this.openWithRevisions(requested,decodeValue)).store;
+  }
+  static async openWithRevisions<T>(requested:string,decodeValue:(value:unknown)=>T):Promise<{
+    store:LocalDetachedArchive<T>;revisions:readonly LocalArchiveHead<T>[];
+  }>{
     if(!requested.trim())throw new LocalDetachedArchiveError('format','独立档案需要明确的目录。');
     const full=resolve(requested),path=join(await fs.realpath(dirname(full)),basename(full));
     for(const dir of [path,join(path,'objects'),join(path,'published')])if(!(await fs.lstat(dir)).isDirectory())bad('独立档案目录无效（不跟随符号链接）。');
     const archive=new LocalDetachedArchive(path,decodeValue);
-    if(!await archive.head())throw new LocalDetachedArchiveError('incomplete','独立档案没有已发布的首个版本。');
-    return archive;
+    const revisions=await archive.revisions();
+    if(!revisions.length)throw new LocalDetachedArchiveError('incomplete','独立档案没有已发布的首个版本。');
+    return {store:archive,revisions};
   }
   async put(input:Uint8Array):Promise<LocalArchiveRef>{
     const bytes=Uint8Array.from(input),ref={sha256:await campaignSHA256(bytes),bytes:bytes.length};

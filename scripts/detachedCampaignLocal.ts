@@ -10,7 +10,7 @@ import { createFastForwardRunner, FAST_FORWARD_MAX_TICKS, type FastForwardProgre
 import { decodeEraWorldSave, encodeEraWorldSave } from '../src/engine/storageEngine';
 import { sameGeneratedWorld } from '../src/engine/worldIdentity';
 import type { WorldState } from '../src/types/world';
-import { LocalDetachedArchive, LocalDetachedArchiveError,
+import { LocalDetachedArchive, LocalDetachedArchiveError, LOCAL_DETACHED_MAX_REVISIONS,
   type LocalArchiveHead, type LocalArchiveRef, type LocalArchiveToken } from './detachedCampaignFilesystem';
 
 const utf8=new TextEncoder(),decode=new TextDecoder('utf-8',{fatal:true,ignoreBOM:true});
@@ -174,7 +174,7 @@ export async function createDetachedArchive(options:CreateDetachedArchiveOptions
   return {manifest,head};
 }
 export async function readDetachedArchiveOriginal(directory:string,branchId:string,tick:number,{signal}:{signal?:AbortSignal}={}){
-  const store=await LocalDetachedArchive.open(directory,localRevision),first=(await store.revisions())[0];
+  const {store,revisions}=await LocalDetachedArchive.openWithRevisions(directory,localRevision),first=revisions[0];
   requireThat(first,'找不到独立档案原线。');
   const manifest=await originManifest(store,first);
   const snapshot=findDetachedArchiveSnapshot(manifest,branchId,tick);
@@ -184,10 +184,29 @@ export async function readDetachedArchiveOriginal(directory:string,branchId:stri
 export async function readDetachedArchiveSnapshot(directory:string,branchId:string,tick:number,options:{signal?:AbortSignal}={}){
   return (await readDetachedArchiveOriginal(directory,branchId,tick,options)).world;
 }
-async function audit(store:Store,signal?:AbortSignal):Promise<DetachedLocalAudit>{
-  const revisions=await store.revisions(),origin=revisions[0],head=revisions.at(-1);
+type DetachedMetadata=Pick<DetachedLocalAudit,'manifest'|'origin'|'head'|'retainedBytes'>&{
+  readonly snapshots:readonly Extract<DetachedLocalRevision,{kind:'advance'}>[];
+};
+/** Checks the actual sealed chain and manifest without allocating any retained world yet. */
+async function readMetadata(store:Store,revisions:readonly LocalArchiveHead<DetachedLocalRevision>[]):Promise<DetachedMetadata>{
+  const origin=revisions[0],head=revisions.at(-1);
   requireThat(origin&&head,'找不到独立档案原线。');
   const manifest=await originManifest(store,origin);
+  let previous=origin.value,retainedBytes=detachedArchiveCapacity(manifest).referencedBytes;
+  const snapshots:Extract<DetachedLocalRevision,{kind:'advance'}>[]=[];
+  for(const revision of revisions.slice(1)){
+    const next=revision.value;
+    requireThat(next.kind==='advance'&&next.manifestId===manifest.id&&next.writerRuleVersion===manifest.writerRuleVersion&&
+      next.previousWorldSha256===previous.worldSha256&&next.tick===previous.tick+next.months,
+      '续跑版本与原线或前一真实世界不一致。');
+    retainedBytes+=next.snapshot.world.bytes;
+    requireThat(retainedBytes<=DETACHED_ARCHIVE_TOTAL_MAX_BYTES,'独立档案已发布内容超过总限额，未跳过旧历史。');
+    snapshots.push(next);previous=next;
+  }
+  return {manifest,origin,head,snapshots,retainedBytes};
+}
+async function audit(store:Store,metadata:DetachedMetadata,signal?:AbortSignal):Promise<DetachedLocalAudit>{
+  const {manifest,origin,head,retainedBytes,snapshots}=metadata;
   let world:WorldState|undefined;
   for(const branch of manifest.branches)for(const snapshot of branch.snapshots){
     stopCampaignRead(signal);
@@ -195,21 +214,19 @@ async function audit(store:Store,signal?:AbortSignal):Promise<DetachedLocalAudit
     if(branch.id===manifest.active.branchId&&snapshot.tick===manifest.active.tick)world=row.world;
   }
   requireThat(world,'档案原线活跃读回失败。');
-  let prior=origin.value,retainedBytes=detachedArchiveCapacity(manifest).referencedBytes;
-  for(const revision of revisions.slice(1)){
-    const next=revision.value;
-    requireThat(next.kind==='advance'&&next.manifestId===manifest.id&&next.writerRuleVersion===manifest.writerRuleVersion&&
-      next.previousWorldSha256===prior.worldSha256,'续跑版本与原线或前一真实世界不一致。');
-    retainedBytes+=next.snapshot.world.bytes;
-    requireThat(retainedBytes<=DETACHED_ARCHIVE_TOTAL_MAX_BYTES,'独立档案已发布内容超过总限额，未跳过旧历史。');
+  for(const next of snapshots){
+    stopCampaignRead(signal);
     const readback=await readSnapshot(store,next.snapshot,undefined,signal);
-    checkContinue(world,readback.world,next.months);world=readback.world;prior=next;
+    checkContinue(world,readback.world,next.months);
+    world=readback.world;
   }
   stopCampaignRead(signal);
   return {manifest,origin,head,world,retainedBytes};
 }
 export async function auditDetachedArchive(directory:string,{signal}:{signal?:AbortSignal}={}):Promise<DetachedLocalAudit>{
-  return audit(await LocalDetachedArchive.open(directory,localRevision),signal);
+  const {store,revisions}=await LocalDetachedArchive.openWithRevisions(directory,localRevision);
+  const metadata=await readMetadata(store,revisions);
+  return audit(store,metadata,signal);
 }
 export async function advanceDetachedArchive(directory:string,options:{writerRuleVersion:string;months:number;expected?:LocalArchiveToken;
   signal?:AbortSignal;onProgress?:(value:FastForwardProgress)=>void}):Promise<LocalArchiveHead<DetachedLocalRevision>>{
@@ -217,12 +234,17 @@ export async function advanceDetachedArchive(directory:string,options:{writerRul
   requireThat(campaignInteger(months,1,DETACHED_EXPLICIT_MAX_MONTHS),'显式独立续跑应为 1 到 1200 个月。');
   requireThat(campaignHashValid(writerRuleVersion)&&writerRuleVersion===buildRule(),'调用者规则不等于当前引擎构建规则。');
   stopCampaignRead(signal);
-  const store=await LocalDetachedArchive.open(directory,localRevision);
-  const verified=await audit(store,signal);
-  requireThat(writerRuleVersion===verified.manifest.writerRuleVersion,'运行规则与独立档案原版不一致，拒绝跨版本接续。');
-  const expected=options.expected??verified.head.token;
-  if(expected.revision!==verified.head.token.revision||expected.seal!==verified.head.token.seal)
+  const {store,revisions}=await LocalDetachedArchive.openWithRevisions(directory,localRevision);
+  const metadata=await readMetadata(store,revisions);
+  requireThat(writerRuleVersion===metadata.manifest.writerRuleVersion,'运行规则与独立档案原版不一致，拒绝跨版本接续。');
+  const expected=options.expected??metadata.head.token;
+  if(expected.revision!==metadata.head.token.revision||expected.seal!==metadata.head.token.seal)
     throw new LocalDetachedArchiveError('conflict','预期的独立档案版本已经改变。');
+  requireThat(metadata.retainedBytes<DETACHED_ARCHIVE_TOTAL_MAX_BYTES,'独立档案总限额已经用满，没有发布新世界。');
+  if(metadata.head.token.revision>=LOCAL_DETACHED_MAX_REVISIONS)
+    throw new LocalDetachedArchiveError('format','独立档案发布头已满，旧历史不变。');
+  // Refusal above cannot certify an archive; every accepted continuation reads every physical payload.
+  const verified=await audit(store,metadata,signal);
   let world=verified.world;
   for(let done=0;done<months;){
     stopCampaignRead(signal);

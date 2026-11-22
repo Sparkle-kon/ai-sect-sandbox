@@ -10,9 +10,11 @@ import {advanceDetachedArchive,auditDetachedArchive,createDetachedArchive,readDe
 
 declare const __SECT_UTILITY_RULE_VERSION__:string;
 const nodeModules='node:fs/promises';
-const {mkdtemp,rm}=await import(nodeModules) as {
+const {mkdtemp,rm,readFile,writeFile}=await import(nodeModules) as {
   mkdtemp(prefix:string):Promise<string>;
   rm(path:string,options:{recursive:boolean;force:boolean}):Promise<void>;
+  readFile(path:string):Promise<Uint8Array>;
+  writeFile(path:string,bytes:Uint8Array):Promise<void>;
 };
 const encode=(text:string)=>new TextEncoder().encode(text);
 const input=(file:EraOutputFile)=>({size:file.bytes.length,arrayBuffer:async()=>Uint8Array.from(file.bytes).buffer});
@@ -52,6 +54,32 @@ describe('actual detached archive retains original bytes and native next month',
       await expect(advanceDetachedArchive(directory,{writerRuleVersion:rule,months:1,expected:head.token})).rejects.toThrow(/版本/u);
       expect((await auditDetachedArchive(directory)).head.token).toEqual(committed.token);
       expect((await readDetachedArchiveOriginal(directory,'old',tick)).payload).toEqual(payload);
+    }finally{await rm(temp,{recursive:true,force:true});}
+  });
+  it('does not read damaged worlds for stale authorization but strictly rejects the same damaged bytes with the live token',async()=>{
+    const temp=await mkdtemp('/tmp/sect-detached-preflight-test-');
+    try{
+      const directory=temp+'/archive',rule=__SECT_UTILITY_RULE_VERSION__;
+      const world=createInitialWorld(),payload=encode(encodeEraWorldSave(world)),sha256=await campaignSHA256(payload);
+      const {tick,year,month}=world;
+      const {head}=await createDetachedArchive({directory,sourceRuleVersion:rule,writerRuleVersion:rule,
+        timelineId:'native-test',active:{branchId:'original',tick,sha256},branches:[{id:'original',label:'原线',
+          frames:[{payload,expected:{tick,year,month,bytes:payload.length,sha256}}]}]});
+      const advanced=await advanceDetachedArchive(directory,{writerRuleVersion:rule,months:1,expected:head.token});
+      if(advanced.value.kind!=='advance')throw Error('No native published successor');
+      const object=directory+'/objects/'+advanced.value.snapshot.world.chunks[0].sha256;
+      const same=Uint8Array.from(await readFile(object));
+      const damaged=same.slice();
+      damaged[Math.floor(damaged.length/2)]^=1;
+      await writeFile(object,damaged);
+      await expect(advanceDetachedArchive(directory,{writerRuleVersion:rule,months:1,expected:head.token}))
+        .rejects.toMatchObject({code:'conflict'});
+      await expect(advanceDetachedArchive(directory,{writerRuleVersion:rule,months:1,expected:advanced.token}))
+        .rejects.toThrow(/SHA-256/u);
+      await expect(auditDetachedArchive(directory)).rejects.toThrow(/SHA-256/u);
+      expect(Uint8Array.from(await readFile(object))).toEqual(damaged);
+      await writeFile(object,same); // Restore only this test's disposable object, never auto repair in production.
+      expect((await auditDetachedArchive(directory)).head.token).toEqual(advanced.token);
     }finally{await rm(temp,{recursive:true,force:true});}
   });
 });
