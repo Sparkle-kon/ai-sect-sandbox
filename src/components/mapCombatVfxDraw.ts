@@ -93,6 +93,20 @@ function battlefield(ctx:CanvasRenderingContext2D,s:number){
   stroke(ctx,'#7c4d41',3*s);stroke(ctx,'#f2bb87',1.2*s);
 }
 
+// A shallow, unlit broken ring. This sits on the ground beside the old battlefield relief,
+// below any live protective dome, and never shares its active turquoise tint or pulse.
+function brokenArrayScar(ctx:CanvasRenderingContext2D,s:number){
+  ctx.globalAlpha=.83;
+  ctx.beginPath();
+  ctx.ellipse(0,9*s,16*s,5*s,0,Math.PI*.19,Math.PI*.76);
+  stroke(ctx,'#30303a',3.2*s);
+  stroke(ctx,'#857d83',1.25*s);
+  ctx.beginPath();
+  ctx.ellipse(0,9*s,16*s,5*s,0,Math.PI*1.05,Math.PI*1.65);
+  stroke(ctx,'#30303a',3.2*s);
+  stroke(ctx,'#857d83',1.25*s);
+}
+
 export function drawMapCombatVfx(ctx:CanvasRenderingContext2D,plan:MapCombatVfxPlan,
   elapsed:number,animate:boolean,logicalPerCssPixel:number,phase=0,camera:MapCamera=DEFAULT_CAMERA){
   if(!plan.effects.length&&!plan.storms.length&&!plan.sieges.length&&!plan.battlefields?.length)return;
@@ -105,7 +119,9 @@ export function drawMapCombatVfx(ctx:CanvasRenderingContext2D,plan:MapCombatVfxP
   ctx.globalAlpha=1;ctx.shadowBlur=0;
   for(const site of plan.battlefields??[]){
     if(!valid(site.location))continue;
-    ctx.save();ctx.translate(site.location.x,site.location.y);battlefield(ctx,s);ctx.restore();
+    ctx.save();ctx.translate(site.location.x,site.location.y);battlefield(ctx,s);
+    if(site.brokenArray)brokenArrayScar(ctx,s);
+    ctx.restore();
   }
   for(const siege of plan.sieges){
     if(!valid(siege.location))continue;

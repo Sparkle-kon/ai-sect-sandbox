@@ -1,3 +1,5 @@
+import { availableBattlefieldRevisits, isBattlefieldRevisitEvent, recordBattlefieldReturn, resolveBattlefieldRevisit } from './battlefieldRevisit';
+import { exactBattlefieldRevisitDecision } from './battlefieldRevisitCognition';
 import {autonomousExpeditionRescueOptions,canPauseAftermathRescue,voluntaryHeartDemonChoiceEffect} from './heartDemonChoicePolicy';
 import {availableHeartDemonRecovery,resolveHeartDemonRecovery} from './heartDemonAftermathEngine';
 import {activeProtagonistFlight,availableProtagonistFlightActions} from './protagonistFlightEngine';
@@ -814,6 +816,11 @@ export function applyCultivatorBrainDecision(
     case 'GRAND_SIEGE_HERO':
       // The native attack round, not this individual turn, owns actual array and resource settlement.
       return null;
+    case 'BATTLEFIELD_REVISIT': {
+      if(modelInput&&activeAvatar(world)===cultivator)return null;
+      const exact=exactBattlefieldRevisitDecision(decision,availableBattlefieldRevisits(world,cultivator,world.tick),true);
+      return exact?resolveBattlefieldRevisit(world,cultivator,exact):null;
+    }
     case 'AWAKEN_DESTINY':
       return decision.targetDestinyOfferId && decision.destinyTraitChoice
         ? settleDestinyTrait(world, cultivator, decision.targetDestinyOfferId, decision.destinyTraitChoice)
@@ -1410,6 +1417,14 @@ export function advanceWorldTick(
     const modelProposal = supplied && traceOptions?.modelActors?.has(cultivator.id) ? supplied : undefined;
     let provided = avatarDecision ?? supplied;
     let modelOrdinaryReplaced=false;
+    if(modelProposal?.chosenAction==='BATTLEFIELD_REVISIT'&&!avatarDecision){
+      const old=prevState.cultivators.find(actor=>actor.id===cultivator.id);
+      if(!old||activeAvatar(prevState)===old||
+        !exactBattlefieldRevisitDecision(modelProposal,availableBattlefieldRevisits(prevState,old,nextState.tick),true)){
+        provided=undefined;
+        modelOrdinaryReplaced=true;
+      }
+    }
     const fromProvider=Boolean(!avatarDecision&&provided&&(modelProposal||isProviderPersonaDecision(provided)));
     const replaying=traceOptions?.replayDraws!==undefined;
     const exactPlainRest=provided?.chosenAction==='REST'&&Object.keys(provided).every(
@@ -1680,6 +1695,8 @@ export function advanceWorldTick(
       if (lodging) { newEvents.push(lodging); witnessEvent(nextState,lodging); }
       const encounter=maybeOpenRoguelikeEncounter(nextState,cultivator,previousLocation);
       if(encounter)newEvents.push(encounter);
+      const scarReturn=recordBattlefieldReturn(nextState,cultivator,previousLocation);
+      if(scarReturn)newEvents.push(scarReturn);
     }
     if (evt && (decision.chosenAction === 'DUEL' || decision.chosenAction === 'SOCIALIZE' || decision.chosenAction === 'BREAKTHROUGH'))
       captureWitnessedPersonalScene(nextState, evt);
@@ -1714,7 +1731,7 @@ export function advanceWorldTick(
         if (receipt && evt.id === `evt-${receipt.id}`) recordReliefCompetition(nextState, receipt);
       }
       newEvents.push(evt);
-      witnessEvent(nextState, evt);
+      if(!isBattlefieldRevisitEvent(evt))witnessEvent(nextState, evt);
       if(decision.chosenAction==='SOCIALIZE'&&cultivator.currentAction==='SOCIALIZE'){
         const after=recordTournamentBanquetAfterTalk(nextState,evt);
         if(after&&!newEvents.some(row=>row.id===after.id))newEvents.push(after);

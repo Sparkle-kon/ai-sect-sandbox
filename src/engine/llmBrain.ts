@@ -1,3 +1,5 @@
+import { availableBattlefieldRevisits } from './battlefieldRevisit';
+import { battlefieldRevisitCommand, exactBattlefieldRevisitDecision } from './battlefieldRevisitCognition';
 import {activeHeartDemonAftermath,availableHeartDemonRecovery} from './heartDemonAftermathEngine';
 import {exactHeartDemonRecoveryDecision,heartDemonRecoveryCommand} from './heartDemonRecoveryCognition';
 import { activeAscensionForActor, availableAscensionActions, type AscensionOption } from './ascensionEngine';
@@ -2046,6 +2048,12 @@ export function computeHeuristicDecision(
     const chosen=reply??request??(cultivator.personality==='刚正'?refusal:undefined);
     if(chosen)return {...chosen,chosenAction:chosen.action,innerMonologue:'先查上次实际交付，再独自决定是否签新约。'};
   }
+  if(activeAvatar(world)!==cultivator){
+    const revisit=availableBattlefieldRevisits(world,cultivator,world.tick);
+    const choice=revisit.find(row=>row.battlefieldRevisitMove==='seek')??revisit[0];
+    const exact=choice&&exactBattlefieldRevisitDecision(battlefieldRevisitCommand(choice),revisit);
+    if(exact)return exact;
+  }
   const ordinary=utilityRankedOrdinaryDecision(cultivator,world);
   // Self-care can refine an independently chosen quiet month, never preempt work or urgent healing.
   if(ordinary?.chosenAction==='REST'&&activeAvatar(world)!==cultivator){
@@ -2465,6 +2473,16 @@ export async function requestCultivatorLLMDecision(
         row.targetGrandSiegeId !== exactId || row.grandSiegeHeroMove !== moves[index])) return undefined;
       return decodeGrandSiegeHeroDecision(parsed, exactId, moves);
     }, 160);
+  }
+
+  const battlefield=availableBattlefieldRevisits(world,cultivator,requestTick);
+  if(battlefield.length){
+    if(requestTick!==world.tick+1||activeAvatar(world)===cultivator)return undefined;
+    const menu=battlefield.map(battlefieldRevisitCommand);
+    return requestDecisionPrompt(config,requestTick,options,
+      '只原样复制本次重访旧战场的一项现有许可。不可填写独白、结果、代价或新人物：'+JSON.stringify(menu),
+      parsed=>activeAvatar(world)===cultivator||requestTick!==world.tick+1?undefined:
+        exactBattlefieldRevisitDecision(parsed,availableBattlefieldRevisits(world,cultivator,requestTick)),160);
   }
 
   const flight=activeProtagonistFlight(world,cultivator);

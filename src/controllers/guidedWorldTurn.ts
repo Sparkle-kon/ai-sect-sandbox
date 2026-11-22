@@ -1,3 +1,4 @@
+import {resolveGuidedBattlefieldRevisitTurn,type GuidedBattlefieldRevisitTurn} from './guidedBattlefieldRevisitTurn';
 import {resolveGuidedHeartDemonRecoveryTurn,type GuidedHeartDemonRecoveryTurn} from './guidedHeartDemonRecoveryTurn';
 import {resolveGuidedProtagonistFlightTurn,type GuidedProtagonistFlightTurn} from './guidedProtagonistFlightTurn';
 import {resolveGuidedAscensionTurn,type GuidedAscensionTurn} from './guidedAscensionTurn';
@@ -8,11 +9,12 @@ import {resolveGuidedHeavenlyAlchemyTurn,type GuidedHeavenlyAlchemyTurn} from '.
 import {resolveGuidedImmortalAuctionTurn,type GuidedImmortalAuctionTurn} from './guidedImmortalAuctionTurn';
 import type {WorldState} from '../types/world';
 
-export type GuidedWorldTurn=GuidedDungeonTurn|GuidedHeavenlyAlchemyTurn|GuidedDaoPathTurn|GuidedImmortalAuctionTurn|GuidedCultivationClanTurn|GuidedAscensionTurn|GuidedProtagonistFlightTurn|GuidedHeartDemonRecoveryTurn;
+export type GuidedWorldTurn=GuidedDungeonTurn|GuidedHeavenlyAlchemyTurn|GuidedDaoPathTurn|GuidedImmortalAuctionTurn|GuidedCultivationClanTurn|GuidedAscensionTurn|GuidedProtagonistFlightTurn|GuidedHeartDemonRecoveryTurn|GuidedBattlefieldRevisitTurn;
 
 export function resolveGuidedWorldTurn(order:GuidedWorldTurn,world:WorldState,branch:string,revision:number){
   if(!('kind' in order))return resolveGuidedDungeonTurn(order,world,branch,revision);
   switch(order.kind){
+    case 'battlefield-revisit':return resolveGuidedBattlefieldRevisitTurn(order,world,branch,revision);
     case 'heart-demon-recovery':return resolveGuidedHeartDemonRecoveryTurn(order,world,branch,revision);
     case 'protagonist-flight':return resolveGuidedProtagonistFlightTurn(order,world,branch,revision);
     case 'ascension':return resolveGuidedAscensionTurn(order,world,branch,revision);

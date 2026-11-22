@@ -5,6 +5,7 @@ const ACTION_LABELS = {
   AWAKEN_DESTINY: '觉醒天命',
   FORBIDDEN_ART: '禁术抉择',
   GRAND_SIEGE_HERO: '阵前抉择',
+  BATTLEFIELD_REVISIT: '重访旧战场',
   AUDIENCE_PLEDGE: '践行密议',
   WATER_VEIN: '实察井水、借脉或采矿',
   NORTH_MINING_CHARTER: '办理寒玉采契',

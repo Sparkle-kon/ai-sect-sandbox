@@ -126,6 +126,7 @@ export type ActionType =
   | 'AWAKEN_DESTINY'
   | 'FORBIDDEN_ART'
   | 'GRAND_SIEGE_HERO'
+  | 'BATTLEFIELD_REVISIT'
   | 'AUDIENCE_PLEDGE'
   | 'CULTIVATE'
   | 'BREAKTHROUGH'
@@ -580,6 +581,8 @@ export interface LLMDecisionPayload {
   targetForbiddenDuelId?: string;
   forbiddenArtChoice?: ForbiddenArtChoice;
   targetGrandSiegeId?: string;
+  battlefieldRevisitMove?: 'repair' | 'seek';
+  targetBattlefieldSiegeId?: string;
   grandSiegeHeroMove?: GrandSiegeHeroMove;
   targetRoguelikeEncounterId?:string;
   roguelikeEncounterChoice?:RoguelikeEncounterChoice;

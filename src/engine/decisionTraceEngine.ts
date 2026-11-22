@@ -1,3 +1,5 @@
+import { availableBattlefieldRevisits } from './battlefieldRevisit';
+import { exactBattlefieldRevisitDecision } from './battlefieldRevisitCognition';
 import {FLIGHT_ROUNDS} from '../types/protagonistFlight';
 import { availableAscensionActions } from './ascensionEngine';
 import { ASCENSION_PRIVATE_COMMAND_KEYS, exactAscensionDecision } from './ascensionCognition';
@@ -101,6 +103,7 @@ export function recordDecisionTrace(world: WorldState, actorId: string, candidat
   const privateDecision = decision.targetHeartDemonAftermathId!==undefined || isPrivateHeartTurn(world, actorId, decision) || decision.chosenAction === 'FORBIDDEN_ART' ||
     decision.targetForbiddenDuelId !== undefined || decision.forbiddenArtChoice !== undefined ||
     decision.chosenAction === 'GRAND_SIEGE_HERO' || decision.targetGrandSiegeId !== undefined || decision.grandSiegeHeroMove !== undefined ||
+    decision.chosenAction === 'BATTLEFIELD_REVISIT' || decision.targetBattlefieldSiegeId !== undefined || decision.battlefieldRevisitMove !== undefined ||
     decision.chosenAction === 'EXPEDITION_DUNGEON' || decision.targetDungeonRoomId !== undefined || decision.dungeonMove !== undefined ||
     decision.chosenAction === 'DAO_PATH' || decision.targetDaoPathId !== undefined || decision.daoPathMove !== undefined ||
     decision.chosenAction === 'IMMORTAL_AUCTION' || AUCTION_PRIVATE_COMMAND_KEYS.some(key => decision[key] !== undefined) ||
@@ -245,6 +248,13 @@ export function rememberReplayDecision(tape: DecisionReplayTape, actorId: string
   const clanFields = signed ? signed.clanMove === 'propose'
     ? { clanMove: signed.clanMove, targetCultivatorId: signed.targetCultivatorId }
     : { clanMove: signed.clanMove, targetCultivationUnionId: signed.targetCultivationUnionId } : undefined;
+  const revisitAction=decision.chosenAction==='BATTLEFIELD_REVISIT';
+  const revisitor=revisitAction?current.cultivators.find(row=>row.id===actorId):undefined;
+  const revisited=revisitor&&exactBattlefieldRevisitDecision(decision,
+    availableBattlefieldRevisits(current,revisitor,live?.tick??state.base.tick+1),true);
+  const revisitFields=revisited?{battlefieldRevisitMove:revisited.battlefieldRevisitMove,
+    targetBattlefieldSiegeId:revisited.targetBattlefieldSiegeId,
+    ...(revisited.targetCultivatorId?{targetCultivatorId:revisited.targetCultivatorId}:{})}:undefined;
   const ascensionAction = decision.chosenAction === 'ASCENSION';
   const ascender = ascensionAction ? current.cultivators.find(row => row.id === actorId) : undefined;
   const stance = ascender && exactAscensionDecision(decision,
@@ -252,9 +262,9 @@ export function rememberReplayDecision(tape: DecisionReplayTape, actorId: string
   const ascent = stance ? { ascensionMove: stance.ascensionMove, ...(stance.targetAscensionTrialId === undefined ? {} :
     { targetAscensionTrialId: stance.targetAscensionTrialId }) } : undefined;
   state.decisions.set(actorId, { ...(forbiddenAction || grandSiegeAction || dungeonAction || heavenlyAction || daoPathAction ||
-      auctionAction || auctionAmbush || clanAction || ascensionAction ? {} : details),
+      auctionAction || auctionAmbush || clanAction || ascensionAction || revisitAction ? {} : details),
     chosenAction: decision.chosenAction, innerMonologue: '', ...(cohortInviteeIds ? { cohortInviteeIds } : {}),
-    ...personalHeartChoice, ...personalForbiddenChoice, ...personalHeroChoice, ...dungeonFields, ...chosenAlchemy, ...pathFields, ...auctionFields, ...ambushFields, ...clanFields, ...ascent });
+    ...personalHeartChoice, ...personalForbiddenChoice, ...personalHeroChoice, ...dungeonFields, ...chosenAlchemy, ...pathFields, ...auctionFields, ...ambushFields, ...clanFields, ...ascent, ...revisitFields });
   if (personalHeartChoice && heartModel) state.heartModelActors.add(actorId);
   else state.heartModelActors.delete(actorId);
   if (personalForbiddenChoice && forbiddenModel) state.forbiddenModelActors.add(actorId);

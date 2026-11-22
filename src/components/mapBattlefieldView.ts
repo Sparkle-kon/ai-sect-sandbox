@@ -1,3 +1,4 @@
+import { projectBattlefieldArrayBreak } from '../engine/battlefieldRevisit';
 import { isScopedExpeditionGate } from '../engine/expeditionOmenTerms';
 import { isUpperPassageEvent } from '../engine/upperPassageIsolation';
 import type { LocationNode, WorldEvent, WorldState } from '../types/world';
@@ -6,10 +7,11 @@ export interface MapBattlefield {
   location: LocationNode;
   settledTick: number;
   rounds: number;
+  brokenArray?: boolean;
 }
 
-export const mapBattlefieldSummary = ({ settledTick, rounds }: MapBattlefield) =>
-  `旧战场：第 ${settledTick} 轮留下的实战遗痕（交战 ${rounds} 轮）`;
+export const mapBattlefieldSummary = ({ settledTick, rounds, brokenArray }: MapBattlefield) =>
+  `旧战场：第 ${settledTick} 轮留下的实战遗痕（交战 ${rounds} 轮）${brokenArray ? " · 此役曾破阵，只是旧痕" : ""}`;
 
 type PublicSource = (id: string, tick: number, check: (event: WorldEvent) => boolean) => boolean;
 const validTick = (value: number) => Number.isSafeInteger(value) && value >= 0;
@@ -72,7 +74,8 @@ export function projectMapBattlefields(world: WorldState, visibleSites: Readonly
     const previous = bySite.get(location.id);
     if (!previous || previous.settledTick < terminal.tick ||
         previous.settledTick === terminal.tick && previous.rounds < siege.rounds) {
-      bySite.set(location.id, { location, settledTick: terminal.tick, rounds: siege.rounds });
+      bySite.set(location.id, { location, settledTick: terminal.tick, rounds: siege.rounds,
+        ...(projectBattlefieldArrayBreak(world,siege)?{brokenArray:true}:{}), });
     }
   }
   return [...bySite.values()].sort((a, b) => a.location.id < b.location.id ? -1 : a.location.id === b.location.id ? 0 : 1);
