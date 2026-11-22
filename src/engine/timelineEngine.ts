@@ -29,7 +29,7 @@ export interface WorldTimeline {
   readonly nextBranchNumber: number;
 }
 export class TimelineError extends Error {
-  constructor(readonly code: 'branch_limit' | 'missing_snapshot' | 'invalid_intervention' | 'invalid_checkpoint' | 'invalid_avatar_entry' | 'invalid_authored_root', message: string) {
+  constructor(readonly code: 'branch_limit' | 'missing_snapshot' | 'invalid_intervention' | 'invalid_checkpoint' | 'invalid_avatar_entry' | 'invalid_authored_root' | 'invalid_north_well_law', message: string) {
     super(message); this.name = 'TimelineError';
   }
 }
@@ -126,6 +126,32 @@ export function appendAuthoredTimelineRoot(timeline:WorldTimeline,expectedBranch
   const founded=immutableBranch({id,label:(typeof label==='string'&&cut(label,TIMELINE_MAX_LABEL))||`作者纪元 ${number}`},
     [saveSnapshot(preparedWorld)]);
   return Object.freeze({activeBranchId:founded.id,nextBranchNumber:number+1,branches:Object.freeze([...timeline.branches,founded])});
+}
+
+/** A declared present-day rule on one verified live frame. This is not a second natural past. */
+export function appendNorthWellRevisitFork(timeline:WorldTimeline,expectedBranchId:string,
+  expectedHead:TimelineSnapshot,declared:WorldState):WorldTimeline {
+  if(timeline.branches.length>=TIMELINE_MAX_BRANCHES)
+    throw new TimelineError('branch_limit','时间线已满，不会删去原线。');
+  const invalid=()=>new TimelineError('invalid_north_well_law','所核原档或作者法已变，原线没有改动。');
+  const branch=branchOf(timeline,expectedBranchId), head=branch?.snapshots.at(-1);
+  if(!branch||!head||head!==expectedHead||timeline.activeBranchId!==expectedBranchId)throw invalid();
+  const law=declared.northWellRevisitLaw;
+  if(head.world.northWellRevisitLaw||!law||law.kind!=='authored_old_village_restriction'||
+    law.declaredTick!==head.tick||law.year!==head.world.year||law.month!==head.world.month||
+    timeline.branches.some(row=>row.snapshots.at(-1)?.world.northWellRevisitLaw?.id===law.id))throw invalid();
+  // Compare each member once, disregarding only top-level property insertion order.
+  const {northWellRevisitLaw:_,...rest}=declared;
+  const names=new Set([...Object.keys(rest),...Object.keys(head.world)]);
+  for(const name of names){
+    const key=name as keyof typeof rest;
+    if(JSON.stringify(rest[key])!==JSON.stringify(head.world[key]))throw invalid();
+  }
+  const number=timeline.nextBranchNumber, id=`branch-${number}`;
+  if(!Number.isSafeInteger(number)||number<1||timeline.branches.some(item=>item.id===id))throw invalid();
+  const authored=immutableBranch({id,parentBranchId:branch.id,forkTick:head.tick,label:'作者线 · 旧井禁牌'},
+    [...branch.snapshots.slice(0,-1),saveSnapshot(declared)]);
+  return Object.freeze({activeBranchId:id,nextBranchNumber:number+1,branches:Object.freeze([...timeline.branches,authored])});
 }
 
 /** Apply exactly one valid intervention to an isolated historical clone; keep the source branch untouched. */

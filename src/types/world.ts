@@ -166,6 +166,7 @@ export type ActionType =
   | 'SEED_CULTURE'
   | 'WATER_VEIN'
   | 'NORTH_MINING_CHARTER'
+  | 'NORTH_WELL_REVIEW'
   | 'TOOL_LOAN'
   | 'FORGE_ARTIFACT'
   | 'BIND_ARTIFACT'
@@ -471,6 +472,7 @@ export interface LLMDecisionPayload {
   innerMonologue: string;
   chosenAction: ActionType;
   waterVeinMove?: WaterVeinMove;
+  northWellReviewMove?: NorthWellReviewMove;
   northMiningMove?: NorthMiningCharterMove;
   northMiningStance?: NorthMiningStance;
   targetNorthMiningCharterId?: string;
@@ -1015,6 +1017,7 @@ export type AvatarPendingOrder = { actorId: string; queuedTick: number } & (
   | { action: 'WATER_VEIN'; waterVeinMove: WaterVeinMove; targetLocationId: 'loc-vein-north' }
   | { action:'NORTH_MINING_CHARTER'; northMiningMove:'propose'; northMiningStance:NorthMiningStance; targetNorthMiningCharterId?:never }
   | { action:'NORTH_MINING_CHARTER'; northMiningMove:'sign'; targetNorthMiningCharterId:string; northMiningStance?:never }
+  | { action:'NORTH_WELL_REVIEW'; northWellReviewMove:NorthWellReviewMove;targetNorthMiningCharterId:string }
   | { action: 'SALVAGE_ARTIFACT'; targetArtifactId: string; targetLocationId: string }
   | { action:'DOCTRINE_MATURITY';doctrineMaturityMove:DoctrineMaturityMove;targetDoctrineFoundingId:string }
   | { action:'DOCTRINE_FOUNDING'; doctrineFoundingMove:DoctrineFoundingMove; targetDoctrineFoundingId?:string;
@@ -2567,7 +2570,7 @@ export interface SharedCommonsPact {
 export interface SharedCommonsState { pacts: SharedCommonsPact[]; nextId: number }
 
 export type ResourceFlowGood = 'stone' | 'jade_seed' | MarketGood;
-export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation' | 'terrain' | 'workshop' | 'road' | 'observatory' | 'pilgrimage' | 'granary' | 'furnace_safety' | 'artifact_salvage' | 'village_supply' | 'civic_memorial' | 'village_fair' | 'sect_stipend' | 'seed_culture' | 'care_followup' | 'danxia_medicine' | 'water_vein' | 'north_mining_charter';
+export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation' | 'terrain' | 'workshop' | 'road' | 'observatory' | 'pilgrimage' | 'granary' | 'furnace_safety' | 'artifact_salvage' | 'village_supply' | 'civic_memorial' | 'village_fair' | 'sect_stipend' | 'seed_culture' | 'care_followup' | 'danxia_medicine' | 'water_vein' | 'north_mining_charter' | 'north_well_review';
 export type ResourceFlowAccount =
   | { kind: 'actor' | 'site' | 'sect' | 'order' | 'shipment' | 'relocation' | 'workshop' | 'salvage' | 'granary' | 'village_supply' | 'village_fair' | 'seed_lot' | 'seed_plot' | 'danxia_medicine'; id: string }
   | { kind: 'oath'; id: string; pocket: 'payment' | 'collateral' };
@@ -3363,7 +3366,28 @@ export interface NorthMiningCharter {
 }
 export interface NorthMiningCharterState {version:1;charters:NorthMiningCharter[]}
 
+export type NorthWellReviewMove = 'keep'|'permit';
+export interface NorthWellRevisitLaw {
+  version:1;kind:'authored_old_village_restriction';id:string;
+  declaredTick:number;year:number;month:number;nativeFrameDigest:string;
+  sourceCharterId:string;freightClosedTick:number;siteId:'loc-vein-north';wellProjectId:string;
+  retainedPopulation:number;
+}
+export interface NorthWellReviewPermit {
+  validFromTick:number;expiresTick:number;spentTick?:number;miningReceiptId?:string;
+}
+export interface NorthWellReviewDecision {
+  id:string;actorId:string;sourceCharterId:string;freightClosedTick:number;surveyId:string;
+  tick:number;year:number;month:number;move:NorthWellReviewMove;paidStones:number;
+  lawId?:string;permit?:NorthWellReviewPermit;
+}
+export interface NorthWellRevisitReviewState {
+  version:1;decisions:NorthWellReviewDecision[];
+}
+
 export interface WorldState {
+  northWellRevisitLaw?:NorthWellRevisitLaw;
+  northWellRevisitReviews?:NorthWellRevisitReviewState;
   northMiningCharters?:NorthMiningCharterState;
   coldWaterVein?:ColdWaterVeinState;
   mortalAgeTrackingSinceTick?: number;

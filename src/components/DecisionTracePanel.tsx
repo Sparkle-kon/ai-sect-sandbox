@@ -6,6 +6,7 @@ import type { ActionType, Cultivator, DecisionTraceCandidate, DecisionTraceRecor
 const ACTION_LABELS: Record<ActionType, string> = {
   WATER_VEIN: '实察井水、借脉或采矿',
   NORTH_MINING_CHARTER: '提出本人采契或按原件落笔',
+  NORTH_WELL_REVIEW: '复核旧井原件与现行规则',
   CULTIVATE: '修炼', BREAKTHROUGH: '突破', EXPLORE: '探索', SOCIALIZE: '交谈', DUEL: '比斗',
   SCHEMING: '筹谋', PURSUE_SCHEME: '执行密谋', AUTHOR_TECHNIQUE: '著录功法', STUDY_TECHNIQUE: '参悟功法',
   TEACH: '传法授业', ACCEPT_TUITION: '接受传法', DECLINE_TUITION: '婉拒传法', OFFER_OATH: '提出契约',

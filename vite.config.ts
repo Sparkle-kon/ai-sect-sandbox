@@ -43,6 +43,8 @@ export default defineConfig({
           'heritage-capture': ['./src/engine/eraHeritageCapture.ts'],
           'cold-water-rules': ['./src/engine/waterVeinTerms.ts'],
           'north-charter-terms': ['./src/engine/northMiningCharterTerms.ts'],
+          'old-well-source': ['./src/engine/northWellRevisitTerms.ts','./src/engine/northWellRevisitEvidence.ts'],
+          'civic-works': ['./src/engine/villageWorksEngine.ts'],
           'household-register': ['./src/engine/householdNameEngine.ts','./src/engine/mortalAgeCohorts.ts'],
           'institution-terms': ['./src/engine/sectActivity.ts','./src/engine/sectCreditTerms.ts'],
           'institution-rules': ['./src/engine/estateEngine.ts', './src/engine/sectCreditEngine.ts', './src/engine/serviceRetirementEngine.ts', './src/engine/relicExhibitEngine.ts'],

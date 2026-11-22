@@ -1,6 +1,7 @@
 import { recordRegionalActorReturn, recordRegionalEarlyPromotions, recordRegionalLatePromotions } from './regionalPromotionEngine';
 import { beginRegionalSimulationTurn, deferRegionalActorTurn, finishRegionalSimulationTurn, recordRegionalTurnRegistry, renewRegionalProtectionAfterEvent } from './regionalSimulationEngine';
 import {advanceDoctrineMaturity,resolveDoctrineMaturityAction} from './doctrineMaturityEngine';
+import { resolveNorthWellReviewAction } from './northWellRevisitEngine';
 import { resolveNorthMiningCharterAction } from './northMiningCharterEngine';
 import { resolveWaterVeinAction } from './waterVeinEngine';
 import { advanceDanxiaMedicine, resolveDanxiaMedicineAction } from './danxiaMedicineEngine';
@@ -254,6 +255,15 @@ export function applyCultivatorBrainDecision(
     cultivator.currentAction = 'BOUNDARY_RELIEF';
     cultivator.innerMonologue = '按已核实的换防关口行进，未到岗前不计驻守。';
     return null;
+  }
+  if(decision.chosenAction==='NORTH_WELL_REVIEW'){
+    if(activeAvatar(world)?.id===cultivator.id&&decision!==explicitAvatarDecision)return null;
+    const applied=resolveNorthWellReviewAction(world,cultivator,decision);
+    if(applied){
+      cultivator.innerMonologue=decision.innerMonologue;
+      cultivator.currentAction='NORTH_WELL_REVIEW';
+    }
+    return applied;
   }
   if(decision.chosenAction==='NORTH_MINING_CHARTER'){
     if(activeAvatar(world)?.id===cultivator.id&&decision!==explicitAvatarDecision)return null;

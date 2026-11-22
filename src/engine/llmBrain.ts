@@ -15,6 +15,7 @@ import { availableShortShiftActions } from './shortShiftEngine';
 import { availableCaravanRestitutionActions } from './caravanRestitutionEngine';
 import { availableVillageGranaryActions, projectVillageGranary } from './villageGranaryEngine';
 import { availableVillageFairActions } from './villageFairEngine';
+import { availableNorthWellReviewActions, utilityNorthWellReviewDecision } from './northWellRevisitEngine';
 import { availableNorthMiningCharterActions, utilityNorthMiningDecision } from './northMiningCharterEngine';
 import { availableWaterVeinActions, utilityWaterVeinDecision } from './waterVeinEngine';
 import { availableSeedCultureActions } from './seedCultureEngine';
@@ -920,6 +921,12 @@ export function computeHeuristicDecision(
       innerMonologue:'到原井以现存实据和自己的职分提出采契，不替他人落笔。'} :
     {chosenAction:charter.action,northMiningMove:'sign',targetNorthMiningCharterId:charter.targetNorthMiningCharterId,
       innerMonologue:'只对这份原件以自己的实际职分落笔，不预报生效或行过新路。'};
+  const oldWell=world.playerAvatar.possessedId===cultivator.id&&(world.playerAvatar.possessionUntilTick??0)>world.tick ?
+    undefined : utilityNorthWellReviewDecision(cultivator,world);
+  if(oldWell)return {chosenAction:oldWell.action,northWellReviewMove:oldWell.northWellReviewMove,
+    targetNorthMiningCharterId:oldWell.targetNorthMiningCharterId,
+    innerMonologue:oldWell.northWellReviewMove==='keep'?'按旧井原件和自己的实读保留现行规则，不声称已经复采。':
+      '依据原址实读求一人一铲的限期许可，不改门法或既有地权。'};
   // Known local water work is weighed after actual harvest/planting, before elective relic hunting.
   const waterVein=utilityWaterVeinDecision(cultivator,world);
   if(waterVein)return {chosenAction:waterVein.action,waterVeinMove:waterVein.waterVeinMove,targetLocationId:waterVein.targetLocationId,
@@ -1679,6 +1686,8 @@ export async function requestCultivatorLLMDecision(
   const arbitrationOptions = availableOathArbitrationActions(cultivator, world);
   const oathOptions = availableOathActions(cultivator, world);
   const marketOptions = availableMarketActions(cultivator, world);
+  const oldWellOptions=world.playerAvatar.possessedId===cultivator.id&&(world.playerAvatar.possessionUntilTick??0)>requestTick ?
+    [] : availableNorthWellReviewActions(cultivator,world,requestTick);
   const charterOptions=world.playerAvatar.possessedId===cultivator.id&&(world.playerAvatar.possessionUntilTick??0)>requestTick ?
     [] : availableNorthMiningCharterActions(cultivator,world,requestTick);
   const waterVeinOptions = availableWaterVeinActions(cultivator,world,requestTick);
@@ -1813,6 +1822,8 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 本宗邦交：${JSON.stringify(world.diplomacy.filter((relation) => relation.sectAId === cultivator.sectId || relation.sectBId === cultivator.sectId))}；公示的外事权限：${JSON.stringify(availableDiplomacyActions(cultivator, world))}
 - 赛季复核只选真实可核验收据；提交不会改写原榜：${JSON.stringify(honorReviewOptions)}
 - 临时观象只复制实际地点的 fund、到期 measure 或带原日期 relay。仅 fund 任选列表中的观测位（现地中心省略、边位用 observatoryStation:'edge'）；不填写读数或强度：${JSON.stringify(observatoryOptions)}
+${oldWellOptions.length?`- 旧井复核只复制本人的现场许可、动作与原采契编号；不得补填写水尺、缴款、开门、律令或矿量：${JSON.stringify(oldWellOptions.map(({action,northWellReviewMove,targetNorthMiningCharterId})=>
+  ({chosenAction:action,northWellReviewMove,targetNorthMiningCharterId})))}`:''}
 ${charterOptions.length?`- 北脉采契只复制本人的现场许可；不代签，不填写角色、收据、款额或路线：${JSON.stringify(charterOptions.map(({action,northMiningMove,northMiningStance,targetNorthMiningCharterId})=>
   ({chosenAction:action,northMiningMove,northMiningStance,targetNorthMiningCharterId})))}`:''}
 ${waterVeinOptions.length ? `- 本人在场的水线许可，只抄 waterVeinMove 与 targetLocationId；不得代报水尺、费用、产量或原因：${JSON.stringify(waterVeinOptions.map(({action,waterVeinMove,targetLocationId})=>({chosenAction:action,waterVeinMove,targetLocationId})))}` : ''}
@@ -1913,6 +1924,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'SEED_CULTURE',
             'WATER_VEIN',
             'NORTH_MINING_CHARTER',
+            'NORTH_WELL_REVIEW',
             'BREW_PILL',
             'USE_PILL',
             'FORGE_ARTIFACT',
@@ -2028,6 +2040,16 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
           if (rescueOnly && chosenAction !== 'EXPEDITION_RESCUE') return undefined;
           if (activeVow && chosenAction !== 'PILGRIMAGE' &&
               (onPilgrimagePath || (chosenAction !== 'REST' && chosenAction !== 'ROUTE_WARNING'))) return undefined;
+          if(parsed.northWellReviewMove!==undefined&&chosenAction!=='NORTH_WELL_REVIEW')return undefined;
+          if(chosenAction==='NORTH_WELL_REVIEW'){
+            const exact=oldWellOptions.find(row=>row.northWellReviewMove===parsed.northWellReviewMove&&
+              row.targetNorthMiningCharterId===parsed.targetNorthMiningCharterId);
+            if(!exact||Object.keys(parsed).some(field=>!['chosenAction','innerMonologue','northWellReviewMove','targetNorthMiningCharterId'].includes(field)))return undefined;
+            const innerMonologue=(typeof parsed.innerMonologue==='string'&&parsed.innerMonologue.trim().slice(0,160))||
+              '依本人当前实读与旧契办理，不替旁人解禁。';
+            return {chosenAction:'NORTH_WELL_REVIEW',northWellReviewMove:exact.northWellReviewMove,
+              targetNorthMiningCharterId:exact.targetNorthMiningCharterId,innerMonologue};
+          }
           if(chosenAction!=='NORTH_MINING_CHARTER'&&
             (parsed.northMiningMove!==undefined||parsed.northMiningStance!==undefined||parsed.targetNorthMiningCharterId!==undefined))return undefined;
           if(chosenAction==='NORTH_MINING_CHARTER'){

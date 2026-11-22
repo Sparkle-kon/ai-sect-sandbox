@@ -1,5 +1,6 @@
 import {availableDoctrineMaturityActions,type DoctrineMaturityOption} from './doctrineMaturityEngine';
 import {availableDoctrineFoundingActions,type DoctrineFoundingOption} from './doctrineFoundingEngine';
+import { availableNorthWellReviewActions,type NorthWellReviewOption } from './northWellRevisitEngine';
 import { availableNorthMiningCharterActions,type NorthMiningOption } from './northMiningCharterEngine';
 import { availableWaterVeinActions,type WaterVeinOption } from './waterVeinEngine';
 import { availableDanxiaMedicineActions } from './danxiaMedicineEngine';
@@ -129,6 +130,18 @@ export function queueAvatarNorthMiningCharter(world:WorldState,actorId:string,op
   return true;
 }
 
+/** Queue only an explicit exact old-well review; payment and any permit require actual execution. */
+export function queueAvatarNorthWellReview(world:WorldState,actorId:string,option:NorthWellReviewOption):boolean {
+  const host=activeAvatar(world);
+  if(!host||!canQueueAvatarSalvage(world,actorId)||option.action!=='NORTH_WELL_REVIEW')return false;
+  const exact=availableNorthWellReviewActions(host,world,world.tick+1).find(row=>row.northWellReviewMove===option.northWellReviewMove&&
+    row.targetNorthMiningCharterId===option.targetNorthMiningCharterId);
+  if(!exact)return false;
+  world.playerAvatar.essence-=AVATAR_ORDER_COST;
+  world.playerAvatar.pendingOrder={actorId,queuedTick:world.tick,...exact};
+  return true;
+}
+
 export type AvatarDanxiaMedicineOption=ReturnType<typeof availableDanxiaMedicineActions>[number];
 
 /** Queue an eligible exact medicinal choice without reserving any stock before the native turn. */
@@ -187,7 +200,9 @@ export function consumeAvatarOrder(world: WorldState): { actorId: string; decisi
   if (!order || world.tick <= order.queuedTick) return undefined;
   delete state.pendingOrder;
   if (world.tick !== order.queuedTick + 1 || activeAvatar(world)?.id !== order.actorId) return undefined;
-  const targets = order.action === 'NORTH_MINING_CHARTER' ?
+  const targets = order.action === 'NORTH_WELL_REVIEW' ?
+    {northWellReviewMove:order.northWellReviewMove,targetNorthMiningCharterId:order.targetNorthMiningCharterId} :
+    order.action === 'NORTH_MINING_CHARTER' ?
     (order.northMiningMove==='propose'?{northMiningMove:order.northMiningMove,northMiningStance:order.northMiningStance}:
       {northMiningMove:order.northMiningMove,targetNorthMiningCharterId:order.targetNorthMiningCharterId}) :
     order.action === 'WATER_VEIN' ?

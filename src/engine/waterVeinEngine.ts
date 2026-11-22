@@ -5,6 +5,7 @@ import { flowActor,flowSect,recordResourceFlow } from './resourceFlowEngine';
 import { routeWarningHazardValid } from './routeWarningProof';
 import { terrainTileAt } from './terrainEngine';
 import { northMiningIsSealed } from './northMiningCharterTerms';
+import { northWellNativeMinePermit,northWellPrecinctRestricted,spendNorthWellNativeMinePermit } from './northWellRevisitTerms';
 import { WATER_VEIN_BASELINE,WATER_VEIN_BORROW_UNITS,WATER_VEIN_COOLDOWN_TICKS,WATER_VEIN_ID,
   WATER_VEIN_OPEN_STONES,WATER_VEIN_ORE_CAPACITY,WATER_VEIN_RECOVERY_TICKS,WATER_VEIN_SIGNAL_OFFSETS,
   WATER_VEIN_SITE,WATER_VEIN_SURVEY_STONES,WATER_VEIN_TILES,latestWaterRow,waterVeinOpeningAt,waterVeinPhase,waterVeinSymptomEventId } from './waterVeinTerms';
@@ -68,14 +69,15 @@ export function availableWaterVeinActions(actor:Cultivator,world:WorldState,exec
       state.openings.some(row=>row.openerId===actor.id&&row.openedTick===executionTick)))return [];
   const options:WaterVeinMove[]=[];
   const sealed=northMiningIsSealed(world,executionTick);
+  const restricted=northWellPrecinctRestricted(world,executionTick);
   const well=completedNorthWaterWell(world,address.village.id);
   if(well&&actor.spiritStones>=WATER_VEIN_SURVEY_STONES)options.push('observe');
   const sect=world.sects.find(row=>row.id===actor.sectId);
   const previous=waterVeinOpeningAt(state,executionTick);
-  if(!sealed&&well&&address.village.population>0&&steward(actor)&&sect&&sect.spiritStones>=WATER_VEIN_OPEN_STONES&&
+  if(!sealed&&!restricted&&well&&address.village.population>0&&steward(actor)&&sect&&sect.spiritStones>=WATER_VEIN_OPEN_STONES&&
       (!previous||previous.completedTick!==undefined&&executionTick>=previous.openedTick+WATER_VEIN_COOLDOWN_TICKS))options.push('open');
   const mineUnits=Math.min(state?.oreRemaining??WATER_VEIN_ORE_CAPACITY,waterVeinPhase(previous,executionTick).mineYield);
-  if(!sealed&&mineUnits>0&&actor.spiritStones<=9999-mineUnits)options.push('mine');
+  if(!sealed&&(!restricted||northWellNativeMinePermit(world,actor.id,executionTick))&&mineUnits>0&&actor.spiritStones<=9999-mineUnits)options.push('mine');
   return options.map(waterVeinMove=>({action:'WATER_VEIN',waterVeinMove,targetLocationId:WATER_VEIN_SITE}));
 }
 function steward(actor:Cultivator){return stewards.has(actor.sectRank);}
@@ -135,6 +137,7 @@ export function resolveWaterVeinAction(world:WorldState,actor:Cultivator,payload
     if(units<1)return null;
     state.oreRemaining-=units;actor.spiritStones+=units;
     state.mining.push({id,actorId:actor.id,tick:world.tick,units});
+    spendNorthWellNativeMinePermit(world,actor.id,id);
     recordResourceFlow(world,{kind:'production',mechanism:'water_vein',reason:'cold_ore_recovered',to:flowActor(actor.id),
       good:'stone',amount:units,refId:id,visibility:{kind:'participants',actorIds:[actor.id]}});
     return event(world,`evt-${id}`,'北脉矿口实取灵石',`从实际矿藏取出 ${units} 枚，当即收入本人持有。`,[actor.id],'participants');
