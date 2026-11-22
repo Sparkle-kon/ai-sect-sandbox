@@ -1,3 +1,4 @@
+import {ScribeCommissionRead,type ScribeCommissionControls} from './ScribeCommissionRead';
 import { useId, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { publicChronicleChapters } from '../engine/coldHistoryEngine';
@@ -126,7 +127,7 @@ export function ChapterBiographies({ chapter }: { chapter: ChronicleChapter }) {
   );
 }
 
-export function ChronicleLibraryPanel({ world, cultivator, scopeKey }: { world: WorldState; cultivator?: Cultivator; scopeKey?: string }) {
+export function ChronicleLibraryPanel({ world, cultivator, scopeKey, scribeControls }: { world: WorldState; cultivator?: Cultivator; scopeKey?: string; scribeControls?:ScribeCommissionControls }) {
   const [page, setPage] = useState<Page>('chapter');
   const [requestedChapter, setRequestedChapter] = useState<string>();
   const paneId = useId();
@@ -230,6 +231,7 @@ export function ChronicleLibraryPanel({ world, cultivator, scopeKey }: { world: 
       ))}
       <ChronicleTopicDigest world={world} viewerId={cultivator?.id} scopeKey={scopeKey} />
       <ChronicleErrataPanel world={world} chapter={chapter} cultivator={cultivator} />
+      <ScribeCommissionRead key={`${scopeKey??''}:${cultivator?.id??''}`} world={world} viewer={cultivator} controls={scribeControls}/>
       <ColdChronicleShelf world={world} chapterTitle={(older) => {
         const safe = readable(older);
         return projectChronicleReading(safe, stampedChronicleLead(safe), true).title;

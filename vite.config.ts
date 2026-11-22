@@ -37,6 +37,9 @@ export default defineConfig({
           'village-supply-rules': ['./src/engine/villageGranaryEngine.ts', './src/engine/villageSupplyAccounting.ts',
             './src/engine/villageSupplyEngine.ts'],
           'agreement-rules': ['./src/engine/oathEngine.ts', './src/engine/oathArbitrationEngine.ts'],
+          // Map-facing agreements depend on route and evidence leaves, not on the live scribe or avatar graph.
+          'territorial-accords': ['./src/engine/ceasefireEngine.ts', './src/engine/territorialLeaseEngine.ts',
+            './src/engine/sanctuaryEngine.ts'],
           'cognitive-protocol': ['./src/engine/llmCognitiveResponseGuide.ts', './src/engine/llmScheduler.ts', './src/engine/fairModelTurnEngine.ts'],
           'furnace-rules': ['./src/engine/furnaceReservationEngine.ts'],
           // Shared leaf callbacks never put historical custody into the native action chunks.

@@ -1,8 +1,10 @@
+import {availableScribeCommissionActions} from './engine/scribeCommissionEngine';
+import type {ScribeCommissionControls} from './components/ScribeCommissionRead';
 import {availableWorkshopReleaseActions,type WorkshopReleaseOption} from './engine/workshopEngine';
 import type {WorkshopReleaseControls} from './components/WorkshopReleaseRead';
 import {AuthoredEraChronicle} from './components/AuthoredEraChronicle';
 import {useAuthoredEraLaunch} from './components/useAuthoredEraLaunch';
-import {activeAvatar,canQueueAvatarSalvage,queueAvatarDanxiaMedicine,queueAvatarDanxiaReview,queueAvatarDoctrineFounding,queueAvatarDoctrineMaturity,queueAvatarWorkshopRelease} from './engine/avatarEngine';
+import {activeAvatar,canQueueAvatarSalvage,queueAvatarDanxiaMedicine,queueAvatarDanxiaReview,queueAvatarDoctrineFounding,queueAvatarDoctrineMaturity,queueAvatarWorkshopRelease,queueAvatarScribeCommission} from './engine/avatarEngine';
 import {availableDanxiaMedicineActions,type DanxiaMedicineOption} from './engine/danxiaMedicineEngine';
 import type {DanxiaMedicineControlsProps} from './components/DanxiaMedicineControls';
 import {availableDanxiaReviewActions,type DanxiaReviewOption} from './engine/danxiaSeasonReviewEngine';
@@ -1459,6 +1461,23 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
   };
   const ordinaryChronicleFold = foldPreferences.sections.chronicle === undefined
     ? opened('chronicle', 'feed') : foldPreferences.sections.chronicle;
+  const scribeAvatar=!preview&&!chronicleReturn&&dashboardOpen&&workspace==='chronicle'&&ordinaryChronicleFold==='library'&&selectedCultivator&&
+    activeAvatar(world)?.id===selectedCultivator.id?selectedCultivator:undefined;
+  const scribeControls:ScribeCommissionControls|undefined=scribeAvatar?{
+    scopeKey:`${viewScopeKey}:${scribeAvatar.id}`,revisionKey:world,disabled:isStepping||fastForwardLocked,
+    choices:canQueueAvatarSalvage(world,scribeAvatar.id)?availableScribeCommissionActions(scribeAvatar,world,world.tick+1):[],
+    pending:world.playerAvatar.pendingOrder?.action==='SCRIBE_COMMISSION'?world.playerAvatar.pendingOrder:undefined,
+    onQueue:(choice,revision)=>{
+      if(revision!==world||browsing.current||stepInFlight.current||fastForwardRun.current||campaignGuard.current||
+        history.current!==timeline||authority.current!==world||saveContextVersion.current!==medicineContextVersion)return false;
+      const updated=updateWorld(current=>{
+        const clone=structuredClone(current);
+        return queueAvatarScribeCommission(clone,scribeAvatar.id,choice)?clone:current;
+      });
+      if(updated!==world)setIsRunning(false);
+      return updated!==world;
+    }
+  }:undefined;
   const rememberFold = (view: Exclude<WorkspaceId, 'map'>, id: string | null) => {
     setFoldPreferences((previous) => previous.sections[view] === id ? previous :
       { ...previous, sections: { ...previous.sections, [view]: id } });
@@ -1682,7 +1701,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
                   (preview ? browsing.current : !browsing.current && authority.current === world) } : undefined}
               onJump={followChronicle} returnPosition={chronicleReturn} onReturnHandled={clearChronicleReturn} focusNotice={focusNotice} />}
           </React.Suspense> },
-          { id: 'library', label: '藏书阁与故事', content: <React.Suspense fallback={<p role="status">载入藏书阁…</p>}><ChronicleLibraryPanel world={visibleWorld} cultivator={selectedCultivator} scopeKey={viewScopeKey} /></React.Suspense> },
+          { id: 'library', label: '藏书阁与故事', content: <React.Suspense fallback={<p role="status">载入藏书阁…</p>}><ChronicleLibraryPanel world={visibleWorld} cultivator={selectedCultivator} scopeKey={viewScopeKey} scribeControls={scribeControls} /></React.Suspense> },
           { id: 'notebook', label: '书签与地图批注', content: <React.Suspense fallback={<p role="status">载入分支记录…</p>}>
             <ChronicleNotebookPanel key={`${timeline.activeBranchId}:${preview?.tick ?? 'live'}:${activeActorId ?? ''}`}
               world={visibleWorld} actorId={activeActorId} branchId={timeline.activeBranchId} readOnly={!!preview} busy={isStepping} onWrite={writeAnnotation} />

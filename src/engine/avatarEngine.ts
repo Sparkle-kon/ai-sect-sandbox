@@ -1,3 +1,4 @@
+import {availableScribeCommissionActions,type ScribeCommissionOption} from './scribeCommissionEngine';
 import {availableWorkshopReleaseActions,type WorkshopReleaseOption} from './workshopEngine';
 import {onLowerPlane,onUpperPassagePlane} from './upperPassageIsolation';
 import {upperArrayFieldPhysicalSite} from './upperArrayFieldMovementEngine';
@@ -285,6 +286,18 @@ export function queueAvatarWorkshopRelease(world:WorldState,actorId:string,choic
   return true;
 }
 
+export function queueAvatarScribeCommission(world:WorldState,actorId:string,choice:ScribeCommissionOption):boolean {
+  const host=activeAvatar(world);
+  if(!host||!onLowerPlane(host)||!canQueueAvatarSalvage(world,actorId)||choice.action!=='SCRIBE_COMMISSION')return false;
+  const options=availableScribeCommissionActions(host,world,world.tick+1).filter(option=>
+    option.scribeCommissionMove===choice.scribeCommissionMove&&option.targetScribeCommissionId===choice.targetScribeCommissionId&&
+    option.targetChronicleSourceId===choice.targetChronicleSourceId&&option.targetCultivatorId===choice.targetCultivatorId);
+  if(options.length!==1)return false;
+  world.playerAvatar.essence-=AVATAR_ORDER_COST;
+  world.playerAvatar.pendingOrder={actorId,queuedTick:world.tick,...options[0]};
+  return true;
+}
+
 export function consumeAvatarOrder(world: WorldState): { actorId: string; decision: LLMDecisionPayload } | undefined {
   const state = world.playerAvatar;
   const order = state?.pendingOrder;
@@ -294,6 +307,11 @@ export function consumeAvatarOrder(world: WorldState): { actorId: string; decisi
   if(order.action==='FRONTIER'||order.action==='FRONTIER_PRODUCTION'||order.action==='FRONTIER_TRADE'||
     order.action==='FRONTIER_PORT'||order.action==='FRONTIER_PORT_TRADE'||order.action==='FRONTIER_DRYLAND'||order.action==='FRONTIER_DRYLAND_TRADE')
     return {actorId:order.actorId,decision:{...frontierCommand(order),innerMonologue:'按确切的另图安排前行。'}};
+  if(order.action==='SCRIBE_COMMISSION')return {actorId:order.actorId,decision:{
+    chosenAction:order.action,innerMonologue:'照原本亲查实证，稿约只由本人办理。',scribeCommissionMove:order.scribeCommissionMove,
+    ...(order.scribeCommissionMove==='offer'?
+      {targetChronicleSourceId:order.targetChronicleSourceId,targetCultivatorId:order.targetCultivatorId}:
+      {targetScribeCommissionId:order.targetScribeCommissionId})}};
   if(order.action==='WORKSHOP_RELEASE')return {actorId:order.actorId,decision:{chosenAction:order.action,
     innerMonologue:'只按原签和实余托管复核这次释约。',
     workshopReleaseMove:order.workshopReleaseMove,targetWorkshopId:order.targetWorkshopId,

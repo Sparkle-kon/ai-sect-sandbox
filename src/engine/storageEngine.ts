@@ -105,6 +105,9 @@ import { validateToolLoanHistory } from './storageToolLoanValidation';
 import { effectiveWorkshopDeadline, effectiveWorkshopQuantity } from './workshopCapacityTerms';
 import { validateWorkshopCapacityClauses } from './storageWorkshopCapacityValidation';
 import { validateWorkshopReleaseNegotiations } from './storageWorkshopReleaseValidation';
+import { validateScribeCommissions } from './storageScribeCommissionValidation';
+import { availableScribeCommissionActions } from './scribeCommissionEngine';
+import { SCRIBE_COMMISSION_DEPOSIT, SCRIBE_COMMISSION_INK, SCRIBE_COMMISSION_WAGE } from '../types/scribeCommission';
 import { validateRouteWarningHistory } from './storageRouteWarningValidation';
 import { createVillageGranariesState, VILLAGE_GRANARY_CAPACITY, VILLAGE_GRANARY_RECEIPT_LIMIT } from './villageGranaryEngine';
 import { createCaravanRestitutionState } from './caravanRestitutionEngine';
@@ -227,13 +230,13 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT SALVAGE_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE DOCTRINE_FOUNDING DOCTRINE_MATURITY RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY CARE_FOLLOWUP DANXIA_MEDICINE DANXIA_REVIEW FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER COURIER_HANDOFF SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP WORKSHOP_RELEASE FURNACE_RESERVATION FURNACE_SAFETY DAMAGE_ASSURANCE SPARRING EXPEDITION_RESCUE SHORT_SHIFT BOUNDARY_RELIEF MENTOR_TRANSFER APPRENTICE_COHORT SEASONAL_HOUSING HOUSEHOLD_NAME CARAVAN_RESTITUTION VILLAGE_GRANARY VILLAGE_SUPPLY ROUTE_WARNING PAVILION_LOAN WORKSHOP_CAPACITY CIVIC_MEMORIAL VILLAGE_FAIR SECT_STIPEND SEED_CULTURE WATER_VEIN NORTH_MINING_CHARTER NORTH_WELL_REVIEW UPPER_PASSAGE UPPER_ARRAY_FIELD UPPER_ARRAY_FIELD_LOCAL UPPER_ARRAY_FIELD_TRADE NORTH_GATE_RENEWAL FRONTIER FRONTIER_PRODUCTION FRONTIER_TRADE FRONTIER_PORT FRONTIER_PORT_TRADE FRONTIER_DRYLAND FRONTIER_DRYLAND_TRADE TOOL_LOAN RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY ALIGNED_WEATHER SEASON_REVIEW REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT SALVAGE_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE DOCTRINE_FOUNDING DOCTRINE_MATURITY RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY CARE_FOLLOWUP DANXIA_MEDICINE DANXIA_REVIEW FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER COURIER_HANDOFF SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP WORKSHOP_RELEASE SCRIBE_COMMISSION FURNACE_RESERVATION FURNACE_SAFETY DAMAGE_ASSURANCE SPARRING EXPEDITION_RESCUE SHORT_SHIFT BOUNDARY_RELIEF MENTOR_TRANSFER APPRENTICE_COHORT SEASONAL_HOUSING HOUSEHOLD_NAME CARAVAN_RESTITUTION VILLAGE_GRANARY VILLAGE_SUPPLY ROUTE_WARNING PAVILION_LOAN WORKSHOP_CAPACITY CIVIC_MEMORIAL VILLAGE_FAIR SECT_STIPEND SEED_CULTURE WATER_VEIN NORTH_MINING_CHARTER NORTH_WELL_REVIEW UPPER_PASSAGE UPPER_ARRAY_FIELD UPPER_ARRAY_FIELD_LOCAL UPPER_ARRAY_FIELD_TRADE NORTH_GATE_RENEWAL FRONTIER FRONTIER_PRODUCTION FRONTIER_TRADE FRONTIER_PORT FRONTIER_PORT_TRADE FRONTIER_DRYLAND FRONTIER_DRYLAND_TRADE TOOL_LOAN RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY ALIGNED_WEATHER SEASON_REVIEW REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const flowGood = one('stone','jade_seed','frost_dose','ward_reed','frontier_water','reef_salt','port_rigging','rift_salt','stormstone','upper_lattice','jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const flowMeasure = num(0,Number.MAX_SAFE_INTEGER);
 const flowSerial = num(1,Number.MAX_SAFE_INTEGER,true);
-const flowAccount = structure({kind:one('actor','site','sect','order','shipment','oath','relocation','workshop','salvage','granary','village_supply','village_fair','seed_lot','seed_plot','danxia_medicine','upper_passage','frontier_store','upper_array_store'),id,
+const flowAccount = structure({kind:one('actor','site','sect','order','shipment','oath','relocation','workshop','salvage','granary','village_supply','village_fair','seed_lot','seed_plot','danxia_medicine','upper_passage','frontier_store','upper_array_store','scribe_commission'),id,
   pocket:optional(one('payment','collateral'))});
 const granaryReceipt: Validator = (value, path) => {
   const kind = (value as { kind?: unknown } | null)?.kind;
@@ -740,7 +743,7 @@ const shape = structure({
     tick,year:tick,month,totalEntries:num(0,Number.MAX_SAFE_INTEGER,true),
     totals:arr(18,structure({good:flowGood,transfer:flowMeasure,production:flowMeasure,consumption:flowMeasure,loss:flowMeasure})),
     entries:arr(RESOURCE_FLOW_DETAIL_LIMIT,structure({
-      id:flowSerial,tick,mechanism:one('alchemy','market','sect_economy','oath','commons','relocation','terrain','workshop','road','observatory','pilgrimage','granary','furnace_safety','artifact_salvage','village_supply','civic_memorial','village_fair','sect_stipend', 'seed_culture','care_followup','danxia_medicine','water_vein','north_mining_charter','north_well_review','upper_passage','upper_array_field','frontier'),
+      id:flowSerial,tick,mechanism:one('alchemy','market','sect_economy','oath','commons','relocation','terrain','workshop','road','observatory','pilgrimage','granary','furnace_safety','artifact_salvage','village_supply','civic_memorial','village_fair','sect_stipend', 'seed_culture','care_followup','danxia_medicine','water_vein','north_mining_charter','north_well_review','upper_passage','upper_array_field','frontier','scribe_commission'),
       refId:id,reason:strings(40,1),good:flowGood,amount:flowMeasure,visibility:flowScope,
       kind:one('transfer','production','consumption','loss'),from:optional(flowAccount),to:optional(flowAccount)
     }))
@@ -1068,6 +1071,15 @@ const shape = structure({
         contestedRetellingIds:arr(CHRONICLE_ERRATA_MAX_RETELLINGS,id)})),
       relays:arr(SAVE_COLLECTION_LIMIT,structure({learnerId:id,originWitnessId:id,learnedTick:tick}))})),
   })),
+  scribeCommissions:optional(structure({version:one(1),nextId:num(1,Number.MAX_SAFE_INTEGER,true),
+    commissions:arr(SAVE_COLLECTION_LIMIT,structure({
+      id,patronId:id,scribeId:id,siteId:id,sourceEventId:id,sourceTick:tick,offeredTick:tick,offerExpiresTick:tick,
+      status:one('offered','accepted','verified','delivered','declined','withdrawn','expired','unavailable'),
+      unavailableActorId:oid,escrowStones:one(0,SCRIBE_COMMISSION_WAGE,SCRIBE_COMMISSION_DEPOSIT),refundedStones:one(0,SCRIBE_COMMISSION_WAGE,SCRIBE_COMMISSION_DEPOSIT),acceptedTick:otick,workExpiresTick:otick,closedTick:otick,
+      verification:optional(structure({tick,inkPaid:one(SCRIBE_COMMISSION_INK),retellingIds:arr(2,id),correctionId:oid})),
+      manuscript:optional(structure({id,tick,wagePaid:one(SCRIBE_COMMISSION_WAGE)})),
+    }))
+  })),
   regionalSimulation:optional(structure({
     version:one(1),focusSiteId:id,
     promotions:optional(arr(SAVE_COLLECTION_LIMIT,(value,path)=>{
@@ -1216,6 +1228,12 @@ const shape = structure({
       }
       if(order?.action==='NORTH_GATE_RENEWAL')return structure({...fixed,action:one('NORTH_GATE_RENEWAL'),
         northGateRenewalMove:one(...NORTH_GATE_RENEWAL_MOVES),targetNorthGateRenewalId:id})(value,path);
+      if(order?.action==='SCRIBE_COMMISSION'){
+        const fields={...fixed,action:one('SCRIBE_COMMISSION')};
+        return 'scribeCommissionMove' in order&&order.scribeCommissionMove==='offer'
+          ?structure({...fields,scribeCommissionMove:one('offer'),targetCultivatorId:id,targetChronicleSourceId:id})(value,path)
+          :structure({...fields,scribeCommissionMove:one('accept','decline','withdraw','verify','deliver'),targetScribeCommissionId:id})(value,path);
+      }
       if(order?.action==='WORKSHOP_RELEASE'){
         const fields={...fixed,action:one('WORKSHOP_RELEASE'),targetWorkshopId:id};
         return order.workshopReleaseMove==='propose'?
@@ -2643,6 +2661,18 @@ function verifyWorld(value: unknown): WorldState {
       hearing.id!==localWaterOrder.targetNorthGateRenewalId||w.tick+1<hearing.openedTick||w.tick+1>=hearing.expiresTick)
       fail('playerAvatar.northGateRenewalOrder');
   }
+  if(localWaterOrder?.action==='SCRIBE_COMMISSION'){
+    const ordered=w.cultivators.find(row=>row.id===localWaterOrder.actorId);
+    if(localWaterOrder.queuedTick!==w.tick||(w.playerAvatar.possessionUntilTick??0)<=w.tick+1||
+      w.playerAvatar.possessedId!==localWaterOrder.actorId||!ordered||
+      !availableScribeCommissionActions(ordered,w,w.tick+1).some(option=>{
+        if(option.scribeCommissionMove==='offer'&&localWaterOrder.scribeCommissionMove==='offer')
+          return option.targetCultivatorId===localWaterOrder.targetCultivatorId&&option.targetChronicleSourceId===localWaterOrder.targetChronicleSourceId;
+        if(option.scribeCommissionMove!=='offer'&&localWaterOrder.scribeCommissionMove!=='offer')
+          return option.scribeCommissionMove===localWaterOrder.scribeCommissionMove&&option.targetScribeCommissionId===localWaterOrder.targetScribeCommissionId;
+        return false;
+      }))fail('playerAvatar.scribeCommissionOrder');
+  }
   if(localWaterOrder?.action==='WORKSHOP_RELEASE'){
     const actor=w.cultivators.find(row=>row.id===localWaterOrder.actorId);
     if(localWaterOrder.queuedTick!==w.tick||(w.playerAvatar.possessionUntilTick??0)<=w.tick+1||
@@ -3349,6 +3379,7 @@ function verifyWorld(value: unknown): WorldState {
   validateRegionalSimulation(w,fail);
   validateRegionalPromotions(w,fail);
   validateEraHeritage(w,fail);
+  validateScribeCommissions(w,fail);
   validateColdWaterVein(w,fail);
   validateNorthMiningCharters(w,fail);
   validateNorthWellRevisit(w,fail);
@@ -3438,9 +3469,9 @@ function serializeWorldSave(world: WorldState): string {
   try {
     // A native turn may first attach either optional ledger after a hot-world clone.
     // Normalize that bounded extension order, leaving every pre-extension byte intact.
-    if (world.eraHeritage !== undefined || world.mortalAgeTrackingSinceTick !== undefined || world.coldWaterVein !== undefined || world.northMiningCharters !== undefined || world.northWellRevisitLaw !== undefined || world.northWellRevisitReviews !== undefined || world.upperPassage !== undefined || world.northGateRenewal !== undefined || world.frontier !== undefined || world.upperArrayField !== undefined) {
-      const {eraHeritage,mortalAgeTrackingSinceTick,coldWaterVein,northMiningCharters,northWellRevisitLaw,northWellRevisitReviews,upperPassage,northGateRenewal,frontier,upperArrayField,...legacy}=world;
-      return JSON.stringify({format:FORMAT,version:VERSION,world:{...legacy,eraHeritage,mortalAgeTrackingSinceTick,coldWaterVein,northMiningCharters,northWellRevisitLaw,northWellRevisitReviews,upperPassage,northGateRenewal,frontier,upperArrayField}});
+    if (world.eraHeritage !== undefined || world.mortalAgeTrackingSinceTick !== undefined || world.coldWaterVein !== undefined || world.northMiningCharters !== undefined || world.northWellRevisitLaw !== undefined || world.northWellRevisitReviews !== undefined || world.upperPassage !== undefined || world.northGateRenewal !== undefined || world.frontier !== undefined || world.upperArrayField !== undefined || world.scribeCommissions !== undefined) {
+      const {eraHeritage,mortalAgeTrackingSinceTick,coldWaterVein,northMiningCharters,northWellRevisitLaw,northWellRevisitReviews,upperPassage,northGateRenewal,frontier,upperArrayField,scribeCommissions,...legacy}=world;
+      return JSON.stringify({format:FORMAT,version:VERSION,world:{...legacy,eraHeritage,mortalAgeTrackingSinceTick,coldWaterVein,northMiningCharters,northWellRevisitLaw,northWellRevisitReviews,upperPassage,northGateRenewal,frontier,upperArrayField,scribeCommissions}});
     }
     return JSON.stringify({ format: FORMAT, version: VERSION, world });
   } catch { throw new WorldSaveError('json', '当前世界不能序列化为 JSON。'); }

@@ -11,6 +11,8 @@ import type {FrontierPortTradeMove} from '../engine/frontierPortTradeTerms';
 import type {NorthGateRenewalMove,NorthGateRenewalState} from '../engine/northGateRenewalTerms';
 import type {UpperPassageMove,UpperPassageNodeId,UpperPositionPlane,UpperPassageState} from '../engine/upperPassageTerms';
 
+import type { ScribeCommissionMove, ScribeCommissionState } from './scribeCommission';
+
 export type SpiritRoot = '金' | '木' | '水' | '火' | '土' | '雷' | '暗' | '天灵根';
 
 export type HerbId = 'jade_leaf' | 'earth_root' | 'star_bloom' | 'shadow_moss';
@@ -155,6 +157,7 @@ export type ActionType =
   | 'OATH_ARBITRATION'
   | 'SEASON_REVIEW'
   | 'PROBATION'
+  | 'SCRIBE_COMMISSION'
   | 'WORKSHOP_RELEASE'
   | 'WORKSHOP'
   | 'FURNACE_RESERVATION'
@@ -633,6 +636,8 @@ export interface LLMDecisionPayload {
   probationVote?: ProbationVote;
   workshopMove?: WorkshopMove;
   workshopReleaseMove?: WorkshopReleaseMove;
+  scribeCommissionMove?: ScribeCommissionMove;
+  targetScribeCommissionId?: string;
   targetWorkshopReleaseId?: string;
   furnaceMove?: 'reserve' | 'cancel';
   furnaceSafetyMove?: FurnaceSafetyMove;
@@ -1064,6 +1069,8 @@ export type AvatarInteractionCommand = AvatarInteractionRequest;
 export type AvatarOrder = 'REST' | 'CULTIVATE';
 export type AvatarPendingOrder = { actorId: string; queuedTick: number } & (
   | { action: AvatarOrder }
+  | {action:'SCRIBE_COMMISSION';scribeCommissionMove:'offer';targetCultivatorId:string;targetChronicleSourceId:string;targetScribeCommissionId?:never}
+  | {action:'SCRIBE_COMMISSION';scribeCommissionMove:'accept'|'decline'|'withdraw'|'verify'|'deliver';targetScribeCommissionId:string;targetCultivatorId?:never;targetChronicleSourceId?:never}
   | {action:'WORKSHOP_RELEASE';workshopReleaseMove:'propose';targetWorkshopId:string;targetWorkshopReleaseId?:never}
   | {action:'WORKSHOP_RELEASE';workshopReleaseMove:'accept'|'decline';targetWorkshopId:string;targetWorkshopReleaseId:string}
   | { action: 'WATER_VEIN'; waterVeinMove: WaterVeinMove; targetLocationId: 'loc-vein-north' }
@@ -2639,9 +2646,9 @@ export interface SharedCommonsPact {
 export interface SharedCommonsState { pacts: SharedCommonsPact[]; nextId: number }
 
 export type ResourceFlowGood = 'stone' | 'jade_seed' | 'frost_dose' | 'ward_reed' | 'frontier_water' | 'reef_salt' | 'port_rigging' | 'rift_salt' | 'stormstone' | 'upper_lattice' | MarketGood;
-export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation' | 'terrain' | 'workshop' | 'road' | 'observatory' | 'pilgrimage' | 'granary' | 'furnace_safety' | 'artifact_salvage' | 'village_supply' | 'civic_memorial' | 'village_fair' | 'sect_stipend' | 'seed_culture' | 'care_followup' | 'danxia_medicine' | 'water_vein' | 'north_mining_charter' | 'north_well_review' | 'upper_passage' | 'upper_array_field' | 'frontier';
+export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation' | 'terrain' | 'workshop' | 'road' | 'observatory' | 'pilgrimage' | 'granary' | 'furnace_safety' | 'artifact_salvage' | 'village_supply' | 'civic_memorial' | 'village_fair' | 'sect_stipend' | 'seed_culture' | 'care_followup' | 'danxia_medicine' | 'water_vein' | 'north_mining_charter' | 'north_well_review' | 'upper_passage' | 'upper_array_field' | 'frontier' | 'scribe_commission';
 export type ResourceFlowAccount =
-  | { kind: 'actor' | 'site' | 'sect' | 'order' | 'shipment' | 'relocation' | 'workshop' | 'salvage' | 'granary' | 'village_supply' | 'village_fair' | 'seed_lot' | 'seed_plot' | 'danxia_medicine' | 'upper_passage' | 'frontier_store' | 'upper_array_store'; id: string }
+  | { kind: 'actor' | 'site' | 'sect' | 'order' | 'shipment' | 'relocation' | 'workshop' | 'salvage' | 'granary' | 'village_supply' | 'village_fair' | 'seed_lot' | 'seed_plot' | 'danxia_medicine' | 'upper_passage' | 'frontier_store' | 'upper_array_store' | 'scribe_commission'; id: string }
   | { kind: 'oath'; id: string; pocket: 'payment' | 'collateral' };
 export type ResourceFlowVisibility =
   | { kind: 'observer' }
@@ -3467,6 +3474,7 @@ export interface NorthWellRevisitReviewState {
 }
 
 export interface WorldState {
+  scribeCommissions?: ScribeCommissionState;
   upperPassage?:UpperPassageState;
   upperArrayField?:UpperArrayFieldState;
   northGateRenewal?:NorthGateRenewalState;
