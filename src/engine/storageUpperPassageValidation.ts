@@ -1,3 +1,4 @@
+import {onUpperPassagePlane} from './upperPassageIsolation';
 import type {WorldState} from '../types/world';
 import { northGateRenewalApertureAuthorized } from './northGateRenewalTerms';
 import {UPPER_PASSAGE_FEE,UPPER_PASSAGE_PATH,UPPER_PASSAGE_RELIEF_PETITION,UPPER_PASSAGE_STANDARD_PETITION,
@@ -15,7 +16,7 @@ export function validateUpperPassage(world:WorldState,fail:(path:string)=>never)
     event.locationId!==undefined&&graphLocations.has(event.locationId));
   if(world.locations.some(site=>graphLocations.has(site.id)))fail('upperPassage.separateAddresses');
   if(!passage){
-    if(world.cultivators.some(actor=>actor.positionPlane||graphLocations.has(actor.locationId))||rawFlows.length||rawEvents.length)
+    if(world.cultivators.some(actor=>onUpperPassagePlane(actor)||graphLocations.has(actor.locationId))||rawFlows.length||rawEvents.length)
       fail('upperPassage.missing');
     return;
   }
@@ -102,7 +103,7 @@ export function validateUpperPassage(world:WorldState,fail:(path:string)=>never)
   if(passage.upperReserve!==totalFunds)fail('upperPassage.reserve');
   for(const body of world.cultivators){
     const recent=latest.get(body.id),last=recent?.steps.at(-1);
-    if(body.positionPlane){
+    if(onUpperPassagePlane(body)){
       if(!recent||!last||recent.returnedTick!==undefined||body.locationId!==last.nodeId||
         body.positionPlane!==upperPassagePlane(last.nodeId)||(!body.alive||body.hp<=0)!==(recent.deceasedTick!==undefined))
         fail('upperPassage.actor.position');
@@ -113,7 +114,7 @@ export function validateUpperPassage(world:WorldState,fail:(path:string)=>never)
     const body=persons.get(pending.actorId),row=latest.get(pending.actorId);
     const next=pending.targetUpperPassageNodeId;
     const move=pending.upperPassageMove;
-    if(!body?.positionPlane||!row||row.returnedTick!==undefined||row.deceasedTick!==undefined)
+    if(!body||!onUpperPassagePlane(body)||!row||row.returnedTick!==undefined||row.deceasedTick!==undefined)
       fail('upperPassage.pending');
     if(move==='read'||move==='petition'){
       const node=move==='read'?'realm-upper-array':'realm-upper-council';

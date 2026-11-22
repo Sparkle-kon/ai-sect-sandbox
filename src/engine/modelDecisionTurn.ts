@@ -1,5 +1,5 @@
 import { regionalModelPassiveActorIds } from './regionalSimulationEngine';
-import { availableUpperPassageProviderActions,requiredBeforeOrdinaryDecision } from './llmBrain';
+import { availableUpperPassageProviderActions,availableFrontierProviderActions,requiredBeforeOrdinaryDecision } from './llmBrain';
 import {activeDanxiaMedicineEscort} from './danxiaMedicineTerms';
 import type { Cultivator, LLMDecisionPayload, WorldState } from '../types/world';
 import { activeAvatar } from './avatarEngine';
@@ -57,6 +57,7 @@ export function modelDecisionCandidates(world: WorldState): Cultivator[] {
     activeAvatar(world)?.id === pending.actorId ? pending.actorId : undefined;
   return world.cultivators.filter(actor=>{
     if(!actor.alive||actor.hp<=0||actor.id===commandedId||(world.month===12&&actor.age+1>=actor.lifespan))return false;
+    if(actor.positionPlane==='frontier')return availableFrontierProviderActions(actor,world,nextTick).length>0;
     if(actor.positionPlane!==undefined)return availableUpperPassageProviderActions(actor,world,nextTick).length>0;
     return !passive.has(actor.id) &&
     (!activeCourierForActor(world, actor) || availableCourierHandoffActions(actor, world, nextTick).some(({ courierHandoffMove }) => courierHandoffMove === 'offer')) &&

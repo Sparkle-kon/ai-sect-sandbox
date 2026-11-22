@@ -98,6 +98,7 @@ import { availableBountyHunts } from './bountyEngine';
 import { knownMapLocations, terrainTileAt } from './terrainEngine';
 import { physicalAtlasHome } from './physicalAtlasEngine';
 import { PHYSICAL_ATLAS_REGION_NAMES } from './physicalAtlasTerms';
+import {availableFrontierActions,exactFrontierDecision,frontierCommand,isFrontierAction} from './frontierActions';
 import { availableBeastTames, guardingHerbBeast, petCombatBonus } from './spiritBeastEngine';
 import {
   ActionType,
@@ -381,11 +382,22 @@ function decodeNorthGateRenewal(parsed:Partial<LLMDecisionPayload>,choices:reado
   return northGateRenewalDecision(selected,line);
 }
 
+export function availableFrontierProviderActions(actor:Cultivator,world:WorldState,tick=world.tick){
+  return holdsUpperPassageBody(world,actor)?[]:availableFrontierActions(actor,world,tick);
+}
+
 export function computeHeuristicDecision(
   cultivator: Cultivator,
   world: WorldState,
   rng: () => number = actorFallbackRandom(world, cultivator.id, world.tick)
 ): LLMDecisionPayload {
+  if(cultivator.positionPlane==='frontier'){
+    // No Utility signature, fee-bearing travel or escrow without an explicit choice.
+    const option=availableFrontierProviderActions(cultivator,world).find(row=>row.action==='FRONTIER_PRODUCTION'&&
+      (row.frontierProductionMove==='harvest'||row.frontierProductionMove==='draw_tide'));
+    return option?{...frontierCommand(option),innerMonologue:'只料理当月亲到的地物。'}:
+      {chosenAction:'REST',innerMonologue:'且在眼前地界歇脚，不替旁人签契。'};
+  }
   if(cultivator.positionPlane!==undefined){
     const option=holdsUpperPassageBody(world,cultivator)?undefined:utilityUpperPassageDecision(cultivator,world);
     return option?upperPassageDecision(option,'按实到的阶与本人所见行事，不代报进境。'):upperPassageRest();
@@ -1697,6 +1709,16 @@ export async function requestCultivatorLLMDecision(
   options: { signal?: AbortSignal; onStart?: () => void } = {},
 ): Promise<LLMDecisionPayload | undefined> {
   if (options.signal?.aborted || !config.enabled || !config.apiKey.trim())return undefined;
+  if(cultivator.positionPlane==='frontier'){
+    const exact=availableFrontierProviderActions(cultivator,world,requestTick);
+    if(!exact.length)return undefined;
+    const prompt=`本人实到另图 ${cultivator.locationId}。只复制一条原生许可，或返回 REST。不要填写资金、数量、货物、住户、天气或结果；只返回 JSON。许可：${JSON.stringify(exact.map(frontierCommand))}`;
+    return requestDecisionPrompt(config,requestTick,options,prompt,parsed=>{
+      if(parsed.chosenAction==='REST'&&Object.keys(parsed).every(key=>key==='chosenAction'||key==='innerMonologue'))
+        return {chosenAction:'REST',innerMonologue:'留在已到地点。'};
+      return exactFrontierDecision(parsed,exact);
+    },220);
+  }
   if(cultivator.positionPlane!==undefined){
     const exact=availableUpperPassageProviderActions(cultivator,world,requestTick);
     if(!exact.length)return undefined;
@@ -1739,6 +1761,8 @@ export async function requestCultivatorLLMDecision(
 
   const location = world.locations.find((l) => l.id === cultivator.locationId);
   const physicalRegion=physicalAtlasHome(world,cultivator)?.point.regionId;
+  const frontierOptions=availableFrontierProviderActions(cultivator,world,requestTick);
+  const frontierGuide=frontierOptions.length?`- 实地另图或交换许可：只能照抄，不得自填费用、货数、身份或天气。${JSON.stringify(frontierOptions.map(frontierCommand))}`:' ';
   const coLocated = world.cultivators.filter(
     (c) =>
       c.alive &&
@@ -1894,7 +1918,7 @@ ${routeWarningGuide}` : ''}` : `你是修仙沙盒世界中的修士【${cultiva
 - 灵根：${cultivator.spiritRoot}；功法：${cultivator.technique.name}（${cultivator.technique.spiritRoot}）；主法宝：${equippedArtifact(cultivator)?.name ?? '无'}（${equippedArtifact(cultivator)?.spiritRoot ?? '无'}）
 - 性格：${cultivator.personality} | 秘密执念：${cultivator.secretGoal}
 - 当前所在地：${location?.name ?? cultivator.locationId}（灵气浓度：${location?.spiritQi ?? 50}；灵脉：${location?.spiritRoot ?? '未明'}；修行倍率：${cultivationMultiplier(cultivator, location).toFixed(2)}）
-${physicalRegion?`- 脚下地域：${PHYSICAL_ATLAS_REGION_NAMES[physicalRegion]}（只指本人现在的位置，不代表地权。）\n`:''}- 同处一地的其他修士：${coLocated.map((c) => `${c.name}(${c.id}, ${c.realm}${c.realmStage}层)`).join('、') || '无'}
+${frontierOptions.length?frontierGuide+'\n':''}${physicalRegion?`- 脚下地域：${PHYSICAL_ATLAS_REGION_NAMES[physicalRegion]}（只指本人现在的位置，不代表地权。）\n`:''}- 同处一地的其他修士：${coLocated.map((c) => `${c.name}(${c.id}, ${c.realm}${c.realmStage}层)`).join('、') || '无'}
 - 当前位置的已观测灵象：${JSON.stringify(location ? localQiWeather(world, location) : null)}
 - 眼下地形：${tile?.biome ?? '未辨'}；地脉灵气：${tile?.spiritQi ?? '未辨'}；此地异象：${JSON.stringify(world.mapHazards.filter((item) => item.tileId === tile?.id && item.expiresTick > world.tick).map(({ kind, intensity, expiresTick }) => ({ kind, intensity, expiresTick })))}
 - 可指名的已知地点：${knownLocations.map((l) => `${l.name}(${l.id}，${l.spiritRoot})`).join('、')}。可核查的传闻途径 id：${unverifiedTrail ?? '无'}（未证实）。若盲探可不填目标 id。
@@ -2018,6 +2042,9 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'NORTH_WELL_REVIEW',
             'UPPER_PASSAGE',
             'NORTH_GATE_RENEWAL',
+            'FRONTIER',
+            'FRONTIER_PRODUCTION',
+            'FRONTIER_TRADE',
             'BREW_PILL',
             'USE_PILL',
             'FORGE_ARTIFACT',
@@ -2133,6 +2160,9 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
           if (rescueOnly && chosenAction !== 'EXPEDITION_RESCUE') return undefined;
           if (activeVow && chosenAction !== 'PILGRIMAGE' &&
               (onPilgrimagePath || (chosenAction !== 'REST' && chosenAction !== 'ROUTE_WARNING'))) return undefined;
+          if(isFrontierAction(chosenAction))return exactFrontierDecision(parsed,frontierOptions);
+          if(parsed.frontierMove!==undefined||parsed.frontierProductionMove!==undefined||parsed.frontierTradeMove!==undefined||
+            parsed.targetFrontierSiteId!==undefined||parsed.targetFrontierTradeId!==undefined)return undefined;
           if(chosenAction==='NORTH_GATE_RENEWAL')return decodeNorthGateRenewal(parsed,renewalOptions);
           if(parsed.northGateRenewalMove!==undefined||parsed.targetNorthGateRenewalId!==undefined)return undefined;
           if((parsed.upperPassageMove!==undefined||parsed.targetUpperPassageNodeId!==undefined)&&

@@ -10,6 +10,15 @@ type FlowGood = FlowRow['good'];
 
 const KIND: Record<FlowRow['kind'], string> = { transfer: '转移', production: '产出', consumption: '消耗', loss: '损失' };
 const REASONS: Readonly<Record<string, string>> = {
+  frontier_entry_paid: '实际过关所付资材', frontier_home_paid: '登记驻住实际启动资材',
+  frontier_tend_spring_root: '泉眼实耗地根', frontier_spring_inflow_water: '真实泉水入槽',
+  frontier_draw_tide_water: '开闸后实收潮水', frontier_sow_water: '播种实耗本地水',
+  frontier_sow_root: '实用母根播种', frontier_irrigate_water: '补灌实耗本地水',
+  frontier_cultivate_water: '南泽实修所耗潮水', frontier_practice: '北岭实修耗用御寒芦',
+  frontier_protect_crop: '实取霜药护苗', frontier_crop_harvested: '当事人实际收获入库',
+  frontier_winter_detour: '实装背风绕行补给',
+  frontier_trade_load: '原货实装转入托管', frontier_trade_exchange: '双方到齐实物交割入库',
+  frontier_trade_return: '原货实回本方仓',
   herb_harvest: '现场采集', herb_regrowth: '灵草自然补生', brew_material: '炼丹耗材', brew_fee: '炼丹炉费',
   brew_output: '炼成丹药', pill_use: '使用丹药', treasury_tax: '库账税赋', treasury_mining: '灵石矿产',
   treasury_upkeep: '宗门维护', treasury_overflow: '库容溢出', facility_construction: '设施建设',
@@ -45,8 +54,10 @@ const control = 'min-h-11 min-w-0 rounded border border-slate-700 bg-slate-950 p
 const PAGE_SIZE = 8;
 const MONTHS = 6;
 
-const goodName = (good: FlowGood) => good === 'stone' ? '灵石' : good === 'jade_seed' ? '青玉叶种子' : MARKET_GOODS[good]?.label ?? '物资未详';
+const goodName = (good: FlowGood) => good === 'stone' ? '灵石' : good === 'jade_seed' ? '青玉叶种子' :
+  good === 'frost_dose' ? '霜药' : good === 'ward_reed' ? '御寒芦' : good === 'frontier_water' ? '在地水' : MARKET_GOODS[good]?.label ?? '物资未详';
 const units = (good: FlowGood) => good === 'stone' ? '灵石' : good === 'jade_seed' ? '粒'
+  : good === 'frost_dose' || good === 'ward_reed' || good === 'frontier_water' ? '份'
   : good === 'jade_leaf' || good === 'earth_root' || good === 'star_bloom' || good === 'shadow_moss' ? '株' : '枚';
 
 export function ResourceFlowMonth({ ledger, world, scope, visibleSiteIds }: {
@@ -79,6 +90,7 @@ export function ResourceFlowMonth({ ledger, world, scope, visibleSiteIds }: {
       case 'salvage': return '货损幸存物封存';
       case 'relocation': return '迁址在途公库';
       case 'workshop': return '工坊备料托管';
+      case 'frontier_store': return '另图在地仓';
     }
   };
 

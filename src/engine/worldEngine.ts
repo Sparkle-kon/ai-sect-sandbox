@@ -1,4 +1,8 @@
 import {onLowerPlane} from './upperPassageIsolation';
+import {isFrontierAction,resolveFrontierAction} from './frontierActions';
+import {recordFrontierDeath,settleFrontierMortality} from './frontierMovementEngine';
+import {advanceFrontierProduction} from './frontierProductionEngine';
+import {advanceFrontierTrade} from './frontierTradeEngine';
 import {recordUpperPassageDeath,settleUpperPassageMortality} from './upperPassageEngine';
 import { recordRegionalActorReturn, recordRegionalEarlyPromotions, recordRegionalLatePromotions } from './regionalPromotionEngine';
 import { beginRegionalSimulationTurn, deferRegionalActorTurn, finishRegionalSimulationTurn, recordRegionalTurnRegistry, renewRegionalProtectionAfterEvent } from './regionalSimulationEngine';
@@ -207,6 +211,13 @@ function applyUpperPassageDecision(world:WorldState,cultivator:Cultivator,decisi
   return event;
 }
 
+function applyFrontierDecision(world:WorldState,actor:Cultivator,payload:LLMDecisionPayload,explicit?:LLMDecisionPayload):WorldEvent|null {
+  if(activeAvatar(world)?.id===actor.id&&payload!==explicit)return null;
+  const event=resolveFrontierAction(world,actor,payload);
+  if(event){actor.innerMonologue=payload.innerMonologue;actor.currentAction=payload.chosenAction;}
+  return event;
+}
+
 export function applyCultivatorBrainDecision(
   world: WorldState,
   cultivator: Cultivator,
@@ -217,6 +228,14 @@ export function applyCultivatorBrainDecision(
   explicitAvatarDecision?: LLMDecisionPayload,
 ): WorldEvent | null {
   if (!cultivator.alive) return null;
+  if(cultivator.positionPlane==='frontier'){
+    if(isFrontierAction(decision.chosenAction))return applyFrontierDecision(world,cultivator,decision,explicitAvatarDecision);
+    if(decision.chosenAction==='REST'){
+      cultivator.currentAction='REST';
+      cultivator.innerMonologue='在亲到的另图休息，不在旧址行事。';
+    }
+    return null;
+  }
   // A separate plane cannot spend lower supplies, heal at a lower site or act from a former address.
   if(cultivator.positionPlane!==undefined){
     if(decision.chosenAction==='UPPER_PASSAGE')return applyUpperPassageDecision(world,cultivator,decision,explicitAvatarDecision);
@@ -277,6 +296,7 @@ export function applyCultivatorBrainDecision(
     cultivator.innerMonologue = '按已核实的换防关口行进，未到岗前不计驻守。';
     return null;
   }
+  if(isFrontierAction(decision.chosenAction))return applyFrontierDecision(world,cultivator,decision,explicitAvatarDecision);
   if(decision.chosenAction==='UPPER_PASSAGE')return applyUpperPassageDecision(world,cultivator,decision,explicitAvatarDecision);
   if(decision.chosenAction==='NORTH_GATE_RENEWAL'){
     if(activeAvatar(world)?.id===cultivator.id&&decision!==explicitAvatarDecision)return null;
@@ -924,6 +944,7 @@ export function advanceWorldTick(
   openResourceFlowMonth(nextState);
   advanceNorthMiningCharters(nextState);
   advanceNorthGateRenewal(nextState);
+  advanceFrontierProduction(nextState);
   advanceRouteWarnings(nextState);
   maintainPlayerAvatar(nextState);
   maintainMentorship(nextState);
@@ -950,9 +971,11 @@ export function advanceWorldTick(
         closeInterruptedTrial(cultivator, nextState.tick);
         const below = onLowerPlane(cultivator);
         if(below) dropInheritance(cultivator, nextState);
+        else if(cultivator.positionPlane==='frontier')recordFrontierDeath(nextState,cultivator);
         else recordUpperPassageDeath(nextState,cultivator);
         const death: WorldEvent = {
-          id: below ? `evt-${nextState.tick}-${cultivator.id}-oldage` : `evt-upper-passage-${nextState.tick}-${cultivator.id}-oldage`,
+          id: below ? `evt-${nextState.tick}-${cultivator.id}-oldage` :
+            `evt-${cultivator.positionPlane==='frontier'?'frontier':'upper-passage'}-${nextState.tick}-${cultivator.id}-oldage`,
           tick: nextState.tick,
           year: nextState.year,
           month: nextState.month,
@@ -983,7 +1006,7 @@ export function advanceWorldTick(
       const result=applyCultivatorBrainDecision(nextState,cultivator,decision,rng,undefined,event=>{
         newEvents.push(event);witnessEvent(nextState,event);
       },explicit);
-      const applied=decision.chosenAction==='UPPER_PASSAGE'&&result!==null;
+      const applied=(decision.chosenAction==='UPPER_PASSAGE'||isFrontierAction(decision.chosenAction))&&result!==null;
       if(supplied)recordDecisionEffect?.(cultivator.id,!explicit&&applied);
       traceOptions?.onActor?.(cultivator.id,candidates,applied);
       if(capture)recordDecisionTrace(nextState,cultivator.id,candidates,decision,explicit?'avatar':
@@ -1155,6 +1178,10 @@ export function advanceWorldTick(
     if (yearly) cultivator.reflections = synthesizeReflections(cultivator, nextState.tick);
   }
 
+  for(const event of advanceFrontierTrade(nextState)){
+    newEvents.push(event);
+    witnessEvent(nextState,event);
+  }
   finishRegionalSimulationTurn(nextState,regionalTurn);
   for (const event of [...advanceApprenticeCohorts(nextState), ...advanceBoundaryReliefs(nextState), ...advanceShortShifts(nextState), ...advanceSparring(nextState), ...advanceDiplomacy(nextState, rng), ...advanceOccasions(nextState, rng), ...advanceOaths(nextState), ...advanceMarkets(nextState), ...advanceWitnesses(nextState), ...advanceSeasonReviews(nextState, (state, seasonId) =>
     publicCompetitionStandings(state, seasonId).find(({ rank }) => rank === 1)), ...maintainSectPolitics(nextState), ...advanceDoctrineFoundings(nextState), ...advanceDoctrineMaturity(nextState,prevState), ...advanceBounties(nextState), ...advanceResearch(nextState), ...advanceWorkshops(nextState), ...advanceDamageAssurance(nextState), ...advanceRelicExhibits(nextState), ...advanceProbation(nextState), ...advanceToolLoans(nextState), ...advanceEstates(nextState), ...advanceDoctrines(nextState), ...advanceSectCredit(nextState), ...advanceSanctuaries(nextState), ...advancePilgrimages(nextState), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceCareFollowups(nextState), ...advanceDanxiaShortages(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...reconcileCourierDeaths(nextState), ...advanceHouseholds(nextState), ...advanceHouseholdNames(nextState)]) {
@@ -1199,6 +1226,7 @@ export function advanceWorldTick(
   const mainEventIds=new Set(newEvents.map(({id})=>id));
   const completedEvents=[...newEvents,...nextState.events.filter(({id,tick})=>tick===nextState.tick&&!mainEventIds.has(id))];
   settleUpperPassageMortality(nextState);
+  settleFrontierMortality(nextState);
   recordEraHistoryTurn(prevState,nextState,completedEvents);
   recordRegionalTurnRegistry(nextState);
   traceOptions?.onCompletedEvents?.(completedEvents);

@@ -1,3 +1,6 @@
+import type {FrontierAnchorId,FrontierMovementMove,FrontierPositionPlane,FrontierSiteId,FrontierState} from '../engine/frontierTerms';
+import type {FrontierProductionMove} from '../engine/frontierProductionTerms';
+import type {FrontierTradeMove} from '../engine/frontierTradeTerms';
 import type {NorthGateRenewalMove,NorthGateRenewalState} from '../engine/northGateRenewalTerms';
 import type {UpperPassageMove,UpperPassageNodeId,UpperPositionPlane,UpperPassageState} from '../engine/upperPassageTerms';
 
@@ -172,6 +175,9 @@ export type ActionType =
   | 'NORTH_WELL_REVIEW'
   | 'UPPER_PASSAGE'
   | 'NORTH_GATE_RENEWAL'
+  | 'FRONTIER'
+  | 'FRONTIER_PRODUCTION'
+  | 'FRONTIER_TRADE'
   | 'TOOL_LOAN'
   | 'FORGE_ARTIFACT'
   | 'BIND_ARTIFACT'
@@ -355,7 +361,7 @@ export interface OrdinaryActionEvidence {
   readonly action:OrdinaryAction;readonly tick:number;readonly streak:1|2|3;
 }
 export interface Cultivator {
-  positionPlane?:UpperPositionPlane;
+  positionPlane?:UpperPositionPlane|FrontierPositionPlane;
   ordinaryActionEvidence?: OrdinaryActionEvidence;
   id: string;
   name: string;
@@ -478,6 +484,11 @@ export interface LLMDecisionPayload {
   innerMonologue: string;
   chosenAction: ActionType;
   waterVeinMove?: WaterVeinMove;
+  frontierMove?: FrontierMovementMove;
+  frontierProductionMove?: FrontierProductionMove;
+  frontierTradeMove?: FrontierTradeMove;
+  targetFrontierSiteId?: FrontierSiteId|FrontierAnchorId;
+  targetFrontierTradeId?: string;
   northGateRenewalMove?: NorthGateRenewalMove;
   targetNorthGateRenewalId?: string;
   upperPassageMove?: UpperPassageMove;
@@ -1029,6 +1040,11 @@ export type AvatarPendingOrder = { actorId: string; queuedTick: number } & (
   | { action:'NORTH_MINING_CHARTER'; northMiningMove:'sign'; targetNorthMiningCharterId:string; northMiningStance?:never }
   | { action:'NORTH_WELL_REVIEW'; northWellReviewMove:NorthWellReviewMove;targetNorthMiningCharterId:string }
   | { action:'UPPER_PASSAGE';upperPassageMove:UpperPassageMove;targetUpperPassageNodeId:UpperPassageNodeId }
+  | { action:'FRONTIER';frontierMove:Exclude<FrontierMovementMove,'exit'>;targetFrontierSiteId:FrontierSiteId }
+  | { action:'FRONTIER';frontierMove:'exit';targetFrontierSiteId:FrontierAnchorId }
+  | { action:'FRONTIER_PRODUCTION';frontierProductionMove:FrontierProductionMove;targetFrontierSiteId:FrontierSiteId }
+  | { action:'FRONTIER_TRADE';frontierTradeMove:'propose';targetCultivatorId:string }
+  | { action:'FRONTIER_TRADE';frontierTradeMove:Exclude<FrontierTradeMove,'propose'>;targetFrontierTradeId:string }
   | { action:'NORTH_GATE_RENEWAL';northGateRenewalMove:NorthGateRenewalMove;targetNorthGateRenewalId:string }
   | { action: 'SALVAGE_ARTIFACT'; targetArtifactId: string; targetLocationId: string }
   | { action:'DOCTRINE_MATURITY';doctrineMaturityMove:DoctrineMaturityMove;targetDoctrineFoundingId:string }
@@ -2581,10 +2597,10 @@ export interface SharedCommonsPact {
 }
 export interface SharedCommonsState { pacts: SharedCommonsPact[]; nextId: number }
 
-export type ResourceFlowGood = 'stone' | 'jade_seed' | MarketGood;
-export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation' | 'terrain' | 'workshop' | 'road' | 'observatory' | 'pilgrimage' | 'granary' | 'furnace_safety' | 'artifact_salvage' | 'village_supply' | 'civic_memorial' | 'village_fair' | 'sect_stipend' | 'seed_culture' | 'care_followup' | 'danxia_medicine' | 'water_vein' | 'north_mining_charter' | 'north_well_review' | 'upper_passage';
+export type ResourceFlowGood = 'stone' | 'jade_seed' | 'frost_dose' | 'ward_reed' | 'frontier_water' | MarketGood;
+export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation' | 'terrain' | 'workshop' | 'road' | 'observatory' | 'pilgrimage' | 'granary' | 'furnace_safety' | 'artifact_salvage' | 'village_supply' | 'civic_memorial' | 'village_fair' | 'sect_stipend' | 'seed_culture' | 'care_followup' | 'danxia_medicine' | 'water_vein' | 'north_mining_charter' | 'north_well_review' | 'upper_passage' | 'frontier';
 export type ResourceFlowAccount =
-  | { kind: 'actor' | 'site' | 'sect' | 'order' | 'shipment' | 'relocation' | 'workshop' | 'salvage' | 'granary' | 'village_supply' | 'village_fair' | 'seed_lot' | 'seed_plot' | 'danxia_medicine' | 'upper_passage'; id: string }
+  | { kind: 'actor' | 'site' | 'sect' | 'order' | 'shipment' | 'relocation' | 'workshop' | 'salvage' | 'granary' | 'village_supply' | 'village_fair' | 'seed_lot' | 'seed_plot' | 'danxia_medicine' | 'upper_passage' | 'frontier_store'; id: string }
   | { kind: 'oath'; id: string; pocket: 'payment' | 'collateral' };
 export type ResourceFlowVisibility =
   | { kind: 'observer' }
@@ -3402,6 +3418,7 @@ export interface NorthWellRevisitReviewState {
 export interface WorldState {
   upperPassage?:UpperPassageState;
   northGateRenewal?:NorthGateRenewalState;
+  frontier?:FrontierState;
   northWellRevisitLaw?:NorthWellRevisitLaw;
   northWellRevisitReviews?:NorthWellRevisitReviewState;
   northMiningCharters?:NorthMiningCharterState;

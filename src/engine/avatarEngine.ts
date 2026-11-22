@@ -1,4 +1,6 @@
-import {onLowerPlane} from './upperPassageIsolation';
+import {onLowerPlane,onUpperPassagePlane} from './upperPassageIsolation';
+import {availableFrontierActions,frontierCommand,frontierOptionKey,type FrontierOption} from './frontierActions';
+import {frontierPhysicalSite} from './frontierMovementEngine';
 import {availableDoctrineMaturityActions,type DoctrineMaturityOption} from './doctrineMaturityEngine';
 import {availableDoctrineFoundingActions,type DoctrineFoundingOption} from './doctrineFoundingEngine';
 import { availableNorthGateRenewalActions,type NorthGateRenewalOption } from './northGateRenewalEngine';
@@ -78,12 +80,21 @@ export function canPossessUpperPassageAvatar(world:WorldState,actorId:string):bo
   if(!state||state.essence<AVATAR_POSSESSION_COST||world.tick<state.switchAvailableTick||
     activeAvatar(world)?.id===actorId)return false;
   const actor=world.cultivators.find(row=>row.id===actorId);
-  return !!actor&&!onLowerPlane(actor)&&availableBody(world,actor)&&
+  return !!actor&&onUpperPassagePlane(actor)&&availableBody(world,actor)&&
     !!world.upperPassage?.journeys.some(row=>row.actorId===actorId&&row.returnedTick===undefined&&row.deceasedTick===undefined&&
       row.steps.at(-1)?.nodeId===actor.locationId);
 }
 export function possessUpperPassageAvatar(world:WorldState,actorId:string):boolean{
   return canPossessUpperPassageAvatar(world,actorId) && attachAvatar(world,actorId);
+}
+
+export function canPossessFrontierAvatar(world:WorldState,actorId:string):boolean{
+  const state=world.playerAvatar,actor=world.cultivators.find(row=>row.id===actorId);
+  return !!actor&&!!state&&state.essence>=AVATAR_POSSESSION_COST&&world.tick>=state.switchAvailableTick&&
+    activeAvatar(world)?.id!==actorId&&availableBody(world,actor)&&!!frontierPhysicalSite(world,actor,world.tick);
+}
+export function possessFrontierAvatar(world:WorldState,actorId:string):boolean{
+  return canPossessFrontierAvatar(world,actorId)&&attachAvatar(world,actorId);
 }
 
 export function maintainPlayerAvatar(world: WorldState): void {
@@ -239,12 +250,24 @@ export function queueAvatarDoctrineMaturity(world:WorldState,actorId:string,opti
   return true;
 }
 
+export function queueAvatarFrontier(world:WorldState,actorId:string,choice:FrontierOption):boolean{
+  const host=activeAvatar(world);
+  if(!host||!canQueueAvatarSalvage(world,actorId))return false;
+  const exact=availableFrontierActions(host,world,world.tick+1).find(option=>frontierOptionKey(option)===frontierOptionKey(choice));
+  if(!exact)return false;
+  world.playerAvatar.essence-=AVATAR_ORDER_COST;
+  world.playerAvatar.pendingOrder={actorId,queuedTick:world.tick,...exact};
+  return true;
+}
+
 export function consumeAvatarOrder(world: WorldState): { actorId: string; decision: LLMDecisionPayload } | undefined {
   const state = world.playerAvatar;
   const order = state?.pendingOrder;
   if (!order || world.tick <= order.queuedTick) return undefined;
   delete state.pendingOrder;
   if (world.tick !== order.queuedTick + 1 || activeAvatar(world)?.id !== order.actorId) return undefined;
+  if(order.action==='FRONTIER'||order.action==='FRONTIER_PRODUCTION'||order.action==='FRONTIER_TRADE')
+    return {actorId:order.actorId,decision:{...frontierCommand(order),innerMonologue:'按确切的另图安排前行。'}};
   const targets = order.action === 'NORTH_GATE_RENEWAL' ?
     {northGateRenewalMove:order.northGateRenewalMove,targetNorthGateRenewalId:order.targetNorthGateRenewalId} :
     order.action === 'UPPER_PASSAGE' ?

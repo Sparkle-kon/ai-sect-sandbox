@@ -1,3 +1,4 @@
+import {onLowerPlane,onUpperPassagePlane} from './upperPassageIsolation';
 import type { Cultivator, LLMDecisionPayload, WorldEvent, WorldState } from '../types/world';
 import { northGateRenewalApertureAuthorized } from './northGateRenewalTerms';
 import { doctrineFoundingPhysicallyAt } from './doctrineFoundingEngine';
@@ -66,7 +67,8 @@ function verifiedReading(world:WorldState,journey:UpperPassageJourney,tick:numbe
 const petitionCost=(reading:UpperPassageReading):4|10=>reading.loss?UPPER_PASSAGE_RELIEF_PETITION:UPPER_PASSAGE_STANDARD_PETITION;
 
 export function availableUpperPassageActions(actor:Cultivator,world:WorldState,executionTick=world.tick):UpperPassageOption[]{
-  if((executionTick!==world.tick&&executionTick!==world.tick+1)||!world.cultivators.includes(actor)||!alive(actor))return [];
+  if((executionTick!==world.tick&&executionTick!==world.tick+1)||!world.cultivators.includes(actor)||!alive(actor)||
+    !onLowerPlane(actor)&&!onUpperPassagePlane(actor))return [];
   const journey=activeUpperPassage(world,actor.id);
   if(!actor.positionPlane){
     if(journey||!locallyQualified(actor,world,executionTick)||!wallet(actor,UPPER_PASSAGE_FEE)||!usableUpperPassageOpening(world,executionTick)||
@@ -156,13 +158,13 @@ export function resolveUpperPassageAction(world:WorldState,actor:Cultivator,payl
 }
 /** Native mortality is independent of either realm being passable. */
 export function recordUpperPassageDeath(world:WorldState,actor:Cultivator):void{
-  if(!world.cultivators.includes(actor)||alive(actor)||!actor.positionPlane)return;
+  if(!world.cultivators.includes(actor)||alive(actor)||!onUpperPassagePlane(actor))return;
   const journey=activeUpperPassage(world,actor.id);
   if(journey)journey.deceasedTick=world.tick;
 }
 export function settleUpperPassageMortality(world:WorldState):void{
   if(!world.upperPassage)return;
-  for(const actor of world.cultivators)if(actor.positionPlane&&!alive(actor))recordUpperPassageDeath(world,actor);
+  for(const actor of world.cultivators)if(onUpperPassagePlane(actor)&&!alive(actor))recordUpperPassageDeath(world,actor);
 }
 export interface UpperPassageView {
   nodeId:UpperPassageNodeId;direction?:UpperPassageJourney['direction'];options:UpperPassageOption[];
@@ -170,7 +172,8 @@ export interface UpperPassageView {
   reading?:UpperPassageReading;petition?:UpperPassagePetition;upperReserve?:number;
 }
 export function projectUpperPassage(world:WorldState,actor?:Cultivator):UpperPassageView|undefined{
-  if(!actor||!world.cultivators.includes(actor)||!alive(actor))return undefined;
+  if(!actor||!world.cultivators.includes(actor)||!alive(actor)||
+    !onLowerPlane(actor)&&!onUpperPassagePlane(actor))return undefined;
   const tick=world.tick+1,options=availableUpperPassageActions(actor,world,tick);
   if(!actor.positionPlane){
     if(actor.locationId!==WATER_VEIN_SITE||!northWaterAddress(world)||!world.coldWaterVein?.openings.length)return undefined;

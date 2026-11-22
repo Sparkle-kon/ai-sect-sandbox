@@ -15,6 +15,13 @@ import {validateUpperPassage} from './storageUpperPassageValidation';
 import {validateNorthGateRenewal} from './storageNorthGateRenewalValidation';
 import {findNorthGateRenewalSource,NORTH_GATE_RENEWAL_MOVES,northGateRenewalForSource} from './northGateRenewalTerms';
 import {UPPER_PASSAGE_PATH} from './upperPassageTerms';
+import {onUpperPassagePlane} from './upperPassageIsolation';
+import {FRONTIER_REGIONS,FRONTIER_SITE_IDS} from './frontierTerms';
+import {FRONTIER_PRODUCTION_MOVES} from './frontierProductionTerms';
+import {availableFrontierActions,frontierOptionKey} from './frontierActions';
+import {validateFrontierMovement} from './storageFrontierValidation';
+import {verifyFrontierTradeAgreement,frontierTradeProductionCustody} from './frontierTradeEngine';
+import {validateFrontierProduction,validateFrontierProductionShape} from './frontierProductionValidation';
 import {validateEraDesignDraft} from './eraDesignSchema';
 import { createAlignedWeatherState } from './alignedWeatherEngine';
 import { alignedWeatherPinnedRuns } from './alignedWeatherTerms';
@@ -204,13 +211,13 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT SALVAGE_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE DOCTRINE_FOUNDING DOCTRINE_MATURITY RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY CARE_FOLLOWUP DANXIA_MEDICINE DANXIA_REVIEW FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER COURIER_HANDOFF SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP FURNACE_RESERVATION FURNACE_SAFETY DAMAGE_ASSURANCE SPARRING EXPEDITION_RESCUE SHORT_SHIFT BOUNDARY_RELIEF MENTOR_TRANSFER APPRENTICE_COHORT SEASONAL_HOUSING HOUSEHOLD_NAME CARAVAN_RESTITUTION VILLAGE_GRANARY VILLAGE_SUPPLY ROUTE_WARNING PAVILION_LOAN WORKSHOP_CAPACITY CIVIC_MEMORIAL VILLAGE_FAIR SECT_STIPEND SEED_CULTURE WATER_VEIN NORTH_MINING_CHARTER NORTH_WELL_REVIEW UPPER_PASSAGE NORTH_GATE_RENEWAL TOOL_LOAN RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY ALIGNED_WEATHER SEASON_REVIEW REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT SALVAGE_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE DOCTRINE_FOUNDING DOCTRINE_MATURITY RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY CARE_FOLLOWUP DANXIA_MEDICINE DANXIA_REVIEW FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER COURIER_HANDOFF SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP FURNACE_RESERVATION FURNACE_SAFETY DAMAGE_ASSURANCE SPARRING EXPEDITION_RESCUE SHORT_SHIFT BOUNDARY_RELIEF MENTOR_TRANSFER APPRENTICE_COHORT SEASONAL_HOUSING HOUSEHOLD_NAME CARAVAN_RESTITUTION VILLAGE_GRANARY VILLAGE_SUPPLY ROUTE_WARNING PAVILION_LOAN WORKSHOP_CAPACITY CIVIC_MEMORIAL VILLAGE_FAIR SECT_STIPEND SEED_CULTURE WATER_VEIN NORTH_MINING_CHARTER NORTH_WELL_REVIEW UPPER_PASSAGE NORTH_GATE_RENEWAL FRONTIER FRONTIER_PRODUCTION FRONTIER_TRADE TOOL_LOAN RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY ALIGNED_WEATHER SEASON_REVIEW REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
-const flowGood = one('stone','jade_seed','jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
+const flowGood = one('stone','jade_seed','frost_dose','ward_reed','frontier_water','jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const flowMeasure = num(0,Number.MAX_SAFE_INTEGER);
 const flowSerial = num(1,Number.MAX_SAFE_INTEGER,true);
-const flowAccount = structure({kind:one('actor','site','sect','order','shipment','oath','relocation','workshop','salvage','granary','village_supply','village_fair','seed_lot','seed_plot','danxia_medicine','upper_passage'),id,
+const flowAccount = structure({kind:one('actor','site','sect','order','shipment','oath','relocation','workshop','salvage','granary','village_supply','village_fair','seed_lot','seed_plot','danxia_medicine','upper_passage','frontier_store'),id,
   pocket:optional(one('payment','collateral'))});
 const granaryReceipt: Validator = (value, path) => {
   const kind = (value as { kind?: unknown } | null)?.kind;
@@ -219,6 +226,13 @@ const granaryReceipt: Validator = (value, path) => {
     stressBefore:percentage,stressAfter:percentage,disasterTick:tick})(value,path);
   return fail(path);
 };
+const frontierBatchSlice=structure({batchId:id,amount:num(1,2,true)});
+const frontierCargo=structure({from:one(...FRONTIER_REGIONS),good:one('frost_dose','ward_reed'),
+  lots:arr(2,frontierBatchSlice),loadedTick:tick,residenceId:id,route:one('standard','winter'),
+  checkpoints:arr(512,structure({chartId:one('lower-base','chart-north-snow','chart-south-marsh'),tileId:id})),
+  winterReeds:optional(arr(1,frontierBatchSlice)),walks:arr(SAVE_COLLECTION_LIMIT,structure({tick,step:num(0,511,true)})),
+  winterWaitTicks:arr(SAVE_COLLECTION_LIMIT,tick),cursor:num(0,511,true),
+  status:one('in_transit','arrived','returning','home_wait','returned','delivered'),arrivedTick:otick,closedTick:otick});
 const villageSupplySigner = structure({actorId:id,donationTick:tick,donationKind:one('donate','donate_roots','donate_stones')});
 const villageSupplyHazard = structure({id,kind:one('meteor','beast_tide','cursed_miasma'),tileId:id,createdTick:tick,expiresTick:tick,intensity:one(1,2,3)});
 const maturityHazardSample=structure({tick,siteId:id,hazard:villageSupplyHazard});
@@ -371,7 +385,7 @@ const shape = structure({
   cultivators:arr(SAVE_COLLECTION_LIMIT,structure({id,name:id,title:text,sectId:strings(240),sectRank,contribution:wealth,transgressions:percentage,disciplineRevision:otick,realm,realmStage:num(1,9,true),
     ordinaryActionEvidence:optional((value,path)=>{if(!isOrdinaryActionEvidence(value))fail(path);}),
     qiProgress:percentage,hp:wealth,maxHp:num(1,1_000_000_000),combatPower:wealth,age:wealth,lifespan:wealth,
-    personality:one('刚正','阴险','狂傲','苟道','痴情','嗜血','逍遥','诡诈'),locationId:id,positionPlane:optional(one('threshold','upper')),spiritStones:wealth,karma:affinity,currentAction:action,
+    personality:one('刚正','阴险','狂傲','苟道','痴情','嗜血','逍遥','诡诈'),locationId:id,positionPlane:optional(one('threshold','upper','frontier')),spiritStones:wealth,karma:affinity,currentAction:action,
     innerMonologue:text,secretGoal:text,spiritRoot:spirit,technique,techniqueMastery:percentage,authoredTechnique:optional(technique),
     activeEdition:optional(structure({originalId:id,editionId:id,kind:editionKind})),herbs,pills,pillToxicity:percentage,
     exploredTileIds:ids,artifacts:arr(SAVE_COLLECTION_LIMIT,artifact),memories:arr(160,memory),coreMemories:arr(160,memory),memorySequence:tick,
@@ -691,9 +705,9 @@ const shape = structure({
   }))}),
   resourceFlow:structure({nextId:flowSerial,months:arr(RESOURCE_FLOW_MONTH_LIMIT,structure({
     tick,year:tick,month,totalEntries:num(0,Number.MAX_SAFE_INTEGER,true),
-    totals:arr(10,structure({good:flowGood,transfer:flowMeasure,production:flowMeasure,consumption:flowMeasure,loss:flowMeasure})),
+    totals:arr(13,structure({good:flowGood,transfer:flowMeasure,production:flowMeasure,consumption:flowMeasure,loss:flowMeasure})),
     entries:arr(RESOURCE_FLOW_DETAIL_LIMIT,structure({
-      id:flowSerial,tick,mechanism:one('alchemy','market','sect_economy','oath','commons','relocation','terrain','workshop','road','observatory','pilgrimage','granary','furnace_safety','artifact_salvage','village_supply','civic_memorial','village_fair','sect_stipend', 'seed_culture','care_followup','danxia_medicine','water_vein','north_mining_charter','north_well_review','upper_passage'),
+      id:flowSerial,tick,mechanism:one('alchemy','market','sect_economy','oath','commons','relocation','terrain','workshop','road','observatory','pilgrimage','granary','furnace_safety','artifact_salvage','village_supply','civic_memorial','village_fair','sect_stipend', 'seed_culture','care_followup','danxia_medicine','water_vein','north_mining_charter','north_well_review','upper_passage','frontier'),
       refId:id,reason:strings(40,1),good:flowGood,amount:flowMeasure,visibility:flowScope,
       kind:one('transfer','production','consumption','loss'),from:optional(flowAccount),to:optional(flowAccount)
     }))
@@ -929,6 +943,18 @@ const shape = structure({
     abandonedSites:arr(SAVE_COLLECTION_LIMIT,structure({id,planId:id,sectId:id,originId:id,destinationId:id,tick,
       originalType:locationKind,facilities:facilityLevels,arrayHp:wealth,arrayMaxHp:wealth}))}),
   scenarioOrigin:optional(structure({version:one(1,2,3),ruleset:one(1),id:strings(100,1),endTick:num(1,120,true)})),
+  frontier:optional(structure({version:one(1),
+    visits:arr(SAVE_COLLECTION_LIMIT,structure({id,actorId:id,regionId:one(...FRONTIER_REGIONS),
+      anchorId:one('loc-vein-north','loc-market'),enteredTick:tick,paidStones:one(8),paidRoots:one(1),
+      steps:arr(SAVE_COLLECTION_LIMIT,structure({tick,siteId:one(...FRONTIER_SITE_IDS)})),exitedTick:otick,deceasedTick:otick})),
+    residences:arr(SAVE_COLLECTION_LIMIT,structure({id,actorId:id,regionId:one(...FRONTIER_REGIONS),
+      homeSiteId:one('frontier-north-home','frontier-south-home'),visitId:id,settledTick:tick,paidStones:one(4),paidRoots:one(1)})),
+    production:optional((value,path)=>validateFrontierProductionShape(value,path,fail)),
+    trade:optional(structure({nextId:flowSerial,lastAdvancedTick:otick,agreements:arr(SAVE_COLLECTION_LIMIT,structure({
+      id,northActorId:id,southActorId:id,offeredTick:tick,status:one('offered','accepted','returning','exchanged','expired','returned'),
+      acceptedTick:otick,returnsTick:otick,closedTick:otick,north:optional(frontierCargo),south:optional(frontierCargo),
+    }))})),
+  })),
   northGateRenewal:optional(structure({version:one(1),hearing:structure({
     id,openedTick:tick,expiresTick:tick,
     source:structure({siteId:one('loc-vein-north'),settlementId:id,charterId:id,wellProjectId:id,openingId:id,
@@ -1102,6 +1128,20 @@ const shape = structure({
       const fixed = {actorId:id,queuedTick:tick};
       if(order?.action==='SALVAGE_ARTIFACT')
         return structure({...fixed,action:one('SALVAGE_ARTIFACT'),targetArtifactId:id,targetLocationId:id})(value,path);
+      if(order?.action==='FRONTIER'){
+        const clause={...fixed,action:one('FRONTIER')};
+        if('frontierMove' in order&&order.frontierMove==='exit')
+          return structure({...clause,frontierMove:one('exit'),targetFrontierSiteId:one('loc-vein-north','loc-market')})(value,path);
+        return structure({...clause,frontierMove:one('enter','travel','settle'),targetFrontierSiteId:one(...FRONTIER_SITE_IDS)})(value,path);
+      }
+      if(order?.action==='FRONTIER_PRODUCTION')return structure({...fixed,action:one('FRONTIER_PRODUCTION'),
+        frontierProductionMove:one(...FRONTIER_PRODUCTION_MOVES),targetFrontierSiteId:one(...FRONTIER_SITE_IDS)})(value,path);
+      if(order?.action==='FRONTIER_TRADE'){
+        const clause={...fixed,action:one('FRONTIER_TRADE')};
+        if('frontierTradeMove' in order&&order.frontierTradeMove==='propose')
+          return structure({...clause,frontierTradeMove:one('propose'),targetCultivatorId:id})(value,path);
+        return structure({...clause,frontierTradeMove:one('accept','load','load_winter'),targetFrontierTradeId:id})(value,path);
+      }
       if(order?.action==='NORTH_GATE_RENEWAL')return structure({...fixed,action:one('NORTH_GATE_RENEWAL'),
         northGateRenewalMove:one(...NORTH_GATE_RENEWAL_MOVES),targetNorthGateRenewalId:id})(value,path);
       if(order?.action==='UPPER_PASSAGE')return structure({...fixed,action:one('UPPER_PASSAGE'),
@@ -2492,6 +2532,12 @@ function verifyWorld(value: unknown): WorldState {
       (w.playerAvatar.pendingOrder && w.playerAvatar.pendingOrder.actorId !== w.playerAvatar.possessedId) ||
       w.playerAvatar.transcript.some((entry) => !actor.has(entry.targetCultivatorId) || (entry.actorId && !actor.has(entry.actorId)))) fail('playerAvatar.references');
   const localWaterOrder=w.playerAvatar.pendingOrder;
+  if(localWaterOrder?.action==='FRONTIER'||localWaterOrder?.action==='FRONTIER_PRODUCTION'||localWaterOrder?.action==='FRONTIER_TRADE'){
+    const current=w.cultivators.find(row=>row.id===localWaterOrder.actorId);
+    if(localWaterOrder.queuedTick!==w.tick||(w.playerAvatar.possessionUntilTick??0)<=w.tick+1||!current||
+      !availableFrontierActions(current,w,w.tick+1).some(option=>frontierOptionKey(option)===frontierOptionKey(localWaterOrder)))
+      fail('playerAvatar.frontierOrder');
+  }
   if(localWaterOrder?.action==='NORTH_GATE_RENEWAL'){
     const ordered=w.cultivators.find(row=>row.id===localWaterOrder.actorId);
     const source=!w.northGateRenewal?findNorthGateRenewalSource(w):undefined;
@@ -2506,7 +2552,7 @@ function verifyWorld(value: unknown): WorldState {
     if(localWaterOrder.queuedTick!==w.tick||(w.playerAvatar.possessionUntilTick??0)<=w.tick+1||!moved||
       (localWaterOrder.upperPassageMove==='enter'?
         (moved.positionPlane!==undefined||localWaterOrder.targetUpperPassageNodeId!==UPPER_PASSAGE_PATH[1]):
-        moved.positionPlane===undefined))fail('playerAvatar.upperPassageOrder');
+        !onUpperPassagePlane(moved)))fail('playerAvatar.upperPassageOrder');
   }
   if(localWaterOrder?.action==='NORTH_WELL_REVIEW'&&
     (localWaterOrder.queuedTick!==w.tick||(w.playerAvatar.possessionUntilTick??0)<=w.tick+1||
@@ -3199,6 +3245,23 @@ function verifyWorld(value: unknown): WorldState {
   validateNorthWellRevisit(w,fail);
   validateNorthGateRenewal(w,fail);
   validateUpperPassage(w,fail);
+  validateFrontierMovement(w,fail);
+  const frontierTrade=w.frontier?.trade;
+  if(frontierTrade){
+    if(!frontierTrade.agreements.length||(frontierTrade.lastAdvancedTick??0)>w.tick)fail('frontier.trade.lifecycle');
+    unique(frontierTrade.agreements,row=>row.id,'frontier.trade.id');
+    const openParties=new Set<string>();
+    for(const agreement of frontierTrade.agreements){
+      const serial=/^frontier-trade-([1-9][0-9]*)$/u.exec(agreement.id);
+      if(!serial||Number(serial[1])>=frontierTrade.nextId||!verifyFrontierTradeAgreement(w,agreement))
+        fail('frontier.trade.evidence');
+      if(agreement.status==='offered'||agreement.status==='accepted'||agreement.status==='returning')for(const id of [agreement.northActorId,agreement.southActorId]){
+        if(openParties.has(id))fail('frontier.trade.doubleParty');
+        openParties.add(id);
+      }
+    }
+  }
+  validateFrontierProduction(w,frontierTradeProductionCustody(w),fail);
   w.coldHistory = freezeColdHistory(w.coldHistory);
   return w;
 }
@@ -3213,9 +3276,9 @@ function serializeWorldSave(world: WorldState): string {
   try {
     // A native turn may first attach either optional ledger after a hot-world clone.
     // Normalize that bounded extension order, leaving every pre-extension byte intact.
-    if (world.eraHeritage !== undefined || world.mortalAgeTrackingSinceTick !== undefined || world.coldWaterVein !== undefined || world.northMiningCharters !== undefined || world.northWellRevisitLaw !== undefined || world.northWellRevisitReviews !== undefined || world.upperPassage !== undefined || world.northGateRenewal !== undefined) {
-      const {eraHeritage,mortalAgeTrackingSinceTick,coldWaterVein,northMiningCharters,northWellRevisitLaw,northWellRevisitReviews,upperPassage,northGateRenewal,...legacy}=world;
-      return JSON.stringify({format:FORMAT,version:VERSION,world:{...legacy,eraHeritage,mortalAgeTrackingSinceTick,coldWaterVein,northMiningCharters,northWellRevisitLaw,northWellRevisitReviews,upperPassage,northGateRenewal}});
+    if (world.eraHeritage !== undefined || world.mortalAgeTrackingSinceTick !== undefined || world.coldWaterVein !== undefined || world.northMiningCharters !== undefined || world.northWellRevisitLaw !== undefined || world.northWellRevisitReviews !== undefined || world.upperPassage !== undefined || world.northGateRenewal !== undefined || world.frontier !== undefined) {
+      const {eraHeritage,mortalAgeTrackingSinceTick,coldWaterVein,northMiningCharters,northWellRevisitLaw,northWellRevisitReviews,upperPassage,northGateRenewal,frontier,...legacy}=world;
+      return JSON.stringify({format:FORMAT,version:VERSION,world:{...legacy,eraHeritage,mortalAgeTrackingSinceTick,coldWaterVein,northMiningCharters,northWellRevisitLaw,northWellRevisitReviews,upperPassage,northGateRenewal,frontier}});
     }
     return JSON.stringify({ format: FORMAT, version: VERSION, world });
   } catch { throw new WorldSaveError('json', '当前世界不能序列化为 JSON。'); }

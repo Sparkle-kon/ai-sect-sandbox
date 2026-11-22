@@ -51,6 +51,8 @@ export default defineConfig({
           'terrain-ecology': ['./src/engine/terrainSuccessionEngine.ts','./src/engine/weatherEngine.ts'],
           'civic-works': ['./src/engine/villageWorksEngine.ts'],
           'household-register': ['./src/engine/householdNameEngine.ts','./src/engine/mortalAgeCohorts.ts'],
+          'rural-governance': ['./src/engine/householdEngine.ts','./src/engine/seasonalHousingEngine.ts',
+            './src/engine/sharedCommonsEngine.ts','./src/engine/civicMemorialEngine.ts','./src/engine/villageFairEngine.ts'],
           'institution-terms': ['./src/engine/sectActivity.ts','./src/engine/sectCreditTerms.ts'],
           'institution-rules': ['./src/engine/estateEngine.ts', './src/engine/sectCreditEngine.ts', './src/engine/serviceRetirementEngine.ts', './src/engine/relicExhibitEngine.ts'],
           // Both native settlement and portable scenario verification use the same small leaf proofs.
