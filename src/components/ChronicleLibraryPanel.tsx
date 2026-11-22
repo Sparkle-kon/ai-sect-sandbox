@@ -84,6 +84,8 @@ function ChapterArchive({ chapter, reading, lead, turningPoints, sharedTurningPo
     <article aria-label="章节正文" className="space-y-3">
       {hasLead && <p className="break-words text-xs text-amber-200">此篇随{lead.name}一路读去。</p>}
       {reading.beats.length > 0 ? <div className="space-y-4 font-serif" data-chronicle-prose>
+        {reading.continuity?.opening &&
+          <p data-chronicle-continuity="opening" className="break-words text-sm leading-7 text-slate-100">{reading.continuity.opening.text}</p>}
         {reading.beats.map((beat, index) => (
           <div key={`${beat.kind}:${index}`} data-chronicle-beat={beat.kind} className="min-w-0 space-y-2">
             {beat.kind === 'focal' && beat.title &&
@@ -93,6 +95,8 @@ function ChapterArchive({ chapter, reading, lead, turningPoints, sharedTurningPo
             ))}
           </div>
         ))}
+        {reading.continuity?.closing &&
+          <p data-chronicle-continuity="closing" className="break-words text-sm leading-7 text-slate-100">{reading.continuity.closing.text}</p>}
       </div> : <p className="text-sm text-slate-400">本章没有可写成场景的公开史料。</p>}
       <ChapterTurningPoints arcs={turningPoints} shared={sharedTurningPoints} />
       {excerpt&&<ChapterExcerptPanel {...excerpt} chapterId={chapter.id}/>}
@@ -191,7 +195,7 @@ export function ChronicleLibraryPanel({ world, cultivator, scopeKey, scribeContr
   const chapter = chapters.find(({ id }) => id === requestedChapter) ?? chapters[0];
   const lead = chapter && (chapter.storyFocal ? stampedChronicleLead(chapter) :
     projectChronicleLead(world, chapter.anchors, chapter.endTick));
-  const reading = chapter && projectChronicleReading(chapter, lead, true);
+  const reading = chapter && projectChronicleReading(chapter, lead, true, world);
   const excerpt=scopeKey&&(!cultivator||world.cultivators.includes(cultivator))?{world,scopeKey,viewerId:cultivator?.id}:undefined;
 
 
@@ -273,7 +277,7 @@ export function ChronicleLibraryPanel({ world, cultivator, scopeKey, scribeContr
         readChapter={(older) => {
           const safe = readable(older);
           const olderLead = safe.storyFocal ? stampedChronicleLead(safe) : projectChronicleLead(world, safe.anchors, safe.endTick);
-          return <ChapterArchive key={safe.id} chapter={safe} reading={projectChronicleReading(safe, olderLead, true)} lead={olderLead}
+          return <ChapterArchive key={safe.id} chapter={safe} reading={projectChronicleReading(safe, olderLead, true, world)} lead={olderLead}
             turningPoints={projectChapterTurningPoints(world,safe.id,cultivator?.id).arcs}
             sharedTurningPoints={projectSharedTurningPoints(world,safe.id,cultivator?.id)} excerpt={excerpt}
             resolveDialogue={(id)=>publicDialogues.chapter(safe.id,id)} />;

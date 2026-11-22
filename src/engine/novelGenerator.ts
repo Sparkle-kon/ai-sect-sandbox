@@ -1,3 +1,5 @@
+import { deriveChapterOpening } from './chapterContinuity';
+import { deriveChapterEndHook } from './chapterEndHooks';
 import { compactColdHistory } from './coldHistoryEngine';
 import { isChronicleStoryFact, projectChronicleLead } from './chronicleLead';
 import type { ChronicleLead } from './chronicleLead';
@@ -151,6 +153,10 @@ export interface ChronicleReading {
   title:string;
   sections:ChronicleReadingSection[];
   beats:ChronicleReadingBeat[];
+  continuity?:{
+    opening?:NonNullable<ReturnType<typeof deriveChapterOpening>>;
+    closing?:NonNullable<ReturnType<typeof deriveChapterEndHook>>;
+  };
 }
 
 const drama: Record<ChronicleAnchor['category'], number> = {
@@ -194,7 +200,7 @@ export function stampedChronicleLead(chapter: ChronicleChapterPlan): ChronicleLe
 }
 
 /** Novel-first view of existing public facts. Saved prose, chronology and proof are left untouched. */
-export function projectChronicleReading(chapter: ChronicleChapter, lead?: ChronicleLead, publicAttributionOnly = false): ChronicleReading {
+export function projectChronicleReading(chapter: ChronicleChapter, lead?: ChronicleLead, publicAttributionOnly = false, world?: WorldState): ChronicleReading {
   const counts=new Map<string,number>();
   for(const anchor of chapter.anchors)counts.set(anchor.id,(counts.get(anchor.id)??0)+1);
   const anchors=chapter.anchors.filter(anchor=>counts.get(anchor.id)===1&&
@@ -203,8 +209,12 @@ export function projectChronicleReading(chapter: ChronicleChapter, lead?: Chroni
   // Manuscript prose and raw attributed dialogue never supply a paced paragraph, even for legacy chapters.
   const sourced=anchors.filter(anchor=>Boolean(publicChronicleExcerpt(anchor.description).trim()||publicChronicleExcerpt(anchor.title).trim()))
     .map(anchor=>({anchor,section:writePublicChronicleScene(anchor)}));
+  const chapterScope = { ...chapter, anchors };
+  const opening = world && anchors.length ? deriveChapterOpening(world, chapterScope, deriveChapterEndHook) : undefined;
+  const closing = world && anchors.length ? deriveChapterEndHook(world, chapterScope) : undefined;
   return {title:chapterReadingTitle(chapter.chapterNumber,scenes,lead),sections:scenes.map(({section})=>section),
-    beats:buildSerializedChapterPacing(sourced,lead)};
+    beats:buildSerializedChapterPacing(sourced,lead),
+    ...(opening || closing ? { continuity: { ...(opening ? { opening } : {}), ...(closing ? { closing } : {}) } } : {}) };
 }
 
 const calendricalHeading = /(?:^|\n)\s*(?:[#*]+\s*)?(?:仙历\s*\d+|第[零〇一二三四五六七八九十百千万两\d]+(?:大?纪元|大世纪|(?:至第?[零〇一二三四五六七八九十百千万两\d]+)?轮)|(?:大?纪元|纪年|编年史)[:：])/u;
@@ -216,15 +226,16 @@ export function isChronicleDraftNovelStyle(title: string, body: string): boolean
     !/[「」『』“”"]/u.test(body) && !/(?:曰|问道|答道|说道)[：:]/u.test(body);
 }
 
-function deterministicBody(chapter: ChronicleChapterPlan): string {
-  const reading=projectChronicleReading({...chapter,body:'',source:'utility'},stampedChronicleLead(chapter),true);
+function deterministicBody(world: WorldState, chapter: ChronicleChapterPlan): string {
+  const reading=projectChronicleReading({...chapter,body:'',source:'utility'},stampedChronicleLead(chapter),true,world);
   const sources=new Map(reading.sections.map(section=>[section.eventId,section]));
-  return reading.beats.map(beat=>{
+  const prose = reading.beats.map(beat=>{
     // Exact lines remain in the manuscript and evidence panel; they don't become independent headlines.
     const quoted=beat.eventIds.flatMap(id=>sources.get(id)?.dialogue?.turns.map(
       ({speakerName,text})=>`${speakerName}：「${text}」`)??[]);
     return [beat.title,...beat.paragraphs,...quoted].filter(Boolean).join('\n');
-  }).join('\n\n');
+  });
+  return [reading.continuity?.opening?.text, ...prose, reading.continuity?.closing?.text].filter(Boolean).join('\n\n');
 }
 
 export function resolveChronicleChapter(world: WorldState, plan: ChronicleChapterPlan, prose?: { title: string; body: string }, endTick = world.tick): ChronicleChapter | null {
@@ -237,7 +248,7 @@ export function resolveChronicleChapter(world: WorldState, plan: ChronicleChapte
   const body = typeof prose?.body === 'string' ? cutText(prose.body, MAX_PROSE) : '';
   const chapter: ChronicleChapter = titleSuffix && body && isChronicleDraftNovelStyle(titleSuffix, body) ? { ...current, title: prefix + titleSuffix, body: `${body}\n\n公开史料索引（以上为文学演绎）\n${current.anchors.map((anchor) =>
       `第${anchor.tick}轮 · ${anchor.title}`).join('\n')}`, source: 'llm' } :
-    { ...current, body: deterministicBody(current), source: 'utility' };
+    { ...current, body: deterministicBody(world,current), source: 'utility' };
   world.chronicleArchive.chapters = [chapter, ...world.chronicleArchive.chapters];
   compactColdHistory(world);
   return chapter;
