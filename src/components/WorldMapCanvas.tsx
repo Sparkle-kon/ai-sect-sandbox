@@ -35,7 +35,7 @@ import { BIOME_PALETTE, createTerrainMapView, mapActorPositions } from './terrai
 import {buildCanvasBiomeRelief,drawCanvasBiomeRelief,type CanvasBiomeReliefPlan} from './canvasBiomeShader';
 import {buildQiFlowPlan,drawQiFlow} from './qiFlowCanvas';
 import {mapScenicAnimationAllowed,mapScenicFrameDelay} from './mapScenicScheduler';
-import { drawMapTerritoryGlyphs, drawTerrain, EXPLORED_TERRAIN_SHADE } from './terrainMapDraw';
+import { drawMapTerritoryGlyphs, drawTerrain } from './terrainMapDraw';
 import { drawMapConvoys, mapTransitActorIds, visibleMapConvoys, visibleMapEscort } from './mapConvoyView';
 import { buildMapPresentation, MAP_EFFECT_LABELS, MOTION_MS } from './mapPresentationView';
 import {visibleMapFlyingSwords} from './mapFlyingSwordView';
@@ -44,6 +44,10 @@ import {drawMapTrajectoryVfx} from './trajectoryVfxDraw';
 import {drawFlights} from './mapPresentationDraw';
 import {buildMapCombatVfxPlan} from './mapCombatVfxView';
 import {drawMapCombatVfx} from './mapCombatVfxDraw';
+import {buildProtectiveArrayDomes} from './protectiveArrayDomeView';
+import {drawProtectiveArrayDomes} from './protectiveArrayDomeDraw';
+import {StrategicMinimap} from './StrategicMinimap';
+import {isStrategicCameraModeCurrent,toggleStrategicCameraMode,type StrategicCameraMode} from './strategicCameraMode';
 import {buildMapActorBadgeView,type MapActorBadgeKind} from './mapActorBadgeView';
 import {planMapActorBadgeLayout} from './mapActorBadgeLayout';
 import {drawMapActorBadges,MAP_ACTOR_BUBBLE_FONT} from './mapActorBadgeDraw';
@@ -158,6 +162,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const reliefLayerRef=useRef<{plan:CanvasBiomeReliefPlan;width:number;height:number;canvas:HTMLCanvasElement}>();
   const [camera, setCamera] = useState(DEFAULT_CAMERA);
+  const [strategicMode,setStrategicMode]=useState<StrategicCameraMode>();
   const [inspection,setInspection]=useState<MapInspection>();
   const [annotationView, setAnnotationView] = useState<typeof import('./mapAnnotationView')>();
   const hasNotes = Boolean(world.annotations?.notes.length);
@@ -193,7 +198,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       setInspection(undefined);
     }
   };
-  const manualCamera = (next: MapCamera) => { cancelPulseCamera();setFollowsSelection(false);updateCamera(next); };
+  const manualCamera = (next: MapCamera) => { cancelPulseCamera();setStrategicMode(undefined);setFollowsSelection(false);updateCamera(next); };
   const [brush, setBrush] = useState<GodBrushKind | 'browse'>('browse');
   const [preview, setPreview] = useState<MapPoint[]>([]);
   const gesture = useRef<MapGestureState>(IDLE_MAP_GESTURE);
@@ -219,6 +224,13 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const commandCamera = (next: MapCamera) => { abandonGesture(); manualCamera(next); };
   const [localFog,setLocalFog]=useState(false);
   const fog=fogEnabled??localFog;
+  const strategyScope={world,scopeKey,viewerId:selectedCultivatorId,fog};
+  const strategic=isStrategicCameraModeCurrent(strategicMode,strategyScope);
+  useEffect(()=>{
+    if(!strategicMode)return;
+    if(!strategic)setStrategicMode(undefined);
+    else if(strategicMode.scope.world!==world)updateCamera(DEFAULT_CAMERA);
+  },[strategicMode,strategic,world]);
   const setFog=(next:boolean)=>{if(fogEnabled===undefined)setLocalFog(next);onFogChange?.(next);};
   useEffect(()=>()=>cancelPulseCamera(),[world,scopeKey,selectedCultivatorId,fog,pulseFocusActive]);
   const [cluster, setCluster] = useState<{ marker: Extract<MapActorMarker, { kind: 'cluster' }>; scope: string; tick: number }>();
@@ -250,7 +262,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     receipt.ownerId === selected.id && receipt.siteId === selected.locationId && receipt.tick === world.tick) ?
     selected.locationId : undefined, [world.tick,world.artifactSalvages,furnaceShift,selected]);
   const mapView = useMemo(() => createTerrainMapView(world, selected, fog), [world, selected, fog]);
-  const physicalAtlas=useMemo(()=>toolsExpanded?projectPhysicalAtlas(world,selected):undefined,[toolsExpanded,world,selected]);
+  const physicalAtlas=useMemo(()=>toolsExpanded||strategic?projectPhysicalAtlas(world,selected):undefined,[toolsExpanded,strategic,world,selected]);
   const atlasDrawing=useMemo(()=>planPhysicalAtlasDrawing(physicalAtlas,{cols:world.terrain.columns,rows:world.terrain.rows}),
     [physicalAtlas,world.terrain.columns,world.terrain.rows]);
   const atlasHome=physicalAtlas?.home;
@@ -391,6 +403,9 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   }, [followsSelection, followedActorId, followedX, followedY]);
   const motionSnapshot=useMemo(()=>buildMapPresentation(world,mapView,actorPositions),[world,mapView,actorPositions]);
   const combatVfx=useMemo(()=>buildMapCombatVfxPlan(world,mapView,motionSnapshot),[world,mapView,motionSnapshot]);
+  const domes=useMemo(()=>buildProtectiveArrayDomes(world,mapView,combatVfx),[world,mapView,combatVfx]);
+  const domesBySite=useMemo(()=>new Map(domes.map(dome=>[dome.location.id,dome])),[domes]);
+  const selectedDome=selected?domes.find(dome=>dome.sectId===selected.sectId):undefined;
   const actorBadgeFacts=useMemo(()=>buildMapActorBadgeView(world,mapView,combatVfx,!historical),[world,mapView,combatVfx,historical]);
   const hasBadgeQuote=useMemo(()=>[...actorBadgeFacts.values()].some(fact=>!!fact.quote),[actorBadgeFacts]);
   const selectedBadgeFact=selectedCultivatorId?actorBadgeFacts.get(selectedCultivatorId):undefined;
@@ -577,6 +592,15 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       const scenicDelay=mapScenicFrameDelay({moving:false,heat:false,ambient:qiFlow.hasMotion,width:markerSize.width});
       const scenicPhase=animate&&Number.isFinite(scenicDelay)?Math.floor(phase*1350/scenicDelay)*scenicDelay/1350:0;
       drawQiFlow(ctx,qiFlow,scenicPhase,animate,logicalPerCssPixel);
+      if(domes.length&&qiFlow.clip.length){
+        ctx.save();
+        try {
+          ctx.beginPath();
+          for(const {x,y,width:spanWidth,height:spanHeight} of qiFlow.clip)ctx.rect(x,y,spanWidth,spanHeight);
+          ctx.clip();
+          drawProtectiveArrayDomes(ctx,domes,elapsed,animate,logicalPerCssPixel);
+        } finally {ctx.restore();}
+      }
       drawPhysicalAtlas(ctx,atlasDrawing,logicalPerCssPixel);
       drawUsedVillageMigrationSegments(ctx, usedVillageSegments, camera.zoom);
       drawHazards(ctx, hazards);
@@ -943,7 +967,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           ctx.font = 'bold 11px sans-serif';
           ctx.textAlign = 'center';
           const labelCell = `${Math.floor(cx * camera.zoom / 75)}:${Math.floor(cy * camera.zoom / 36)}`;
-          const showName = !compact || isSelected || (camera.zoom >= 2 && !marked.has(labelCell));
+          const showName = isSelected || !strategic&&(!compact || camera.zoom >= 2 && !marked.has(labelCell));
           if (showName) { ctx.fillText(`${cultivator.name}`, cx, cy + 24); marked.add(labelCell); }
           if (cultivator.id === avatarId) {
             ctx.fillStyle = '#fde68a';
@@ -1034,7 +1058,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener?.('change',stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, atlasDrawing, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, observedSalvageSites, localGranary, villageMapLabels, civicObservation, usedVillageSegments, furnaceShift, localPavilionDesk, localMemorial, localVillageFair, localStipend, localSeedCulture, localToolLoans, localAlignedWeather, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope, scenicRelief, qiFlow, inspectionEnabled, letters, travel, flightAlignments, combatVfx, actorBadgeFacts, hasBadgeQuote]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, atlasDrawing, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, observedSalvageSites, localGranary, villageMapLabels, civicObservation, usedVillageSegments, furnaceShift, localPavilionDesk, localMemorial, localVillageFair, localStipend, localSeedCulture, localToolLoans, localAlignedWeather, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope, scenicRelief, qiFlow, inspectionEnabled, letters, travel, flightAlignments, combatVfx, actorBadgeFacts, hasBadgeQuote, domes, strategic]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1054,7 +1078,6 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     return () => canvas.removeEventListener('wheel', wheel);
   }, []);
 
-  const centerOfMap = { x: MAP_WIDTH / 2, y: MAP_HEIGHT / 2 };
   const frameFor = (canvas: HTMLCanvasElement): MapGestureFrame => ({
     camera: cameraRef.current, rect: canvas.getBoundingClientRect(), scope: gestureScope,
     allowSingleTouchPan: !compact || touchPan && toolsInteractive(), brush: toolsInteractive() ? armedBrush : undefined,
@@ -1150,6 +1173,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   };
   const startGesture = (event: React.PointerEvent<HTMLCanvasElement>) => {
     if (event.button !== 0 && gesture.current.phase === 'idle') return;
+    if(strategic&&pulseCameraFrame.current!==undefined)setStrategicMode(undefined);
     cancelPulseCamera();
     const canvas = event.currentTarget;
     if(currentInspection&&!currentInspection.pinned)setInspection(undefined);
@@ -1187,8 +1211,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       document.removeEventListener('pointercancel', finish, true);
     };
   }, []);
-  const minViewport = screenToMap(camera, { x: 0, y: 0 });
-  const maxViewport = screenToMap(camera, { x: MAP_WIDTH, y: MAP_HEIGHT });
+  const minViewport=screenToMap(camera,{x:0,y:0});
   const focusSite = (site: LocationNode) => {
     const visible = seenLocations.find(({ id }) => id === site.id);
     if (!visible) return;
@@ -1205,6 +1228,43 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     if (site) focusSite(site);
     else onChronicleFocusUnavailable?.();
   }, [chronicleFocus, focusSite, onChronicleFocusUnavailable, seenLocations, world]);
+  const navigateCamera=(target:MapCamera,message:string,bringIntoView=false)=>{
+    const preference=typeof window.matchMedia==='function'?window.matchMedia('(prefers-reduced-motion: reduce)'):undefined;
+    const animate=shouldAnimateMap(preference?.matches,!document.hidden);
+    abandonGesture();cancelPulseCamera();setFollowsSelection(false);setInspection(undefined);
+    if(bringIntoView){
+      canvasRef.current?.scrollIntoView({block:'nearest',behavior:animate?'smooth':'auto'});
+      canvasRef.current?.focus({preventScroll:true});
+    }
+    const from=cameraRef.current;
+    if(!animate||from.zoom===target.zoom&&from.x===target.x&&from.y===target.y){
+      updateCamera(target);setFocusMessage(message);return;
+    }
+    const start=performance.now();
+    const frame=(now:number)=>{
+      const elapsed=now-start;
+      if(elapsed>=WORLD_PULSE_CAMERA_DURATION_MS||preference?.matches||document.hidden){
+        updateCamera(target);pulseCameraFrame.current=undefined;
+        setFocusMessage(message);return;
+      }
+      updateCamera(interpolatePulseCamera(from,target,elapsed));
+      pulseCameraFrame.current=requestAnimationFrame(frame);
+    };
+    pulseCameraFrame.current=requestAnimationFrame(frame);
+  };
+  const toggleStrategy=()=>{
+    const focus=selectedPoint??seenLocations.find(site=>isCurrentLocation(site.id));
+    const next=toggleStrategicCameraMode(strategicMode,strategyScope,cameraRef.current,focus);
+    setStrategicMode(next.mode);
+    navigateCamera(next.camera,next.mode?'已查看下界已知舆图全景。':
+      next.camera.zoom>1?'已回到本域细览。':'当前没有可定位的本域标记，保留已知舆图。');
+  };
+  const locateMiniMap=(point:MapPoint)=>{
+    const tile=terrainTileAt(world,point.x,point.y);
+    if(!tile||mapView.tileState(tile)==='hidden')return;
+    commandCamera(strategic?focusMapPoint(cameraRef.current,point):centerCamera(cameraRef.current,point));
+    setFocusMessage('已定位到所选已知地格。');
+  };
   useEffect(()=>{
     if(!pulseFocus||!pulseFocusActive||pulseConsumed.current===pulseFocus.token)return;
     pulseConsumed.current=pulseFocus.token;
@@ -1212,24 +1272,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     const site=resolveWorldPulseFocusSite(pulseFocus,{world,scopeKey,viewerId:selectedCultivatorId,fog,active:pulseFocusActive});
     const canvas=canvasRef.current;
     if(!site||!canvas){setFocusMessage('预警的地点已变化，未移动舆图。');return;}
-    const preference=typeof window.matchMedia==='function'?window.matchMedia('(prefers-reduced-motion: reduce)'):undefined;
-    const animate=shouldAnimateMap(preference?.matches,!document.hidden);
-    abandonGesture();cancelPulseCamera();setFollowsSelection(false);setInspection(undefined);
-    canvas.scrollIntoView({block:'nearest',behavior:animate?'smooth':'auto'});
-    canvas.focus({preventScroll:true});
-    const from=cameraRef.current,target=focusMapPoint(from,site);
-    if(!animate){updateCamera(target);setFocusMessage(`地图已定位：${site.name}`);return;}
-    const start=performance.now();
-    const frame=(now:number)=>{
-      const elapsed=now-start;
-      if(elapsed>=WORLD_PULSE_CAMERA_DURATION_MS||preference?.matches||document.hidden){
-        updateCamera(target);pulseCameraFrame.current=undefined;
-        setFocusMessage(`地图已定位：${site.name}`);return;
-      }
-      updateCamera(interpolatePulseCamera(from,target,elapsed));
-      pulseCameraFrame.current=requestAnimationFrame(frame);
-    };
-    pulseCameraFrame.current=requestAnimationFrame(frame);
+    setStrategicMode(undefined);
+    navigateCamera(focusMapPoint(cameraRef.current,site),`地图已定位：${site.name}`,true);
   },[pulseFocus,pulseFocusActive,world,scopeKey,selectedCultivatorId,fog,onPulseFocusHandled]);
   const locateActor = (id: string) => {
     const point = actorPositions.find(({ actor }) => actor.id === id);
@@ -1296,31 +1340,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           data={inspected} anchor={currentInspection.anchor} pinned={currentInspection.pinned} readOnly={fog||!onEntityIntervention}
           actions={currentInspection.pinned&&!fog&&onEntityIntervention?availableMapEntityActions(world,mapView,currentInspection.target):[]}
           onClose={dismissal} onFocus={focusInspection} onCommit={commitInspection}/>}
-        <button
-          type="button"
-          className={`absolute bottom-2 right-2 w-24 overflow-hidden rounded border border-slate-500 bg-slate-950/90 shadow-md sm:w-36 ${compact ? 'hidden sm:block' : ''}`}
-          aria-label="小地图：点击定位"
-          title="小地图：点击定位"
-          onClick={(event) => {
-            const point = event.detail === 0 ? centerOfMap
-              : clientToMapViewport(event.currentTarget.getBoundingClientRect(), { x: event.clientX, y: event.clientY });
-            if (point) commandCamera(centerCamera(cameraRef.current, point));
-          }}
-        >
-          <svg viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`} aria-hidden="true" className="block w-full">
-            {world.terrain.tiles.map((tile) => {
-              const state = mapView.tileState(tile);
-              const width = MAP_WIDTH / world.terrain.columns;
-              const height = MAP_HEIGHT / world.terrain.rows;
-              return <rect key={tile.id} x={tile.col * width} y={tile.row * height} width={width} height={height}
-                fill={state === 'hidden' ? '#070c19' : state === 'explored' ? EXPLORED_TERRAIN_SHADE : BIOME_PALETTE[tile.biome].swatch}
-                opacity={state === 'explored' ? 0.35 : 1} />;
-            })}
-            <rect x={minViewport.x + 5} y={minViewport.y + 5}
-              width={maxViewport.x - minViewport.x - 10} height={maxViewport.y - minViewport.y - 10}
-              fill="#ffffff" fillOpacity={0.1} stroke="#fef08a" strokeWidth={10} />
-          </svg>
-        </button>
+        <StrategicMinimap world={world} view={mapView} camera={camera} strategic={strategic}
+          compact={compact} onToggle={toggleStrategy} onPoint={locateMiniMap}/>
       </div>
       {Boolean(selectedBadgeFact?.statuses.length)&&<p className="sr-only">所选修士状态：{selectedBadgeFact?.statuses.map(kind=>ACTOR_BADGE_LABELS[kind]).join('、')}。</p>}
       {selectedBadgeFact?.quote&&<p className="sr-only">所选修士本月公开斗法对白：{selectedBadgeFact.quote}</p>}
@@ -1376,8 +1397,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
             {selectedSect && (
               <span className="text-amber-200">宗门位阶：{selectedSect.name} · {selected.sectRank}{selected.alive ? '' : ' · 留档'}</span>
             )}
-            {!fog && selectedSect && selectedSect.arrayMaxHp > 0 && (
-              <span className="text-indigo-300">本宗护山阵 {selectedSect.arrayHp}/{selectedSect.arrayMaxHp}</span>
+            {selectedDome && (
+              <span className="text-indigo-300">本宗护山阵 {selectedDome.hp}/{selectedDome.maxHp}{selectedDome.hp===0?' · 阵破':''}</span>
             )}
             <span className="inline-flex items-center gap-1">灵根 <SpiritRootBadge root={selected.spiritRoot} /></span>
             {selectedLocation && isCurrentLocation(selectedLocation.id) && (
@@ -1613,9 +1634,9 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
             const herbCount = countHerbs(location.herbs);
             const trialCount = trialsByLocation.get(location.id) ?? 0;
             const guardCount = guardsByLocation.get(location.id) ?? 0;
-            const homeSect = headquarters.get(location.id);
+            const dome=domesBySite.get(location.id);
             const localOccasions = occasionsByLocation.get(location.id) ?? [];
-            const localCouncil = currentCouncils.get(homeSect?.id ?? '');
+            const localCouncil = currentCouncils.get(headquarters.get(location.id)?.id ?? '');
             const localVillage = civicObservation?.locationId === location.id ? civicObservation : undefined;
             const localWeather = weatherAtVisibleSites.get(location.id);
             const localBeasts = beastsByLocation.get(location.id) ?? [];
@@ -1666,8 +1687,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                   coverage.kind === 'relief' ? '接替者已实到' : '有实际驻守'}</span>}
                 {observedCohortSites.has(location.id) && <span className="text-amber-200">· 本回合已亲见实际合班授课</span>}
                 {observedSalvageSites.has(location.id) && <span className="text-teal-200">· 已亲见货损幸存原物封存</span>}
-                {homeSect && homeSect.arrayMaxHp > 0 && (
-                  <span className="text-indigo-300">· 护山阵 {homeSect.arrayHp}/{homeSect.arrayMaxHp}</span>
+                {dome && (
+                  <span className="text-indigo-300">· 护山阵 {dome.hp}/{dome.maxHp}{dome.hp===0?' · 阵破':''}</span>
                 )}
                 {(villageLabel || localVillage) && <span className="text-lime-200">
                   · {villageLabel?.name ?? localVillage?.name}{villageLabel?.stage ? ` · ${villageLabel.stage}` : ''}{localVillage ? ` · ${localVillage.population} 人` : ''}
