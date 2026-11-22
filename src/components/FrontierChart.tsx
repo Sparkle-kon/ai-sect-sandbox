@@ -1,4 +1,5 @@
 import {useEffect,useId,useMemo,useRef} from 'react';
+import {frontierChartInk,paintFrontierCellInk} from './frontierChartInk';
 
 export interface FrontierChartCell {
   chartId:string;tileId:string;row:number;col:number;
@@ -32,8 +33,9 @@ export function frontierChartGeometry(data:FrontierChartData):Blueprint|undefine
 }
 
 const WIDTH=480,HEIGHT=270;
-function paintFrontierChart(ctx:CanvasRenderingContext2D,blueprint:Blueprint){
+export function paintFrontierChart(ctx:CanvasRenderingContext2D,blueprint:Blueprint){
   const {tiles,cols,rows,active}=blueprint;
+  const ink=frontierChartInk(active.chartId);
   const size=Math.min((WIDTH-30)/cols,(HEIGHT-24)/rows);
   const left=(WIDTH-cols*size)/2,top=(HEIGHT-rows*size)/2;
   ctx.clearRect(0,0,WIDTH,HEIGHT);
@@ -41,13 +43,17 @@ function paintFrontierChart(ctx:CanvasRenderingContext2D,blueprint:Blueprint){
   ctx.font='500 14px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
   for(const tile of tiles){
     const x=left+tile.col*size,y=top+tile.row*size,current=tile.tileId===active.tileId;
-    ctx.fillStyle=current?'#235153':tile.surface==='sea'?'#11364d':'#132e36';
-    ctx.fillRect(x+1,y+1,size-2,size-2);
-    ctx.strokeStyle=current?'#fde68a':tile.surface==='sea'?'#448ca8':'#3e7078';ctx.lineWidth=current?3:1;
+    paintFrontierCellInk(ctx,ink,{x,y,size,row:tile.row,col:tile.col,active:current,sea:tile.surface==='sea'});
+    ctx.strokeStyle=current?'#fde68a':tile.surface==='sea'?'#448ca8':ink.edge;ctx.lineWidth=current?3:1;
     ctx.strokeRect(x+2,y+2,size-4,size-4);
-    ctx.fillStyle=current?'#fef3c7':'#d2f2f4';
+    ctx.strokeStyle='#080e16';ctx.lineWidth=2.5;
+    ctx.fillStyle=current?'#fef3c7':'#e2eff3';
+    ctx.strokeText(`${tile.row+1}·${tile.col+1}`,x+size/2,y+size*(tile.name?.trim()&&size>=42?.37:.50),size-7);
     ctx.fillText(`${tile.row+1}·${tile.col+1}`,x+size/2,y+size*(tile.name?.trim()&&size>=42?.37:.50),size-7);
-    if(tile.name?.trim()&&size>=42)ctx.fillText(tile.name,x+size/2,y+size*.67,size-7);
+    if(tile.name?.trim()&&size>=42){
+      ctx.strokeText(tile.name,x+size/2,y+size*.67,size-7);
+      ctx.fillText(tile.name,x+size/2,y+size*.67,size-7);
+    }
   }
 }
 

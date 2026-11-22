@@ -32,6 +32,9 @@ import { isActiveCampaign, SIEGE_LABELS } from './siegeLabels';
 import { OCCASION_KIND, OCCASION_STATUS } from './occasionLabels';
 import { BOUNTY_STATUS, relevantBounty } from './bountyLabels';
 import { BIOME_PALETTE, createTerrainMapView, mapActorPositions } from './terrainMapView';
+import {buildCanvasBiomeRelief,drawCanvasBiomeRelief,type CanvasBiomeReliefPlan} from './canvasBiomeShader';
+import {buildQiFlowPlan,drawQiFlow} from './qiFlowCanvas';
+import {mapScenicAnimationAllowed,mapScenicFrameDelay} from './mapScenicScheduler';
 import { drawMapTerritoryGlyphs, drawTerrain, EXPLORED_TERRAIN_SHADE } from './terrainMapDraw';
 import { drawMapConvoys, mapTransitActorIds, visibleMapConvoys, visibleMapEscort } from './mapConvoyView';
 import { buildMapPresentation, MAP_EFFECT_LABELS, MOTION_MS } from './mapPresentationView';
@@ -139,6 +142,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   onChronicleFocusUnavailable,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const reliefLayerRef=useRef<{plan:CanvasBiomeReliefPlan;width:number;height:number;canvas:HTMLCanvasElement}>();
   const [camera, setCamera] = useState(DEFAULT_CAMERA);
   const [inspection,setInspection]=useState<MapInspection>();
   const [annotationView, setAnnotationView] = useState<typeof import('./mapAnnotationView')>();
@@ -307,6 +311,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const localLeaseSites = useMemo(() => visibleLeaseMapSites(world, mapView, selected), [world, mapView, selected]);
   const localCommons = useMemo(() => visibleSharedCommonsMapSites(world, mapView, selected), [world, mapView, selected]);
   const formationLines = useMemo(() => visibleFormationMapLinks(world, mapView, selected), [world, mapView, selected]);
+  const scenicRelief=useMemo(()=>buildCanvasBiomeRelief(world,mapView),[world,mapView]);
+  const qiFlow=useMemo(()=>buildQiFlowPlan(world,mapView,formationLines),[world,mapView,formationLines]);
   const localClinic = useMemo(() => {
     const clinic = visibleInfirmaries(world, selected);
     return clinic?.capacity && isCurrentLocation(clinic.siteId) ? { siteId: clinic.siteId, capacity: clinic.capacity } : undefined;
@@ -496,6 +502,22 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
 
     const width = canvas.width;
     const height = canvas.height;
+    // Only the authoritative, static visible relief gets cached. Camera, native marks and motion are drawn fresh.
+    let cachedRelief=reliefLayerRef.current;
+    if(cachedRelief?.plan!==scenicRelief||cachedRelief.width!==width||cachedRelief.height!==height){
+      reliefLayerRef.current=undefined;
+      cachedRelief=undefined;
+      if(scenicRelief.tiles.length>0){
+        const layer=canvas.ownerDocument.createElement('canvas');
+        layer.width=width;layer.height=height;
+        const reliefContext=layer.getContext('2d');
+        if(reliefContext){
+          drawCanvasBiomeRelief(reliefContext,scenicRelief);
+          cachedRelief={plan:scenicRelief,width,height,canvas:layer};
+          reliefLayerRef.current=cachedRelief;
+        }
+      }
+    }
     let markerSize: MarkerViewport = canvas.getBoundingClientRect();
     let staticMarkers: ReturnType<typeof planActorMarkers> | undefined;
 
@@ -525,6 +547,12 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
 
       // 2. Terrain, spirit qi overlay and sect boundaries.
       drawTerrain(ctx, world, mapView.tileState, heat, phase, territorySemantics, logicalPerCssPixel);
+      if(cachedRelief)ctx.drawImage(cachedRelief.canvas,0,0);
+      else drawCanvasBiomeRelief(ctx,scenicRelief);
+      // Native combat/travel may ask for faster repaints; ambient motion stays on its own lower cadence.
+      const scenicDelay=mapScenicFrameDelay({moving:false,heat:false,ambient:qiFlow.hasMotion,width:markerSize.width});
+      const scenicPhase=animate&&Number.isFinite(scenicDelay)?Math.floor(phase*1350/scenicDelay)*scenicDelay/1350:0;
+      drawQiFlow(ctx,qiFlow,scenicPhase,animate,logicalPerCssPixel);
       drawPhysicalAtlas(ctx,atlasDrawing,logicalPerCssPixel);
       drawUsedVillageMigrationSegments(ctx, usedVillageSegments, camera.zoom);
       drawHazards(ctx, hazards);
@@ -580,21 +608,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         ctx.restore();
       }
 
-      // 3. Draw Spirit Vein connection lines between locations
-      ctx.strokeStyle = 'rgba(56, 189, 248, 0.12)';
-      ctx.setLineDash([5, 6]);
-      const centerLoc = seenLocations.find((l) => l.id === 'loc-secret-1' && isCurrentLocation(l.id));
-      if (centerLoc) {
-        for (const loc of seenLocations) {
-          if (loc.id === centerLoc.id || !isCurrentLocation(loc.id)) continue;
-          ctx.beginPath();
-          ctx.moveTo(centerLoc.x, centerLoc.y);
-          ctx.lineTo(loc.x, loc.y);
-          ctx.stroke();
-        }
-      }
-      ctx.setLineDash([]);
-
+      // No landmark connects to an invented route. Qi uses only the approved geometry painted above.
       // 4. Draw Locations
       for (const loc of seenLocations) {
         if (!isCurrentLocation(loc.id)) {
@@ -922,28 +936,33 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
 
     const preference = typeof window.matchMedia === 'function' ? window.matchMedia('(prefers-reduced-motion: reduce)') : undefined;
     let frame: number | undefined;
-    let previous = 0;
+    let previous=0;
+    let wasMoving=false;
+    const active=()=>mapScenicAnimationAllowed({reducedMotion:preference?.matches,pageVisible:!document.hidden,
+      surfaceActive:inspectionEnabled,width:markerSize.width,height:markerSize.height});
     const run = (now: number) => {
-      const elapsed = now - motionStart;
-      const moving = hasMotion && elapsed < MOTION_MS;
-      if (now - previous >= (moving ? 33 : 80) || !moving && !heat) {
-        draw(now / 1350, elapsed, true);
-        previous = now;
+      if(!active()){frame=undefined;return;}
+      const elapsed=now-motionStart;
+      const moving=hasMotion&&elapsed<MOTION_MS;
+      const delay=mapScenicFrameDelay({moving,heat,ambient:qiFlow.hasMotion,width:markerSize.width});
+      if(now-previous>=delay||wasMoving&&!moving){
+        draw(now/1350,elapsed,true);
+        previous=now;
       }
-      frame = heat || moving ? window.requestAnimationFrame(run) : undefined;
+      wasMoving=moving;
+      frame=heat||moving||qiFlow.hasMotion?window.requestAnimationFrame(run):undefined;
     };
     const stopOrStart = () => {
-      if (frame !== undefined) window.cancelAnimationFrame(frame);
-      frame = undefined;
-      const now = performance.now();
-      const animate = shouldAnimateMap(preference?.matches, !document.hidden);
-      draw(0, now - motionStart, animate);
-      if (animate && (heat || hasMotion && now - motionStart < MOTION_MS)) {
-        frame = window.requestAnimationFrame(run);
-      }
+      if(frame!==undefined)window.cancelAnimationFrame(frame);
+      frame=undefined;
+      const now=performance.now(),animate=active();
+      previous=now;
+      wasMoving=hasMotion&&now-motionStart<MOTION_MS;
+      draw(0,now-motionStart,animate);
+      if(animate&&(heat||wasMoving||qiFlow.hasMotion))frame=window.requestAnimationFrame(run);
     };
-    preference?.addEventListener('change', stopOrStart);
-    document.addEventListener('visibilitychange', stopOrStart);
+    preference?.addEventListener?.('change',stopOrStart);
+    document.addEventListener('visibilitychange',stopOrStart);
     stopOrStart();
     const resize = typeof ResizeObserver === 'function' ? new ResizeObserver(() => {
       const next = canvas.getBoundingClientRect();
@@ -956,10 +975,10 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     return () => {
       resize?.disconnect();
       if (frame !== undefined) window.cancelAnimationFrame(frame);
-      preference?.removeEventListener('change', stopOrStart);
+      preference?.removeEventListener?.('change',stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, atlasDrawing, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, observedSalvageSites, localGranary, villageMapLabels, civicObservation, usedVillageSegments, furnaceShift, localPavilionDesk, localMemorial, localVillageFair, localStipend, localSeedCulture, localToolLoans, localAlignedWeather, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, atlasDrawing, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, observedSalvageSites, localGranary, villageMapLabels, civicObservation, usedVillageSegments, furnaceShift, localPavilionDesk, localMemorial, localVillageFair, localStipend, localSeedCulture, localToolLoans, localAlignedWeather, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope, scenicRelief, qiFlow, inspectionEnabled]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
