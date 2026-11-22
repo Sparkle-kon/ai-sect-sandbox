@@ -251,6 +251,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   };
 
   const visibleHistory = timeline.branches.find(({ id }) => id === timeline.activeBranchId)?.snapshots;
+  const previousMapWorld=visibleHistory?.find(frame=>frame.tick===visibleWorld.tick-1)?.world;
   const readingChronicle = !cockpitOpen && dashboardOpen && workspace === 'chronicle';
   const showingChronicle = cockpitOpen || readingChronicle;
   const authoredHead=timeline.branches.find(branch=>branch.id===timeline.activeBranchId)?.snapshots.at(-1);
@@ -647,7 +648,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
       }}}
     map={immersive??
       <React.Suspense fallback={<p role="status">载入舆图…</p>}>
-        <WorldMapCanvas compact scopeKey={viewScopeKey} world={visibleWorld} selectedCultivatorId={activeActorId}
+        <WorldMapCanvas compact scopeKey={viewScopeKey} world={visibleWorld} selectedCultivatorId={activeActorId} previousWorld={previousMapWorld}
           inspectionEnabled={canInspectMap} inspectionRevision={inspectionRevision} onEntityIntervention={canMapWrite?handleMapEntityIntervention:undefined}
           fogEnabled={mapFog} onFogChange={setMapFog} pulseFocus={pulseFocus} pulseFocusActive={canInspectMap}
           onPulseFocusHandled={clearWorldPulse}
@@ -722,7 +723,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
         </div>} views={{
         map: immersive??<div className="grid min-w-0 items-start gap-2.5 lg:grid-cols-[minmax(0,1fr)_17rem] lg:gap-4">
           <div className="min-w-0"><React.Suspense fallback={<div role="status" className="grid min-h-64 place-items-center rounded-xl border border-slate-800 text-sm text-slate-300">载入舆图…</div>}>
-            <WorldMapCanvas compact scopeKey={viewScopeKey} world={visibleWorld} selectedCultivatorId={activeActorId}
+            <WorldMapCanvas compact scopeKey={viewScopeKey} world={visibleWorld} selectedCultivatorId={activeActorId} previousWorld={previousMapWorld}
           inspectionEnabled={canInspectMap} inspectionRevision={inspectionRevision} onEntityIntervention={canMapWrite?handleMapEntityIntervention:undefined}
           fogEnabled={mapFog} onFogChange={setMapFog} pulseFocus={pulseFocus} pulseFocusActive={canInspectMap}
           onPulseFocusHandled={clearWorldPulse}

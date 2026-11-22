@@ -38,6 +38,9 @@ import {mapScenicAnimationAllowed,mapScenicFrameDelay} from './mapScenicSchedule
 import { drawMapTerritoryGlyphs, drawTerrain, EXPLORED_TERRAIN_SHADE } from './terrainMapDraw';
 import { drawMapConvoys, mapTransitActorIds, visibleMapConvoys, visibleMapEscort } from './mapConvoyView';
 import { buildMapPresentation, MAP_EFFECT_LABELS, MOTION_MS } from './mapPresentationView';
+import {visibleMapFlyingSwords} from './mapFlyingSwordView';
+import {buildMapTravelTrajectory} from './mapTravelTrajectory';
+import {drawMapTrajectoryVfx} from './trajectoryVfxDraw';
 import { drawFlights, drawMapEffects } from './mapPresentationDraw';
 import { projectMapTerritories } from './mapTerritorySemantics';
 import {MapEntityPopover} from './MapEntityPopover';
@@ -102,6 +105,7 @@ interface MapInspection extends MapEntityPopoverBinding {
 
 interface WorldMapCanvasProps {
   world: WorldState;
+  previousWorld?:WorldState;
   selectedCultivatorId: string | null;
   onSelectCultivator: (id: string) => void;
   onSelectLocation?: (loc: LocationNode) => void;
@@ -124,7 +128,7 @@ interface WorldMapCanvasProps {
 }
 
 export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
-  world,
+  world,previousWorld,
   selectedCultivatorId,
   onSelectCultivator,
   onSelectLocation,
@@ -313,6 +317,9 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const formationLines = useMemo(() => visibleFormationMapLinks(world, mapView, selected), [world, mapView, selected]);
   const scenicRelief=useMemo(()=>buildCanvasBiomeRelief(world,mapView),[world,mapView]);
   const qiFlow=useMemo(()=>buildQiFlowPlan(world,mapView,formationLines),[world,mapView,formationLines]);
+  const letters=useMemo(()=>visibleMapFlyingSwords(world,mapView,selected),[world,mapView,selected]);
+  const travel=useMemo(()=>buildMapTravelTrajectory(world,mapView,selected,previousWorld),[world,mapView,selected,previousWorld]);
+  const flightAlignments=useMemo(()=>new Map(world.sects.map(sect=>[sect.id,sect.alignment])),[world.sects]);
   const localClinic = useMemo(() => {
     const clinic = visibleInfirmaries(world, selected);
     return clinic?.capacity && isCurrentLocation(clinic.siteId) ? { siteId: clinic.siteId, capacity: clinic.capacity } : undefined;
@@ -521,7 +528,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     let markerSize: MarkerViewport = canvas.getBoundingClientRect();
     let staticMarkers: ReturnType<typeof planActorMarkers> | undefined;
 
-    const hasMotion = presentation.routes.size > 0 || presentation.effects.length > 0;
+    const hasMotion = presentation.routes.size>0||presentation.effects.length>0||letters.length>0||travel.hasMotion;
     if (playback.current?.source !== world.mapPresentation) {
       playback.current = { source: world.mapPresentation, start: performance.now() };
     }
@@ -561,8 +568,11 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       drawVillageSupplyCheckpoints(ctx, villageSupplyCheckpoints, camera.zoom);
       drawRouteWarningMarks(ctx,routeWarningMarks,camera.zoom);
       drawFormationMapLinks(ctx, formationLines, camera.zoom);
-      if (escortedCaravan) drawMapConvoys(ctx, [escortedCaravan], camera.zoom, '#7dd3fc', 'escort');
-      if (pilgrimageMark) {
+      const cart=travel.markers.find(mark=>mark.kind==='caravan');
+      const isEscortedCart=cart!==undefined&&escortedCaravan?.marker.x===cart.point.x&&escortedCaravan.marker.y===cart.point.y;
+      if(escortedCaravan)drawMapConvoys(ctx,[escortedCaravan],camera.zoom,'#7dd3fc','escort',!isEscortedCart);
+      if(pilgrimageMark&&!travel.markers.some(mark=>mark.kind==='pilgrimage'&&
+        mark.point.x===pilgrimageMark.point.x&&mark.point.y===pilgrimageMark.point.y)){
         const { x, y } = pilgrimageMark.point;
         ctx.save();
         ctx.fillStyle = '#0f2632';
@@ -829,7 +839,18 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       drawMapTerritoryGlyphs(ctx, territorySemantics.markers, logicalPerCssPixel);
 
       // 5. Draw only actors in the current field of view.
-      const frameActors = drawFlights(ctx, actorPositions, presentation.routes, elapsed, animate);
+      const frameActors=(()=>{
+        // Clip even strokes and glows, not just route centerlines, to the actual painted view.
+        if(!qiFlow.clip.length)return actorPositions;
+        ctx.save();
+        try {
+          ctx.beginPath();
+          for(const {x,y,width:spanWidth,height:spanHeight} of qiFlow.clip)ctx.rect(x,y,spanWidth,spanHeight);
+          ctx.clip();
+          if(letters.length||travel.markers.length)drawMapTrajectoryVfx(ctx,letters,travel.markers,elapsed,animate,logicalPerCssPixel);
+          return drawFlights(ctx,actorPositions,presentation.routes,elapsed,animate,actor=>flightAlignments.get(actor.sectId));
+        } finally {ctx.restore();}
+      })();
       const markers = frameActors === actorPositions
         ? (staticMarkers ??= planActorMarkers(frameActors, camera, markerSize, selectedCultivatorId))
         : planActorMarkers(frameActors, camera, markerSize, selectedCultivatorId);
@@ -978,7 +999,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener?.('change',stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, atlasDrawing, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, observedSalvageSites, localGranary, villageMapLabels, civicObservation, usedVillageSegments, furnaceShift, localPavilionDesk, localMemorial, localVillageFair, localStipend, localSeedCulture, localToolLoans, localAlignedWeather, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope, scenicRelief, qiFlow, inspectionEnabled]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, atlasDrawing, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, observedSalvageSites, localGranary, villageMapLabels, civicObservation, usedVillageSegments, furnaceShift, localPavilionDesk, localMemorial, localVillageFair, localStipend, localSeedCulture, localToolLoans, localAlignedWeather, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope, scenicRelief, qiFlow, inspectionEnabled, letters, travel, flightAlignments]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1266,6 +1287,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           </svg>
         </button>
       </div>
+      {letters.length>0&&<p className="sr-only">所选修士本月确收飞剑传书，舆图只示两地，不公开内容。</p>}
+      {travel.markers.some(mark=>mark.kind==='caravan')&&<p className="sr-only">舆图标出已观测商队关口，不显示未走路线。</p>}
       {pilgrimageMark && <p className="sr-only">所选修士的巡礼关口：第 {pilgrimageMark.row} 行，第 {pilgrimageMark.col} 列。</p>}
       {campMarks.length > 0 && <p className="sr-only">已观测夜宿营地 {campMarks.length} 处，共 {campMarks.reduce((count, camp) => count + camp.parties, 0)} 队，不是新地点。</p>}
       {extractionMarks.length > 0 && <p className="sr-only">当前看见 {extractionMarks.length} 处实际撤离关口；不是新地点，也未公开路线。</p>}

@@ -92,7 +92,7 @@ export const MAP_CONVOY_STYLES = {
 
 /** Static convoy overlay; it neither animates nor advances simulation. */
 export function drawMapConvoys(ctx:CanvasRenderingContext2D,convoys:readonly VisibleCheckpoint[],zoom:number,
-  color?:string,kind:MapConvoyKind='migration'):void {
+  color?:string,kind:MapConvoyKind='migration',paintMarker=true):void {
   if(!convoys.length) return;
   const style=MAP_CONVOY_STYLES[kind];
   ctx.save();
@@ -103,6 +103,7 @@ export function drawMapConvoys(ctx:CanvasRenderingContext2D,convoys:readonly Vis
     ctx.strokeStyle='#020617';ctx.lineWidth=4/zoom;ctx.stroke();
     ctx.strokeStyle=color??style.stroke;ctx.lineWidth=2/zoom;ctx.stroke();
     ctx.setLineDash([]);
+    if(!paintMarker)continue;
     const size=9/zoom;
     ctx.beginPath();
     if(kind==='escort') {
