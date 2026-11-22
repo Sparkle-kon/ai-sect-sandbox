@@ -76,7 +76,7 @@ export function PlayerStoryEntry({role,revision,busy=false,titleRef,onEnter,onFo
           </>}
           {role.kind==='playing'&&<>
             <p className="text-sm leading-relaxed text-slate-300">你正在引导{role.name}。为下个月选一次行动，或者不下令，让人物自己选择。</p>
-            {role.queued ? <p ref={queuedReceipt} tabIndex={-1} role="status" className="text-sm text-amber-200">已安排下个月{role.queued==='other'?'的一项行动':ORDERS[role.queued]}。回到故事按「继续」才过月。</p>
+            {role.queued ? <p ref={queuedReceipt} tabIndex={-1} role="status" className="text-sm text-amber-200">已安排下个月{role.queued==='other'?'的一项行动':ORDERS[role.queued]}。回到故事按「看下个月」才过月。</p>
               : role.canOrder&&onOrder ? <>
                 <p className="text-xs text-slate-400">排入一项用 {AVATAR_ORDER_COST} 神识；到下个月还要核对当时条件。</p>
                 <div className="flex flex-wrap gap-2">
@@ -89,7 +89,10 @@ export function PlayerStoryEntry({role,revision,busy=false,titleRef,onEnter,onFo
         </>}
         {notice?.revision===revision&&<p role="status" className="text-sm text-amber-200">{notice.text}</p>}
       </div>
-      <button type="button" className={action} disabled={busy} onClick={onTools}>查看地图、纪事与存档</button>
+      <details className="group min-w-0 rounded-lg border border-slate-800 px-3 text-sm text-slate-300 [overflow-wrap:anywhere]">
+        <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300">更多工具<span aria-hidden="true" className="shrink-0 group-open:rotate-90">›</span></summary>
+        <button type="button" className={`${action} mb-3`} disabled={busy} onClick={onTools}>查看地图、纪事与存档</button>
+      </details>
     </section>
   );
 }

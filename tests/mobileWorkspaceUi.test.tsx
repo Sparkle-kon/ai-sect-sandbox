@@ -10,8 +10,8 @@ describe('mobile-first sandbox workspaces', () => {
   it('shows only Continue and More on the story-first public entry', () => {
     const html = renderToStaticMarkup(<App />);
     expect(html.match(/<button\b/g)).toHaveLength(2);
-    expect(html).toMatch(/>继续<\/button>/);
-    expect(html).toMatch(/>\s*更多\s*<\/button>/);
+    expect(html).toMatch(/>看下个月<\/button>/);
+    expect(html).toMatch(/>\s*走进故事\s*<\/button>/);
     expect(html).toContain('data-story-home');
     expect(html).toContain('主角未定');
     expect(html).toContain('陨仙墟异动');

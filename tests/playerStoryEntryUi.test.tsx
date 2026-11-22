@@ -13,19 +13,29 @@ const show=(role:StoryPlayerRole)=>renderToStaticMarkup(<PlayerStoryEntry role={
 const home=vi.fn(()=>undefined);
 
 describe('player-facing story flow and native choices',()=>{
-  it('keeps only Continue and More while showing what happened, whose story, and how the player starts',()=>{
+  it('keeps only Continue and Enter Story while showing what happened, whose story, and how the player starts',()=>{
     const world=createInitialWorld(), view=projectStoryHomepage(world);
     const html=renderToStaticMarkup(<StoryFirstHome scene={view.scene} leadName={view.lead?.name} onContinue={home} onMore={home}/>);
     expect(html.match(/<button\b/g)).toHaveLength(2);
-    expect(html).toMatch(/>继续<\/button>/);
-    expect(html).toMatch(/>\s*更多\s*<\/button>/);
+    expect(html).toMatch(/>看下个月<\/button>/);
+    expect(html).toMatch(/>\s*走进故事\s*<\/button>/);
     expect(html).toContain('陨仙墟异动');
     expect(html).toContain('宗、血月魔宗、丹霞谷和天机阁的修士纷纷动身');
     expect(html).toContain('主角未定');
+    expect(html).toMatch(/<h2[^>]*>主角未定<\/h2>/);
+    expect(html).toContain('data-story-next');
+    expect(html.indexOf('主角未定')).toBeLessThan(html.indexOf('陨仙墟异动'));
     expect(html).toContain('你在旁观');
-    expect(html).toContain('看下个月 · 每次只过一月');
+    expect(html).toContain('每次只过一月');
     expect(html).not.toMatch(/模拟器|<select|自动推演|查看地图、纪事与存档/);
     expect(home).not.toHaveBeenCalled();
+  });
+
+  it('does not call a player a spectator before a protagonist is earned',()=>{
+    const html=renderToStaticMarkup(<StoryFirstHome playerName="苏清寒" onContinue={never} onMore={never}/>);
+    expect(html).toContain('主角未定');
+    expect(html).toMatch(/你正在引导：<strong[^>]*>苏清寒<\/strong>/);
+    expect(html).not.toContain('你在旁观');
   });
 
   it('distinguishes a protagonist earned by real turns, unrelated current story, and the player’s different body',()=>{
@@ -51,6 +61,8 @@ describe('player-facing story flow and native choices',()=>{
     expect(ready).toContain('从旁观切换为入世');
     expect(ready).not.toContain('确认入世');
     expect(ready.indexOf('以叶连翘入世')).toBeLessThan(ready.indexOf('查看地图、纪事与存档'));
+    expect(ready).toMatch(/<details[^>]*><summary[^>]*>更多工具<span[^>]*>›<\/span><\/summary>/);
+    expect(ready).not.toMatch(/<details[^>]*\sopen(?=[\s=>])/);
     const unavailable=show({kind:'observer',name:'叶连翘',canEnter:false,unavailable:'已有行动待办。'});
     expect(unavailable).toContain('已有行动待办。');
     expect(unavailable).toContain('跟随主角的见闻');
@@ -67,7 +79,7 @@ describe('player-facing story flow and native choices',()=>{
     expect(ready).toContain('排入一项用 5 神识');
     const queued=show({kind:'playing',name:'叶连翘',isLead:true,canOrder:false,queued:'CULTIVATE'});
     expect(queued).toContain('已安排下个月修炼');
-    expect(queued).toContain('继续');
+    expect(queued).toContain('看下个月');
     expect(queued).not.toMatch(/>下月调息<|>下月修炼<|已执行/);
   });
 });
