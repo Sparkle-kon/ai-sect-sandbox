@@ -1,3 +1,4 @@
+import {buildSchoolFormMapStrokes,drawSchoolFormMapStrokes} from './schoolFormMapStroke';
 import {buildCalamityMapFlows,calamityFlowSummary,drawCalamityMapFlows} from './calamityArrayMapFlow';
 import { drawSiegeFormationVfx, SIEGE_FORMATION_LIFETIME_MS } from './siegeFormationVfxDraw';
 import {buildScopedMapScene} from './scopedMapScene';
@@ -449,6 +450,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const {combatVfx,battlefieldBySite,domes,domesBySite,actorBadgeFacts,hasBadgeQuote,presentation,formationFrames}=
     useMemo(()=>buildScopedMapScene(world,mapView,actorPositions,Boolean(historical)),[world,mapView,actorPositions,historical]);
   const calamityFlows=useMemo(()=>buildCalamityMapFlows(world,mapView),[world,mapView]);
+  const schoolStrokes=useMemo(()=>buildSchoolFormMapStrokes(world,mapView),[world,mapView]);
+  const schoolStrokeSites=useMemo(()=>new Set(schoolStrokes.map(mark=>mark.siteId)),[schoolStrokes]);
   const selectedDome=selected?domes.find(dome=>dome.sectId===selected.sectId):undefined;
   const selectedBadgeFact=selectedCultivatorId?actorBadgeFacts.get(selectedCultivatorId):undefined;
   const canvasFlights=useMemo(()=>compileCanvasFlights(actorPositions,presentation.routes,actor=>flightAlignments.get(actor.sectId)),
@@ -775,6 +778,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           for(const {x,y,width:spanWidth,height:spanHeight} of qiFlow.clip)ctx.rect(x,y,spanWidth,spanHeight);
           ctx.clip();
           drawMapCombatVfx(ctx,combatVfx,elapsed,animate,logicalPerCssPixel,scenicPhase,camera);
+          if(schoolStrokes.length)drawSchoolFormMapStrokes(ctx,schoolStrokes,logicalPerCssPixel);
           if(calamityFlows.length)drawCalamityMapFlows(ctx,calamityFlows,logicalPerCssPixel);
           if(formationFrames.length)drawSiegeFormationVfx(ctx,formationFrames,timestamp-formationStart,animate&&animateFormation,logicalPerCssPixel);
           if(ascensionMarks.length)drawAscensionMapVfx(ctx,ascensionMarks,elapsed,animate,logicalPerCssPixel);
@@ -946,7 +950,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener?.('change',stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, atlasDrawing, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, civicObservation, usedVillageSegments, annotationView, annotationPins, armedBrush, preview, compact, clusterScope, scenicRelief, qiFlow, inspectionEnabled, letters, travel, flightMap, canvasFlights, combatVfx, actorBadgeFacts, hasBadgeQuote, domes, strategic, arenaMarks, dungeonMark, alchemyMarks, daoMarks, auctionMark, realmHalos, clanCeremonies, ascensionMarks, formationFrames, calamityFlows, historical]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, atlasDrawing, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, civicObservation, usedVillageSegments, annotationView, annotationPins, armedBrush, preview, compact, clusterScope, scenicRelief, qiFlow, inspectionEnabled, letters, travel, flightMap, canvasFlights, combatVfx, actorBadgeFacts, hasBadgeQuote, domes, strategic, arenaMarks, dungeonMark, alchemyMarks, daoMarks, auctionMark, realmHalos, clanCeremonies, ascensionMarks, formationFrames, calamityFlows, schoolStrokes, historical]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1594,6 +1598,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                   coverage.kind === 'relief' ? '接替者已实到' : '有实际驻守'}</span>}
                 {observedCohortSites.has(location.id) && <span className="text-amber-200">· 本回合已亲见实际合班授课</span>}
                 {observedSalvageSites.has(location.id) && <span className="text-teal-200">· 已亲见货损幸存原物封存</span>}
+                {schoolStrokeSites.has(location.id)&&<span className="text-amber-200">· 本月有实见剑招</span>}
                 {calamityFlow&&<span className="text-teal-200">· {calamityFlow}</span>}
                 {dome && (
                   <span className="text-indigo-300">· 护山阵 {dome.hp}/{dome.maxHp}{dome.hp===0?' · 阵破':''}</span>

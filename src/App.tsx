@@ -1,3 +1,4 @@
+import { useSchoolFormDuelStory } from './components/useSchoolFormDuelStory';
 import { useCalamityArrayStory } from './components/useCalamityArrayStory';
 import { useBattlefieldRevisitStory } from './components/useBattlefieldRevisitStory';
 import { useDungeonStoryFork } from './components/useDungeonStoryFork';
@@ -305,6 +306,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   });
   const {card:featuredStoryCard,pending:storyDecisionPending}=useFeaturedStoryDecision(simulation);
   const dungeonFork=useDungeonStoryFork(simulation,!dashboardOpen&&!cockpitOpen&&!storyEntryOpen,selectedCultivator);
+  const schoolFormDuel=useSchoolFormDuelStory(simulation,!dashboardOpen&&!cockpitOpen&&!storyEntryOpen,selectedCultivator);
   const calamityArray=useCalamityArrayStory(simulation,!dashboardOpen&&!cockpitOpen&&!storyEntryOpen,selectedCultivator);
   const battlefieldRevisit=useBattlefieldRevisitStory(simulation,!dashboardOpen&&!cockpitOpen&&!storyEntryOpen,selectedCultivator);
   const flight=useProtagonistFlightScene(simulation,
@@ -670,7 +672,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
       openings={<HighDramaPresetPicker scopeKey={viewScopeKey} revision={world} disabled={dramaticOpening.disabled} onStart={dramaticOpening.start}/>}
       onFollow={storyHome.lead?followCurrentLead:undefined} onEnter={enterCurrentLead} onOrder={orderCurrentStoryAvatar} />:
       <StoryFirstHome recapContext={world.chronicleArchive.chapters.length||world.coldHistory?.chapters.length?
-        {world,scopeKey:viewScopeKey,viewer:activeAvatar(world)}:undefined} scene={storyHome.scene} subplot={guidance.subplot} branchScene={dungeonFork??calamityArray??battlefieldRevisit??flightCard??passageScene??banquetStory??<DeferredGrandSiegeMapScene world={world} viewer={activeAvatar(world)} fog personalOnly visible witnessScopeKey={viewScopeKey}/>} leadName={storyHome.lead?.name} playerName={activeAvatar(world)?.name}
+        {world,scopeKey:viewScopeKey,viewer:activeAvatar(world)}:undefined} scene={storyHome.scene} subplot={guidance.subplot} branchScene={dungeonFork??schoolFormDuel??calamityArray??battlefieldRevisit??flightCard??passageScene??banquetStory??<DeferredGrandSiegeMapScene world={world} viewer={activeAvatar(world)} fog personalOnly visible witnessScopeKey={viewScopeKey}/>} leadName={storyHome.lead?.name} playerName={activeAvatar(world)?.name}
         busy={isStepping} moreRef={storyMoreRef} notice={storyNotice} calendar={storyHome.calendar} opening={dramaticOpening.opening}
         outcome={storyOutcome?.world===world?storyOutcome.text:undefined} onContinue={advanceStory} onMore={openStoryEntry} />)}
   </main>;

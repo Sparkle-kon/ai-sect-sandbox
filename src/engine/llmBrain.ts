@@ -1,3 +1,5 @@
+import { availableSchoolFormChoices, schoolFormDuelForParticipant } from './schoolFormDuel';
+import { exactSchoolFormDecision, schoolFormCommand } from './schoolFormDuelCognition';
 import { availableCalamityArrayChoices } from './calamityArray';
 import { calamityArrayCommand, exactCalamityArrayDecision } from './calamityArrayCognition';
 import { availableBeastDuelChoices, beastDuelContactForParticipant } from './beastDuelProtection';
@@ -2405,6 +2407,19 @@ export async function requestCultivatorLLMDecision(
       requestTick === world.tick + 1 && cultivator.tribulation?.id === exactTrialId &&
       activeHeartDemon(world, cultivator) === frame && !frame.queued && !isHeartDemonGuided(world, cultivator, frame)
         ? decodeHeartDemonDecision(parsed, exactTrialId) : undefined, 150);
+  }
+
+  const schoolForm = schoolFormDuelForParticipant(world,cultivator);
+  if (schoolForm) {
+    if (requestTick!==world.tick+1 || schoolForm.attackerId!==cultivator.id || activeAvatar(world)===cultivator) return undefined;
+    const choices=availableSchoolFormChoices(world,schoolForm);
+    if (!choices.length) return undefined;
+    const menu=choices.map(choice=>schoolFormCommand(schoolForm.id,choice));
+    return requestDecisionPrompt(config,requestTick,options,
+      '只可如实选择眼前是否回剑，或亲自撤回本次挑战。原样抄写一个许可，不写师承、独白、伤势或结果：'+JSON.stringify(menu),
+      parsed=>requestTick===world.tick+1&&schoolFormDuelForParticipant(world,cultivator)===schoolForm&&
+        activeAvatar(world)!==cultivator&&exactSchoolFormDecision(parsed,schoolForm.id,choices)
+        ?exactSchoolFormDecision(parsed,schoolForm.id,availableSchoolFormChoices(world,schoolForm)):undefined,145);
   }
 
   const suspended = forbiddenDuelForParticipant(world, cultivator);

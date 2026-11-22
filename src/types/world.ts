@@ -1,3 +1,5 @@
+import type { SchoolFormDuelChoice, SchoolFormDuelContact } from './schoolFormDuel';
+import type { TaughtSwordPractice } from './taughtSwordForm';
 import type { BeastDuelChoice, BeastDuelContact } from './beastDuelProtection';
 import type { ProtagonistHandoff } from './protagonistHandoff';
 import type { ProtagonistFlight } from './protagonistFlight';
@@ -127,6 +129,7 @@ export type ActionType =
   | 'AWAKEN_DESTINY'
   | 'FORBIDDEN_ART'
   | 'BEAST_DUEL_RESPONSE'
+  | 'SCHOOL_FORM_DUEL'
   | 'GRAND_SIEGE_HERO'
   | 'BATTLEFIELD_REVISIT'
   | 'CALAMITY_ARRAY'
@@ -587,6 +590,8 @@ export interface LLMDecisionPayload {
   forbiddenArtChoice?: ForbiddenArtChoice;
   targetGrandSiegeId?: string;
   battlefieldRevisitMove?: 'repair' | 'seek';
+  schoolFormChoice?: SchoolFormDuelChoice;
+  targetSchoolFormContactId?: string;
   calamityArrayStance?: 'joint' | 'local';
   targetCalamityHazardId?: string;
   targetBattlefieldSiegeId?: string;
@@ -1266,6 +1271,7 @@ export interface WorldRandomState {
 }
 
 export interface TuitionOffer {
+  swordPractice?: TaughtSwordPractice;
   id: string;
   mentorId: string;
   studentId: string;
@@ -3645,6 +3651,7 @@ export interface WorldState {
   roguelikeEncounters?:RoguelikeEncounterRecord[];
   forbiddenDuels?: ForbiddenDuelContact[];
   beastDuelContacts?:BeastDuelContact[];
+  schoolFormDuels?: SchoolFormDuelContact[];
   scribeCommissions?: ScribeCommissionState;
   waypostMeals?: WaypostMealState;
   disasterShelter?: DisasterShelterState;

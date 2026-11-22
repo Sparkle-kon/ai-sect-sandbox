@@ -1,3 +1,5 @@
+import { availableSchoolFormChoices, schoolFormDuelForParticipant } from './schoolFormDuel';
+import { exactSchoolFormDecision } from './schoolFormDuelCognition';
 import { availableCalamityArrayChoices } from './calamityArray';
 import { exactCalamityArrayDecision } from './calamityArrayCognition';
 import { availableBeastDuelChoices, beastDuelContactForParticipant } from './beastDuelProtection';
@@ -108,6 +110,7 @@ export function recordDecisionTrace(world: WorldState, actorId: string, candidat
     decision.targetForbiddenDuelId !== undefined || decision.forbiddenArtChoice !== undefined ||
     decision.chosenAction === 'GRAND_SIEGE_HERO' || decision.targetGrandSiegeId !== undefined || decision.grandSiegeHeroMove !== undefined ||
     decision.chosenAction === 'BEAST_DUEL_RESPONSE' || decision.targetBeastDuelId !== undefined || decision.beastDuelChoice !== undefined ||
+    decision.chosenAction === 'SCHOOL_FORM_DUEL' || decision.schoolFormChoice !== undefined || decision.targetSchoolFormContactId !== undefined ||
     decision.chosenAction === 'CALAMITY_ARRAY' || decision.targetCalamityHazardId !== undefined || decision.calamityArrayStance !== undefined ||
     decision.chosenAction === 'BATTLEFIELD_REVISIT' || decision.targetBattlefieldSiegeId !== undefined || decision.battlefieldRevisitMove !== undefined ||
     decision.chosenAction === 'EXPEDITION_DUNGEON' || decision.targetDungeonRoomId !== undefined || decision.dungeonMove !== undefined ||
@@ -261,6 +264,12 @@ export function rememberReplayDecision(tape: DecisionReplayTape, actorId: string
     availableBeastDuelChoices(state.base,beastOwner),true);
   const beastFields=beastResponse?{targetBeastDuelId:beastResponse.targetBeastDuelId,beastDuelChoice:beastResponse.beastDuelChoice,
     ...(beastResponse.targetLocationId?{targetLocationId:beastResponse.targetLocationId}:{})}:undefined;
+  const schoolAction=decision.chosenAction==='SCHOOL_FORM_DUEL';
+  const schoolActor=schoolAction?state.base.cultivators.find(row=>row.id===actorId):undefined;
+  const schoolContact=schoolActor&&schoolFormDuelForParticipant(state.base,schoolActor);
+  const school=schoolContact?.attackerId===actorId
+    ?exactSchoolFormDecision(decision,schoolContact.id,availableSchoolFormChoices(state.base,schoolContact),true):undefined;
+  const schoolFields=school?{schoolFormChoice:school.schoolFormChoice,targetSchoolFormContactId:school.targetSchoolFormContactId}:undefined;
   const arrayAction = decision.chosenAction === 'CALAMITY_ARRAY';
   const arrayActor = arrayAction ? current.cultivators.find(row => row.id === actorId) : undefined;
   const arrayIntent = arrayActor && exactCalamityArrayDecision(decision,
@@ -281,9 +290,9 @@ export function rememberReplayDecision(tape: DecisionReplayTape, actorId: string
   const ascent = stance ? { ascensionMove: stance.ascensionMove, ...(stance.targetAscensionTrialId === undefined ? {} :
     { targetAscensionTrialId: stance.targetAscensionTrialId }) } : undefined;
   state.decisions.set(actorId, { ...(forbiddenAction || grandSiegeAction || dungeonAction || heavenlyAction || daoPathAction ||
-      auctionAction || auctionAmbush || clanAction || ascensionAction || revisitAction || beastAction || arrayAction ? {} : details),
+      auctionAction || auctionAmbush || clanAction || ascensionAction || revisitAction || beastAction || arrayAction || schoolAction ? {} : details),
     chosenAction: decision.chosenAction, innerMonologue: '', ...(cohortInviteeIds ? { cohortInviteeIds } : {}),
-    ...personalHeartChoice, ...personalForbiddenChoice, ...personalHeroChoice, ...dungeonFields, ...chosenAlchemy, ...pathFields, ...auctionFields, ...ambushFields, ...clanFields, ...ascent, ...revisitFields, ...beastFields, ...arrayFields });
+    ...personalHeartChoice, ...personalForbiddenChoice, ...personalHeroChoice, ...dungeonFields, ...chosenAlchemy, ...pathFields, ...auctionFields, ...ambushFields, ...clanFields, ...ascent, ...revisitFields, ...beastFields, ...arrayFields, ...schoolFields });
   if (personalHeartChoice && heartModel) state.heartModelActors.add(actorId);
   else state.heartModelActors.delete(actorId);
   if (personalForbiddenChoice && forbiddenModel) state.forbiddenModelActors.add(actorId);

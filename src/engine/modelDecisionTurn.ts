@@ -1,3 +1,4 @@
+import { availableSchoolFormChoices, schoolFormDuelForParticipant } from './schoolFormDuel';
 import { availableAscensionActions } from './ascensionEngine';
 import { ascensionDutyActive } from './ascensionPresence';
 import { regionalModelPassiveActorIds } from './regionalSimulationEngine';
@@ -71,6 +72,8 @@ export function modelDecisionCandidates(world: WorldState): Cultivator[] {
     if(ascensionDutyActive(world,actor)||actor.realm==='渡劫'&&actor.realmStage===9&&
         availableAscensionActions(actor,world,nextTick).some(row=>row.ascensionMove==='start'))
       return availableAutonomousAscensionActions(actor,world,nextTick).length>0;
+    const schoolForm=schoolFormDuelForParticipant(world,actor);
+    if(schoolForm)return actor!==avatar&&schoolForm.attackerId===actor.id&&availableSchoolFormChoices(world,schoolForm).length>0;
     const trial = actor.tribulation;
     const theatre = trial?.stage === 'heart_demon' && (trial.heartTheatreArmed === true || trial.heartDemon !== undefined);
     const heart = theatre ? activeHeartDemon(world, actor) : undefined;

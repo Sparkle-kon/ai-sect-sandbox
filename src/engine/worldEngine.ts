@@ -1,3 +1,8 @@
+import { availableSchoolFormChoices, closeSchoolFormDuel, deadSchoolFormContacts, isPrivateSchoolFormEvent,
+  openSchoolFormDuel, schoolFormActualStroke, schoolFormCounterPayment, schoolFormDuelForParticipant, schoolFormPrivateEvent } from './schoolFormDuel';
+import { exactSchoolFormDecision, schoolFormCommand } from './schoolFormDuelCognition';
+import { isTaughtSwordPracticeEvent, recordTaughtSwordPractice } from './taughtSwordForm';
+import type { NativeDuelModifier } from './nativeDuelRules';
 import { availableCalamityArrayChoices, isPrivateCalamityArrayEvent, recordCalamityArrayChoice } from './calamityArray';
 import { exactCalamityArrayDecision } from './calamityArrayCognition';
 import { beastDuelContactForParticipant, beastDuelGuardEvent, consumeBeastDuelContact, openBeastDuelContact, openBeastDuelEvent,
@@ -276,7 +281,7 @@ interface ForbiddenDuelSettlement {
 /** Ordinary and suspended contact finish through the same real damage, witnesses, and inheritance. */
 function settleNativeDuel(world:WorldState,cultivator:Cultivator,defender:Cultivator,decision:LLMDecisionPayload,
   rolls:NativeDuelRolls,authorizedBountyTargetId?:string,emit?:(event:WorldEvent)=>void,
-  context?:ForbiddenDuelSettlement,beastGuardContact?:BeastDuelContact):WorldEvent{
+  context?:ForbiddenDuelSettlement,beastGuardContact?:BeastDuelContact,formModifier?:NativeDuelModifier):WorldEvent{
   const location=world.locations.find(site=>site.id===cultivator.locationId);
   const finishDuel = (proof: WorldEvent,paid:ReturnType<typeof consumeDaoDuelIntents>=[]): WorldEvent => {
     recordDaoDuelIntents(world,proof,paid);
@@ -290,7 +295,7 @@ function settleNativeDuel(world:WorldState,cultivator:Cultivator,defender:Cultiv
     if(release)return finishDuel(release);
   }
   const modifier=context?{ownerId:context.contact.ownerId,scoreMultiplier:context.activation.scoreMultiplier,
-    incomingMultiplier:context.activation.incomingMultiplier}:undefined;
+    incomingMultiplier:context.activation.incomingMultiplier}:formModifier;
   const daoPaid=consumeDaoDuelIntents(world,cultivator,defender);
   const ordinaryWinner=context&&context.activation.choice!=='decline'
     ?measureNativeDuel(world,cultivator,defender,rolls,undefined,daoPaid).winner:undefined;
@@ -945,7 +950,10 @@ export function applyCultivatorBrainDecision(
         1,
         cultivator.maxHp
       );
-      return recordCohortPractice(world, cultivator, beforeMastery);
+      const lesson = recordTaughtSwordPractice(world,cultivator,beforeMastery);
+      const cohort = recordCohortPractice(world,cultivator,beforeMastery);
+      if(lesson&&cohort&&emit){emit(lesson);return cohort;}
+      return lesson??cohort;
     }
 
     case 'REST': {
@@ -1119,6 +1127,7 @@ export function applyCultivatorBrainDecision(
       };
     }
 
+    case 'SCHOOL_FORM_DUEL':
     case 'BEAST_DUEL_RESPONSE':
     case 'FORBIDDEN_ART':
       // The owner can only answer through an actual suspended duel's native monthly slot.
@@ -1129,7 +1138,8 @@ export function applyCultivatorBrainDecision(
         (decision.targetCultivatorId === undefined || c.id === decision.targetCultivatorId)
       );
       if (!defender || forbiddenDuelForParticipant(world,defender) || forbiddenDuelForParticipant(world,cultivator)||beastDuelContactForParticipant(world,defender)||
-          beastDuelContactForParticipant(world,cultivator)) return null;
+          beastDuelContactForParticipant(world,cultivator)||schoolFormDuelForParticipant(world,cultivator)||
+          schoolFormDuelForParticipant(world,defender)) return null;
       const ward = interceptSanctuaryDuel(world, cultivator, defender);
       if (ward?.blocked) return ward.event;
       if (ward) recordAuxiliaryActionEvent(world, ward.event, emit);
@@ -1148,6 +1158,10 @@ export function applyCultivatorBrainDecision(
           const beastContact=openBeastDuelContact(world,cultivator,defender,threat.loser,rolls);
           if(beastContact)return openBeastDuelEvent(world,beastContact);
         }
+      }
+      if(allowForbiddenDuel&&authorizedBountyTargetId===undefined&&decision.targetCultivatorId===defender.id){
+        const school=openSchoolFormDuel(world,cultivator,defender,rolls);
+        if(school)return schoolFormPrivateEvent(world,school,'noticed');
       }
       return settleNativeDuel(world,cultivator,defender,publicDecision,rolls,authorizedBountyTargetId,emit);
     }
@@ -1225,6 +1239,7 @@ export function advanceWorldTick(
   const finishedDuelActors=new Set<string>();
   pruneInvalidForbiddenDuelContacts(nextState);
   pruneInvalidBeastDuelContacts(nextState);
+  deadSchoolFormContacts(nextState);
 
   for (const cultivator of [...nextState.cultivators]) {
     if (!cultivator.alive || cultivator.positionPlane === 'immortal') continue;
@@ -1361,6 +1376,50 @@ export function advanceWorldTick(
     }
 
     if(finishedDuelActors.has(cultivator.id))continue;
+    const school=schoolFormDuelForParticipant(nextState,cultivator);
+    if(school){
+      if(school.attackerId!==cultivator.id||school.openedTick>=nextState.tick)continue;
+      const defender=nextState.cultivators.find(row=>row.id===school.defenderId);
+      const options=availableSchoolFormChoices(nextState,school);
+      if(!defender||!options.length){closeSchoolFormDuel(nextState,school);continue;}
+      const supplied=precomputedDecisions?.[cultivator.id];
+      const directed=avatarOrder?.actorId===cultivator.id?avatarOrder.decision:undefined;
+      const fromModel=Boolean(!directed&&traceOptions?.modelActors?.has(cultivator.id));
+      const earlier=prevState.cultivators.find(row=>row.id===cultivator.id);
+      const before=earlier&&schoolFormDuelForParticipant(prevState,earlier);
+      const requested=before?.id===school.id&&(!fromModel||activeAvatar(prevState)!==earlier)
+        ?exactSchoolFormDecision(directed??supplied,school.id,availableSchoolFormChoices(prevState,before),true):undefined;
+      const accepted=requested&&exactSchoolFormDecision(requested,school.id,options,true);
+      // The possessed learner can wait one month; never invent a player answer at expiry.
+      if(!accepted&&activeAvatar(nextState)===cultivator&&nextState.tick===school.openedTick+1)continue;
+      const fallback=activeAvatar(nextState)===cultivator?undefined:
+        options.includes('counter')&&cultivator.hp>=cultivator.maxHp*.45&&
+        (cultivator.personality==='狂傲'||cultivator.personality==='嗜血'||cultivator.personality==='刚正')?'counter':'stop';
+      const choice=accepted?.schoolFormChoice??fallback;
+      const settled=choice?exactSchoolFormDecision(schoolFormCommand(school.id,choice),school.id,options):undefined;
+      const modifier=choice==='counter'?schoolFormCounterPayment(nextState,school):undefined;
+      closeSchoolFormDuel(nextState,school);
+      finishedDuelActors.add(cultivator.id);finishedDuelActors.add(defender.id);
+      if(settled){cultivator.currentAction='SCHOOL_FORM_DUEL';cultivator.innerMonologue=settled.innerMonologue;}
+      if(choice==='stop'){
+        newEvents.push(schoolFormPrivateEvent(nextState,school,'stop'));
+      }else{
+        if(modifier)newEvents.push(schoolFormPrivateEvent(nextState,school,'counter'));
+        const publish=(event:WorldEvent)=>{newEvents.push(event);witnessEvent(nextState,event);};
+        const duel=settleNativeDuel(nextState,cultivator,defender,settled??{chosenAction:'DUEL',innerMonologue:'只按眼下刃势。'},
+          school.rolls,undefined,publish,undefined,undefined,modifier);
+        captureWitnessedPersonalScene(nextState,duel);captureDramaticBondFact(nextState,duel);
+        publish(duel);
+        const actual=modifier&&schoolFormActualStroke(nextState,school,duel);
+        if(actual)newEvents.push(actual);
+        renewRegionalProtectionAfterEvent(regionalTurn);
+      }
+      if(settled&&traceOptions?.tape)rememberReplayDecision(traceOptions.tape,cultivator.id,settled,0);
+      if(supplied)recordDecisionEffect?.(cultivator.id,Boolean(accepted&&fromModel));
+      if(settled&&traceOptions?.captureTrace!==false)
+        recordDecisionTrace(nextState,cultivator.id,[],settled,directed?'avatar':accepted&&fromModel?'model':'utility',true);
+      continue;
+    }
     const beastContact=beastDuelContactForParticipant(nextState,cultivator);
     if(beastContact){
       cultivator.currentAction='BEAST_DUEL_RESPONSE';
@@ -1759,7 +1818,7 @@ export function advanceWorldTick(
     const ordinaryBefore = snapshotOrdinaryAction(cultivator, decision);
     const evt = applyCultivatorBrainDecision(nextState, cultivator, decision, rng, undefined, (event) => {
       newEvents.push(event);
-      witnessEvent(nextState, event);
+      if(!isTaughtSwordPracticeEvent(event)&&!isPrivateSchoolFormEvent(event))witnessEvent(nextState, event);
     }, avatarDecision, chosenByModel || Boolean(traceOptions?.replayHeartModelActors?.has(cultivator.id)));
     if (decision.chosenAction === 'EXPLORE' && cultivator.currentAction === 'EXPLORE' && previousLocation !== cultivator.locationId) {
       recordRegionalActorReturn(nextState,regionalTurn,cultivator,previousLocation,decision.chosenAction,evt);
@@ -1804,7 +1863,7 @@ export function advanceWorldTick(
         if (receipt && evt.id === `evt-${receipt.id}`) recordReliefCompetition(nextState, receipt);
       }
       newEvents.push(evt);
-      if(!isBattlefieldRevisitEvent(evt)&&!isPrivateCalamityArrayEvent(evt))witnessEvent(nextState, evt);
+      if(!isBattlefieldRevisitEvent(evt)&&!isPrivateCalamityArrayEvent(evt)&&!isTaughtSwordPracticeEvent(evt)&&!isPrivateSchoolFormEvent(evt))witnessEvent(nextState, evt);
       if(decision.chosenAction==='SOCIALIZE'&&cultivator.currentAction==='SOCIALIZE'){
         const after=recordTournamentBanquetAfterTalk(nextState,evt);
         if(after&&!newEvents.some(row=>row.id===after.id))newEvents.push(after);
@@ -1919,6 +1978,7 @@ export function advanceWorldTick(
   finalizeDestinyTraitOffers(nextState);
   pruneInvalidForbiddenDuelContacts(nextState);
   pruneInvalidBeastDuelContacts(nextState);
+  deadSchoolFormContacts(nextState);
   finalizeProtagonistFlightTurn(prevState,nextState,completedEvents);
   recordEraHistoryTurn(prevState,nextState,completedEvents);
   publishTianjiGazette(prevState,nextState,completedEvents);
@@ -2086,5 +2146,6 @@ export function executeGodIntervention(
   }
   pruneInvalidForbiddenDuelContacts(nextState);
   pruneInvalidBeastDuelContacts(nextState);
+  deadSchoolFormContacts(nextState);
   return nextState;
 }
