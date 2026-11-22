@@ -119,21 +119,22 @@ const noPills = (): Record<PillId, number> => ({ foundation: 0, golden: 0, barri
 
 const COUNCIL_ELDERS: ReadonlyArray<{
   id: string; name: string; sectId: string; locationId: string;
-  root: Cultivator['spiritRoot']; personality: Cultivator['personality']; age: number;
+  root: Cultivator['spiritRoot']; personality: Cultivator['personality']; age: number; gender: NonNullable<Cultivator['gender']>;
 }> = [
-  { id: 'elder-taixu-1', name: '顾行舟', sectId: 'sect-qingyun', locationId: 'loc-taixu', root: '金', personality: '刚正', age: 168 },
-  { id: 'elder-taixu-2', name: '薛照雪', sectId: 'sect-qingyun', locationId: 'loc-taixu', root: '水', personality: '逍遥', age: 142 },
-  { id: 'elder-blood-1', name: '乌无寂', sectId: 'sect-bloodmoon', locationId: 'loc-blood', root: '暗', personality: '嗜血', age: 185 },
-  { id: 'elder-blood-2', name: '殷晚池', sectId: 'sect-bloodmoon', locationId: 'loc-blood', root: '火', personality: '阴险', age: 156 },
-  { id: 'elder-danxia-1', name: '闻春岚', sectId: 'sect-danxia', locationId: 'loc-danxia', root: '木', personality: '苟道', age: 165 },
-  { id: 'elder-danxia-2', name: '叶连翘', sectId: 'sect-danxia', locationId: 'loc-danxia', root: '火', personality: '刚正', age: 136 },
-  { id: 'elder-tianji-1', name: '蒋观星', sectId: 'sect-tianji', locationId: 'loc-tianji', root: '雷', personality: '诡诈', age: 174 },
-  { id: 'elder-tianji-2', name: '白若璇', sectId: 'sect-tianji', locationId: 'loc-tianji', root: '土', personality: '苟道', age: 149 },
+  { id: 'elder-taixu-1', gender: 'man', name: '顾行舟', sectId: 'sect-qingyun', locationId: 'loc-taixu', root: '金', personality: '刚正', age: 168 },
+  { id: 'elder-taixu-2', gender: 'woman', name: '薛照雪', sectId: 'sect-qingyun', locationId: 'loc-taixu', root: '水', personality: '逍遥', age: 142 },
+  { id: 'elder-blood-1', gender: 'man', name: '乌无寂', sectId: 'sect-bloodmoon', locationId: 'loc-blood', root: '暗', personality: '嗜血', age: 185 },
+  { id: 'elder-blood-2', gender: 'woman', name: '殷晚池', sectId: 'sect-bloodmoon', locationId: 'loc-blood', root: '火', personality: '阴险', age: 156 },
+  { id: 'elder-danxia-1', gender: 'woman', name: '闻春岚', sectId: 'sect-danxia', locationId: 'loc-danxia', root: '木', personality: '苟道', age: 165 },
+  { id: 'elder-danxia-2', gender: 'woman', name: '叶连翘', sectId: 'sect-danxia', locationId: 'loc-danxia', root: '火', personality: '刚正', age: 136 },
+  { id: 'elder-tianji-1', gender: 'man', name: '蒋观星', sectId: 'sect-tianji', locationId: 'loc-tianji', root: '雷', personality: '诡诈', age: 174 },
+  { id: 'elder-tianji-2', gender: 'woman', name: '白若璇', sectId: 'sect-tianji', locationId: 'loc-tianji', root: '土', personality: '苟道', age: 149 },
 ];
 
 function initialElders(): Cultivator[] {
   return COUNCIL_ELDERS.map((elder, index) => ({
     id: elder.id,
+    gender: elder.gender,
     name: elder.name,
     title: '议事长老',
     sectId: elder.sectId,
@@ -289,7 +290,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     mentorTransfers: createMentorTransferState(),
     oaths: createOathState(),
     markets: createMarketState(),
-    settlements: createSettlementState(locations, seed),
+    settlements: createSettlementState(locations, seed, {generatedPersonMetadata:true}),
     villageEvolution:{villages:[],migrations:[]},
     doctrines: createDoctrineState(),
     doctrineFoundings:{foundings:[]},
@@ -451,6 +452,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
     cultivators: [
       {
         id: 'npc-1',
+        gender: 'man',
         name: '凌尘子',
         title: '太虚掌教',
         sectId: 'sect-qingyun',
@@ -499,6 +501,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
       },
       {
         id: 'npc-2',
+        gender: 'woman',
         name: '苏清寒',
         title: '剑宗真传',
         sectId: 'sect-qingyun',
@@ -547,6 +550,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
       },
       {
         id: 'npc-3',
+        gender: 'man',
         name: '厉苍天',
         title: '血月老祖',
         sectId: 'sect-bloodmoon',
@@ -595,6 +599,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
       },
       {
         id: 'npc-4',
+        gender: 'woman',
         name: '幽姬',
         title: '魔宗圣女',
         sectId: 'sect-bloodmoon',
@@ -643,6 +648,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
       },
       {
         id: 'npc-5',
+        gender: 'man',
         name: '药玄真君',
         title: '丹霞谷主',
         sectId: 'sect-danxia',
@@ -691,6 +697,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
       },
       {
         id: 'npc-6',
+        gender: 'man',
         name: '韩立风',
         title: '丹霞散人',
         sectId: 'sect-danxia',
@@ -739,6 +746,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
       },
       {
         id: 'npc-7',
+        gender: 'man',
         name: '楚星河',
         title: '天机少主',
         sectId: 'sect-tianji',
@@ -787,6 +795,7 @@ export function createInitialWorld(seed = DEFAULT_WORLD_SEED, profileId: Worldge
       },
       {
         id: 'npc-8',
+        gender: 'woman',
         name: '柳如烟',
         title: '天机琴仙',
         sectId: 'sect-tianji',

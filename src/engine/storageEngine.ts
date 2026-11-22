@@ -240,6 +240,7 @@ const structure = (rules: Record<string, Rule>): Validator => (v, path) => {
   }
 };
 const id = strings(240, 1);
+const fictionalGender = optional(one('woman','man'));
 const text = strings();
 const bool: Validator = (v, path) => { if (typeof v !== 'boolean') fail(path); };
 const tick = num(0, 100_000_000, true);
@@ -616,7 +617,7 @@ const shape = structure({
     monthlyEconomy:optional(structure({tick,taxes:wealth,mining:wealth,upkeep:wealth,net:num(-1_000_000_000,1_000_000_000)}))})),
   locations:arr(1200,structure({id,name:id,x:num(0,1000),y:num(0,600),type:one('sect_hq','spirit_vein','secret_realm','market','abyss'),spiritRoot:spirit,
     spiritQi:num(0,150),ownerSectId:oid,expeditionOmenId:oid,inheritanceScrolls:arr(350,technique),herbs,herbCapacity:herbs,furnaceGrade:one(0,1,2,3),description:text})),
-  cultivators:arr(SAVE_COLLECTION_LIMIT,structure({id,name:id,title:text,sectId:strings(240),sectRank,contribution:wealth,transgressions:percentage,disciplineRevision:otick,realm,realmStage:num(1,9,true),
+  cultivators:arr(SAVE_COLLECTION_LIMIT,structure({id,name:id,gender:fictionalGender,title:text,sectId:strings(240),sectRank,contribution:wealth,transgressions:percentage,disciplineRevision:otick,realm,realmStage:num(1,9,true),
     publicAlchemy:optional(arr(1200,structure({siteId:id,firstTick:tick,lastTick:tick,successes:num(1,100_000_000,true),bestGrade:one(1,2,3)}))),
     heavenlyAlchemy:optional(heavenlyAlchemy),
     daoPath:optional(daoPath),
@@ -1403,7 +1404,7 @@ const shape = structure({
   }),
   settlements:structure({lastAdvancedTick:otick,
     villages:arr(48,structure({id,locationId:id,name:id,population:count,capacity:count,stress:percentage,
-      volunteers:arr(SAVE_COLLECTION_LIMIT,structure({id,name:id,age:wealth,spiritRoot:spirit,willingness:percentage,aptitude:percentage,
+      volunteers:arr(SAVE_COLLECTION_LIMIT,structure({id,name:id,gender:fictionalGender,age:wealth,spiritRoot:spirit,willingness:percentage,aptitude:percentage,
         enlistedCultivatorId:oid,cohortYear:otick})),
       nextVolunteerSequence:optional(num(1,100_000_000,true)),
       juvenileCohorts:optional(arr(200,structure({bornTick:tick,count}))),lastCohortYear:otick,lastRecruitTick:otick,
@@ -1738,7 +1739,11 @@ function verifyWorld(value: unknown): WorldState {
   const w = candidate as WorldState;
   if (!w.cultivators.length || !w.locations.length) fail('world.minimum_entities');
   if (value !== null && typeof value === 'object' && !Object.hasOwn(value, 'settlements')) {
-    w.settlements = createSettlementState(w.locations, w.random.seed);
+    // Only a first-tick modern creation with an explicitly authored roster can
+    // reconstruct missing newborn metadata. Older incomplete worlds stay neutral.
+    const modernGenesis=w.tick===1&&w.worldgen?.birthTick===1&&w.cultivators.length>=16&&
+      w.cultivators.some(actor=>actor.id==='npc-1')&&w.cultivators.every(actor=>actor.gender!==undefined);
+    w.settlements = createSettlementState(w.locations, w.random.seed, modernGenesis?{generatedPersonMetadata:true}:undefined);
   }
   if (value !== null && typeof value === 'object' && !Object.hasOwn(value, 'relics')) {
     w.relics = createRelicState(w.locations, w.random.seed);
@@ -3523,6 +3528,12 @@ function verifyWorld(value: unknown): WorldState {
         village.volunteers.some((volunteer) => volunteer.enlistedCultivatorId &&
           (volunteer.enlistedCultivatorId !== `recruit-${volunteer.id}` || !actor.has(volunteer.enlistedCultivatorId)))) fail('settlements.villages.references');
   }
+  // Explicit values from the same native recruitment are corroborating facts.
+  // A missing value on either side is legacy/neutral and never backfilled here.
+  const linkedGender=new Map(volunteers.flatMap(person=>person.enlistedCultivatorId&&person.gender!==undefined?
+    [[person.enlistedCultivatorId,person.gender] as const]:[]));
+  if(linkedGender.size&&w.cultivators.some(person=>person.gender!==undefined&&linkedGender.has(person.id)&&
+      person.gender!==linkedGender.get(person.id)))fail('settlements.volunteers.genderLink');
   for (const row of w.settlements.records) {
     if (!settlementIds.has(row.settlementId) || (row.targetSettlementId && !settlementIds.has(row.targetSettlementId)) ||
         (row.actorId && !actor.has(row.actorId)) || (row.sectId && !sector.has(row.sectId)) ||

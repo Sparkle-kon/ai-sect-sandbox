@@ -1,3 +1,5 @@
+import {CultivatorPortrait} from './CultivatorPortrait';
+import {projectCultivatorPortrait} from './cultivatorPortraitModel';
 import {DaoPathRead,type DaoPathControls} from './DaoPathRead';
 import {projectDaoPath} from '../engine/daoPathEngine';
 import {canReadOwnPersona,personaDossierMemories,PersonaDossierRead} from './personaDossierRead';
@@ -87,6 +89,7 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
   const location = extractionPoint || reliefPoint ? undefined : world.locations.find((l) => l.id === cultivator.locationId);
   const bounty = relevantBounty(world.bounties, cultivator.id);
   const profile = !workspaceSection || workspaceSection === 'profile';
+  const portrait = profile ? projectCultivatorPortrait(world,cultivator) : undefined;
   const cultivation = !workspaceSection || workspaceSection === 'cultivation';
   const daoPath=cultivation?projectDaoPath(world,cultivator):undefined;
   const mind = !workspaceSection || workspaceSection === 'mind';
@@ -120,23 +123,26 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
       </div>}
 
       {/* Header */}
-      {profile && <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-base font-bold text-slate-100">
-              {cultivator.name}
-            </h3>
-            <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-800 text-amber-300 border border-amber-500/30">
-              {cultivator.realm} {cultivator.realmStage}层
-            </span>
-            <span className="px-2 py-0.5 rounded text-[11px] bg-slate-800 text-slate-300">
-              性格：{cultivator.personality}
-            </span>
+      {profile && <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
+        <div className="flex min-w-0 max-w-full items-start gap-2.5">
+          {portrait&&<CultivatorPortrait portrait={portrait}/>}
+          <div className="min-w-0 [overflow-wrap:anywhere]">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-base font-bold text-slate-100">
+                {cultivator.name}
+              </h3>
+              <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-800 text-amber-300 border border-amber-500/30">
+                {cultivator.realm} {cultivator.realmStage}层
+              </span>
+              <span className="px-2 py-0.5 rounded text-[11px] bg-slate-800 text-slate-300">
+                性格：{cultivator.personality}
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 mt-0.5">
+              {sect?.name ?? '散修'} · {cultivator.title} · 寿元 {cultivator.age}/
+              {cultivator.lifespan}载
+            </p>
           </div>
-          <p className="text-xs text-slate-400 mt-0.5">
-            {sect?.name ?? '散修'} · {cultivator.title} · 寿元 {cultivator.age}/
-            {cultivator.lifespan}载
-          </p>
         </div>
 
         <span

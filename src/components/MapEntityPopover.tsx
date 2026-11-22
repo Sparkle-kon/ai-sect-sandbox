@@ -1,3 +1,4 @@
+import {CultivatorPortrait} from './CultivatorPortrait';
 import {useEffect,useId,useRef,useState,type CSSProperties} from 'react';
 import {Crosshair,Mountain,Sparkles,UserRound,X} from 'lucide-react';
 import {AVATAR_MESSAGE_LIMIT} from '../engine/avatarEngine';
@@ -82,10 +83,11 @@ export function MapEntityPopover({data,anchor,pinned,readOnly=false,actions,onCl
       rounded-xl border border-amber-300/35 bg-slate-950/95 p-3 text-sm text-slate-200 shadow-[0_6px_32px_rgba(0,0,0,0.55)] backdrop-blur
       [overflow-wrap:anywhere] sm:bottom-[var(--map-card-bottom)] sm:left-[var(--map-card-left)] sm:right-auto sm:top-[var(--map-card-top)] sm:w-72
       sm:max-h-[min(46dvh,calc(50%_-_0.5rem))] ${pinned?'pointer-events-auto':'pointer-events-none'}`}>
-    <header className="flex items-center justify-between gap-2">
-      <div className="min-w-0">
+    <header className="flex items-center gap-2">
+      {data.kind==='actor'&&data.portrait&&<CultivatorPortrait portrait={data.portrait} className="h-14 w-12 shrink-0"/>}
+      <div className="min-w-0 flex-1">
         <p className="flex items-center gap-1.5 text-xs font-medium tracking-wide text-amber-300">
-          {data.kind==='actor'?<UserRound aria-hidden="true" className="h-3.5 w-3.5 shrink-0"/>:<Mountain aria-hidden="true" className="h-3.5 w-3.5 shrink-0"/>}
+          {data.kind==='actor'?(!data.portrait&&<UserRound aria-hidden="true" className="h-3.5 w-3.5 shrink-0"/>):<Mountain aria-hidden="true" className="h-3.5 w-3.5 shrink-0"/>}
           {data.kind==='actor'?'舆图 · 修士':'舆图 · 山河'}
         </p>
         <h3 id={title} className="mt-0.5 font-serif text-lg font-semibold text-amber-50">{data.name}</h3>

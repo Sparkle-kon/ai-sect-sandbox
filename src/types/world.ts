@@ -430,7 +430,11 @@ export interface PublicAlchemyPractice {
   successes: number;
   bestGrade: 1 | 2 | 3;
 }
+/** Optional authored metadata for fictional portrait styling only. */
+export type FictionalGender = 'woman' | 'man';
+
 export interface Cultivator {
+  gender?: FictionalGender;
   publicAlchemy?: PublicAlchemyPractice[];
   heavenlyAlchemy?: HeavenlyAlchemyState;
   daoPath?: DaoPathState;
@@ -1420,6 +1424,7 @@ export interface MarketState {
 }
 
 export interface MortalVolunteer {
+  gender?: FictionalGender;
   id: string;
   name: string;
   age: number;

@@ -1,3 +1,4 @@
+import {projectMapCultivatorPortrait,type CultivatorPortraitSpec} from './cultivatorPortraitModel';
 import {activeAvatar} from '../engine/avatarEngine';
 import {personaLine,privatePersonaText} from '../engine/wildPersonaEngine';
 import type {ActionType,Cultivator,LocationNode,WorldState} from '../types/world';
@@ -10,7 +11,7 @@ import {mapActorPositions,type createTerrainMapView} from './terrainMapView';
 export type MapEntityTarget={kind:'actor'|'site';id:string};
 export type MapEntityAction='treasure'|'lightning'|'whisper';
 export type MapEntityRead=
-  | {kind:'actor';target:MapEntityTarget&{kind:'actor'};name:string;realm:string;hp:number;maxHp:number;actionLabel:string;monologue?:string;persona?:string}
+  | {kind:'actor';target:MapEntityTarget&{kind:'actor'};name:string;realm:string;hp:number;maxHp:number;actionLabel:string;portrait?:CultivatorPortraitSpec;monologue?:string;persona?:string}
   | {kind:'site';target:MapEntityTarget&{kind:'site'};name:string;spiritQi:number;residents:readonly string[];residentCount:number;
      population?:number;eventTitles:readonly string[]};
 
@@ -78,9 +79,10 @@ export function projectMapEntityPopover(world:WorldState,view:View,target:MapEnt
     const actor=actorInView(world,view,target.id);
     if(!actor)return undefined;
     const monologue=livePersonal&&viewerId===actor.id&&activeAvatar(world)===actor?monologueLine(actor):undefined;
+    const portrait=projectMapCultivatorPortrait(world,view,actor);
     return {kind:'actor',target:{kind:'actor',id:actor.id},name:cap(cleaned(actor.name),80),
       realm:`${actor.realm}${actor.realmStage}层`,hp:actor.hp,maxHp:actor.maxHp,
-      actionLabel:simpleActions[actor.currentAction]??'行事中',...(monologue?{monologue}:{persona:personaLine(actor,'thought')})};
+      ...(portrait?{portrait}:{}),actionLabel:simpleActions[actor.currentAction]??'行事中',...(monologue?{monologue}:{persona:personaLine(actor,'thought')})};
   }
   if(target.kind!=='site')return undefined;
   const site=siteInView(world,view,target.id);

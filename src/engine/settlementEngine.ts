@@ -1,3 +1,4 @@
+import {fictionalGenderFor} from './fictionalPersonMetadata';
 import {disasterShelterPinnedRecordIds} from './disasterShelterCheckpoint';
 import { finishVillageEvolution, noteVillageEvolutionSettlement, observeVillageEvolution, planVillageEvolutionMigration, recordVillageEvolutionMigration, villageEvolutionBlocksMigration, villageEvolutionLocalObserverIds, villageEvolutionPinnedSettlementIds } from './villageEvolutionEngine';
 import {danxiaReviewPinnedReliefIds} from './danxiaSeasonTerms';
@@ -43,7 +44,9 @@ function mixed(seed: number, key: string): number {
   return (n ^ (n >>> 16)) >>> 0;
 }
 
-export function createSettlementState(locations: LocationNode[], seed: number): SettlementState {
+// Legacy codec fallback keeps the historical 2-argument metadata-free construction.
+export function createSettlementState(locations: LocationNode[], seed: number,
+  options:{generatedPersonMetadata?:boolean} = {}): SettlementState {
   const publicSites = locations.filter((site) => site.type === 'market').sort(byId).slice(0, 4);
   const frontier = locations.filter((site) => site.type === 'spirit_vein').sort(byId).slice(0, 3);
   const villages = [...publicSites, ...frontier].map((site): MortalSettlement => {
@@ -52,8 +55,10 @@ export function createSettlementState(locations: LocationNode[], seed: number): 
     const population = 44 + base % 43;
     const volunteers: MortalVolunteer[] = Array.from({ length: 4 }, (_, i) => {
       const number = mixed(seed, `${id}-${i}`);
+      const volunteerId=`${id}-vol-${i + 1}`;
       return {
-        id: `${id}-vol-${i + 1}`,
+        id:volunteerId,
+        ...(options.generatedPersonMetadata?{gender:fictionalGenderFor(seed,volunteerId)}:{}),
         name: FAMILY[number % FAMILY.length] + GIVEN[Math.floor(number / 13) % GIVEN.length],
         age: i === 0 ? 18 + number % 14 : 16 + number % 25,
         spiritRoot: ROOTS[Math.floor(number / 113) % ROOTS.length],
@@ -130,7 +135,9 @@ function log(world: WorldState, village: MortalSettlement, row: Omit<SettlementR
 
 function enlist(person: MortalVolunteer, actor: Cultivator, village: MortalSettlement): Cultivator {
   return {
-    id: `recruit-${person.id}`, name: person.name, title: '新晋外门弟子', sectId: actor.sectId, sectRank: '外门弟子',
+    id: `recruit-${person.id}`, name: person.name,
+    ...(person.gender===undefined?{}:{gender:person.gender}),
+    title: '新晋外门弟子', sectId: actor.sectId, sectRank: '外门弟子',
     contribution: 0, transgressions: 0, realm: '练气', realmStage: 1, qiProgress: 0,
     hp: 120, maxHp: 120, combatPower: 100, age: person.age, lifespan: 120, personality: '苟道',
     locationId: village.locationId, spiritStones: SETTLEMENT_RECRUIT_STIPEND, karma: 0,
@@ -209,7 +216,7 @@ function annualCohort(world: WorldState, village: MortalSettlement, stressedByHa
     }
     const id = `${village.id}-vol-${village.nextVolunteerSequence++}`;
     const number = mixed(world.random.seed, id);
-    village.volunteers.push({ id, cohortYear: world.year, name: FAMILY[number % FAMILY.length] + GIVEN[Math.floor(number / 13) % GIVEN.length],
+    village.volunteers.push({ id, gender:fictionalGenderFor(world.random.seed,id), cohortYear: world.year, name: FAMILY[number % FAMILY.length] + GIVEN[Math.floor(number / 13) % GIVEN.length],
       age: 18, spiritRoot: ROOTS[Math.floor(number / 113) % ROOTS.length], aptitude: 60 + number % 35, willingness: 68 + number % 30 });
     const listed = registerHouseholdVolunteer(world, village, village.volunteers.at(-1)!, item.birthTick);
     if (!listed) village.volunteers.pop();
@@ -226,7 +233,7 @@ function annualCohort(world: WorldState, village: MortalSettlement, stressedByHa
     const id = `${village.id}-vol-${sequence}`;
     const number = mixed(world.random.seed, id);
     village.volunteers.push({
-      id, cohortYear: world.year, name: FAMILY[number % FAMILY.length] + GIVEN[Math.floor(number / 13) % GIVEN.length],
+      id, gender:fictionalGenderFor(world.random.seed,id), cohortYear: world.year, name: FAMILY[number % FAMILY.length] + GIVEN[Math.floor(number / 13) % GIVEN.length],
       age: 18 + number % 23, spiritRoot: ROOTS[Math.floor(number / 113) % ROOTS.length],
       aptitude: 60 + number % 35, willingness: 79 + number % 20,
     });

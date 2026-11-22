@@ -1,3 +1,5 @@
+import {drawCultivatorRealmAura} from './cultivatorRealmAuraDraw';
+import {projectMapCultivatorHalos} from './cultivatorPortraitModel';
 import {drawImmortalAuctionMapMark,immortalAuctionMapMark} from './immortalAuctionMapMark';
 import {buildDaoIntentMapVfx,drawDaoIntentMapVfx} from './daoIntentMapVfx';
 import {DAO_PATHS} from '../engine/daoPathTerms';
@@ -309,6 +311,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       .map(({ siteId }) => siteId));
   }, [world, selected]);
   const { seenLocations, isCurrentLocation } = mapView;
+  const realmHalos=useMemo(()=>projectMapCultivatorHalos(world,mapView),[world,mapView]);
   const auctionMark=useMemo(()=>immortalAuctionMapMark(world,isCurrentLocation,!!preview),[world,isCurrentLocation,preview]);
   const arenaMarks=useMemo(()=>tournamentArenaMapMarks(world,isCurrentLocation),[world,isCurrentLocation]);
   const daoMarks=useMemo(()=>buildDaoIntentMapVfx(world,isCurrentLocation,!!preview),[world,isCurrentLocation,preview]);
@@ -919,6 +922,19 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         ? (staticMarkers ??= planActorMarkers(frameActors, camera, markerSize, selectedCultivatorId))
         : planActorMarkers(frameActors, camera, markerSize, selectedCultivatorId);
       paintedActors.current = { markers, positions: actorPositions, camera, size: markerSize, scope: clusterScope };
+      if(realmHalos.size&&qiFlow.clip.length){
+        ctx.save();
+        try{
+          ctx.beginPath();
+          for(const {x,y,width:spanWidth,height:spanHeight} of qiFlow.clip)ctx.rect(x,y,spanWidth,spanHeight);
+          ctx.clip();
+          for(const marker of markers){
+            if(marker.kind!=='actor'||presentation.routes.has(marker.point.actor.id))continue;
+            const halo=realmHalos.get(marker.point.actor.id);
+            if(halo)drawCultivatorRealmAura(ctx,marker.point.x,marker.point.y,halo,scenicPhase,animate);
+          }
+        }finally{ctx.restore();}
+      }
       const marked = new Set<string>();
       for (const marker of markers) {
           if (marker.kind === 'cluster') {
@@ -1078,7 +1094,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener?.('change',stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, atlasDrawing, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, observedSalvageSites, localGranary, villageMapLabels, civicObservation, usedVillageSegments, furnaceShift, localPavilionDesk, localMemorial, localVillageFair, localStipend, localSeedCulture, localToolLoans, localAlignedWeather, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope, scenicRelief, qiFlow, inspectionEnabled, letters, travel, flightAlignments, combatVfx, actorBadgeFacts, hasBadgeQuote, domes, strategic, arenaMarks, dungeonMark, alchemyMarks, daoMarks, auctionMark]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, atlasDrawing, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, observedSalvageSites, localGranary, villageMapLabels, civicObservation, usedVillageSegments, furnaceShift, localPavilionDesk, localMemorial, localVillageFair, localStipend, localSeedCulture, localToolLoans, localAlignedWeather, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope, scenicRelief, qiFlow, inspectionEnabled, letters, travel, flightAlignments, combatVfx, actorBadgeFacts, hasBadgeQuote, domes, strategic, arenaMarks, dungeonMark, alchemyMarks, daoMarks, auctionMark, realmHalos]);
 
   useEffect(() => {
     const canvas = canvasRef.current;

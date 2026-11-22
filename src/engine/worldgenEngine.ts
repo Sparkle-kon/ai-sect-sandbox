@@ -1,3 +1,4 @@
+import {fictionalGenderFor} from './fictionalPersonMetadata';
 import type { Cultivator, HerbId, LocationNode, Sect, SpiritRoot, TerrainBiome, WorldGeneration, WorldgenProfileId, WorldState } from '../types/world';
 import { ALCHEMY_RECIPES } from './alchemyEngine';
 import { findMapPath } from './mapMotionEngine';
@@ -65,7 +66,7 @@ function founder(world: WorldState, sect: Sect, profile: WorldgenProfileId, inde
   const hq = world.locations.find(({ id: locationId }) => locationId === sect.headquartersId)!;
   const spiritRoot = index % 2 === 0 ? hq.spiritRoot : ROOTS[Math.floor(n / 101) % ROOTS.length];
   return {
-    id, name: SURNAME[n % SURNAME.length] + GIVEN[Math.floor(n / 13) % GIVEN.length],
+    id, gender:fictionalGenderFor(seed,id), name: SURNAME[n % SURNAME.length] + GIVEN[Math.floor(n / 13) % GIVEN.length],
     title: '创世外门弟子', sectId: sect.id, sectRank: '外门弟子', contribution: 0, transgressions: 0, realm: '练气', realmStage: 1,
     qiProgress: 5 + n % 21, hp: 120, maxHp: 120, combatPower: 100, age: 18 + n % 12, lifespan: 120,
     personality: index % 2 === 0 ? '苟道' : '逍遥', locationId: hq.id, spiritStones: 48 + n % 17, karma: 0,
@@ -115,7 +116,7 @@ function enrichPreset(world: WorldState, profileId: Exclude<WorldgenProfileId, '
     if (pattern % 4 !== 0) tile.biome = distinctTerrain[profileId][Math.floor(pattern / 7) % distinctTerrain[profileId].length];
   }
   world.spiritBeasts = spawnInitialBeasts(world.locations);
-  world.settlements = createSettlementState(world.locations, seed);
+  world.settlements = createSettlementState(world.locations, seed, {generatedPersonMetadata:true});
 }
 
 /** Constructor-only transformation; an existing world never has its profile retroactively changed. */
