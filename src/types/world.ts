@@ -599,6 +599,7 @@ export interface LLMDecisionPayload {
   targetCalamityHazardId?: string;
   frontierNightHuntMove?: FrontierNightHuntMove;
   witnessInquiryMove?: 'inspect'|'ask';
+  targetCampaignAssemblySiegeId?: string;
   targetBattlefieldSiegeId?: string;
   grandSiegeHeroMove?: GrandSiegeHeroMove;
   targetRoguelikeEncounterId?:string;

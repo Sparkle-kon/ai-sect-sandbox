@@ -1,3 +1,4 @@
+import { availableCampaignAssemblyActions } from './campaignAssembly';
 import { availableFrontierNightHuntActions } from './frontierNightHunt';
 import { availableSchoolFormChoices, schoolFormDuelForParticipant } from './schoolFormDuel';
 import { availableAscensionActions } from './ascensionEngine';
@@ -100,11 +101,13 @@ export function modelDecisionCandidates(world: WorldState): Cultivator[] {
     const dungeon = availableDungeonModelOptions(actor, world, nextTick).length > 0;
     const flight=!priorScene&&!hero.length&&activeProtagonistFlight(world,actor);
     if(flight&&(avatar===actor||!availableProtagonistFlightActions(actor,world,nextTick).length))return false;
-    // Genuine autonomous offers wake only the normal admission guard below, never an invalid body or action lane.
-    return (!passive.has(actor.id) || !!heart || !!contact || !!encounter || !!destiny || hero.length > 0 || dungeon || flight) &&
+    const assembly=!priorScene&&!hero.length&&!flight&&avatar!==actor
+      ?availableCampaignAssemblyActions(actor,world,nextTick).filter(row=>row.kind!=='guard'):[];
+    // Genuine autonomous offers wake only normal admission guards; a field leader may only negotiate an active march.
+    return (!passive.has(actor.id) || !!heart || !!contact || !!encounter || !!destiny || hero.length > 0 || dungeon || flight || assembly.length>0) &&
     (!activeCourierForActor(world, actor) || availableCourierHandoffActions(actor, world, nextTick).some(({ courierHandoffMove }) => courierHandoffMove === 'offer')) &&
     !activeDanxiaMedicineEscort(world,actor)&&!activeEscortForActor(world, actor) && !activeRelocationForActor(world, actor) &&
-    !activeSiegeForActor(world, actor) && (dungeon || isEligibleForOccasionDecision(world, actor, nextTick)) &&
+    (!activeSiegeForActor(world, actor)||assembly.some(row=>row.kind==='negotiate')) && (dungeon || isEligibleForOccasionDecision(world, actor, nextTick)) &&
     (!boundaryReliefCheckpoint(world, actor) || availableBoundaryReliefActions(actor, world, nextTick).length > 0) &&
     (!pilgrimageCheckpoint(world, actor) || availablePilgrimageActions(actor, world, false, nextTick).length > 0);
   });

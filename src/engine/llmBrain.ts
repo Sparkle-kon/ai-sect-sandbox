@@ -1,3 +1,5 @@
+import { availableCampaignAssemblyActions } from './campaignAssembly';
+import { exactCampaignAssemblyDecision, tagCampaignAssemblyDecision } from './campaignAssemblyCognition';
 import { availableWitnessInquiryActions } from './witnessInquiry';
 import { exactWitnessInquiryDecision, witnessInquiryCommand } from './witnessInquiryCognition';
 import { availableFrontierNightHuntActions, projectFrontierNightHunt } from './frontierNightHunt';
@@ -1415,6 +1417,17 @@ export function computeHeuristicDecision(
 
   const negotiation = utilityCeasefireDecision(cultivator, world);
   if (negotiation) return negotiation;
+  // A witnessed front can occupy one of the other bodies' quiet turns; unattended native pacing stays unchanged.
+  const frontWitness=activeAvatar(world);
+  if(frontWitness&&frontWitness!==cultivator&&frontWitness.positionPlane===undefined&&frontWitness.alive&&frontWitness.hp>0){
+    const scene=availableCampaignAssemblyActions(cultivator,world,world.tick).filter(row=>row.kind!=='guard'&&
+      world.sieges.some(siege=>siege.id===row.siegeId&&siege.destinationId===frontWitness.locationId));
+    const choice=scene.find(row=>row.kind==='negotiate'&&(cultivator.personality==='刚正'||cultivator.personality==='逍遥'))??
+      scene.find(row=>row.kind==='join'&&cultivator.hp>=cultivator.maxHp*.6&&cultivator.personality!=='苟道');
+    const exact=choice&&exactCampaignAssemblyDecision(choice.command,[choice]);
+    const tagged=exact&&choice&&tagCampaignAssemblyDecision(exact,[choice]);
+    if(tagged)return tagged;
+  }
 
   const mayNameHeir = world.tick % 12 === 7 && !cultivator.namedHeirId && cultivator.age >= cultivator.lifespan * .62;
   const estateOptions = availableEstateActions(cultivator, world, mayNameHeir);
@@ -2587,6 +2600,22 @@ export async function requestCultivatorLLMDecision(
          activeProtagonistFlight(world,cultivator)!==flight||!exactProtagonistFlightDecision(parsed,flightMenu))return undefined;
       return exactProtagonistFlightDecision(parsed,availableProtagonistFlightActions(cultivator,world,requestTick));
     },160);
+  }
+  const campaign=availableCampaignAssemblyActions(cultivator,world,requestTick).filter(row=>row.kind!=='guard');
+  if(campaign.length){
+    if(activeAvatar(world)===cultivator||requestTick!==world.tick+1)return undefined;
+    return requestDecisionPrompt(config,requestTick,options,
+      '仅原样复制这一战本人获准的一项命令。提出议和不等于另一宗答应，赴阵不等于已经到场。不可填写战果、人物、身份或伤势：'+
+        JSON.stringify(campaign.map(row=>row.command)),
+      parsed=>{
+        if(requestTick!==world.tick+1||activeAvatar(world)===cultivator)return undefined;
+        const offered=exactCampaignAssemblyDecision(parsed,campaign);
+        if(!offered)return undefined;
+        const current=availableCampaignAssemblyActions(cultivator,world,requestTick).filter(row=>row.kind!=='guard'&&
+          campaign.some(first=>first.siegeId===row.siegeId&&first.kind===row.kind&&exactCampaignAssemblyDecision(row.command,[first])));
+        const exact=exactCampaignAssemblyDecision(parsed,current);
+        return exact&&tagCampaignAssemblyDecision(exact,current);
+      },160);
   }
   const activeVow = activePilgrimageForActor(world, cultivator);
   const onPilgrimagePath = activeVow && Boolean(pilgrimageCheckpoint(world, cultivator));

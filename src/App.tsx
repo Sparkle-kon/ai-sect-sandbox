@@ -1,3 +1,4 @@
+import { useCampaignAssemblyStory } from './components/useCampaignAssemblyStory';
 import { useWitnessInquiryStory } from './components/useWitnessInquiryStory';
 import { useFrontierNightHuntStory } from './components/useFrontierNightHuntStory';
 import { useSchoolFormDuelStory } from './components/useSchoolFormDuelStory';
@@ -308,6 +309,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   });
   const {card:featuredStoryCard,pending:storyDecisionPending}=useFeaturedStoryDecision(simulation);
   const dungeonFork=useDungeonStoryFork(simulation,!dashboardOpen&&!cockpitOpen&&!storyEntryOpen,selectedCultivator);
+  const campaignAssembly=useCampaignAssemblyStory(simulation,!dashboardOpen&&!storyEntryOpen,selectedCultivator);
   const witnessInquiry=useWitnessInquiryStory(simulation,!dashboardOpen&&!cockpitOpen&&!storyEntryOpen,selectedCultivator);
   const nightHunt=useFrontierNightHuntStory(simulation,!dashboardOpen&&!cockpitOpen&&!storyEntryOpen,selectedCultivator);
   const schoolFormDuel=useSchoolFormDuelStory(simulation,!dashboardOpen&&!cockpitOpen&&!storyEntryOpen,selectedCultivator);
@@ -641,7 +643,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   const clearWorldPulse=(token:number)=>setPulseFocus(current=>current?.token===token?undefined:current);
   const pulseStrip=worldPulse&&<WorldPulseBar view={worldPulse} historical={Boolean(preview)}
     canFocus={!immersive} onFocusAlert={focusWorldPulse}/>;
-  if(cockpitOpen)return <PanoramicCockpitView world={visibleWorld} titleRef={cockpitHeading} exit={cockpitSwitch} statusStrip={pulseStrip} stageOverride={featuredStoryCard} subplot={guidance.subplot} branchScene={flightCard??passageScene??banquetStory}
+  if(cockpitOpen)return <PanoramicCockpitView world={visibleWorld} titleRef={cockpitHeading} exit={cockpitSwitch} statusStrip={pulseStrip} stageOverride={featuredStoryCard} subplot={guidance.subplot} branchScene={flightCard??passageScene??banquetStory??campaignAssembly}
     time={{historical:Boolean(preview),running:isRunning,busy:cockpitBusy||storyDecisionPending,onStep:()=>void handleStepTick(),
       onToggleAutoplay:toggleStoryAutoplay,onReturnLive:()=>handleTimelinePreview(null),onOpenTimeline:()=>{
         openWorkspace('chronicle');rememberFold('chronicle','timeline');setStoryEntryOpen(false);
@@ -676,7 +678,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
       openings={<HighDramaPresetPicker scopeKey={viewScopeKey} revision={world} disabled={dramaticOpening.disabled} onStart={dramaticOpening.start}/>}
       onFollow={storyHome.lead?followCurrentLead:undefined} onEnter={enterCurrentLead} onOrder={orderCurrentStoryAvatar} />:
       <StoryFirstHome recapContext={world.chronicleArchive.chapters.length||world.coldHistory?.chapters.length?
-        {world,scopeKey:viewScopeKey,viewer:activeAvatar(world)}:undefined} scene={storyHome.scene} subplot={guidance.subplot} branchScene={dungeonFork??nightHunt??schoolFormDuel??calamityArray??battlefieldRevisit??witnessInquiry??flightCard??passageScene??banquetStory??<DeferredGrandSiegeMapScene world={world} viewer={activeAvatar(world)} fog personalOnly visible witnessScopeKey={viewScopeKey}/>} leadName={storyHome.lead?.name} playerName={activeAvatar(world)?.name}
+        {world,scopeKey:viewScopeKey,viewer:activeAvatar(world)}:undefined} scene={storyHome.scene} subplot={guidance.subplot} branchScene={dungeonFork??nightHunt??schoolFormDuel??calamityArray??battlefieldRevisit??witnessInquiry??campaignAssembly??flightCard??passageScene??banquetStory??<DeferredGrandSiegeMapScene world={world} viewer={activeAvatar(world)} fog personalOnly visible witnessScopeKey={viewScopeKey}/>} leadName={storyHome.lead?.name} playerName={activeAvatar(world)?.name}
         busy={isStepping} moreRef={storyMoreRef} notice={storyNotice} calendar={storyHome.calendar} opening={dramaticOpening.opening}
         outcome={storyOutcome?.world===world?storyOutcome.text:undefined} onContinue={advanceStory} onMore={openStoryEntry} />)}
   </main>;

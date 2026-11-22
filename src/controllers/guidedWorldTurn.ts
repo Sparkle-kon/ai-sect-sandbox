@@ -1,3 +1,4 @@
+import { resolveGuidedCampaignAssemblyTurn, type GuidedCampaignAssemblyTurn } from './guidedCampaignAssemblyTurn';
 import { resolveGuidedWitnessInquiryTurn, type GuidedWitnessInquiryTurn } from './guidedWitnessInquiryTurn';
 import { resolveGuidedFrontierNightHuntTurn, type GuidedFrontierNightHuntTurn } from './guidedFrontierNightHuntTurn';
 import { resolveGuidedSchoolFormDuelTurn, type GuidedSchoolFormDuelTurn } from './guidedSchoolFormDuelTurn';
@@ -13,11 +14,12 @@ import {resolveGuidedHeavenlyAlchemyTurn,type GuidedHeavenlyAlchemyTurn} from '.
 import {resolveGuidedImmortalAuctionTurn,type GuidedImmortalAuctionTurn} from './guidedImmortalAuctionTurn';
 import type {WorldState} from '../types/world';
 
-export type GuidedWorldTurn=GuidedDungeonTurn|GuidedHeavenlyAlchemyTurn|GuidedDaoPathTurn|GuidedImmortalAuctionTurn|GuidedCultivationClanTurn|GuidedAscensionTurn|GuidedProtagonistFlightTurn|GuidedHeartDemonRecoveryTurn|GuidedBattlefieldRevisitTurn|GuidedCalamityArrayTurn|GuidedSchoolFormDuelTurn|GuidedFrontierNightHuntTurn|GuidedWitnessInquiryTurn;
+export type GuidedWorldTurn=GuidedDungeonTurn|GuidedHeavenlyAlchemyTurn|GuidedDaoPathTurn|GuidedImmortalAuctionTurn|GuidedCultivationClanTurn|GuidedAscensionTurn|GuidedProtagonistFlightTurn|GuidedHeartDemonRecoveryTurn|GuidedBattlefieldRevisitTurn|GuidedCalamityArrayTurn|GuidedSchoolFormDuelTurn|GuidedFrontierNightHuntTurn|GuidedWitnessInquiryTurn|GuidedCampaignAssemblyTurn;
 
 export function resolveGuidedWorldTurn(order:GuidedWorldTurn,world:WorldState,branch:string,revision:number){
   if(!('kind' in order))return resolveGuidedDungeonTurn(order,world,branch,revision);
   switch(order.kind){
+    case 'campaign-assembly':return resolveGuidedCampaignAssemblyTurn(order,world,branch,revision);
     case 'witness-inquiry':return resolveGuidedWitnessInquiryTurn(order,world,branch,revision);
     case 'frontier-night-hunt':return resolveGuidedFrontierNightHuntTurn(order,world,branch,revision);
     case 'school-form-duel':return resolveGuidedSchoolFormDuelTurn(order,world,branch,revision);

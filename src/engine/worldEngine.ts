@@ -1,3 +1,5 @@
+import { availableCampaignAssemblyActions } from './campaignAssembly';
+import { exactCampaignAssemblyDecision } from './campaignAssemblyCognition';
 import { availableWitnessInquiryActions, isPrivateWitnessInquiryEvent, resolveWitnessInquiry } from './witnessInquiry';
 import { exactWitnessInquiryDecision } from './witnessInquiryCognition';
 import { availableFrontierNightHuntActions, initializeFrontierNightHunt, isPrivateFrontierNightHuntEvent, resolveFrontierNightHunt } from './frontierNightHunt';
@@ -420,6 +422,13 @@ export function applyCultivatorBrainDecision(
   allowForbiddenDuel = true,
 ): WorldEvent | null {
   if (!cultivator.alive || cultivator.positionPlane === 'immortal') return null;
+  if (decision.targetCampaignAssemblySiegeId!==undefined) {
+    const {targetCampaignAssemblySiegeId,...native}=decision;
+    const exact=exactCampaignAssemblyDecision(native,availableCampaignAssemblyActions(cultivator,world,world.tick)
+      .filter(row=>row.siegeId===targetCampaignAssemblySiegeId&&row.kind!=='guard'),true);
+    if(!exact||modelInput&&activeAvatar(world)===cultivator)return null;
+    decision=exact;
+  }
   if(decision.targetHeartDemonAftermathId!==undefined&&decision.chosenAction!=='REST')return null;
   if (decision.chosenAction === 'ASCENSION' || ascensionDutyActive(world, cultivator)) {
     if (decision.chosenAction !== 'ASCENSION') return null;
@@ -1569,6 +1578,16 @@ export function advanceWorldTick(
     const modelProposal = supplied && traceOptions?.modelActors?.has(cultivator.id) ? supplied : undefined;
     let provided = avatarDecision ?? supplied;
     let modelOrdinaryReplaced=false;
+    if (modelProposal?.targetCampaignAssemblySiegeId!==undefined && !avatarDecision) {
+      const before=prevState.cultivators.find(row=>row.id===cultivator.id);
+      const {targetCampaignAssemblySiegeId,...native}=modelProposal;
+      if(!before||activeAvatar(prevState)===before||!exactCampaignAssemblyDecision(native,
+        availableCampaignAssemblyActions(before,prevState,nextState.tick).filter(row=>
+          row.kind!=='guard'&&row.siegeId===targetCampaignAssemblySiegeId),true)) {
+        provided=undefined;
+        modelOrdinaryReplaced=true;
+      }
+    }
     if (modelProposal?.chosenAction === 'WITNESS_INQUIRY' && !avatarDecision) {
       const before=prevState.cultivators.find(row=>row.id===cultivator.id);
       if(!before||activeAvatar(prevState)===before||
