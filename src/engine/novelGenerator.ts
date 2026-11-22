@@ -1,6 +1,8 @@
 import { deriveChapterOpening } from './chapterContinuity';
 import { deriveChapterEndHook } from './chapterEndHooks';
 import { writeMundaneLifeProse } from './mundaneLifeProse';
+import { chapterFocalSources } from './focalLayerEvidence';
+import { projectFocalLayers } from './focalSceneLayers';
 import { compactColdHistory } from './coldHistoryEngine';
 import { isChronicleStoryFact, projectChronicleLead } from './chronicleLead';
 import type { ChronicleLead } from './chronicleLead';
@@ -211,10 +213,13 @@ export function projectChronicleReading(chapter: ChronicleChapter, lead?: Chroni
   const sourced=anchors.filter(anchor=>Boolean(publicChronicleExcerpt(anchor.description).trim()||publicChronicleExcerpt(anchor.title).trim()))
     .map(anchor=>({anchor,section:writePublicChronicleScene(anchor),quietParagraph:writeMundaneLifeProse(anchor)}));
   const chapterScope = { ...chapter, anchors };
+  const exactOriginal = world && anchors.length ? chapterFocalSources(world,chapterScope) : undefined;
   const opening = world && anchors.length ? deriveChapterOpening(world, chapterScope, deriveChapterEndHook) : undefined;
   const closing = world && anchors.length ? deriveChapterEndHook(world, chapterScope) : undefined;
   return {title:chapterReadingTitle(chapter.chapterNumber,scenes,lead),sections:scenes.map(({section})=>section),
-    beats:buildSerializedChapterPacing(sourced,lead),
+    beats:buildSerializedChapterPacing(sourced,lead,world&&exactOriginal?focal=>projectFocalLayers({
+      world,focal,throughTick:chapter.endTick,anchors,publicOriginal:exactOriginal,
+    }):undefined),
     ...(opening || closing ? { continuity: { ...(opening ? { opening } : {}), ...(closing ? { closing } : {}) } } : {}) };
 }
 

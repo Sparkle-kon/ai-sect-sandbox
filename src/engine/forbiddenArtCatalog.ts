@@ -56,3 +56,9 @@ export const FORBIDDEN_ART_CATALOG:Readonly<Record<ForbiddenArtId,ForbiddenArtRe
     roots:['木','土','天灵根'],life:4,bloodFraction:0,durability:9,scoreMultiplier:1,incomingMultiplier:.89,lastStand:true,
   },
 };
+
+// Stable native source identity is shared by the live resolver and the read-only chronicle.
+export const forbiddenDuelContactId=(openedTick:number,attackerId:string,defenderId:string)=>
+  `forbidden-duel-${openedTick}-${attackerId}-${defenderId}`;
+export const forbiddenArtScarId=(contactId:string,artId:ForbiddenArtId)=>`forbidden-scar-${contactId}-${artId}`;
+export const forbiddenArtEventId=(contactId:string)=>`evt-${contactId}-art`;

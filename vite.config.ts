@@ -82,7 +82,8 @@ export default defineConfig({
             './src/engine/publicDialogueProvenance.ts', './src/engine/chroniclePublicProse.ts'],
           // Private theatre selection and its save proof are shared by UI, native and storage.
           'heart-demon-rules': ['./src/engine/heartDemonEngine.ts', './src/engine/interruptedStoryChoices.ts',
-            './src/engine/storageHeartDemonValidation.ts', './src/types/heartDemon.ts', './src/engine/tribulationTerms.ts'],
+            './src/engine/storageHeartDemonValidation.ts', './src/types/heartDemon.ts'],
+          'tribulation-reference': ['./src/engine/tribulationTerms.ts'],
           'expedition-rooms-live': ['./src/engine/expeditionDungeonEngine.ts','./src/engine/siegeParticipants.ts'],
           'ascension-proof': ['./src/engine/ascensionProof.ts','./src/engine/ascensionTerms.ts','./src/engine/storageAscensionValidation.ts'],
           'cultivation-clan-proof': ['./src/types/cultivationClan.ts','./src/engine/cultivationClanTerms.ts','./src/engine/storageCultivationClanValidation.ts'],
@@ -111,9 +112,9 @@ export default defineConfig({
           'grand-siege-proof': ['./src/engine/grandSiegeProof.ts', './src/engine/storageGrandSiegeValidation.ts', './src/types/grandSiege.ts'],
           // The game seed depends only on trace state; keep the optional replay rules separate.
           'decision-replay': ['./src/engine/decisionTraceEngine.ts'],
-          // One shared chunk for authored arts, native costs and their strict save proof.
-          'forbidden-art-rules': ['./src/types/forbiddenArt.ts', './src/engine/forbiddenArtCatalog.ts',
-            './src/engine/forbiddenArtEngine.ts', './src/engine/storageForbiddenArtValidation.ts'],
+          // Read-only chapters must not pull the live forbidden-art and heart-demon simulation graph into history.
+          'forbidden-art-reference': ['./src/types/forbiddenArt.ts', './src/engine/forbiddenArtCatalog.ts'],
+          'forbidden-art-rules': ['./src/engine/forbiddenArtEngine.ts', './src/engine/storageForbiddenArtValidation.ts'],
           'personal-rules': ['./src/engine/artifactEngine.ts', './src/engine/reincarnationEngine.ts', './src/engine/schemeEngine.ts', './src/engine/elementalEngine.ts'],
           'world-identity': ['./src/engine/worldRandom.ts', './src/engine/worldIdentity.ts', './src/engine/worldgenProfiles.ts','./src/engine/highDramaPresetTerms.ts','./src/engine/storageBuiltinScenarioValidation.ts'],
           'travel-checkpoints': ['./src/engine/expeditionRescueCheckpoint.ts', './src/engine/boundaryReliefCheckpoint.ts',

@@ -1,7 +1,8 @@
 import {FORBIDDEN_ART_IDS,type ForbiddenArtChoice,type ForbiddenArtCost,type ForbiddenArtId,type ForbiddenArtOrigin,
   type ForbiddenArtOutcome,type ForbiddenArtScar,type ForbiddenDuelContact,type NativeDuelRolls} from '../types/forbiddenArt';
 import type {Artifact,Cultivator,LLMDecisionPayload,WorldEvent,WorldState} from '../types/world';
-import {FORBIDDEN_ART_CATALOG} from './forbiddenArtCatalog';
+import {FORBIDDEN_ART_CATALOG,forbiddenArtEventId,forbiddenArtScarId,forbiddenDuelContactId} from './forbiddenArtCatalog';
+export {forbiddenArtEventId,forbiddenArtScarId,forbiddenDuelContactId} from './forbiddenArtCatalog';
 import {activeAvatar} from './avatarEngine';
 import {durabilityOf,equippedArtifact} from './artifactEngine';
 import {cloneWorldWithColdHistory} from './coldHistoryEngine';
@@ -23,10 +24,6 @@ const look=(world:WorldState,id:string):Cultivator|undefined=>{
   return actors.length===1?actors[0]:undefined;
 };
 const current=(world:WorldState)=>world.forbiddenDuels??[];
-export const forbiddenDuelContactId=(openedTick:number,attackerId:string,defenderId:string)=>
-  `forbidden-duel-${openedTick}-${attackerId}-${defenderId}`;
-export const forbiddenArtScarId=(contactId:string,artId:ForbiddenArtId)=>`forbidden-scar-${contactId}-${artId}`;
-export const forbiddenArtEventId=(contactId:string)=>`evt-${contactId}-art`;
 
 function liveLower(actor:Cultivator|undefined):actor is Cultivator{
   return !!actor?.alive&&actor.hp>0&&actor.positionPlane===undefined;

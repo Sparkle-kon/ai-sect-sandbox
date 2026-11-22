@@ -1,11 +1,13 @@
 import type { ChronicleAnchor } from '../types/world';
 import { chapterFocalScore, chapterFocalThreadKey } from './chapterFocalScene';
 import type { ChronicleLead } from './chronicleLead';
+import type { FocalLayer } from './focalLayerEvidence';
 
 export interface ChronicleReadingBeat {
   readonly kind:'opening'|'transition'|'focal'|'closing';
   readonly paragraphs:readonly string[];
   readonly eventIds:readonly string[];
+  readonly paragraphEventIds:readonly (readonly string[])[];
   readonly title?:string;
 }
 export interface PacedChronicleScene {
@@ -67,8 +69,17 @@ function leadBacks(anchor:ChronicleAnchor,lead:ChronicleLead|undefined):boolean 
     anchor.actorIds.includes(lead.actorId);
 }
 
+function withinFocalBudget(layers:readonly FocalLayer[],budget:number):readonly FocalLayer[] {
+  const total=(rows:readonly FocalLayer[])=>rows.reduce((sum,row)=>sum+codepoints(row.text),0);
+  if(total(layers)<=budget)return layers;
+  // A long introduction may be skipped, not the attested resolution that made this event the chapter's focal scene.
+  const body=layers.filter(row=>row.role!=='approach');
+  return body.length&&total(body)<=budget?body:[];
+}
+
 /** Editorial presentation only. Sources are already scoped; this never writes new facts or stored chapter fields. */
-export function buildSerializedChapterPacing(scenes:readonly PacedChronicleScene[],lead?:ChronicleLead):ChronicleReadingBeat[]{
+export function buildSerializedChapterPacing(scenes:readonly PacedChronicleScene[],lead?:ChronicleLead,
+  readFocal?: (anchor:ChronicleAnchor)=>readonly FocalLayer[]):ChronicleReadingBeat[]{
   const ordered=scenes.map(({anchor,section,quietParagraph},original)=>({
     anchor,section,original,quiet:contextCopy(quietParagraph||section.paragraph||section.title),score:chapterFocalScore(anchor),
   })).filter(row=>!!row.quiet).sort((a,b)=>a.anchor.tick-b.anchor.tick||a.original-b.original);
@@ -93,28 +104,36 @@ export function buildSerializedChapterPacing(scenes:readonly PacedChronicleScene
   const opening=firstTransition>0?recordedSeason(ordered[0].anchor,ordered[0].quiet):'';
   const quietBudget=codepoints(opening)+ordered.reduce((total,row)=>total+(selected.has(row.anchor.id)?0:codepoints(row.quiet)),0);
   const perFocal=selected.size?Math.min(FOCAL_SOFT_LIMIT,Math.floor(quietBudget*(100-CONTEXT_PERCENT)/CONTEXT_PERCENT/selected.size)):0;
-  type MutableBeat={kind:ChronicleReadingBeat['kind'];paragraphs:string[];eventIds:string[];title?:string};
+  type MutableBeat={kind:ChronicleReadingBeat['kind'];paragraphs:string[];eventIds:string[];paragraphEventIds:string[][];title?:string};
   const beats:MutableBeat[]=[];
   for(let index=0;index<ordered.length;index++){
     const row=ordered[index];
     if(selected.has(row.anchor.id)){
       const title=row.section.title;
       const budget=quietBudget?Math.max(0,perFocal-codepoints(title)):FOCAL_SOFT_LIMIT;
+      const layers=withinFocalBudget(readFocal?.(row.anchor)??[],budget);
       const paragraph=focalCopy(row.section.paragraph||title,budget);
-      beats.push({kind:'focal',title,paragraphs:[paragraph||row.quiet],eventIds:[row.anchor.id]});
+      beats.push({kind:'focal',title,eventIds:[row.anchor.id],
+        paragraphs:layers.length?layers.map(detail=>detail.text):[paragraph||row.quiet],
+        paragraphEventIds:layers.length?layers.map(detail=>[...detail.eventIds]):[[row.anchor.id]]});
       continue;
     }
     const kind=index<firstTransition?'opening':lastFocal>=0&&index>lastFocal||lastFocal<0&&index===ordered.length-1?'closing':'transition';
     let beat=beats.at(-1);
     if(beat?.kind!==kind){
-      beat={kind,paragraphs:[],eventIds:[]};
+      beat={kind,paragraphs:[],eventIds:[],paragraphEventIds:[]};
       beats.push(beat);
     }
     const season=index===0?(kind==='opening'?opening:''):changedSeason(ordered[index-1].anchor,row.anchor,row.quiet);
     const next=season+row.quiet;
     const previous=beat.paragraphs.at(-1);
-    if(previous&&codepoints(previous+next)<=CONTEXT_PARAGRAPH_TARGET)beat.paragraphs[beat.paragraphs.length-1]=previous+next;
-    else beat.paragraphs.push(next);
+    if(previous&&codepoints(previous+next)<=CONTEXT_PARAGRAPH_TARGET){
+      beat.paragraphs[beat.paragraphs.length-1]=previous+next;
+      beat.paragraphEventIds[beat.paragraphEventIds.length-1].push(row.anchor.id);
+    }else{
+      beat.paragraphs.push(next);
+      beat.paragraphEventIds.push([row.anchor.id]);
+    }
     beat.eventIds.push(row.anchor.id);
   }
   return beats;
