@@ -1,4 +1,5 @@
 import { lazy, Suspense, useRef } from 'react';
+import type {NextStoryGuidance} from '../engine/nextStoryGuidance';
 import type { Cultivator, WorldState } from '../types/world';
 import {PublicBondAside,type PublicBondArc} from './DramaticBondRead';
 import { useId, type ReactNode, type Ref } from 'react';
@@ -17,6 +18,7 @@ interface StoryFirstHomeProps {
   scene?: StoryFirstScene;
   subplot?:PublicBondArc;
   branchScene?:ReactNode;
+  nextGuide?:NextStoryGuidance;
   recapContext?:{world:WorldState;scopeKey:string;viewer?:Cultivator};
   leadName?: string;
   playerName?: string;
@@ -30,7 +32,7 @@ interface StoryFirstHomeProps {
   onMore: () => void;
 }
 
-export function StoryFirstHome({ scene, subplot, branchScene, recapContext, leadName, playerName, busy = false, notice, outcome, calendar, moreRef, opening, onContinue, onMore }: StoryFirstHomeProps) {
+export function StoryFirstHome({ scene, subplot, branchScene, nextGuide, recapContext, leadName, playerName, busy = false, notice, outcome, calendar, moreRef, opening, onContinue, onMore }: StoryFirstHomeProps) {
   const nextDescription = useId();
   const storyReader=useRef<HTMLElement>(null);
   const leadHeading=useId();
@@ -65,6 +67,7 @@ export function StoryFirstHome({ scene, subplot, branchScene, recapContext, lead
           <p className="text-xs font-medium text-amber-200">{scene?.earlier ? '本月暂无新见闻 · 上一幕' : '本月见闻'}</p>
           <h2 data-chronicle-reader-heading className="font-serif text-xl font-semibold leading-snug text-amber-50 sm:text-2xl">{scene?.title ?? '暂无新的公开见闻'}</h2>
           {scene && scene.paragraph !== scene.title && <p className="font-serif text-base leading-7 text-slate-200"><span data-chronicle-paragraph-text>{scene.paragraph}</span></p>}
+          {nextGuide&&<p className="border-t border-slate-800 pt-2 text-sm leading-relaxed text-slate-300"><strong className="font-medium text-amber-200">{nextGuide.title}</strong> · {nextGuide.line}</p>}
           {leadName && scene?.followsLead === false && <p className="text-xs leading-relaxed text-slate-400">这一幕说的是别人，主线尚未换人。</p>}
         </article>
       </div>

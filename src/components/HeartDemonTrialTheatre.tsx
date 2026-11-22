@@ -54,6 +54,7 @@ export interface HeartDemonTrialTheatreProps {
   frame:HeartDemonFrame;
   actorName:string;
   likenessName?:string;
+  guidance?:string;
   busy:boolean;
   onChoose:(choice:HeartDemonChoice)=>boolean;
   onRelease:()=>boolean;
@@ -61,7 +62,7 @@ export interface HeartDemonTrialTheatreProps {
   onContinue:()=>void;
 }
 
-export function HeartDemonTrialTheatre({frame,actorName,likenessName,busy,onChoose,onRelease,onAdvance,onContinue}:HeartDemonTrialTheatreProps){
+export function HeartDemonTrialTheatre({frame,actorName,likenessName,guidance,busy,onChoose,onRelease,onAdvance,onContinue}:HeartDemonTrialTheatreProps){
   const title=useId(),intro=useId(),heading=useRef<HTMLHeadingElement>(null);
   const [message,setMessage]=useState('');
   const result=frame.result;
@@ -83,6 +84,7 @@ export function HeartDemonTrialTheatre({frame,actorName,likenessName,busy,onChoo
     </header>
     {apparition&&<>
       <div id={intro} className="space-y-1.5 font-serif text-sm leading-relaxed text-slate-200 sm:text-base">
+        {guidance&&<p className="text-sm text-violet-200">{guidance}</p>}
         <p>雷声断了。{apparition.figure}</p>
         <p className="border-l border-violet-400/40 pl-2 text-violet-100"><span className="mr-1 text-xs text-violet-300">幻象质问</span>“{apparition.question}”</p>
       </div>

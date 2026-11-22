@@ -1,3 +1,4 @@
+import { projectNextStoryGuidance } from '../engine/nextStoryGuidance';
 import {useBeastDuelSpotlight} from './useBeastDuelSpotlight';
 import {useEffect,useState} from 'react';
 import type {useWorldSimulationController} from '../controllers/useWorldSimulationController';
@@ -88,8 +89,11 @@ export function useFeaturedStoryDecision(simulation:Simulation){
     void simulation.handleStepTick();
     return true;
   };
+  const heartGuideActor=!preview&&nativeHeart?world.cultivators.find(row=>row.id===nativeHeart.actorId):undefined;
+  const heartGuide=heartGuideActor?projectNextStoryGuidance(world,heartGuideActor):undefined;
   const heartCard=heart&&heartScope!==dismissedHeart?
     <HeartDemonTrialTheatre key={heartScope} frame={heart.frame} actorName={heart.actorName} likenessName={heart.likenessName}
+      guidance={heartGuide?.kind==='heart'?heartGuide.line:undefined}
       busy={busy} onChoose={chooseHeart} onRelease={releaseHeart} onAdvance={advanceHeart}
       onContinue={()=>{setDismissedHeart(heartScope);setReleaseReceipt(undefined);}}/>:undefined;
   const exactContact=()=>{

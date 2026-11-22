@@ -1,3 +1,4 @@
+import { projectNextStoryGuidance } from './engine/nextStoryGuidance';
 import { useCampaignAssemblyStory } from './components/useCampaignAssemblyStory';
 import { useWitnessInquiryStory } from './components/useWitnessInquiryStory';
 import { useFrontierNightHuntStory } from './components/useFrontierNightHuntStory';
@@ -669,6 +670,11 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
         resolvePublicDialogue={publicRead?.dialogue.event} category={chronicleFilter} onCategoryChange={setChronicleFilter}/>
     </React.Suspense>}/>;
 
+  const activeReadingScene=dungeonFork??nightHunt??schoolFormDuel??calamityArray??battlefieldRevisit??witnessInquiry??campaignAssembly??
+    flightCard??passageScene??banquetStory;
+  const guidanceActor=!preview&&storyHome&&!activeReadingScene
+    ?activeAvatar(world)??world.cultivators.find(actor=>actor.id===storyHome.lead?.id)??selectedCultivator:undefined;
+  const nextGuide=guidanceActor?projectNextStoryGuidance(world,guidanceActor):undefined;
   if (storyHome) return <main data-story-home data-story-turn={storyHome.calendar.tick} className="min-h-dvh bg-slate-950 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
     <div className="mx-auto flex max-w-[76rem] flex-wrap justify-end gap-2 px-4 empty:hidden">
       {cockpitSwitch}
@@ -679,7 +685,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
       openings={<HighDramaPresetPicker scopeKey={viewScopeKey} revision={world} disabled={dramaticOpening.disabled} onStart={dramaticOpening.start}/>}
       onFollow={storyHome.lead?followCurrentLead:undefined} onEnter={enterCurrentLead} onOrder={orderCurrentStoryAvatar} />:
       <StoryFirstHome recapContext={world.chronicleArchive.chapters.length||world.coldHistory?.chapters.length?
-        {world,scopeKey:viewScopeKey,viewer:activeAvatar(world)}:undefined} scene={storyHome.scene} subplot={guidance.subplot} branchScene={dungeonFork??nightHunt??schoolFormDuel??calamityArray??battlefieldRevisit??witnessInquiry??campaignAssembly??flightCard??passageScene??banquetStory??<DeferredGrandSiegeMapScene world={world} viewer={activeAvatar(world)} fog personalOnly visible witnessScopeKey={viewScopeKey}/>} leadName={storyHome.lead?.name} playerName={activeAvatar(world)?.name}
+        {world,scopeKey:viewScopeKey,viewer:activeAvatar(world)}:undefined} scene={storyHome.scene} subplot={guidance.subplot} nextGuide={nextGuide?.kind==='heart'?undefined:nextGuide} branchScene={activeReadingScene??<DeferredGrandSiegeMapScene world={world} viewer={activeAvatar(world)} fog personalOnly visible witnessScopeKey={viewScopeKey}/>} leadName={storyHome.lead?.name} playerName={activeAvatar(world)?.name}
         busy={isStepping} moreRef={storyMoreRef} notice={storyNotice} calendar={storyHome.calendar} opening={dramaticOpening.opening}
         outcome={storyOutcome?.world===world?storyOutcome.text:undefined} onContinue={advanceStory} onMore={openStoryEntry} />)}
   </main>;

@@ -7,10 +7,10 @@ const base:HeartDemonFrame={id:'private-heart-trial',actorId:'private-body',site
   openedTick:18,finalWaveEventId:'private-final-wave',evidence:{kind:'mirror'}};
 const result:HeartDemonResult={choice:'wrath',origin:'player',outcome:'failed',resolvedTick:19,damage:23,
   karmaDelta:-3,masteryDelta:0,personalityBefore:'刚正',personalityAfter:'嗜血'};
-function read(frame:HeartDemonFrame, likenessName?:string,busy=false){
+function read(frame:HeartDemonFrame, likenessName?:string,busy=false,guidance?:string){
   const onChoose=vi.fn(()=>true),onRelease=vi.fn(()=>true),onAdvance=vi.fn(()=>true),onContinue=vi.fn();
   const html=renderToStaticMarkup(<HeartDemonTrialTheatre frame={frame} actorName="岑闻溪" likenessName={likenessName}
-    busy={busy} onChoose={onChoose} onRelease={onRelease} onAdvance={onAdvance} onContinue={onContinue}/>);
+    busy={busy} guidance={guidance} onChoose={onChoose} onRelease={onRelease} onAdvance={onAdvance} onContinue={onContinue}/>);
   for(const callback of [onChoose,onRelease,onAdvance,onContinue])expect(callback).not.toHaveBeenCalled();
   expect(html).not.toContain('private-');
   return html;
@@ -67,4 +67,10 @@ describe('one guided native heart-demon story stage',()=>{
       expect(html.match(/<button/g)).toHaveLength(1);
     }
   });
+});
+
+it('puts the single guidance line only before an actual heart-demon choice',()=>{
+  const guidance='雷已过，待选的是如何面对眼前幻象。';
+  expect(read(base,undefined,false,guidance)).toContain(guidance);
+  expect(read({...base,result},undefined,false,guidance)).not.toContain(guidance);
 });

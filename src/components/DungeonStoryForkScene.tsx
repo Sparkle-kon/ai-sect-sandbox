@@ -14,6 +14,7 @@ interface Props {
   comparison?:DungeonCounterfactualView;
   busy?:boolean;
   notice?:string;
+  guidance?:string;
   onChoose?:(option:DungeonOption)=>void;
   onCompare?:()=>void;
 }
@@ -59,7 +60,7 @@ function Route({route}:{route:DungeonCounterfactualRoute}) {
 }
 
 /** Read-only counterfactuals stay separate from the single exact live choice. */
-export function DungeonStoryForkScene({scene,comparison,busy=false,notice,onChoose,onCompare}:Props) {
+export function DungeonStoryForkScene({scene,comparison,busy=false,notice,guidance,onChoose,onCompare}:Props) {
   const title=useId(),comparisonTitle=useId();
   const legal=scene.actual?[]:scene.options.filter(option=>choiceLabel(option)&&
     scene.options.filter(row=>row.dungeonMove===option.dungeonMove).length===1);
@@ -73,6 +74,7 @@ export function DungeonStoryForkScene({scene,comparison,busy=false,notice,onChoo
       <p className="text-xs text-teal-200">此行实录</p>
       <Step step={scene.actual}/>
     </section>:<p className="text-sm leading-relaxed text-slate-100">人已到药园。先采一枚玉叶，再决定是否深入，还是现在沿来路退出？</p>}
+    {guidance&&onChoose&&legal.length>0&&<p className="text-sm text-teal-200">{guidance}</p>}
     {onChoose&&legal.length>0&&<div role="group" aria-label="此行真正选择" className="grid gap-1.5 sm:grid-cols-2">
       {legal.map(option=><button key={option.dungeonMove} type="button" disabled={busy} className={action}
         onClick={event=>{if(!busy&&event.detail<=1)onChoose(option);}}>{choiceLabel(option)}</button>)}

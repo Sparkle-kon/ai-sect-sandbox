@@ -53,3 +53,11 @@ describe('two native paths in the same danger',()=>{
     expect(html).not.toMatch(/试走比较|<button\b|此行实录/u);
   });
 });
+
+it('puts one hint beside a true expedition choice, never a receipt or nonplayable state',()=>{
+  const guidance='你已在药园，眼下可采叶或退回。';
+  const onChoose=()=>{};
+  expect(renderToStaticMarkup(<DungeonStoryForkScene scene={initial} onChoose={onChoose} guidance={guidance}/>)).toContain(guidance);
+  expect(renderToStaticMarkup(<DungeonStoryForkScene scene={initial} guidance={guidance}/>)).not.toContain(guidance);
+  expect(renderToStaticMarkup(<DungeonStoryForkScene scene={{...initial,actual:actualExit}} onChoose={onChoose} guidance={guidance}/>)).not.toContain(guidance);
+});

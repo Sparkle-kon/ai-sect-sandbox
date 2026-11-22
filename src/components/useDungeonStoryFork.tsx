@@ -1,3 +1,4 @@
+import { projectNextStoryGuidance } from '../engine/nextStoryGuidance';
 import { lazy, Suspense, useMemo, useRef, useState } from 'react';
 import type { useWorldSimulationController } from '../controllers/useWorldSimulationController';
 import { resolveGuidedDungeonTurn } from '../controllers/guidedDungeonTurn';
@@ -87,7 +88,9 @@ export function useDungeonStoryFork(sim:Sim,active:boolean,viewer:Cultivator|und
       setPending(false);
     }
   }:undefined;
+  const guidance=live&&viewer?projectNextStoryGuidance(world,viewer):undefined;
   return <Suspense fallback={null}><Scene
+    guidance={guidance?.kind==='dungeon'?guidance.line:undefined}
     scene={{label:display.label,sourceTick:display.world.tick,options:live?.options??[],actual:old?.proof}}
     comparison={old?.stamp===display?old.view:undefined} notice={old?.stamp===display?old.notice:undefined}
     busy={pending||sim.isRunning||sim.isStepping||sim.fastForwardLocked} onChoose={onChoose} onCompare={onCompare}/>
