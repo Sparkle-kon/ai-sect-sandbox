@@ -1,13 +1,51 @@
 # BACKLOG.md — Infinite Evolution Task Queue (天道沙盒开发任务队列)
 
-> **接续方法：** 从顶部第一个未勾选项开始，每项独立实现、测试、验证和发布；完成后接下一项，不等人为确认。
-> **完成标准：** 双引擎、相关 UI/Canvas、确定性测试、`npm run verify`、更新 CHANGELOG、单独提交并核对远端。
-> **补队列：** 完成后若剩少于 20 项，追加一个包含 10 项具体可验收机制的新阶段。
-> **运行边界：** 同一次运行里逐项连续做，不设置周期唤醒。遇系统硬上限时保存检查点，未验证的工作不勾选。完整规则见 [AGENTS.md](AGENTS.md)。
+> **接续方法：** 从顶部第一个未勾选项（`- [ ]`）开始，每项独立实现、测试、验证和发布；完成后立即接下一项，不等人为确认。
+> **战略转向（天道变法）：** 停止新增微观账本/收据/工具磨损/过秤运费等琐碎行政任务！全面聚焦 **1) 大屏全息同屏指挥台 (Panoramic Cockpit UX)**、**2) 2D Canvas 九州视觉奇观与动画演出**、**3) 高戏剧性修仙爽感（肉鸽奇遇抉择、神通法宝对轰、心魔幻境、正魔灭门大战）**、**4) `App.tsx` 架构解耦瘦身与零散面板收拢**。
+> **完成标准：** 双引擎兼容、直观视觉/UI 呈现、确定性测试、`npm run verify`（保持既有 2000+ 测试全绿）、更新 CHANGELOG、单独提交并推送到 `origin/main`。
+> **补队列：** 完成后若未勾选项少于 20 项，在队列末尾追加一个包含 10 项“视觉奇观/修仙戏剧玩法/架构精简”的新阶段。完整规则见 [AGENTS.md](AGENTS.md)。
 
 ---
 
-## 纪元主线
+## 天道变法主线：大屏全息沙盒、视觉奇观、高能修仙戏剧与架构重塑 (V1–V4)
+
+以下四阶段（共 20 项）为当前最高优先级队列，按「顶部第一个未勾选项」依次执行：
+
+### V1　大屏全息天道指挥台与 `App.tsx` 架构解耦瘦身 (Panoramic Cockpit & Architecture Refactor)
+
+- [ ] **[V1-1] 大屏全息同屏指挥台模式 (Panoramic God-View Cockpit Mode)**：构建 `src/components/PanoramicCockpit.tsx`。在宽屏桌面端（或通过顶栏一键切换「全息大盘 / 故事书卷」视图，同时保持现有默认测试契约 100% 兼容），提供无需层层翻找折叠菜单的同屏三栏指挥台：**左栏为 2D 九州动态沙盒大地图 (`WorldMapCanvas`) + 快捷时间推演控制栏**；**中栏为当前主角戏剧舞台 + 当月核心奇遇/冲突焦点**；**右栏为选中修士的识海思维链 (`AgentInspector`) + 因果关系拓扑 (`RelationshipGraph`) + 实时编年史流**。补充组件与切换测试。
+- [ ] **[V1-2] `App.tsx` 架构解耦第一刀：抽离世界推演与时间线控制器 (`useWorldSimulationController`)**：当前 `src/App.tsx` 已膨胀至 2000+ 行。将世界状态推进、快进 Worker 编排、时间线分支切换、自动播放定时器以及 Fair Model Turn 调度逻辑抽离至 `src/controllers/useWorldSimulationController.ts`，使 `App.tsx` 大幅瘦身并保持所有既有单元测试与集成测试零回归。
+- [ ] **[V1-3] `App.tsx` 架构解耦第二刀：聚合零散制度小面板为三大主题总览中心 (`InstitutionHubPanel`)**：将散落在 `App.tsx` 中的几十个微型制度/账本面板（如工坊、借器、运费、乡祠、驿站、观象、静养、义仓等）按领域整合进 `src/components/hubs/SectAffairsHub.tsx`（宗门内政与工坊总览）、`src/components/hubs/CivicWorldHub.tsx`（九州民生与坊市商路总览）、`src/components/hubs/ChronicleArchiveHub.tsx`（天机史馆与考据总览），用清晰的二级 Tab 替代冗长的手风琴堆叠，将 `App.tsx` 行数压缩 40% 以上。
+- [ ] **[V1-4] 地图悬浮气泡检视器与就地交互 (`MapEntityPopover`)**：在 `WorldMapCanvas` 上点击或悬停任意灵脉地点、村镇或修士时，直接在地图旁弹出高颜值的半透明古风悬浮检视卡（显示该地灵气/驻留修士/正在发生的大事件/聚落人口，或该修士的境界/气血条/当前动作/内心独白一句话），并支持在悬浮卡上一键「聚焦追踪」、「神念传音」或「降下机缘/雷劫」，无需跳转到其他工作区才能看清地图上的内容。
+- [ ] **[V1-5] 顶栏全局修仙界态势感知仪 (`WorldPulseBar`)**：在全息指挥台与沙盒工作区顶部增加紧凑的「天地气运态势条」，直观显示：当前九域灵潮节气图标、正魔势力气运对比条、当世战力榜首（天下第一人）、正在渡劫或激战的高危预警闪光标签（点击可直接将地图镜头平滑聚焦到事发地点）。
+
+### V2　九州山河画卷与 2D Canvas 斗法/天劫视觉奇观 (Canvas Visual Spectacle)
+
+- [ ] **[V2-1] 九州国风山河地貌与动态灵脉气韵渲染 (`CanvasBiomeShader & QiFlow`)**：升级 `WorldMapCanvas` 的视觉表现力。为不同地形（太虚剑峰、血月魔渊、丹霞灵谷、摘星天机台、极北寒玉脉、东海外港、西漠盐井、高原雷脊、上界阵原）绘制具有国风辨识度的地貌纹理、云雾粒子、灵气光环呼吸灯效，以及连接各地脉的流光灵气粒子线。
+- [ ] **[V2-2] 御剑流光、飞剑传书与跨区商队动态轨迹 (`CanvasTrajectoryVFX`)**：在 `WorldMapCanvas` 上用平滑插值动画直观渲染修士的跨地点移动（正道化作青金剑光尾迹、魔道化作血影流光）、密函飞剑传书的金色流光弧线、以及跨境商队/朝山巡礼队伍在驿路上的行进图标，让沙盒地图真正“活起来”。
+- [ ] **[V2-3] 生死斗法剑气碰撞与九重雷劫天威特效 (`CanvasCombatAndTribulationVFX`)**：当某地点发生修士生死斗法、宗门攻防战或大境界渡劫时，在 `WorldMapCanvas` 对应坐标渲染醒目的动态视觉演出：斗法时的双色剑气交击火花与气血浮动飘字（`-320 HP`）、渡劫时的紫霄劫云漩涡与落雷闪电链、破境成功时的金莲异象光柱。
+- [ ] **[V2-4] 修士头顶微缩状态徽章与戏剧气泡 (`CanvasActorBadges`)**：在地图上的修士节点旁渲染直观的微缩视觉指示器：残血重伤闪烁红光、即将破境圆满环绕金光、心魔缠身环绕紫黑煞气，并在其触发高光台词或重要决策时在地图头顶弹出简短的古风台词气泡（如*“今日便斩你证道！”*、*“天地灵气，入我金丹！”*）。
+- [ ] **[V2-5] 护山大阵光幕与九域全景战略缩略图 (`ProtectiveArrayDome & StrategicMinimap`)**：为各大宗门驻地渲染半透明的「护山大阵」阵法穹顶（完整度随大阵耐久变化，遭围攻时出现裂纹特效）；升级九域全景导航小地图，支持一键在「本域精细画卷」与「九域十洲无缝战略全图」之间缩放巡览。
+
+### V3　修仙爽感回归：肉鸽奇遇抉择、上古神通、心魔幻境与仙魔大劫 (High-Drama Xianxia Gameplay)
+
+- [ ] **[V3-1] 秘境探索与游历「三选一」肉鸽奇遇事件台 (`RoguelikeEncounterModal`)**：构建 `src/engine/roguelikeEncounterEngine.ts` 与 `src/components/RoguelikeEncounterCard.tsx`。当玩家引导的主角（或重点关注的修士）探索秘境、古迹或跨域游历时，触发极具修仙小说代入感的奇遇事件（如*“误入坐化剑仙洞府”*、*“偶遇重伤垂死的千年妖修求救”*、*“发现带有心魔封印的上古残卷”*），提供 3 个风险与收益截然不同的抉择分支（离线时由 NPC 性格自动抉择，玩家引导时可亲自拍板），直接影响功法领悟、气运、寿元或结下奇缘。
+- [ ] **[V3-2] 逆天改命词条与本命神通觉醒系统 (`DestinyTraits & SignatureDivineArts`)**：创建 `src/engine/destinyTraitEngine.ts`。每次修士突破大境界（筑基→金丹→元婴→化神→渡劫）时，可从随机刷出的 3 个「逆天改命」先天/后天命格词条中觉醒其一（如*【剑心通明】*、*【血海不枯】*、*【天道宠儿】*、*【苟道至尊】*、*【丹毒化灵】*），不仅带来独特的战斗与修行机制加成，还会显著改变其面对危机时的行为风格并在人物档案中以炫酷徽章展示。
+- [ ] **[V3-3] 沉浸式「心魔劫」幻境拷问剧场 (`HeartDemonTrialTheatre`)**：当修士冲击金丹/元婴/化神遭遇心魔劫时，根据其真实的生平执念、未报血仇、亏欠的道侣或师徒因果，生成一场直击灵魂的「心魔幻境对决」（心魔化作其宿敌或挚友质问其道心）。提供“斩断尘缘”、“以杀止杀”或“直面愧疚”的破劫选择；破劫成功则道心大进，失败则走火入魔甚至性情大变（正入魔/魔悟道）。
+- [ ] **[V3-4] 上古十大禁术、法宝器灵复苏与越阶反杀 (`AncientForbiddenArts & SpiritWeaponAwakening`)**：为高阶法宝引入「器灵觉醒」与「燃血催动禁术」机制。当修士在生死决战中濒临绝境（气血低于 25%）时，可选择燃烧寿元或精血发动本命法宝禁招（如*“太虚诛仙剑阵”*、*“万魂血海吞天”*），上演热血的越阶反杀或断臂逃生，生成极具画面感的战斗战报与永恒伤痕印记。
+- [ ] **[V3-5] 百年仙魔大劫与灭门级护山大阵攻防战 (`GrandSectSiegeTheatre`)**：将正魔冲突与天地大劫升级为可视化的「仙魔大战战役舞台」。展示攻守双方出战长老与真传弟子阵容、护山大阵阵眼破损进度、阵前斗将单挑、太上长老出关救场或掌门自爆金丹护宗的高潮戏码，战后在地图与编年史上留下永久的战场遗迹与宗门兴衰转折。
+
+### V4　群像戏剧舞台与大模型狂野叙事解放 (Dramatic Character Theatre & Wild LLM Storytelling)
+
+- [ ] **[V4-1] 宿命对手、师徒反目与道侣生死羁绊戏剧引擎 (`DramaticBondArcEngine`)**：构建 `src/engine/dramaticBondEngine.ts`。自动识别并强化世界中最具戏剧张力的双人/三人关系弧线（如“杀师之仇不共戴天”、“正魔殊途的禁忌道侣”、“同门天骄的掌门继承人之争”），在首页故事舞台与人物面板上以【宿命羁绊卷轴】重点追踪他们的每一次重逢、背叛、救援与决战。
+- [ ] **[V4-2] 解放 LLM「狂野戏精模式」与个性化古风台词生成 (`WildXianxiaPersonaPrompts`)**：升级 `src/engine/llmBrain.ts` 与 `src/engine/dialogueEngine.ts`。在保证底层状态合法的前提下，赋予 LLM 更大的文学创作自由度：根据修士的性格（狂傲、阴险、苟道、痴情、嗜血）与命格词条，生成极具网文爽感与古典仙侠韵味的内心独白、战前叫阵诗词、临终遗言与密谋私语，彻底告别千篇一律的干瘪公文腔。
+- [ ] **[V4-3] 交互式「随身老爷爷 / 天道降旨」实时对话审讯台 (`InteractiveRingGrandpaChat`)**：升级 `PossessionPanel` 与 `GodConsole`，允许玩家以“戒指里的上古残魂”或“天道化身”身份，与任意修士展开多轮自然语言交互（支持离线性格仿真应答与在线 LLM 实时飙戏）：可以忽悠他叛出宗门、传授他禁忌功法、挑拨他刺杀掌门，并实时看到其道心摇摆度与最终顺从/逆天反抗的决定。
+- [ ] **[V4-4] 封神榜、陨落英魂录与人物一生传记画卷 (`HallOfImmortals & BiographyScroll`)**：打造高颜值的「天机封神榜 & 历代列传」画卷模态框（`src/components/HallOfImmortalsModal.tsx`）。不仅展示战力榜、恶人榜、炼丹宗师榜，还能为任何一位陨落或飞升的传奇修士一键生成图文并茂的《本纪/世家列传》（串联其出身、拜师、高光奇遇、宿敌决战、逆天命格与结局）。
+- [ ] **[V4-5] 丝滑新手引导、一键高能开局剧本与全息大盘终极打磨 (`HighDramaScenarioPresets & UXPolish`)**：内置 3 个开局即高潮的特色修仙剧本预设（如*《山雨欲来：正魔决战陨仙墟》*、*《天骄争锋：百年仙门大比前夜》*、*《微末凡人：从寒玉矿奴到万年老祖》*），玩家一键即可进入充满戏剧冲突的鲜活局面，完成大屏全息指挥台与移动端故事模式的体验闭环。
+
+---
+
+## 纪元主线 (E1–E4 已完成基座)
 
 下面三阶段是自动执行器当前的优先队列，沿用「顶部第一个未勾选项」规则。原有 Phase 0–18 的编号、状态和相对顺序保留在后。每阶段末项都要交付一个可以进场、做选择、再存档的年代。
 
@@ -298,30 +336,16 @@
 
 ---
 
-## Phase 18: Aftermath & Local Returns (事后余波与江湖回路)
+## Phase 18: 仙途奇观、宗门大比舞台与神通法宝进阶 (Xianxia Spectacle & Grand Tournaments)
 
-- [ ] **[P18-1] Verified Reversals in a Named Story Thread (同人改诺与回望)**: Link a specific public choice to a later, independently verified reversal by the same real actor. Keep each choice and its separate consequence; an old disagreement, same name or unobserved motive cannot supply a reversal. Test a genuine reversal and a similarly dated unrelated fork.
-- [ ] **[P18-2] An Apprentice Carries Forward a Witnessed Lesson (弟子所闻与旧课)**: Let a named former apprentice cite an exact prior lesson they actually attended when doing matching real work later. Preserve their own learned result separately from the mentor’s deeds and old title. No borrowed credit, invented lesson, inherited rank or second skill reward.
-- [ ] **[P18-3] Material Promises Settled in Real Partial Lots (约料分次实交)**: A funded, explicit local service may accept a separate authorized material installment only from genuinely uncommitted stock. Keep original quantity, delivered amount and actual balance distinct; cancellations release only custody still held, never replay an earlier transfer or turn unpaid aid into debt.
-- [ ] **[P18-4] A Waymark Replaced After an Actual Survey (旧路标复立)**: After a recorded hazard displaces an existing sign, a real traveler must survey the same known route before a qualified local worker may spend actual supplies to replace it. Keep the old reading and the verified update separate; no new path or unknown adjacent direction is inferred.
-- [ ] **[P18-5] Fair-Day Stall Succession Without Baggage Transfer (摊位交接与原货各归)**: When an actual staffed stall closes, let the next independently present merchant claim only a real remaining slot. The outgoing seller’s unsold goods, fees and native listings never transfer automatically. Test later demand, reserved slots, bad-weather interruption and former receipts.
-- [ ] **[P18-6] An Aged Relayed Reading Can Be Corrected, Not Reused as Fresh Proof (旧观转递与署期勘误)**: Once an authorized recipient actually received a reading, a named source may append a correction from a genuine later observation. Preserve which value and date the recipient saw at each turn; neither a receipt of relay nor a forecast can count as a second independent observation.
-- [ ] **[P18-7] Witnessed Injuries During a Real Escort (护路亲见与伤证封存)**: A consenting guard at the same actual escort checkpoint may record only an independently noticed consequence of that crossing. Preserve the named participant’s private receipt and a nonidentifying local status separately. The entry cannot heal, refund, or infer the extent of hidden injury.
-- [ ] **[P18-8] Exact Pending Reading Marks Across Divergent Branches (挂在半页的原本)**: Retain a deliberate scene bookmark only as long as its exact branch and observed source match. Two copies with the same title/date/ID but conflicting bodies remain separate. On stale or private evidence, return to an honest neutral state without moving to a guessed chapter or changing the active world.
-- [ ] **[P18-9] Measured One-Handed Reading in a Thousand-Person World (千人窄屏不掉名)**: Test actual growing rosters beyond one thousand against bounded rendered pages, exact protagonist and nonlead jumps, and unchanged semantic keyboard order. Keep all people and their existing branch histories even when UI windows are trimmed. Report actual visual and input coverage separately, without turning a benchmark size into a roster limit.
-- [ ] **[P18-10] Recovery of One Verified Lost Sealed Original (旧驿失函与原封找回)**: Attempt recovery only if a genuine carrier’s recorded event left that exact parcel in independently verified local custody. Verify the intact original and a new separately accepted handoff; the first failed leg keeps its lost entry, no parcel is copied or prematurely opened, and any later delivery needs its own real receipt.
+- [ ] **[P18-1] 可视化八强淘汰赛「仙门大比」演武擂台 (`TournamentBracketArena`)**：当触发宗门大比或天下论剑时，生成直观的 8 强/16 强晋级对阵图（Bracket UI），支持玩家逐轮观看或快进天骄对决、押注气运灵石，并为夺冠魁首颁发专属称号与通天灵宝。
+- [ ] **[P18-2] 上古秘境多层探索地图与护宝妖王 Boss 战 (`SecretRealmDungeonExplorer`)**：进入开启的秘境后，展现秘境内部的三层险境节点（外围药园 → 核心古殿 → 传承禁地），修士可组队或独闯挑战镇守妖王，支持破阵、夺宝与秘境崩塌前的紧急逃生。
+- [ ] **[P18-3] 炼丹炉火候微操与丹雷异象 (`AlchemyFurnaceInteractive & PillLightning`)**：炼制高阶金丹（九转金丹、渡劫神丹）时引动天地丹雷，成丹品质分为凡品、灵品、仙品与绝世丹纹，并在地图与面板上触发丹香百里异象。
+- [ ] **[P18-4] 本命飞剑养成、剑意领悟与万剑归宗演出 (`SwordIntentMastery`)**：为剑修与法修提供专属道途（剑道、丹道、阵道、魔道、体修）进阶树，领悟剑意/刀意/魔意后在 Canvas 战斗中展现专属颜色的剑阵光效。
+- [ ] **[P18-5] 拍卖行风云与压轴天材地宝竞价争夺 (`ImmortalAuctionHouse`)**：在万仙坊市定期开启「万宝大会拍卖行」，各宗门长老、散修与玩家引导角色同场加价竞拍残破古宝、筑基/结婴灵丹，买下后甚至可能引来魔修半路截杀。
+- [ ] **[P18-6] 修士立绘头像生成器与境界气场特效 (`ProceduralCultivatorPortrait`)**：为每位修士根据其性别、年龄、宗门、灵根、境界与性格生成独特的 SVG 国风古装头像与背后的境界法相光环（金丹金轮、元婴法相、魔道血月）。
+- [ ] **[P18-7] 天机奇闻日报与修仙界热搜风云榜 (`TianjiGazetteNewspaper`)**：每逢年度交替或重大战役后，由天机阁自动编撰一份排版精美的《天机风云报》，包含头版头条、天骄黑马点评、恩怨八卦与悬赏通缉令。
+- [ ] **[P18-8] 道侣双修大典、血脉后代灵根遗传与修仙家族崛起 (`CultivationClanDynasty`)**：当两位修士结为生死道侣并举办双修大典，可诞下拥有父母复合灵根与先天词条的后代，逐步在宗门外形成绵延数百年的修仙世家。
+- [ ] **[P18-9] 飞升天劫终极演出与上界仙门接引 (`AscensionToImmortalPlaneVFX`)**：当修士修炼至渡劫大圆满引发飞升天劫时，全地图渲染九天仙门洞开、仙乐齐鸣的史诗级过场与结局纪传，将其永载入封神榜。
+- [ ] **[P18-10] 全息沙盒性能与代码整洁度全面巡检 (`HolisticSandboxPolish & BundleOptimization`)**：对所有新增的视觉特效、全息指挥台与戏剧引擎进行渲染帧率与构建包体积优化，确保在千人长局下依然丝滑流畅。
 
----
-
-## Phase 19: Afterlives of Evidence & Material Custody (旧据余生与实物有主)
-
-- [ ] **[P19-1] Two Places With One Name (旧址新名与故事地望)**: In an existing chapter, distinguish a genuinely visited old headquarters from a later seat that reused its display name. Use the original scene's exact site ID and dated physical relocation receipt; show current-map links only from live observation, with old/unknown sites labeled honestly. Verify a native relocation before/after, same-name site and a same-tick fork with no relocation. No second map, guessed coordinates or homepage controls.
-- [ ] **[P19-2] A Council Seat Can Deliberately Abstain (当席弃议，不以沉默作同意)**: Allow the named eligible member of one real still-open public petition to sign a dated abstention without becoming an affirmative or negative vote. Where old rules already count attendance, distinguish counted presence from an affirmative vote and an absent elder. Test narrow native quorum/tie/late cases; no second ballot, fabricated attendance, changed rank or automatic LLM calls.
-- [ ] **[P19-3] Burial Does Not Swallow a Borrowed Tool (借器未归与遗产旁账)**: If a lender dies with a physically loaned tool, retain the same outstanding custody until the living borrower can hand it back at a real co-present probate endpoint. The qualified estate representative accepts only the actual item and measured condition; leave earned usage and the old staged artifact unchanged, with no duplicated estate credit or forged heir. Test blocked handoff while probate is unresolved and one actual later return after strict reopen.
-- [ ] **[P19-4] Used Artifact Consignment at a Real Bench (二手器具与原铸印)**: A willing onsite owner and buyer may trade one existing ordinary unbound, nonrelic artifact at a published workshop/market bench for actual stones. Accept on a later turn only with the exact same item, unchanged owner and condition, free recipient capacity, and both people present. Preserve maker/repair provenance and measured durability. Verify item held elsewhere, malformed origin, repeat, genuine later repair and no synthetic trade or reforge.
-- [ ] **[P19-5] A Suspect Seed Lot Stays Physically Separate (疑种隔藏与复测放行)**: After a genuinely poor native germination sample, an authorized keeper may mark only the remaining exact batch as set aside. One later independent sample spends real seeds and can clear only that batch's mark; viable stock, spent seeds and unrelated variety remain distinct. Test mixed identical-name lots, zero spare units, poor retest and both sides of reloaded clearing. No new cultivar, invented harvest or blanket ban.
-- [ ] **[P19-6] A Recovered Spring Must Prove Its Yield (活泉复核与枯账仍在)**: After native terrain recovery, offer one genuinely funded, locally staffed trial to document whether the same mapped spring can produce its ordinary measured resource again. First publish only the observed change; the native old resource cap and rival users still constrain actual draw. Show an unsuccessful trial and later lawful draw separately; no invented rain, progress inferred from the calendar or duplicate stock.
-- [ ] **[P19-7] One Named Lesson Can Be Withdrawn Before It Runs (开课前收课与未动教时)**: Allow the actual cohort teacher to cancel a single still-unheld lesson after recorded consent, preserving signed attendance history and every earlier completed lesson. Publish only that there is no lesson today; no mentor transfer, refunded teaching time that was never charged, or deleted worker records. Test real students traveling but absent, an already held lesson, and the last simultaneous cancellation/attendance ordering.
-- [ ] **[P19-8] Two Witnesses, Two Different Portions (同幕不同所见)**: For one existing public multi-step encounter with independent physical witness stamps, present a single compact scene with separate selectable witnessed portions, including an explicit unavailable gap when someone arrived late or left early. No inferred motive, private speech, projected knowledge from the protagonist, extra reading tab or bookmarking mechanism. Verify held staggered arrival/departure on two forks and equivalent keyboard ordering.
-- [ ] **[P19-9] A Native Payment Statement With a Proven Cutoff (账日前后各自为证)**: From the existing receipt ledger, let an original signer inspect one bounded settlement statement at two exact retained dates. Show posted obligations, transfers and unknowable gaps separately; never silently fill a dropped journal detail or reconcile missing money from a later wallet. Verify a real multi-date release, partial detail loss and fork with one actual receipt omitted, without changing accounting, reproducing checkpoints or exporting a save.
-- [ ] **[P19-10] Era Bridge From an Inherited Real Object (旧器跨代可读，不把样本合居)**: Run one same-lineage native sequence from a verifiable old owner through actual probate or lawful sale and later reuse by a distinctly registered heir/owner. Open old and new atomically checked episodes, verify the single item ID, original owner and custody changes, and explicitly avoid calling separate regional samples one lineage. Measure page latency and archive bytes with 1,000+ roster separately; record device evidence only if physically tested. No duplicate asset, reconstructed actor, invented calendar or new home controls.

@@ -1,59 +1,42 @@
-# AGENTS.md — 天道沙盒连续开发协议
+# AGENTS.md — 天道沙盒连续开发协议（天道变法版：视觉沙盒、高戏剧修仙与架构解耦）
 
-**做完一项，直接做下一项。** 开发迭代以提交为单位，不以对话回复为单位。这是同一次执行中的连续循环，不靠定时任务、提醒或周期唤醒。只在用户叫停、真实阻塞或执行环境硬性结束时停下；系统强制结束不能靠 Markdown 延长。
-
-## 1. 每轮执行
-
-1. 完整阅读本文件和 [任务队列](BACKLOG.md)。检查工作区、`origin/main`、`CHANGELOG.md` 和最近的接续记录，不覆盖未识别改动。
-2. 从顶部取第一个未勾选任务。不要跳过依赖项，或为凑数量把多个功能合并为一次验收。
-3. 完整实现 TypeScript + React 功能，不新增 `any`、占位、空按钮或 TODO 桩。机制用正式世界状态和规则结算，接通离线 Utility AI 与 LLM Cognitive JSON；UI/Canvas 应显示或操作与该任务相关的真实结果。
-4. 在 `tests/` 补确定性单元和模拟测试，覆盖正常、拒绝、重复和必要的状态竞争。LLM 路径用模拟响应，不用付费请求跑测试。
-5. 执行 `npm run verify`（类型检查、测试、生产构建）。修复失败及相关警告，失败时不勾选也不发布。通过后勾选本项，并在 `CHANGELOG.md` 写下实现、验证和限制。
-6. 统计 `BACKLOG.md` 中真实未勾选任务。少于 20 时在末尾追加一个阶段，列出 **10 项**有玩法深度且可验收的任务。沿[纪元主线](BACKLOG.md#纪元主线)最近一次实测留下的问题补队列，写明玩家能做什么、世界怎样变化、用哪个存档或场景验收。先查已有编号，避免重复立项。
-7. 单独创建描述性的 conventional commit。在获授权的工作中逐项推送 `origin main` 并核对远端；不强推。若推送受阻，保留已验证的本地提交，不声称已发布。
-8. 返回第 2 步。不要在正常设计选择、单项完成或报告阶段停下来请示。
-
-### 纪元主线的交付口径
-
-以 `BACKLOG.md` 的物理顺序为准。先让玩家从百年后的真实世界入世，再开放作者编写未来，最后推进跨域、跨千年的文明演化。E3-10 验收时按其实测结果就地展开 E4，此次接续独立于第 6 步的队列余量。首页沿用「继续／更多」，年代入口放在现有世界、存档、纪事和人物工作区。观察、跟随、附身分别沿用各自的资格规则。
-
-长局任务在变更记录中留下可复查的起点（规则版本、种子、谱系、分支、仙历）、推进方式、干预与终点。按任务记录在世修士、历代入册、创世仍在、在籍凡人，以及受影响的具名人物、地点或契约。涉及规模时记录耗时和实际存档字节。小场景覆盖日常回归，百年及以上样本在对应里程碑复跑，并验证读回后还能推进和分叉。旧规则的样本数值仅作对照。
-
-在纪事与读档中，分别标明逐月事实、版本化区域年算结果和作者设定的来源。因果引用落到所属分支的实体和事件，保留未知与相互冲突的证词。快进续跑还原已确认的世界检查点。开发续跑还原任务编号、代码提交与验证进度，两者分别记录。
-
-## 2. 运行结束、恢复和实际阻塞
-
-- **可用窗口内**：持续按队列推进；通过验收的里程碑可以报告，但报告不是停止信号。
-- **窗口即将结束**：保存已验证、已发布的最后 SHA；把未验证的工作保留在云端可恢复检查点，并记下任务编号、最近验证、下一步及阻塞。不把半成品标为完成或推到 main。
-- **实际重启后**：先确认没有重叠执行，核对远端与检查点；安全时从未完成项恢复，不重新做已经发布的工作。不要创建定时唤醒替代持续运行。
-- **真正阻塞**：用户要求暂停、平台不允许、权限/凭证不可用，或者验证失败且剩余窗口无法解决。报告具体影响，不能借“无人值守”规避权限、付费、密钥或部署边界。
-
-## 3. Architecture Overview (项目架构蓝图)
-
-```text
-ai-sect-sandbox/
-├── AGENTS.md                 # This iteration and handoff protocol
-├── BACKLOG.md                # Ordered task queue
-├── PROMPT_FOR_DOTS.md        # Copy-paste master prompts to launch/resume GPT Dots
-├── CHANGELOG.md              # Automated iteration log maintained by the agent
-├── src/
-│   ├── types/
-│   │   └── world.ts          # Core domain types: Cultivator, Sect, Tile, Memory, Event, LLMDecision
-│   ├── data/
-│   │   └── initialWorld.ts   # Procedural world generator, sects, biomes, techniques, artifacts
-│   ├── engine/
-│   │   ├── worldEngine.ts    # Core tick simulation: cultivation, combat, movement, tribulations, diplomacy
-│   │   └── llmBrain.ts       # Dual-mode AI driver: OpenAI-compatible JSON cognitive loop + Utility AI fallback
-│   ├── components/
-│   │   ├── WorldMapCanvas.tsx    # Interactive HTML5 Canvas 2D map with territories, particles & entities
-│   │   ├── RelationshipGraph.tsx # Dynamic SVG force/radial social graph (master, grudge, lover, ally)
-│   │   ├── GodConsole.tsx        # Heavenly Dao intervention deck, LLM settings, whisper injector
-│   │   ├── AgentInspector.tsx    # Deep NPC psyche inspector (CoT inner monologue, memory stream, gear)
-│   │   └── ChronicleFeed.tsx     # Filterable living history log & world lore generator
-│   ├── App.tsx               # Main dashboard layout & simulation loop controller
-│   └── main.tsx              # Entry point
-└── tests/
-    └── worldEngine.test.ts   # Vitest deterministic simulation test suite
-```
+**做完一项，直接做下一项。** 开发迭代以提交为单位，不以对话回复为单位。这是同一次执行中的连续循环，不靠定时任务、提醒或周期唤醒。只在用户叫停、真实阻塞或执行环境硬性结束时停下。
 
 ---
+
+## 1. 核心战略转向：从“微观账本审计”转向“大屏视觉沙盒 + 高能修仙戏剧 + 架构整洁”
+
+仓库底层已拥有极其扎实的九域万年演化与物权证据引擎（8 万行源码、2000+ 测试）。从现在起，**严禁继续往“琐碎行政/借还工具收据/过秤运费/碑文勘误”等微观会计审计方向立项**，全面转向以下四大高价值方向：
+
+1. **大屏天道全息指挥台（Panoramic God-View Cockpit）与响应式双态**：
+   - 解除“所有功能必须藏进深层手风琴折叠”的旧束缚！
+   - 提供**大屏全息同屏工作台（Cockpit View）**：在桌面宽屏下，允许玩家同屏直观看到 **2D 九州动态沙盒地图 + 当前主角戏剧舞台与抉择 + 核心人物识海/因果拓扑 + 顶部时间轴推演控制栏**，同时保留原有的 `StoryFirstHome` / `SandboxWorkspace` 无障碍语义与窄屏（360px/390px）兼容，确保既有 2000+ 测试全部通过。
+2. **2D Canvas 视觉奇观与地图直觉交互（Visual Canvas Spectacle）**：
+   - 把隐藏在文字折叠卡里的世界状态（九域地貌、灵脉灵潮、御剑流光、斗法剑气碰撞、九重雷劫乌云、渡劫金光、宗门护山大阵护盾、聚落兴衰、地图点击气泡卡片）直观地渲染到 `WorldMapCanvas` 上！
+3. **高戏剧张力的修仙爽感与肉鸽奇遇（High-Drama Xianxia & Interactive Roguelike）**：
+   - 聚焦修仙真正好玩的核心：**夺舍/引导主角时的三选一逆天改命奇遇弹窗**、**上古神通与本命法宝对轰演出**、**心魔劫幻境问答**、**正魔灭门级宗门会战舞台**、**师徒反目/道侣生死相护的高戏剧张力群像戏**。
+4. **架构解耦与面板收拢（Architecture Consolidation & Anti-Fragmentation）**：
+   - **禁止每做一个功能就在 `App.tsx` 里堆砌新的零散 `React.lazy` 折叠小卡片！**
+   - 持续为 `App.tsx`（当前 2000+ 行）瘦身：将状态编排拆入清晰的カスタム Hooks（`src/hooks/` 或 `src/controllers/`），将零散的几十个微型 `*Read.tsx` / `*Panel.tsx` 聚合收拢为高颜值的地图悬浮检视器（Map Popover）、人物戏剧档案卡与宗门大殿总览。
+
+---
+
+## 2. 每轮永动执行闭环
+
+1. 完整阅读本文件和 [任务队列](BACKLOG.md)。先执行 `git pull --rebase origin main`（或核对 `origin/main`），检查 `CHANGELOG.md` 和最近的提交，绝不覆盖未识别改动。
+2. 从 `BACKLOG.md` 顶部取**第一个未勾选 (`- [ ]`) 任务**。不要跳过依赖项。
+3. 完整实现 TypeScript + React 功能，不新增 `any`、占位、空按钮或 TODO 桩。机制必须接通离线 Utility AI 与 LLM Cognitive JSON，并在 UI / Canvas 上呈现直观、高颜值的视觉与交互反馈。
+4. 在 `tests/` 补充或更新确定性单元与组件测试。修改 UI 时注意保持既有测试依赖的 ARIA 标签和组件契约兼容。
+5. 执行 `npm run verify`（`npm run typecheck && npm run test && npm run build`）。修复所有失败与构建告警，未通过前绝不勾选或提交。
+6. 勾选 `BACKLOG.md` 中的完成项，并在 `CHANGELOG.md` 顶部记录本轮实现摘要与测试数量。
+7. **任务自增殖法则（Self-Proliferation Rule）**：统计 `BACKLOG.md` 中未勾选 (`- [ ]`) 任务数。若少于 **20 项**，在队列末尾新增一个阶段（10 项具体任务）。**新裂变的任务必须属于“视觉演出、修仙奇遇/神通/大劫玩法、大屏交互体验、或架构模块化重构”，严禁再生成“收据/托管/核销/工具磨损”类琐碎账本任务！**
+8. 创建清晰的 conventional commit，并执行 `git push origin main` 推送到远端。
+9. **立即返回第 2 步继续下一项任务**！严禁在完成单项后停下来询问“是否继续”。
+
+---
+
+## 3. 运行结束、恢复和实际阻塞
+
+- **可用窗口内**：持续按队列推进；通过验收的里程碑无需等待人类回复，直接进入下一项。
+- **窗口即将结束**：确保最后一次通过 `npm run verify` 的提交已推送到 `origin/main`；不把半成品推到 `main`。
+- **实际重启后**：核对 `origin/main` 与 `BACKLOG.md`，直接从第一个未勾选项 `- [ ]` 恢复执行。

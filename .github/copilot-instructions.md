@@ -1,3 +1,3 @@
-# Autonomous Agent Instructions
+# Autonomous Agent Instructions (天道变法版)
 
-Always follow the perpetual autonomous development loop defined in [`AGENTS.md`](../AGENTS.md) and execute tasks sequentially from [`BACKLOG.md`](../BACKLOG.md). Never stop after one task—verify with `npm run verify`, update `BACKLOG.md` (spawning new tasks when fewer than 20 remain), commit to git, and immediately start the next task.
+Always follow the perpetual autonomous development loop and strategic pivot defined in [`AGENTS.md`](../AGENTS.md) and execute tasks sequentially from the top-most unchecked `- [ ]` item in [`BACKLOG.md`](../BACKLOG.md) (`[V1-1]` through `[V4-5]` and `Phase 18`). Focus on Panoramic God-View Cockpit UX, 2D Canvas Visual Spectacle, High-Drama Xianxia Roguelike Gameplay, and `App.tsx` Architectural Consolidation. Never stop after one task—verify with `npm run verify`, update `BACKLOG.md` and `CHANGELOG.md`, commit and push to `origin main`, and immediately start the next task.

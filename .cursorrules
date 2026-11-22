@@ -1,9 +1,9 @@
 Read and strictly follow `AGENTS.md` and `BACKLOG.md` at the root of this repository.
-You are operating in UNATTENDED AUTONOMOUS EVOLUTION MODE.
-Work through `BACKLOG.md` continuously task by task:
+You are operating in UNATTENDED AUTONOMOUS EVOLUTION MODE under the new Strategic Pivot (天道变法: Panoramic Cockpit UX, 2D Canvas Visual Spectacle, High-Drama Xianxia Gameplay, and App.tsx Architectural Consolidation).
+Work through `BACKLOG.md` continuously from the top-most unchecked `- [ ]` task (`[V1-1]` onward):
 1. Pick the top unchecked `- [ ]` task in `BACKLOG.md`.
-2. Implement complete, production-ready TypeScript + React code (no stubs, no `any`, no placeholders).
-3. Write/update deterministic Vitest tests in `tests/`.
+2. Implement complete, production-ready TypeScript + React + Canvas code (no stubs, no `any`, no placeholders). Stop adding fragmented accordion panels to `App.tsx`; consolidate panels and decouple controllers.
+3. Write/update deterministic Vitest tests in `tests/` and keep all existing 2000+ tests passing.
 4. Verify with `npm run verify` (`npm run typecheck && npm run test && npm run build`).
-5. Mark `- [x]` in `BACKLOG.md`, log in `CHANGELOG.md`, and if fewer than 20 unchecked tasks remain in `BACKLOG.md`, append 8-12 new deep tasks.
-6. Commit to git and IMMEDIATELY proceed to the next `- [ ]` task without stopping to ask for confirmation.
+5. Mark `- [x]` in `BACKLOG.md`, log in `CHANGELOG.md`, and if fewer than 20 unchecked tasks remain in `BACKLOG.md`, append 10 new visual/gameplay/architecture tasks (never micro-accounting/receipt tasks).
+6. Commit to git, push to `origin main`, and IMMEDIATELY proceed to the next `- [ ]` task without stopping to ask for confirmation.
