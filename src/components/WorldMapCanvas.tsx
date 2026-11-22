@@ -38,6 +38,8 @@ import { buildMapPresentation, MAP_EFFECT_LABELS, MOTION_MS } from './mapPresent
 import { drawFlights, drawMapEffects } from './mapPresentationDraw';
 import { projectMapTerritories } from './mapTerritorySemantics';
 import { paintedMapMarks } from './mapPaintedSemantics';
+import {projectPhysicalAtlas} from '../engine/physicalAtlasEngine';
+import {drawPhysicalAtlas,physicalAtlasMapMarks,PhysicalAtlasSummary,planPhysicalAtlasDrawing} from './physicalAtlasMap';
 import { centerCamera, clientToMapViewport, closestViewportTarget, DEFAULT_CAMERA, MAP_HEIGHT, MAP_WIDTH, MAX_ZOOM, screenToMap, zoomCamera } from './mapCamera';
 import type { CameraPoint, MapCamera } from './mapCamera';
 import { CLUSTER_RADIUS_PX, mapActorPage, pickActorMarker, planActorMarkers, visibleMarkerMembers } from './mapActorClusters';
@@ -196,6 +198,13 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     receipt.ownerId === selected.id && receipt.siteId === selected.locationId && receipt.tick === world.tick) ?
     selected.locationId : undefined, [world.tick,world.artifactSalvages,furnaceShift,selected]);
   const mapView = useMemo(() => createTerrainMapView(world, selected, fog), [world, selected, fog]);
+  const physicalAtlas=useMemo(()=>toolsExpanded?projectPhysicalAtlas(world,selected):undefined,[toolsExpanded,world,selected]);
+  const atlasDrawing=useMemo(()=>planPhysicalAtlasDrawing(physicalAtlas,{cols:world.terrain.columns,rows:world.terrain.rows}),
+    [physicalAtlas,world.terrain.columns,world.terrain.rows]);
+  const atlasHome=physicalAtlas?.home;
+  const atlasLocationName=atlasHome?.locationId?world.locations.find(site=>site.id===atlasHome.locationId)?.name:undefined;
+  const atlasLocationOwner=atlasHome?.locationOwnerSectId?world.sects.find(sect=>sect.id===atlasHome.locationOwnerSectId)?.name:undefined;
+  const atlasTileOwner=atlasHome?.tileOwnerSectId?world.sects.find(sect=>sect.id===atlasHome.tileOwnerSectId)?.name:undefined;
   const extractionMarks = useMemo(() => [...new Map(
     [...mapView.extractionPositions.values()].map((point) => [`${point.x}:${point.y}`, point]),
   ).values()], [mapView]);
@@ -327,9 +336,10 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const routeWarningMarks=useMemo(()=>world.routeWarnings.notices.length ? paintedRouteWarningGeometry(world,
     visiblePublicRouteWarnings(world,mapView.current ??
       (selected?.alive ? currentVisibleTileIds(world,selected) : new Set<string>()))) : [],[world,mapView.current,selected]);
-  const semanticMarks = useMemo(() => explorerOpen ? paintedMapMarks(world,mapView,territorySemantics.markers,hazards,convoys,
-    escortedCaravan,presentation,villageSupplyCheckpoints,routeWarningMarks) : [],
-  [explorerOpen,world,mapView,territorySemantics,hazards,convoys,escortedCaravan,presentation,villageSupplyCheckpoints,routeWarningMarks]);
+  const semanticMarks = useMemo(() => explorerOpen ? [...physicalAtlasMapMarks(atlasDrawing),
+    ...paintedMapMarks(world,mapView,territorySemantics.markers,hazards,convoys,
+      escortedCaravan,presentation,villageSupplyCheckpoints,routeWarningMarks)] : [],
+  [explorerOpen,atlasDrawing,world,mapView,territorySemantics,hazards,convoys,escortedCaravan,presentation,villageSupplyCheckpoints,routeWarningMarks]);
   const paintedActors = useRef<{
     markers: ReturnType<typeof planActorMarkers>; positions: typeof actorPositions; camera: MapCamera; size: MarkerViewport; scope: string;
   }>();
@@ -483,6 +493,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
 
       // 2. Terrain, spirit qi overlay and sect boundaries.
       drawTerrain(ctx, world, mapView.tileState, heat, phase, territorySemantics, logicalPerCssPixel);
+      drawPhysicalAtlas(ctx,atlasDrawing,logicalPerCssPixel);
       drawUsedVillageMigrationSegments(ctx, usedVillageSegments, camera.zoom);
       drawHazards(ctx, hazards);
       annotationView?.drawMapAnnotationPins(ctx, annotationPins, camera.zoom);
@@ -916,7 +927,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener('change', stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, observedSalvageSites, localGranary, villageMapLabels, civicObservation, usedVillageSegments, furnaceShift, localPavilionDesk, localMemorial, localVillageFair, localStipend, localSeedCulture, localToolLoans, localAlignedWeather, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, atlasDrawing, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, observedSalvageSites, localGranary, villageMapLabels, civicObservation, usedVillageSegments, furnaceShift, localPavilionDesk, localMemorial, localVillageFair, localStipend, localSeedCulture, localToolLoans, localAlignedWeather, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1067,7 +1078,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         </div>
       </div>
 
-      <p id={keyboardHelp} className="sr-only">方向键平移，加号或减号缩放，Home 复位，F 定位所选修士。山河索引可按地点、修士或事件定位。</p>
+      <p id={keyboardHelp} className="sr-only">{'方向键平移，加号或减号缩放，Home 复位，F 定位所选修士。山河索引可按地点、修士或事件定位。'}{atlasDrawing.borders.length>0?'当前可见的域界与跨界路标也可在山河索引的路径与行程中定位。':''}</p>
       <div className="relative">
         <canvas
         ref={canvasRef}
@@ -1268,9 +1279,11 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           '寒玉井边，可翻看天门再议的实录。'
         }</span>}
         {toolsExpanded && selectedKnownRegion && <span className="text-[11px] text-emerald-200">
-          所选已知地点所属地域：{SIMULATION_REGION_NAMES[selectedKnownRegion]}
+          所选已知地点所属地域：{SIMULATION_REGION_NAMES[selectedKnownRegion]}（年算分区，不是地权）
         </span>}
         {localHeritageReading && <span className="text-[11px] text-amber-200">此处有本人可以核查的旧事凭据。</span>}
+        <PhysicalAtlasSummary view={physicalAtlas} drawing={atlasDrawing} locationName={atlasLocationName}
+          locationOwner={atlasLocationOwner} tileOwner={atlasTileOwner}/>
 
       </div>
       <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-800 px-4 py-2 text-[11px] text-slate-300" aria-label="地图视角与画笔">

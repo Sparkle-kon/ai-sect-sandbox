@@ -96,6 +96,8 @@ import { activeOccasionForActor, availableOccasionJoins } from './occasionEngine
 import { canSeeOccasion, canInvestigateExpeditionOmen, projectExpeditionOmens } from './expeditionOmenEngine';
 import { availableBountyHunts } from './bountyEngine';
 import { knownMapLocations, terrainTileAt } from './terrainEngine';
+import { physicalAtlasHome } from './physicalAtlasEngine';
+import { PHYSICAL_ATLAS_REGION_NAMES } from './physicalAtlasTerms';
 import { availableBeastTames, guardingHerbBeast, petCombatBonus } from './spiritBeastEngine';
 import {
   ActionType,
@@ -1736,6 +1738,7 @@ export async function requestCultivatorLLMDecision(
   if (rescueOnly && !rescueOptions.length) return undefined;
 
   const location = world.locations.find((l) => l.id === cultivator.locationId);
+  const physicalRegion=physicalAtlasHome(world,cultivator)?.point.regionId;
   const coLocated = world.cultivators.filter(
     (c) =>
       c.alive &&
@@ -1891,7 +1894,7 @@ ${routeWarningGuide}` : ''}` : `你是修仙沙盒世界中的修士【${cultiva
 - 灵根：${cultivator.spiritRoot}；功法：${cultivator.technique.name}（${cultivator.technique.spiritRoot}）；主法宝：${equippedArtifact(cultivator)?.name ?? '无'}（${equippedArtifact(cultivator)?.spiritRoot ?? '无'}）
 - 性格：${cultivator.personality} | 秘密执念：${cultivator.secretGoal}
 - 当前所在地：${location?.name ?? cultivator.locationId}（灵气浓度：${location?.spiritQi ?? 50}；灵脉：${location?.spiritRoot ?? '未明'}；修行倍率：${cultivationMultiplier(cultivator, location).toFixed(2)}）
-- 同处一地的其他修士：${coLocated.map((c) => `${c.name}(${c.id}, ${c.realm}${c.realmStage}层)`).join('、') || '无'}
+${physicalRegion?`- 脚下地域：${PHYSICAL_ATLAS_REGION_NAMES[physicalRegion]}（只指本人现在的位置，不代表地权。）\n`:''}- 同处一地的其他修士：${coLocated.map((c) => `${c.name}(${c.id}, ${c.realm}${c.realmStage}层)`).join('、') || '无'}
 - 当前位置的已观测灵象：${JSON.stringify(location ? localQiWeather(world, location) : null)}
 - 眼下地形：${tile?.biome ?? '未辨'}；地脉灵气：${tile?.spiritQi ?? '未辨'}；此地异象：${JSON.stringify(world.mapHazards.filter((item) => item.tileId === tile?.id && item.expiresTick > world.tick).map(({ kind, intensity, expiresTick }) => ({ kind, intensity, expiresTick })))}
 - 可指名的已知地点：${knownLocations.map((l) => `${l.name}(${l.id}，${l.spiritRoot})`).join('、')}。可核查的传闻途径 id：${unverifiedTrail ?? '无'}（未证实）。若盲探可不填目标 id。
