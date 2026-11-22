@@ -40,6 +40,7 @@ import { projectMapTerritories } from './mapTerritorySemantics';
 import {MapEntityPopover} from './MapEntityPopover';
 import {resolveMapEntityHit,type MapEntityPaintedFrame} from './mapEntityHit';
 import {availableMapEntityActions,projectMapEntityPopover,type MapEntityAction,type MapEntityTarget} from './mapEntityPopoverModel';
+import {interpolatePulseCamera,resolveWorldPulseFocusSite,WORLD_PULSE_CAMERA_DURATION_MS,type WorldPulseFocusRequest} from './mapPulseFocus';
 import type {MapEntityPopoverBinding} from './mapEntityPopoverWrite';
 import { paintedMapMarks } from './mapPaintedSemantics';
 import {projectPhysicalAtlas} from '../engine/physicalAtlasEngine';
@@ -103,6 +104,11 @@ interface WorldMapCanvasProps {
   onSelectLocation?: (loc: LocationNode) => void;
   onBrushStroke?: (kind: GodBrushKind, points: MapPoint[]) => void;
   inspectionEnabled?:boolean;
+  fogEnabled?:boolean;
+  onFogChange?:(next:boolean)=>void;
+  pulseFocus?:WorldPulseFocusRequest;
+  pulseFocusActive?:boolean;
+  onPulseFocusHandled?:(token:number)=>void;
   inspectionRevision?:number;
   onEntityIntervention?:(binding:MapEntityPopoverBinding,action:MapEntityAction,whisperText?:string)=>boolean;
   compact?: boolean;
@@ -121,6 +127,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   onSelectLocation,
   onBrushStroke,
   inspectionEnabled=true,
+  fogEnabled,onFogChange,pulseFocus,pulseFocusActive=true,onPulseFocusHandled,
   inspectionRevision=0,
   onEntityIntervention,
   compact = false,
@@ -154,6 +161,12 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const explorerSummary = useRef<HTMLElement | null>(null);
   const keyboardHelp = useId();
   const cameraRef = useRef(camera);
+  const pulseCameraFrame=useRef<number>();
+  const pulseConsumed=useRef<number>();
+  const cancelPulseCamera=()=>{
+    if(pulseCameraFrame.current!==undefined)cancelAnimationFrame(pulseCameraFrame.current);
+    pulseCameraFrame.current=undefined;
+  };
   const updateCamera = (next: MapCamera) => {
     const previous = cameraRef.current;
     if (previous.x !== next.x || previous.y !== next.y || previous.zoom !== next.zoom) {
@@ -162,7 +175,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       setInspection(undefined);
     }
   };
-  const manualCamera = (next: MapCamera) => { setFollowsSelection(false); updateCamera(next); };
+  const manualCamera = (next: MapCamera) => { cancelPulseCamera();setFollowsSelection(false);updateCamera(next); };
   const [brush, setBrush] = useState<GodBrushKind | 'browse'>('browse');
   const [preview, setPreview] = useState<MapPoint[]>([]);
   const gesture = useRef<MapGestureState>(IDLE_MAP_GESTURE);
@@ -186,7 +199,10 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     }
   }, [toolsExpanded]);
   const commandCamera = (next: MapCamera) => { abandonGesture(); manualCamera(next); };
-  const [fog, setFog] = useState(false);
+  const [localFog,setLocalFog]=useState(false);
+  const fog=fogEnabled??localFog;
+  const setFog=(next:boolean)=>{if(fogEnabled===undefined)setLocalFog(next);onFogChange?.(next);};
+  useEffect(()=>()=>cancelPulseCamera(),[world,scopeKey,selectedCultivatorId,fog,pulseFocusActive]);
   const [cluster, setCluster] = useState<{ marker: Extract<MapActorMarker, { kind: 'cluster' }>; scope: string; tick: number }>();
   const [clusterSearch, setClusterSearch] = useState('');
   const [clusterPage, setClusterPage] = useState(0);
@@ -1059,6 +1075,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   };
   const startGesture = (event: React.PointerEvent<HTMLCanvasElement>) => {
     if (event.button !== 0 && gesture.current.phase === 'idle') return;
+    cancelPulseCamera();
     const canvas = event.currentTarget;
     if(currentInspection&&!currentInspection.pinned)setInspection(undefined);
     const result = beginMapGesture(gesture.current, contactFor(event), frameFor(canvas));
@@ -1113,6 +1130,32 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     if (site) focusSite(site);
     else onChronicleFocusUnavailable?.();
   }, [chronicleFocus, focusSite, onChronicleFocusUnavailable, seenLocations, world]);
+  useEffect(()=>{
+    if(!pulseFocus||!pulseFocusActive||pulseConsumed.current===pulseFocus.token)return;
+    pulseConsumed.current=pulseFocus.token;
+    onPulseFocusHandled?.(pulseFocus.token);
+    const site=resolveWorldPulseFocusSite(pulseFocus,{world,scopeKey,viewerId:selectedCultivatorId,fog,active:pulseFocusActive});
+    const canvas=canvasRef.current;
+    if(!site||!canvas){setFocusMessage('预警的地点已变化，未移动舆图。');return;}
+    const preference=typeof window.matchMedia==='function'?window.matchMedia('(prefers-reduced-motion: reduce)'):undefined;
+    const animate=shouldAnimateMap(preference?.matches,!document.hidden);
+    abandonGesture();cancelPulseCamera();setFollowsSelection(false);setInspection(undefined);
+    canvas.scrollIntoView({block:'nearest',behavior:animate?'smooth':'auto'});
+    canvas.focus({preventScroll:true});
+    const from=cameraRef.current,target=focusMapPoint(from,site);
+    if(!animate){updateCamera(target);setFocusMessage(`地图已定位：${site.name}`);return;}
+    const start=performance.now();
+    const frame=(now:number)=>{
+      const elapsed=now-start;
+      if(elapsed>=WORLD_PULSE_CAMERA_DURATION_MS||preference?.matches||document.hidden){
+        updateCamera(target);pulseCameraFrame.current=undefined;
+        setFocusMessage(`地图已定位：${site.name}`);return;
+      }
+      updateCamera(interpolatePulseCamera(from,target,elapsed));
+      pulseCameraFrame.current=requestAnimationFrame(frame);
+    };
+    pulseCameraFrame.current=requestAnimationFrame(frame);
+  },[pulseFocus,pulseFocusActive,world,scopeKey,selectedCultivatorId,fog,onPulseFocusHandled]);
   const locateActor = (id: string) => {
     const point = actorPositions.find(({ actor }) => actor.id === id);
     if (!point) return;

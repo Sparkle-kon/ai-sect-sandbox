@@ -46,6 +46,9 @@ import type { AvatarInteractionRequest, CouncilPlan } from './types/world';
 import { readTimelineHead, readTimelineSnapshot, selectTimelineBranch, forkTimelineAvatarEntry, appendAuthoredTimelineRoot, TIMELINE_MAX_BRANCHES } from './engine/timelineEngine';
 import type { TimelineSnapshot } from './engine/timelineEngine';
 import {findEraEntryCandidate,projectEraEntryCandidates} from './engine/eraEntryCandidates';
+import {WorldPulseBar} from './components/WorldPulseBar';
+import {projectWorldPulse,type WorldPulseRisk} from './components/worldPulseModel';
+import type {WorldPulseFocusRequest} from './components/mapPulseFocus';
 import {applyScopedMapEntityIntervention,type MapEntityPopoverBinding} from './components/mapEntityPopoverWrite';
 import type {MapEntityAction} from './components/mapEntityPopoverModel';
 import {createTerrainMapView} from './components/terrainMapView';
@@ -87,6 +90,9 @@ const panel = 'space-y-2 rounded-xl border border-slate-800 bg-slate-900 p-3';
 
 export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, initialCockpit = false }) => {
   const [cockpitOpen,setCockpitOpen]=useState(initialCockpit);
+  const [mapFog,setMapFog]=useState(false);
+  const [pulseFocus,setPulseFocus]=useState<WorldPulseFocusRequest>();
+  const pulseSerial=useRef(0);
   const cockpitHeading=useRef<HTMLHeadingElement>(null);
   const [dashboardOpen, setDashboardOpen] = useState(initialWorkspace !== undefined);
   const [workspace, setWorkspace] = useState<WorkspaceId>(initialWorkspace ?? 'map');
@@ -291,9 +297,11 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   }:undefined;
   const aliveCount = visibleWorld.cultivators.filter((c) => c.alive).length;
   const activeActorId = selectedCultivator?.id ?? null;
+  const worldPulse=useMemo(()=>dashboardOpen||cockpitOpen?projectWorldPulse(visibleWorld,activeActorId,mapFog):undefined,
+    [dashboardOpen,cockpitOpen,visibleWorld,activeActorId,mapFog]);
   const inspectionRevision=saveContextVersion.current;
   const canInspectMap=cockpitOpen||dashboardOpen&&workspace==='map';
-  const canMapWrite=canInspectMap&&!preview&&!isRunning&&!isStepping&&!fastForwardLocked;
+  const canMapWrite=canInspectMap&&!mapFog&&!preview&&!isRunning&&!isStepping&&!fastForwardLocked;
   const handleMapEntityIntervention=(binding:MapEntityPopoverBinding,action:MapEntityAction,whisperText?:string)=>{
     const starting=authority.current;
     return updateWorld(current=>applyScopedMapEntityIntervention({
@@ -622,7 +630,16 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
     if(cockpitOpen)backToStory();
     setCockpitOpen(!cockpitOpen);
   }}/>;
-  if(cockpitOpen)return <PanoramicCockpitView world={visibleWorld} titleRef={cockpitHeading} exit={cockpitSwitch}
+  const focusWorldPulse=(risk:WorldPulseRisk)=>{
+    const current=browsing.current?preview?.world:authority.current;
+    if(!worldPulse||immersive||current!==visibleWorld||history.current!==timeline||!worldPulse.risks.includes(risk))return;
+    if(!cockpitOpen)openWorkspace('map');
+    setPulseFocus({world:visibleWorld,scopeKey:viewScopeKey,viewerId:activeActorId,fog:mapFog,riskId:risk.id,token:++pulseSerial.current});
+  };
+  const clearWorldPulse=(token:number)=>setPulseFocus(current=>current?.token===token?undefined:current);
+  const pulseStrip=worldPulse&&<WorldPulseBar view={worldPulse} historical={Boolean(preview)}
+    canFocus={!immersive} onFocusAlert={focusWorldPulse}/>;
+  if(cockpitOpen)return <PanoramicCockpitView world={visibleWorld} titleRef={cockpitHeading} exit={cockpitSwitch} statusStrip={pulseStrip}
     time={{historical:Boolean(preview),running:isRunning,busy:cockpitBusy,onStep:()=>void handleStepTick(),
       onToggleAutoplay:toggleAutoplay,onReturnLive:()=>handleTimelinePreview(null),onOpenTimeline:()=>{
         openWorkspace('chronicle');rememberFold('chronicle','timeline');setStoryEntryOpen(false);
@@ -632,6 +649,8 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
       <React.Suspense fallback={<p role="status">载入舆图…</p>}>
         <WorldMapCanvas compact scopeKey={viewScopeKey} world={visibleWorld} selectedCultivatorId={activeActorId}
           inspectionEnabled={canInspectMap} inspectionRevision={inspectionRevision} onEntityIntervention={canMapWrite?handleMapEntityIntervention:undefined}
+          fogEnabled={mapFog} onFogChange={setMapFog} pulseFocus={pulseFocus} pulseFocusActive={canInspectMap}
+          onPulseFocusHandled={clearWorldPulse}
           onSelectCultivator={setSelectedCultivatorId} onBrushStroke={preview?undefined:handleBrushStroke}/>
       </React.Suspense>}
     inspector={<>{inspect('profile')}{inspect('mind')}</>}
@@ -694,6 +713,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
           </div>
         </div>
       </header>
+      {pulseStrip&&<div className="mx-auto w-full max-w-[76rem] px-2.5 pt-2 sm:px-4">{pulseStrip}</div>}
 
       <SandboxWorkspace active={workspace} onChange={openWorkspace} autoFocusTab={!(trail || chronicleReturn)}
         hideActiveContent={Boolean(trail && !focusTarget)} panelLead={trail && <div className="mb-2 flex min-w-0 flex-wrap items-center gap-2">
@@ -704,6 +724,8 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
           <div className="min-w-0"><React.Suspense fallback={<div role="status" className="grid min-h-64 place-items-center rounded-xl border border-slate-800 text-sm text-slate-300">载入舆图…</div>}>
             <WorldMapCanvas compact scopeKey={viewScopeKey} world={visibleWorld} selectedCultivatorId={activeActorId}
           inspectionEnabled={canInspectMap} inspectionRevision={inspectionRevision} onEntityIntervention={canMapWrite?handleMapEntityIntervention:undefined}
+          fogEnabled={mapFog} onFogChange={setMapFog} pulseFocus={pulseFocus} pulseFocusActive={canInspectMap}
+          onPulseFocusHandled={clearWorldPulse}
             toolsOpen={workspace === 'map' && (foldPreferences.mapTools ?? false)} onToolsOpenChange={(mapTools) =>
               setFoldPreferences((previous) => (previous.mapTools ?? false) === mapTools ? previous : { ...previous, mapTools })}
             additionalTools={handedness === 'default' && !preview && !isRunning ? <button type="button" disabled={fastForwardLocked} onClick={toggleAutoplay}
