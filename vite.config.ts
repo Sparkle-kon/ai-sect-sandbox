@@ -83,6 +83,8 @@ export default defineConfig({
           // Private theatre selection and its save proof are shared by UI, native and storage.
           'heart-demon-rules': ['./src/engine/heartDemonEngine.ts', './src/engine/interruptedStoryChoices.ts',
             './src/engine/storageHeartDemonValidation.ts', './src/types/heartDemon.ts', './src/engine/tribulationTerms.ts'],
+          // Authored and model-selected voice variants do not pull in the simulation rule graph.
+          'wild-persona-voices': ['./src/engine/wildPersonaEngine.ts', './src/engine/dialogueEngine.ts'],
           // Public bond projections share a narrow proof format, independently of raw relationship panels.
           'dramatic-bond-proof': ['./src/types/dramaticBond.ts', './src/engine/dramaticBondTerms.ts', './src/engine/storageDramaticBondValidation.ts'],
           'dramatic-bond-story': ['./src/engine/dramaticBondEngine.ts', './src/components/DramaticBondRead.tsx',

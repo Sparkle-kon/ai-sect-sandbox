@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createInitialWorld } from '../src/data/initialWorld';
-import { applyDialogueLanguage, enrichTickDialogues } from '../src/engine/dialogueEngine';
+import { applyDialogueLanguage, enrichTickDialogues, scriptedDialogue } from '../src/engine/dialogueEngine';
 import { ARTIFACT_TRADE_PRICE, availableEncounters } from '../src/engine/encounterEngine';
 import { computeHeuristicDecision, queryCultivatorLLMDecision } from '../src/engine/llmBrain';
 import { advanceWorldTick, applyCultivatorBrainDecision } from '../src/engine/worldEngine';
+import { personaLine } from '../src/engine/wildPersonaEngine';
 import type { ActionType, LLMConfig } from '../src/types/world';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -31,6 +32,28 @@ describe('dialogues and encounters', () => {
     expect(event?.dialogue?.kind).toBe('combat');
     expect(event?.dialogue?.turns.map((turn) => turn.speakerId)).toEqual([actor.id, target.id, actor.id]);
     expect(event?.dialogue?.turns[2].text).toContain(`${actor.name}占得上风`);
+  });
+
+  it('only an exact dead participant can supply the spoken native farewell; explicit openings cannot rewrite it', () => {
+    const { world, actor, target } = meeting();
+    const closing = `${target.name}胜出，${actor.name}当场陨落。`;
+    expect(scriptedDialogue('combat',actor,target,closing,undefined,actor).turns).toHaveLength(3);
+    actor.alive=false;
+    actor.hp=0;
+    expect(scriptedDialogue('combat',actor,target,closing,undefined,{...actor}).turns).toHaveLength(3);
+    const authored=scriptedDialogue('combat',actor,target,closing,'原来是你。',actor);
+    expect(authored.turns.map(({speakerId})=>speakerId)).toEqual([actor.id,target.id,actor.id,actor.id]);
+    expect(authored.turns[2].text).toBe(personaLine(actor,'farewell'));
+    const id=`evt-${world.tick}-${actor.id}-kill`;
+    const events=[{ id,tick:world.tick,year:world.year,month:world.month,title:closing,description:closing,
+      category:'death' as const,actorIds:[actor.id,target.id],locationId:actor.locationId,dialogue:authored }];
+    const approved=['先让一步。','容我问清。'];
+    const changed=applyDialogueLanguage(events,[id],{exchanges:[{id,lines:approved}]});
+    expect(changed[0].dialogue?.turns.slice(0,2).map(({text})=>text)).toEqual(approved);
+    expect(changed[0].dialogue?.turns.slice(2)).toEqual(authored.turns.slice(2));
+    expect(applyDialogueLanguage(events,[id],{exchanges:[{id,lines:[...approved,'假托遗言。']}]})).toBe(events);
+    const privateOnly=events.map(event=>({...event,witnessScope:'participants' as const}));
+    expect(applyDialogueLanguage(privateOnly,[id],{exchanges:[{id,lines:approved}]})).toBe(privateOnly);
   });
 
   it('executes real trades and conserves stones and artifacts, with deterministic Utility initiation', () => {
@@ -92,16 +115,28 @@ describe('dialogues and encounters', () => {
     }, () => 0.5);
     const event = next.events[0];
     const id = event.id;
-    const llm = vi.fn(async () => new Response(JSON.stringify({
-      choices: [{ message: { content: JSON.stringify({
-        exchanges: [{ id, lines: ['请看这些灵石。', '成交前容我点数。'] }],
-      }) } }],
-    })));
+    const approved: string[] = [];
+    const llm = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const request: { messages: { role: string; content: string }[] } = JSON.parse(String(init?.body));
+      const scope: { id: string; slots: { slot: number; speakerId: string; options: { id: string; text: string }[] }[] }[] =
+        JSON.parse(request.messages.find(message => message.role === 'user')!.content);
+      expect(scope.map(menu => menu.id)).toEqual([id]);
+      expect(JSON.stringify(scope)).not.toContain(event.description);
+      const choices = scope[0].slots.map(({slot,speakerId,options}) => {
+        const chosen = options.find(option => option.text !== event.dialogue!.turns[slot - 1].text);
+        if (!chosen) throw Error('expected actual alternative authored line');
+        approved.push(chosen.text);
+        return {slot,speakerId,optionId:chosen.id};
+      });
+      return new Response(JSON.stringify({
+        choices: [{ message: { content: JSON.stringify({ exchanges: [{ id, choices }] }) } }],
+      }));
+    });
     vi.stubGlobal('fetch', llm);
     const enriched = await enrichTickDialogues(next, config);
     expect(llm).toHaveBeenCalledTimes(1);
     expect(enriched.events[0]).toMatchObject({ description: event.description, dialogue: { source: 'llm' } });
-    expect(enriched.events[0].dialogue?.turns[0].text).toBe('请看这些灵石。');
+    expect(enriched.events[0].dialogue?.turns.slice(0, 2).map(turn => turn.text)).toEqual(approved);
     expect(enriched.events[0].dialogue?.turns[2]).toEqual(event.dialogue?.turns[2]);
     expect(enriched.cultivators).toBe(next.cultivators);
     expect(applyDialogueLanguage(next.events, [id], {

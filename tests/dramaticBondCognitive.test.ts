@@ -92,7 +92,7 @@ describe('dramatic bonds come from the same native settlement for Cognitive and 
       expect(world.decisionTrace.records.find(row => row.actorId === actorId && row.tick === world.tick))
         .toMatchObject({ source, chosenAction: 'SOCIALIZE', applied: true });
     }
-    expect(society(cognitive, actorId)?.description).toContain(modelSpeech);
+    expect(society(cognitive, actorId)?.description).not.toContain(modelSpeech);
     expect(society(utility, actorId)?.description).not.toContain(modelSpeech);
     expect(cognitive.dramaticBonds).toEqual(utility.dramaticBonds);
     const first = cognitive.dramaticBonds?.facts.find(fact => fact.sourceEventId === meeting.id);

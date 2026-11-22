@@ -1,5 +1,6 @@
 import {describe,expect,it} from 'vitest';
 import {createInitialWorld} from '../src/data/initialWorld';
+import {possessAvatar} from '../src/engine/avatarEngine';
 import {advanceWorldTick,executeGodIntervention} from '../src/engine/worldEngine';
 import {createTerrainMapView} from '../src/components/terrainMapView';
 import {availableMapEntityActions,buildMapEntityCommand,projectMapEntityPopover,type MapEntityTarget} from '../src/components/mapEntityPopoverModel';
@@ -14,17 +15,23 @@ const siteTarget=(id:string):MapEntityTarget=>({kind:'site',id});
 const need=<T,>(value:T|undefined):T=>{if(value===undefined)throw Error('Expected actual native fixture data');return value;};
 
 describe('map entity current scope',()=>{
-  it('keeps the fictional thought to the same exact selected living actor and does not expose secret goals',()=>{
+  it('keeps the fictional thought to the same exact live possessed actor and does not expose secret goals',()=>{
     const world=createInitialWorld(seed),actor=world.cultivators[0],other=world.cultivators[1];
     actor.innerMonologue='\u202e暂且收剑。第二句不可出现。';actor.secretGoal='绝不外传的秘密';
     const target=actorTarget(actor.id),view=createTerrainMapView(world,actor,false);
-    expect(projectMapEntityPopover(world,view,target,actor.id)).toMatchObject({
+    expect(projectMapEntityPopover(world,view,target,actor.id,true)).not.toHaveProperty('monologue');
+    expect(projectMapEntityPopover(world,view,target,actor.id,true)).toHaveProperty('persona');
+    expect(possessAvatar(world,actor.id)).toBe(true);
+    expect(projectMapEntityPopover(world,view,target,actor.id)).not.toHaveProperty('monologue');
+    expect(projectMapEntityPopover(world,view,target,actor.id,true)).not.toHaveProperty('monologue');
+    actor.innerMonologue='暂且收剑。第二句不可出现。';
+    expect(projectMapEntityPopover(world,view,target,actor.id,true)).toMatchObject({
       kind:'actor',target,name:actor.name,monologue:'暂且收剑。',hp:actor.hp,maxHp:actor.maxHp,
     });
-    expect(projectMapEntityPopover(world,view,target,other.id)).not.toHaveProperty('monologue');
-    expect(JSON.stringify(projectMapEntityPopover(world,view,target,actor.id))).not.toContain(actor.secretGoal);
+    expect(projectMapEntityPopover(world,view,target,other.id,true)).not.toHaveProperty('monologue');
+    expect(JSON.stringify(projectMapEntityPopover(world,view,target,actor.id,true))).not.toContain(actor.secretGoal);
     actor.innerMonologue='旁人绝不外传的秘密。';
-    expect(projectMapEntityPopover(world,view,target,actor.id)).not.toHaveProperty('monologue');
+    expect(projectMapEntityPopover(world,view,target,actor.id,true)).not.toHaveProperty('monologue');
     const different=structuredClone(world);
     expect(projectMapEntityPopover(different,view,target,actor.id)).toBeUndefined();
     actor.hp=0;

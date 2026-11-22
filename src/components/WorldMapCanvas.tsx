@@ -1099,8 +1099,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     binding.world===world&&binding.scopeKey===scopeKey&&binding.revision===inspectionRevision&&
     binding.viewerId===selectedCultivatorId&&binding.fog===fog&&inspectionEnabled&&!armedBrush);
   const currentInspection=matchesView(inspection)?inspection:undefined;
-  const inspected=useMemo(()=>currentInspection&&projectMapEntityPopover(world,mapView,currentInspection.target,selectedCultivatorId),
-    [world,mapView,currentInspection,selectedCultivatorId]);
+  const inspected=useMemo(()=>currentInspection&&projectMapEntityPopover(world,mapView,currentInspection.target,selectedCultivatorId,!historical),
+    [world,mapView,currentInspection,selectedCultivatorId,historical]);
   useEffect(()=>{
     setInspection(former=>matchesView(former)?former:undefined);
   },[world,scopeKey,inspectionRevision,selectedCultivatorId,fog,inspectionEnabled,armedBrush]);

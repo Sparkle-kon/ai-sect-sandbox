@@ -60,10 +60,11 @@ function archiveComparable(raw:WorldEvent,old:ChronicleAnchor,people:ReadonlySet
   if(raw.dialogue.source===old.dialogue.source)
     return ordered.every(({turn},i)=>sameTurn(turn,old.dialogue!.turns[i]))?'exact':'conflict';
   // The native optional language pass happens *after* archive capture. It may change only
-  // opening words, never actor IDs, turn order, stored names, kind or the actual final line.
-  if(raw.dialogue.source!=='llm'||old.dialogue.source!=='utility')return 'conflict';
-  const closing=ordered.findIndex(({index})=>index===raw.dialogue!.turns.length-1);
-  if(closing!==-1&&!sameTurn(ordered[closing].turn,old.dialogue.turns[closing]))return 'conflict';
+  // the first two slots. A genuine farewell and all other native tail slots
+  // must have independent archived copies with exact attribution and words.
+  if(raw.dialogue.source!=='llm'||old.dialogue.source!=='utility'||raw.dialogue.turns.length<3||
+      ordered.filter(({index})=>index>=2).length!==raw.dialogue.turns.length-2||
+      ordered.some(({turn,index},i)=>index>=2&&!sameTurn(turn,old.dialogue!.turns[i])))return 'conflict';
   return 'variant';
 }
 

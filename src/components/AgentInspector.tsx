@@ -1,3 +1,4 @@
+import {canReadOwnPersona,personaDossierMemories,PersonaDossierRead} from './personaDossierRead';
 import {ActorDramaticBondRead,type PersonalBondRead,type PublicBondArc} from './DramaticBondRead';
 import {ForbiddenArtScarsRead} from './ForbiddenArtCard';
 import {EarnedDestinyTraits} from './DestinyTraitCard';
@@ -7,7 +8,7 @@ import type {WorkshopReleaseControls} from './WorkshopReleaseRead';
 import type {DanxiaMedicineControlsProps} from './DanxiaMedicineControls';
 import type {DanxiaSeasonReviewControlsProps} from './DanxiaSeasonReviewControls';
 import React from 'react';
-import { Brain, Shield, Coins, Compass, Heart, Sparkles } from 'lucide-react';
+import { Shield, Coins, Compass, Heart } from 'lucide-react';
 import { Cultivator, WorldState } from '../types/world';
 import { expeditionRescueCheckpoint } from '../engine/expeditionRescueCheckpoint';
 import { boundaryReliefCheckpoint } from '../engine/boundaryReliefCheckpoint';
@@ -40,6 +41,7 @@ const ScriptureEditionPanel = React.lazy(async () => ({ default: (await import('
 const RelicSetPanel = React.lazy(async () => ({ default: (await import('./RelicSetPanel')).RelicSetPanel }));
 
 interface AgentInspectorProps {
+  allowPersonalThought?:boolean;
   publicBonds?:readonly PublicBondArc[];
   personalBonds?:PersonalBondRead;
   medicineControls?:DanxiaMedicineControlsProps;
@@ -63,7 +65,7 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
   workshopReleaseControls,
   workshopEstateControls,
   craftTrainingControls,
-  publicBonds,personalBonds,
+  publicBonds,personalBonds,allowPersonalThought=false,
 }) => {
   if (!cultivator) {
     return (
@@ -81,6 +83,8 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
   const profile = !workspaceSection || workspaceSection === 'profile';
   const cultivation = !workspaceSection || workspaceSection === 'cultivation';
   const mind = !workspaceSection || workspaceSection === 'mind';
+  const ownThought=mind&&canReadOwnPersona(world,cultivator,allowPersonalThought);
+  const readableMind=mind?personaDossierMemories(cultivator,ownThought):cultivator;
   const sectDetails = !workspaceSection || workspaceSection === 'sect';
   const scriptureCatalog = cultivation && world.scriptures ? visibleScriptureEditions(world, cultivator) : undefined;
   const showsRelic = cultivation && (cultivator.artifacts.some(({ relicSetId }) => relicSetId !== undefined) ||
@@ -144,20 +148,7 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
 
       {profile&&world.cultivators.includes(cultivator)&&<ActorDramaticBondRead actorId={cultivator.id} publicArcs={publicBonds} personal={personalBonds}/>}
 
-      {/* Fictional character narration */}
-      {mind && <div className="p-3 rounded-lg bg-slate-950/90 border border-indigo-500/30 space-y-1.5">
-        <div className="flex items-center gap-1.5 text-xs font-semibold text-indigo-300">
-          <Brain className="w-3.5 h-3.5" />
-          <span>角色心声（虚构叙事）</span>
-        </div>
-        <p className="text-xs text-slate-200 italic leading-relaxed">
-          “{cultivator.innerMonologue}”
-        </p>
-        <div className="pt-1 text-[11px] text-amber-300/90 flex items-center gap-1">
-          <Sparkles className="w-3 h-3" />
-          <span>深层执念：{cultivator.secretGoal}</span>
-        </div>
-      </div>}
+      {mind&&<PersonaDossierRead world={world} actor={cultivator} live={allowPersonalThought}/>}
 
       {profile && <>
       {/* Vital Stats Grid */}
@@ -264,7 +255,7 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
       </>}
       {mind && <>
       <RecollectionPanel world={world} actorId={cultivator.id} />
-      <ReflectionPanel cultivator={cultivator} />
+      <ReflectionPanel cultivator={readableMind} />
       <RumorPanel cultivator={cultivator} locations={world.locations} cultivators={world.cultivators} />
       <SealedCourierPanel world={world} cultivator={cultivator} />
       <SchemePanel cultivator={cultivator} locations={world.locations} cultivators={world.cultivators} />
@@ -274,8 +265,8 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
         <p className="text-[11px] text-slate-400 leading-relaxed">
           情景记忆会逐月淡忘，每12个月凝练重要经历；核心记忆衰减更慢，但也会淡忘并受容量限制。
         </p>
-        <MemoryPanel memories={cultivator.coreMemories} tick={world.tick} core />
-        <MemoryPanel memories={cultivator.memories} tick={world.tick} />
+        <MemoryPanel memories={readableMind.coreMemories} tick={world.tick} core />
+        <MemoryPanel memories={readableMind.memories} tick={world.tick} />
       </div>
       </>}
     </div>

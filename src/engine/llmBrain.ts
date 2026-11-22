@@ -1,3 +1,5 @@
+import { DESTINY_TRAIT_CATALOG } from './destinyTraitCatalog';
+import { latestEarnedPersonaTrait, personaLine, privatePersonaText } from './wildPersonaEngine';
 import { availableGrandSiegeHeroActions, chooseGrandSiegeHeroDecision, hasQueuedGrandSiegeHero } from './grandSiegeTheatreEngine';
 import type { GrandSiegeHeroMove } from '../types/grandSiege';
 import {activeForbiddenDuel, availableForbiddenArtOptions, chooseForbiddenArtDecision, forbiddenDuelForParticipant} from './forbiddenArtEngine';
@@ -1352,10 +1354,10 @@ export function computeHeuristicDecision(
     rng() < Math.max(0, Math.min(1, (conflictDemon ? 0.18 : painfulDuel ? 0.3 : 0.65) + destinyDuelAppetite(cultivator, enemy)))
   ) {
     return {
-      innerMonologue: `冤家路窄！在此撞见宿敌【${enemy.name}】，我战力占优，不如趁此机会将其重创！`,
+      innerMonologue: personaLine(cultivator, 'thought'),
       chosenAction: 'DUEL',
       targetCultivatorId: enemy.id,
-      spokenLine: `${enemy.name}，今日便是你我了结因果之时！看招！`,
+      spokenLine: personaLine(cultivator, 'combat_open'),
     };
   }
 
@@ -1367,7 +1369,7 @@ export function computeHeuristicDecision(
   ) {
     const target = coLocatedOthers[Math.floor(rng() * coLocatedOthers.length)];
     return {
-      innerMonologue: `【${target.name}】在此毫无防备，我且暗中布局窥探其弱点，或散布流言乱其道心。`,
+      innerMonologue: personaLine(cultivator, 'scheme'),
       chosenAction: 'SCHEMING',
       targetCultivatorId: target.id,
       rumorIntent: cultivator.rumors.some((item) => item.lead) ? 'EXAGGERATE' : 'FABRICATE',
@@ -1681,7 +1683,7 @@ export function computeHeuristicDecision(
       innerMonologue: `与【${target.name}】同处【${currentLocation?.name ?? '此地'}】，不若论道一番，互通有无。`,
       chosenAction: 'SOCIALIZE',
       targetCultivatorId: target.id,
-      spokenLine: `${target.name}道友，别来无恙，可愿共饮一杯灵茶论道？`,
+      spokenLine: personaLine(cultivator, 'social_open'),
     };
   }
 
@@ -1752,6 +1754,12 @@ export function llmDecisionEndpoint(config: Pick<LLMConfig, 'apiBaseUrl'>): stri
   return `${config.apiBaseUrl.replace(/\/+$/, '')}/chat/completions`;
 }
 
+// Provenance follows the accepted runtime object, never a property supplied by an external JSON reply.
+const providerPersonaDecisions = new WeakSet<LLMDecisionPayload>();
+export function isProviderPersonaDecision(decision: unknown): boolean {
+  return typeof decision === 'object' && decision !== null && providerPersonaDecisions.has(decision as LLMDecisionPayload);
+}
+
 async function requestDecisionPrompt(config: LLMConfig, requestTick: number,
   options: { signal?: AbortSignal; onStart?: () => void }, prompt: string,
   decode: (parsed: Partial<LLMDecisionPayload>) => LLMDecisionPayload | undefined, maxTokens = 450): Promise<LLMDecisionPayload | undefined> {
@@ -1793,7 +1801,10 @@ async function requestDecisionPrompt(config: LLMConfig, requestTick: number,
 
           return decode(parsed);
     } });
-    return result.status === 'ok' && !controller.signal.aborted ? result.data : undefined;
+    if (result.status !== 'ok' || controller.signal.aborted) return undefined;
+    const decision = { ...result.data, innerMonologue: privatePersonaText(result.data.innerMonologue) ?? '先按眼前所见行事。' };
+    providerPersonaDecisions.add(decision);
+    return decision;
   } catch {
     return undefined;
   } finally {
@@ -2210,6 +2221,7 @@ export async function requestCultivatorLLMDecision(
   const relicOptions = availableRelicActions(cultivator, world, requestTick);
   const recollectionOptions = availableRecollectionActions(cultivator, world);
   const ownEcho = visibleRecollection(world, cultivator.id);
+  const earnedPersona = latestEarnedPersonaTrait(cultivator);
   const prompt = boundaryReliefOnly ?
     `你是修仙沙盒中正在路上的换防修士，不在上个实站。若由本人撤回，只复制执行回合许可的动作与换防编号：${JSON.stringify(boundaryReliefOptions)}。
 路线和守备都以实际进度为准，不能填坐标、灵气、地权、守卫或宣布到岗。只返回合法 JSON。` :
@@ -2228,6 +2240,7 @@ ${routeWarningGuide}` : ''}` : `你是修仙沙盒世界中的修士【${cultiva
 - 气血：${cultivator.hp}/${cultivator.maxHp} | 战力：${cultivator.combatPower}
 - 灵根：${cultivator.spiritRoot}；功法：${cultivator.technique.name}（${cultivator.technique.spiritRoot}）；主法宝：${equippedArtifact(cultivator)?.name ?? '无'}（${equippedArtifact(cultivator)?.spiritRoot ?? '无'}）
 - 性格：${cultivator.personality} | 秘密执念：${cultivator.secretGoal}
+- 只在 innerMonologue 写本人的私下心声：用第一人称，依此刻性格，可写疑念、欲望或一念犹豫，不须端正圆满。以短句和一处修仙意象来写，例如「${personaLine(cultivator, 'thought')}」。这不是面向他人的对白，不需输出 spokenLine。不得替别人动念，不得把怀疑写成事实或把拟行之事写成结果。${earnedPersona ? `本人已真正觉醒的命格「${DESTINY_TRAIT_CATALOG[earnedPersona].name}」只可作为心声意象，不能写成新增术法、技能或结果。` : ''}
 - 当前所在地：${location?.name ?? cultivator.locationId}（灵气浓度：${location?.spiritQi ?? 50}；灵脉：${location?.spiritRoot ?? '未明'}；修行倍率：${cultivationMultiplier(cultivator, location).toFixed(2)}）
 ${frontierOptions.length?frontierGuide+'\n':''}${physicalRegion?`- 脚下地域：${PHYSICAL_ATLAS_REGION_NAMES[physicalRegion]}（只指本人现在的位置，不代表地权。）\n`:''}- 同处一地的其他修士：${coLocated.map((c) => `${c.name}(${c.id}, ${c.realm}${c.realmStage}层)`).join('、') || '无'}
 - 当前位置的已观测灵象：${JSON.stringify(location ? localQiWeather(world, location) : null)}
@@ -3080,10 +3093,8 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
           }
 
           return {
-            innerMonologue:
-              (typeof parsed.innerMonologue === 'string' && parsed.innerMonologue.trim().slice(0, 160)) ||
-              cultivator.innerMonologue ||
-              '天道无常，唯有苦修方是正途。',
+            innerMonologue: privatePersonaText(parsed.innerMonologue) ??
+              privatePersonaText(cultivator.innerMonologue) ?? personaLine(cultivator, 'thought'),
             chosenAction,
             targetLocationId: legalSalvage ? legalSalvage.targetLocationId : legalBoundaryRelief ? legalBoundaryRelief.targetLocationId : legalFurnace ? legalFurnace.targetLocationId : legalSanctuary ? legalSanctuary.targetLocationId : legalRelocation ? legalRelocation.targetLocationId :
               chosenAction !== 'DOCTRINE' && typeof parsed.targetLocationId === 'string' ? parsed.targetLocationId : undefined,

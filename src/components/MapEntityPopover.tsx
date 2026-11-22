@@ -102,7 +102,10 @@ export function MapEntityPopover({data,anchor,pinned,readOnly=false,actions,onCl
             className="block h-2 w-full accent-rose-300"/>
         </div>}
         {data.actionLabel&&<p className="text-xs text-teal-200">眼下：{data.actionLabel}</p>}
-        {data.monologue&&<blockquote className="border-l border-amber-400/30 pl-2 font-serif text-sm leading-6 text-slate-300">{data.monologue}</blockquote>}
+                {(data.monologue||data.persona)&&<div>
+          <p className="text-xs text-violet-200">{data.monologue?'仅本人可见 · 心声':'人物演绎 · 并非亲知'}</p>
+          <blockquote className="border-l border-amber-400/30 pl-2 font-serif text-sm leading-6 text-slate-300">{data.monologue??data.persona}</blockquote>
+        </div>}
       </>:<>
         <p className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-slate-300">
           <span>灵气 <strong className="text-teal-200">{data.spiritQi}</strong></span>

@@ -1,3 +1,4 @@
+import { personaLine } from './wildPersonaEngine';
 import { captureDramaticBondFact } from './dramaticBondEngine';
 import { availableGrandSiegeHeroActions } from './grandSiegeTheatreEngine';
 import type { ForbiddenDuelContact, NativeDuelRolls } from '../types/forbiddenArt';
@@ -131,7 +132,7 @@ import {
   WorldEvent,
   WorldState,
 } from '../types/world';
-import { computeHeuristicDecision, requiredBeforeOrdinaryDecision, utilityCeasefireDecision, utilityExpeditionRescueDecision } from './llmBrain';
+import { computeHeuristicDecision, isProviderPersonaDecision, requiredBeforeOrdinaryDecision, utilityCeasefireDecision, utilityExpeditionRescueDecision } from './llmBrain';
 import { maintainMemories, recordMemory } from './memoryEngine';
 import { synthesizeReflections } from './reflectionEngine';
 import { fabricateRumor, knownRumorLead, spreadRumors, witnessEvent } from './rumorEngine';
@@ -321,7 +322,7 @@ function settleNativeDuel(world:WorldState,cultivator:Cultivator,defender:Cultiv
       actorIds: [cultivator.id, defender.id],
       duelWinnerId: winner.id,
       damage,
-      dialogue: scriptedDialogue('combat', cultivator, defender, `${winner.name}胜出，${loser.name}当场陨落。`, decision.spokenLine),
+      dialogue: scriptedDialogue('combat', cultivator, defender, `${winner.name}胜出，${loser.name}当场陨落。`, decision.spokenLine, loser),
       locationId: cultivator.locationId,
     };
     if (divineArtProse) lethalEvent.description += divineArtProse + '。';
@@ -560,6 +561,9 @@ export function applyCultivatorBrainDecision(
 
   const location = world.locations.find((l) => l.id === cultivator.locationId);
   const qiFactor = (location?.spiritQi ?? 50) / 50;
+  // A behavioral provider saw personal context. Its words may remain in-character thought, never a public quote.
+  const publicSpeech=modelInput||isProviderPersonaDecision(decision)?undefined:decision.spokenLine;
+  const publicDecision=publicSpeech===decision.spokenLine?decision:{...decision,spokenLine:publicSpeech};
 
   switch (decision.chosenAction) {
     case 'TAME_BEAST':
@@ -783,7 +787,7 @@ export function applyCultivatorBrainDecision(
     case 'TRADE':
     case 'DUAL_CULTIVATE':
     case 'SECT_DIPLOMACY':
-      return resolveEncounter(decision.chosenAction, world, cultivator, decision,
+      return resolveEncounter(decision.chosenAction, world, cultivator, publicDecision,
         (target, amount) => adjustRelationship(world, cultivator.id, target.id, amount,
           cultivator.sectId === target.sectId ? '同门' : '竞争'));
     case 'CULTIVATE': {
@@ -906,7 +910,7 @@ export function applyCultivatorBrainDecision(
         year: world.year,
         month: world.month,
         title: `${cultivator.name}与${target.name}坐而论道`,
-        description: `${cultivator.name}与${target.name}于【${location?.name ?? '灵山'}】畅谈天地法则，${decision.spokenLine ? `言道：“${decision.spokenLine}”` : '相谈甚欢。'}`,
+        description: `${cultivator.name}与${target.name}于【${location?.name ?? '灵山'}】畅谈天地法则。言道：“${publicSpeech||personaLine(cultivator,'social_open')}”`,
         category: 'diplomacy',
         actorIds: [cultivator.id, target.id],
         locationId: cultivator.locationId,
@@ -990,7 +994,7 @@ export function applyCultivatorBrainDecision(
           };
         }
       }
-      return settleNativeDuel(world,cultivator,defender,decision,rolls,authorizedBountyTargetId,emit);
+      return settleNativeDuel(world,cultivator,defender,publicDecision,rolls,authorizedBountyTargetId,emit);
     }
   }
 }

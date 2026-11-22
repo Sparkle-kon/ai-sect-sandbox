@@ -1,3 +1,5 @@
+import {activeAvatar} from '../engine/avatarEngine';
+import {personaLine,privatePersonaText} from '../engine/wildPersonaEngine';
 import type {ActionType,Cultivator,LocationNode,WorldState} from '../types/world';
 import type {GodInterventionCommand} from '../engine/worldEngine';
 import {isChronicleStoryFact} from '../engine/chronicleLead';
@@ -8,7 +10,7 @@ import {mapActorPositions,type createTerrainMapView} from './terrainMapView';
 export type MapEntityTarget={kind:'actor'|'site';id:string};
 export type MapEntityAction='treasure'|'lightning'|'whisper';
 export type MapEntityRead=
-  | {kind:'actor';target:MapEntityTarget&{kind:'actor'};name:string;realm:string;hp:number;maxHp:number;actionLabel:string;monologue?:string}
+  | {kind:'actor';target:MapEntityTarget&{kind:'actor'};name:string;realm:string;hp:number;maxHp:number;actionLabel:string;monologue?:string;persona?:string}
   | {kind:'site';target:MapEntityTarget&{kind:'site'};name:string;spiritQi:number;residents:readonly string[];residentCount:number;
      population?:number;eventTitles:readonly string[]};
 
@@ -35,7 +37,7 @@ function siteInView(world:WorldState,view:View,id:string):LocationNode|undefined
   return sites.length===1&&site&&view.seenLocations.filter(row=>row===site).length===1&&view.isCurrentLocation(id)?site:undefined;
 }
 function monologueLine(actor:Cultivator):string|undefined{
-  const clean=cleaned(actor.innerMonologue);
+  const clean=privatePersonaText(actor.innerMonologue);
   const secret=cleaned(actor.secretGoal);
   if(!clean||secret&&clean.includes(secret))return undefined;
   const first=clean.match(/^.*?[。！？.!?](?=$|\s|[^0-9])/u)?.[0]??clean;
@@ -71,14 +73,14 @@ function stationaryResidents(world:WorldState,view:View,site:LocationNode):Culti
   return mapActorPositions([site],visible,view.trailPositions).map(row=>row.actor);
 }
 
-export function projectMapEntityPopover(world:WorldState,view:View,target:MapEntityTarget,viewerId?:string|null):MapEntityRead|undefined{
+export function projectMapEntityPopover(world:WorldState,view:View,target:MapEntityTarget,viewerId?:string|null,livePersonal=false):MapEntityRead|undefined{
   if(target.kind==='actor'){
     const actor=actorInView(world,view,target.id);
     if(!actor)return undefined;
-    const monologue=viewerId===actor.id?monologueLine(actor):undefined;
+    const monologue=livePersonal&&viewerId===actor.id&&activeAvatar(world)===actor?monologueLine(actor):undefined;
     return {kind:'actor',target:{kind:'actor',id:actor.id},name:cap(cleaned(actor.name),80),
       realm:`${actor.realm}${actor.realmStage}层`,hp:actor.hp,maxHp:actor.maxHp,
-      actionLabel:simpleActions[actor.currentAction]??'行事中',...(monologue?{monologue}:{})};
+      actionLabel:simpleActions[actor.currentAction]??'行事中',...(monologue?{monologue}:{persona:personaLine(actor,'thought')})};
   }
   if(target.kind!=='site')return undefined;
   const site=siteInView(world,view,target.id);
