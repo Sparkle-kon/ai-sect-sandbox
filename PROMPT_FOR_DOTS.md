@@ -1,30 +1,25 @@
-# PROMPT_FOR_DOTS.md — 复制给 GPT / Dots / Codex 的天道变法全自动指令
-
-## 一、 天道变法 · 视觉沙盒与修仙爽感主启动指令（直接复制这段给 GPT Dots）
+# PROMPT_FOR_DOTS.md — 复制给 GPT / Dots / Codex 的 UI 视觉精修 + 连载小说扩充指令
 
 ```markdown
 Target GitHub Repository: https://github.com/Sparkle-kon/ai-sect-sandbox
 Git Clone URL: https://github.com/Sparkle-kon/ai-sect-sandbox.git
+Live Preview Site: https://ai-sect-sandbox-mobile-20261121.spazzzz.chatgpt.site/
 
-You are operating in UNATTENDED AUTONOMOUS EVOLUTION MODE on `https://github.com/Sparkle-kon/ai-sect-sandbox` (`ai-sect-sandbox` - 天道沙盒：AI修仙宗门与群像模拟器).
+Sync with remote immediately: run `git pull --rebase origin main` and read the updated `AGENTS.md` and `BACKLOG.md`.
 
-IMPORTANT STRATEGIC PIVOT (天道变法):
-1. First, `git pull --rebase origin main` and read the updated `AGENTS.md` and `BACKLOG.md` completely.
-2. We have officially pivoted from micro-bureaucratic receipt/escrow accounting to the new top priority queue in `BACKLOG.md`: **天道变法主线 (V1–V4) & Phase 18**:
-   - **V1**: Panoramic God-View Cockpit Mode (`PanoramicCockpit.tsx`), `App.tsx` architectural decoupling (`useWorldSimulationController.ts`, consolidating fragmented panels into `SectAffairsHub`, `CivicWorldHub`, `ChronicleArchiveHub`), interactive Map Entity Popovers (`MapEntityPopover`), and global `WorldPulseBar`.
-   - **V2**: 2D Canvas Visual Spectacle (biome textures, spirit qi particle flows, sword-flight trajectories, duel clash VFX & floating damage numbers, 9-stage tribulation lightning & golden lotus, overhead actor status badges & dialogue bubbles, protective array domes).
-   - **V3**: High-Drama Xianxia Gameplay (3-choice Roguelike Secret Realm Encounters, Destiny Traits & Signature Divine Arts on realm breakthrough, Heart Demon Trial illusion theatre, Forbidden Arts & Spirit Weapon awakening comebacks, Grand Sect Siege theatre).
-   - **V4**: Dramatic Character Bond Arcs, Wild Xianxia LLM persona prompts & poetry, interactive Ring Grandpa chat, and Hall of Immortals / Biography Scroll generator.
+We have added two urgent top-priority tracks at the top of `BACKLOG.md` (`UI1` and `N1`):
 
-For EVERY task in `BACKLOG.md` (starting from the top-most unchecked `- [ ]` task `[V1-1]`), strictly execute this closed loop:
-1. Pick the top-most unchecked `- [ ]` task in `BACKLOG.md`.
-2. Implement complete, production-grade TypeScript + React + Canvas code (zero placeholders, zero `TODO` stubs, zero `any` types). Keep existing 2000+ test contracts green while delivering rich visual UI/Canvas and dramatic gameplay.
-3. Add deterministic unit and component tests in `tests/`.
-4. Run `npm run verify` (`npm run typecheck && npm run test && npm run build`) until it passes 100% with zero warnings.
-5. Mark the completed item `- [x]` in `BACKLOG.md` and log the summary in `CHANGELOG.md`.
-6. Check remaining unchecked `- [ ]` count in `BACKLOG.md`: if fewer than 20 remain, append 10 new tasks focused strictly on **Visual Spectacle, High-Drama Xianxia Gameplay, or Architectural Consolidation** (NEVER create micro-accounting/receipt/escrow tasks again).
-7. Commit and `git push origin main` to `https://github.com/Sparkle-kon/ai-sect-sandbox.git`.
-8. CRITICAL: DO NOT STOP after one task! Immediately proceed to the next `- [ ]` task in `BACKLOG.md` and repeat continuously.
+1. **Track `UI1` (`[UI1-1]` to `[UI1-5]`): Visual & UI Strict Polish + Live Site Redeploy**
+   - Fix the 5 visual issues seen in the user's screenshot:
+     - `[UI1-1]`: Eliminate all text/badge/node overlaps on `WorldMapCanvas` (separate `摘星天机台` and `松灯坊市` coordinates; move `[宗1]`~`[宗4]` off the node center; stop cluttering location titles with 10 inline suffixes like `炉2 卫1 经 祠 集`—keep only clean `Location Name + Spirit Root` on canvas and move facility details into `MapEntityPopover`; adjust orbiting actor positions so names never collide with location titles).
+     - `[UI1-2]`: Soften the harsh `15x9` Minesweeper-like checkerboard grid and `^` chevrons into an organic Chinese ink-wash landscape, and redesign the bright pastel minimap in the bottom-right corner into a sleek, collapsible dark-gold Xuan-ink compass that never covers `血月魔渊`.
+     - `[UI1-3]`: Replace plain black circles and flat colored dots on the map with stylized vector sect landmarks (sword peak, cauldron, star dais, blood moon) and ornate cultivator tokens.
+     - `[UI1-4]`: Fill the 80% empty black void in the right sidebar of the `地图` workspace (`views.map` `<aside>`) with a rich Cultivator Dossier showing `CultivatorPortrait` SVG, HP/Qi progress bars, inner monologue quote, equipped artifacts/Dao path, local site events, and quick God actions.
+     - `[UI1-5]`: Polish global Xianxia UI theme AND **redeploy/update the live preview site (`https://ai-sect-sandbox-mobile-20261121.spazzzz.chatgpt.site/`)** so the user sees the latest build live!
 
-Start now with `[V1-1] 大屏全息同屏指挥台模式 (Panoramic God-View Cockpit Mode)`.
+2. **Track `N1` (`[N1-1]` to `[N1-5]`): Serialized Novel Pacing & Mundane Breathing Room (连载章回小说扩充)**
+   - **Core Literary Principle**: Each chapter must read like a real serialized Xianxia novel—**NOT every paragraph should be a dramatic climax!**
+   - Use **70% calm, mundane daily life transitions & seasonal atmosphere** (quiet cultivation, mountain rain, tending herb fields, furnace fire, traveling along mountain paths, mundane market errands without exaggerated subheadings) to build breathing room and contrast for the **1–2 true focal scenes** in each chapter, with natural chapter-to-chapter continuity (`书接上回` lead-ins and subtle end-of-chapter hooks) and a clean continuous book-page reader view (`SerializedBookPageTypography`).
+
+Execute `[UI1-1]` through `[UI1-5]`, then `[N1-1]` through `[N1-5]`, and continue through `Phase 18`, `Phase 19`, and `Phase 20` continuously without stopping. Verify every task with `npm run verify`, commit and push to `origin main`, and redeploy the live preview site when available!
 ```

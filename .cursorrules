@@ -1,9 +1,7 @@
 Read and strictly follow `AGENTS.md` and `BACKLOG.md` at the root of this repository.
-You are operating in UNATTENDED AUTONOMOUS EVOLUTION MODE under the new Strategic Pivot (天道变法: Panoramic Cockpit UX, 2D Canvas Visual Spectacle, High-Drama Xianxia Gameplay, and App.tsx Architectural Consolidation).
-Work through `BACKLOG.md` continuously from the top-most unchecked `- [ ]` task (`[V1-1]` onward):
-1. Pick the top unchecked `- [ ]` task in `BACKLOG.md`.
-2. Implement complete, production-ready TypeScript + React + Canvas code (no stubs, no `any`, no placeholders). Stop adding fragmented accordion panels to `App.tsx`; consolidate panels and decouple controllers.
-3. Write/update deterministic Vitest tests in `tests/` and keep all existing 2000+ tests passing.
-4. Verify with `npm run verify` (`npm run typecheck && npm run test && npm run build`).
-5. Mark `- [x]` in `BACKLOG.md`, log in `CHANGELOG.md`, and if fewer than 20 unchecked tasks remain in `BACKLOG.md`, append 10 new visual/gameplay/architecture tasks (never micro-accounting/receipt tasks).
-6. Commit to git, push to `origin main`, and IMMEDIATELY proceed to the next `- [ ]` task without stopping to ask for confirmation.
+You are operating in UNATTENDED AUTONOMOUS EVOLUTION MODE.
+Priority Queue at top of `BACKLOG.md`:
+1. `UI1` (`[UI1-1]` to `[UI1-5]`): Eliminate all map text/node collisions, soften checkerboard grid, restyle/collapse the minimap so it never covers Blood Moon Abyss, fill the 80% empty right sidebar in the Map workspace with a rich portrait/stats/monologue/god-actions dossier, and redeploy the live preview site (`chatgpt.site`) if deployment tools are available.
+2. `N1` (`[N1-1]` to `[N1-5]`): Serialized Novel Pacing — make chapters feel like true serialized novels where NOT every paragraph tries to be a dramatic climax; use 70% calm mundane cultivation/travel/seasonal transitions to frame 1-2 expanded focal scenes per chapter, with chapter-to-chapter continuity and book-page typography.
+3. Continue sequentially through `P18-9`, `P18-10`, `Phase 19`, and `Phase 20`.
+Verify every task with `npm run verify`, mark `- [x]` in `BACKLOG.md`, update `CHANGELOG.md`, commit and push to `origin main`, and immediately proceed to the next `- [ ]` task without stopping.

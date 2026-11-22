@@ -43,6 +43,43 @@
 - [x] **[V4-4] 封神榜、陨落英魂录与人物一生传记画卷 (`HallOfImmortals & BiographyScroll`)**：打造高颜值的「天机封神榜 & 历代列传」画卷模态框（`src/components/HallOfImmortalsModal.tsx`）。不仅展示战力榜、恶人榜、炼丹宗师榜，还能为任何一位陨落或飞升的传奇修士一键生成图文并茂的《本纪/世家列传》（串联其出身、拜师、高光奇遇、宿敌决战、逆天命格与结局）。
 - [x] **[V4-5] 丝滑新手引导、一键高能开局剧本与全息大盘终极打磨 (`HighDramaScenarioPresets & UXPolish`)**：内置 3 个开局即高潮的特色修仙剧本预设（如*《山雨欲来：正魔决战陨仙墟》*、*《天骄争锋：百年仙门大比前夜》*、*《微末凡人：从寒玉矿奴到万年老祖》*），玩家一键即可进入充满戏剧冲突的鲜活局面，完成大屏全息指挥台与移动端故事模式的体验闭环。
 
+### UI1　界面与地图视觉严格打磨专项：解决文字重叠、死板棋盘、右侧大片留白与线上站同步发布 (Visual Polish & Live Deployment)
+
+> **实机与线上站 (`https://ai-sect-sandbox-mobile-20261121.spazzzz.chatgpt.site/`) 巡检暴露的 7 大 UI 硬伤（必须逐一根治）：**
+> 1. **地图文字与圆点严重撞车重叠**：在 `WorldMapCanvas` 上，`太虚剑峰`、`摘星天机台` 与 `松灯坊市`、`丹霞灵谷`、`血月魔渊` 处，修士圆圈、修士姓名、`[宗1]`~`[宗4]` 框、地点标题、`〈灵根〉`、`炉1/2/3 卫1 经 祠 秘`、`兽1`、`潮`、`灵气 85` 全部叠在同一坐标上，字压字完全看不清！
+> 2. **地图背景像简陋的扫雷方格表，人物只是纯色小圆点**：`15×9` 方块网格线与粗虚线领地框太生硬，人物只是单调的纯色实心圆点（`●`），缺乏仙侠画卷美感。
+> 3. **右下角小地图配色刺眼且遮挡魔渊**：右下角的彩色马赛克缩略图 / `战略小地图` 直接盖在 `血月魔渊` 区域上。
+> 4. **「地图」标签页右侧 80% 是黑屏大留白**：`views.map` 右侧栏（`<aside aria-label="当前修士">`）只有三行字，下面整片黑屏浪费，而常用的「地图工具」却被挤到屏幕下方折叠起来！
+> 5. **首页到沙盒入口藏得太深（要连点 3 层），且 `全息大盘` 在 `1112px` 笔记本屏上不显示**：从故事首页进沙盒地图竟然要点 `走进故事 -> 更多工具 -> 查看地图、纪事与存档` 三次；`CockpitModeSwitch` 设了 `1280px` 门槛导致普通笔记本屏看不到；`另选开局剧本` 没有按钮边框样式像普通文字。
+> 6. **「人物」等标签页全是折叠黑框 + 英文枚举泄露 (`当前: CULTIVATE`)**：`AgentInspector` 里状态徽章直接裸露英文 `当前: CULTIVATE`（应汉化为 `当前：吐纳修炼` 等中文）；桌面端左侧 `修士名册` 默认折叠导致左栏空旷。
+> 7. **线上预览站 (`chatgpt.site`) 未同步发布最新代码**：完成 UI 与小说打磨后必须重新构建并同步发布线上预览站。
+
+- [ ] **[UI1-1] 根治地图文字、标签与节点重叠碰撞 (`MapCollisionFreeLayout & CleanNodeLabels`)**：
+  1) 拉开过近的地点坐标（如 `摘星天机台` 与 `松灯坊市` 保持足够垂直与水平间距，避免标题互踩）；
+  2) 将 `[宗1]`~`[宗4]` 领地角标移至领地边界角落（或改用低调的领地底纹），严禁画在宗门驻地圆心正上方；
+  3) **大幅精简地图常驻文字**：地点节点上方只绘制带半透明墨色胶囊底托的「地点名 + 灵根色标」，将冗长的 `炉2 卫1 经 祠 集 俸 苗 共器 校` 等后缀收进点击/悬停的 `MapEntityPopover` 详情卡内；
+  4) 优化在场修士环绕轨道角度与半径（避开正北 `y - 26` 地点名与正南 `y + 33` 灵气文字扇区），给修士姓名加上清晰深色描边底托，确保全图 **0 文字重叠**。
+- [ ] **[UI1-2] 去棋盘化国风山河画卷与不遮挡魔渊的古风罗盘缩略图 (`OrganicInkMap & NonOccludingMinimap`)**：
+  1) 弱化 `terrainMapDraw.ts` 中生硬的方格直线网格与刺眼粗虚线，采用柔和的国风青黛/玄墨渐变过渡、温润的领地光晕边界与水墨山川暗纹；
+  2) 重塑右下角缩略小地图 (`StrategicMinimap`)：去掉刺眼的高饱和粉绿橘马赛克色块，改用与主图协调的暗金玄墨古风配色，支持折叠为精致的「山河罗盘」小按钮，并将小地图或 `血月魔渊` 坐标合理错开，确保**绝不遮挡 `血月魔渊` 节点与文字**。
+- [ ] **[UI1-3] 地图驻地地标与修士棋子视觉精致化 (`StylizedLandmarkGlyphs & AvatarTokens`)**：告别“空心黑圈 + 纯色小圆点”的电路板画风！在 `WorldMapCanvas` 上为宗门山门、秘境、魔渊、坊市、灵脉绘制精美的国风矢量中心徽记（如剑峰、丹鼎、星盘、魔月、古亭图案 + 多层灵气光晕），为修士棋子绘制带内环纹理、境界光圈与高光质感的精致玉牌/棋子造型。
+- [ ] **[UI1-4] 填补「地图」工作区右侧 80% 空白：立绘 + 气血灵气条 + 识海心声 + 快捷天道同屏侧栏 (`RichMapSidebarDossier`)**：升级 `src/App.tsx` 中 `views.map` 右侧的 `<aside aria-label="当前修士">`（从 `17rem` 扩宽至 `21rem`~`23rem` 并充实内容）：同屏展示选中修士的**水墨 SVG 立绘 (`CultivatorPortrait`) + 境界/宗门/命格徽章 + 气血与灵气可视化进度条 + 识海内心独白引文框 + 本命法宝/道途状态 + 当前所在地见闻摘要 + 快捷「聚焦 / 传音 / 赐宝 / 降雷」天道操作**，彻底消灭右侧黑屏留白。
+- [ ] **[UI1-5] 修复英文枚举泄露 (`CULTIVATE`)、桌面端展开名册、优化首页直达沙盒入口并同步发布线上站 (`UXPolishAndLiveDeploy`)**：
+  1) 将 `AgentInspector.tsx` 及全站所有裸露的英文 `ActionType` 枚举（如 `当前: CULTIVATE`、`BREAKTHROUGH`、`EXPLORE`、`SCHEMING`、`DUEL`、`SOCIALIZE`、`REST`）全面映射为典雅的中文（如 `吐纳修炼`、`破境冲关`、`御剑游历`、`暗中谋划`、`生死斗法`、`品茗论道`、`闭关调息`）；
+  2) 在桌面宽屏（`>= 768px`）下，「人物」页左侧 `ActorRoster`（修士名册）默认展开显示人物列表（带头像缩略图与境界），不再默认折叠留白；
+  3) 将 `CockpitModeSwitch`（全息大盘切换）的宽屏阈值从 `1280px` 放宽至 `1024px`（覆盖主流笔记本屏幕），美化 `另选开局剧本` 的卡片/按钮边框，并在宽屏首页提供更直观的沙盒/大盘切换体验（同时保持既有窄屏 360px 测试契约 100% 兼容）；
+  4) **重新构建并将最新前端版本发布更新到线上预览站点 (`https://ai-sect-sandbox-mobile-20261121.spazzzz.chatgpt.site/`)**！
+
+### N1　连载章回小说的呼吸感：平淡闲笔铺垫、疏密详略与跨章起承转合 (Serialized Novel Pacing & Continuity)
+
+> **核心文学准则：** 每一章要像真正的连载修仙小说一样——**绝不能要求每一段文字都惊天动地、句句高潮！** 满篇高潮只会变成流水账快讯。真正的连载小说必须有**平淡日常的闲笔过渡、山中岁月的慢节奏铺垫、次要琐事的平实略写**，用 70% 平实有烟火气的过渡文字去烘托每章仅有的 1~2 处核心戏眼，并做到章首承接上回、章末留白悬念。
+
+- [ ] **[N1-1] 章回内部「疏密详略」编排器：一章一戏眼，其余皆化平实闲笔 (`SerializedChapterPacing & MundaneTransitions`)**：改造 `src/engine/novelGenerator.ts` 与章节生成管线。取消将一章内十几个锚点事件全部写成同等权重“高光小标题”的做法；将每章结构重编为 **「起（节气风物与山门日常闲笔）→ 承（行旅、吐纳、坊市交割等次要事件的平实串场，不单列夸张标题）→ 转（本章唯一 1~2 处核心戏眼展开）→ 合（余波散去与平淡收束）」**。让大部分过场文字保持平实、克制、从容的叙述节奏。
+- [ ] **[N1-2] 跨章「书接上回」与章末「连载留白钩子」承接链 (`ChapterContinuityThread & CliffhangerHooks`)**：在相邻章节之间建立真实的叙事承接。新章开篇自然承接上一章末尾人物的落脚处、伤势调养、未走完的旅途或时令更替（如*“上回陨仙墟的动静散去后，太虚剑峰接着落了半月春雨，山中一时无话……”*）；每章末尾根据当前真实在途的行程、未开的秘境先兆或正在闭关的人，留下一句平淡却吊人胃口的连载收尾（如*“至于北岭那批暖芦何时过关，已是入冬以后的事了。”*），严禁编造未发生的事实。
+- [ ] **[N1-3] 修仙界「烟火日常与山中岁月」平淡闲笔库 (`MundaneXianxiaLifeProse`)**：创建 `src/engine/mundaneLifeProse.ts`。针对“并无大战发生”的寻常月份与次要人物动向，结合当前真实的四时节气、地域风貌（如丹霞炉火、外港潮汐、寒玉井绳、村落耕作）与修士日常（闭关吐纳、照看灵田、山径赶路、坊市歇脚），生成平淡、真实、有呼吸感的日常闲笔过渡段，营造“山中无甲子，寒尽不知年”的修仙连载韵味。
+- [ ] **[N1-4] 核心戏眼的多层次「过程与环境烘托」扩写 (`FocalSceneLayeredExpansion`)**：在一章 70% 平淡日常与过渡铺垫的基础上，对本章选出的唯一「核心戏眼」（如一场真正发生的生死决战、一次九重雷劫或宗门攻防）进行有层次的细节展开（从战前山风/炉火的寂静、交手时的道途剑意/禁术痕迹、到胜负落定后的现场余音），通过“平淡闲笔 vs 核心戏眼”的疏密对比，拉满连载章节的阅读张力。
+- [ ] **[N1-5] 沉浸式「连载追更书页」排版：连贯散文流与低调史料角标 (`SerializedBookPageTypography`)**：升级 `ChronicleLibraryPanel` 中的章节阅读视图。将同一章的起、承、转、合渲染为连贯、舒适的连载小说书页段落流，去掉打断阅读心流的碎片化外框与冗余机械标签；将每个段落对应的原始事件时间与实据隐藏为段末低调的古风角标/注脚（点击注脚可展开核查原始事件与证词），兼顾纯粹的连载小说阅读体验与 100% 史实可核查性。
+
 ---
 
 ## 纪元主线 (E1–E4 已完成基座)
@@ -332,7 +369,6 @@
 - [x] **[P17-7] Market Freight Charged for Verified Loads (货重量核验与实付运力)**: Attach real measured load bands to an existing consignment, use a consenting carrier's actual capacity and charge only the one shipment actually dispatched. Preserve original market quantity and financial receipt, release unused freight custody on verified cancellation, and distinguish a light partial delivery from a mere promise or inferred loss.
 - [x] **[P17-8] Additive Local Memorial Corrections (乡祠追加勘误与同名分列)**: Let a different authorized local witness append a narrowly typed correction for a published memorial only from new actual documentary evidence. Keep the former reading, same-named people and unchanged relief and household records visible under the original proof; correction cannot infer a death date, new ancestry or replacement identity.
 - [x] **[P17-9] Linked Reproducibility Receipts Across Retained Checkpoints (留存检查点与复演回执链)**: Verify two explicitly selected local receipts against exact retained checkpoint bytes and known rule versions, and link them only when the recorded predecessor digest and actual source identity match. Distinguish lost snapshots and unavailable rule builds from mismatches, without replaying automatically, applying history, exposing branch labels or uploading a save.
-- [ ] **[P17-10] Verified Cultivation Slot Transfers Under Competing Claims (同地并约与实有时段让渡)**: Allow two original holders and a real site custodian to negotiate a finite reassignment of one previously granted cultivation period. Verify the other holder's actual timely consent and physical arrival, preserve old spend and completed periods, refund only unused entitlements through their original account, and never convert a time slot into title or faction rank.
 
 ---
 
