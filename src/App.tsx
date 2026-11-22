@@ -663,7 +663,8 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
       revision={world} busy={isStepping||fastForwardLocked} onBack={()=>setStoryEntryOpen(false)} onTools={openDashboard}
       openings={<HighDramaPresetPicker scopeKey={viewScopeKey} revision={world} disabled={dramaticOpening.disabled} onStart={dramaticOpening.start}/>}
       onFollow={storyHome.lead?followCurrentLead:undefined} onEnter={enterCurrentLead} onOrder={orderCurrentStoryAvatar} />:
-      <StoryFirstHome scene={storyHome.scene} subplot={guidance.subplot} branchScene={flightCard??passageScene??banquetStory??<DeferredGrandSiegeMapScene world={world} viewer={activeAvatar(world)} fog personalOnly visible witnessScopeKey={viewScopeKey}/>} leadName={storyHome.lead?.name} playerName={activeAvatar(world)?.name}
+      <StoryFirstHome recapContext={world.chronicleArchive.chapters.length||world.coldHistory?.chapters.length?
+        {world,scopeKey:viewScopeKey,viewer:activeAvatar(world)}:undefined} scene={storyHome.scene} subplot={guidance.subplot} branchScene={flightCard??passageScene??banquetStory??<DeferredGrandSiegeMapScene world={world} viewer={activeAvatar(world)} fog personalOnly visible witnessScopeKey={viewScopeKey}/>} leadName={storyHome.lead?.name} playerName={activeAvatar(world)?.name}
         busy={isStepping} moreRef={storyMoreRef} notice={storyNotice} calendar={storyHome.calendar} opening={dramaticOpening.opening}
         outcome={storyOutcome?.world===world?storyOutcome.text:undefined} onContinue={advanceStory} onMore={openStoryEntry} />)}
   </main>;

@@ -1,3 +1,5 @@
+import { ChronicleRecapControls } from './ChronicleRecapControls';
+import { projectStoryRecap } from '../engine/storyRecap';
 import { ChronicleBookPage } from './ChronicleBookPage';
 import { createChronicleBookSourceResolver, type ChronicleBookSource } from './chronicleBookSources';
 import {ChapterExcerptPanel,type ChapterExcerptPanelProps} from './ChapterExcerptPanel';
@@ -69,23 +71,31 @@ function chapterForReading(chapter: ChronicleChapter, liveIds: ReadonlySet<strin
   return anchors.length === chapter.anchors.length ? chapter : { ...chapter, anchors, body: '' };
 }
 
-function ChapterArchive({ chapter, reading, lead, turningPoints, sharedTurningPoints, resolveDialogue, resolveBookSources, excerpt }: {
+function ChapterArchive({ chapter, reading, lead, turningPoints, sharedTurningPoints, resolveDialogue, resolveBookSources, excerpt, recapContext }: {
   chapter: ChronicleChapter; reading: ReturnType<typeof projectChronicleReading>; lead?: ChronicleLead;
   turningPoints: readonly ChapterTurningPoint[];
   sharedTurningPoints: readonly SharedTurningPoint[];
   excerpt?:Omit<ChapterExcerptPanelProps,'chapterId'>;
+  recapContext?: {world:WorldState;scopeKey:string;viewer?:Cultivator};
   resolveDialogue: (eventId:string)=>PublicDialogueProvenance | undefined;
   resolveBookSources: (ids:readonly string[],priorChapterId?:string)=>readonly ChronicleBookSource[];
 }) {
   const [readOriginal, setReadOriginal] = useState(false);
+  const readerRef=useRef<HTMLElement>(null);
+  const recap=useMemo(()=>recapContext&&projectStoryRecap(recapContext.world,recapContext.viewer,chapter.id),
+    [recapContext,chapter.id]);
   const scenes = new Map(reading.sections.map((entry) => [entry.eventId, entry]));
   const anchors = chapter.anchors.filter(({ id }) => scenes.has(id));
   const proofDialogues = new Map(anchors.map(({id})=>[id,resolveDialogue(id)]));
   const originalProved = readOriginal && canShowOriginalChronicleManuscript(chapter.body,proofDialogues.values());
   const hasLead = lead && new Set(lead.eventIds.filter((id) => scenes.has(id))).size >= 2;
   return (
-    <article aria-label="章节正文" className="space-y-3">
+    <article ref={readerRef} aria-label="章节正文" className="space-y-3">
       {hasLead && <p className="break-words text-xs text-amber-200">此篇随{lead.name}一路读去。</p>}
+      {!!recap?.rows.length&&recapContext&&<div className="sticky top-0 z-10 flex justify-end bg-slate-950/90">
+        <ChronicleRecapControls recap={recap} readerRef={readerRef} world={recapContext.world}
+          scopeKey={recapContext.scopeKey} viewerId={recapContext.viewer?.id} chapterId={chapter.id}/>
+      </div>}
       <ChronicleBookPage reading={reading} resolveSources={resolveBookSources} />
       <ChapterTurningPoints arcs={turningPoints} shared={sharedTurningPoints} />
       {excerpt&&<ChapterExcerptPanel {...excerpt} chapterId={chapter.id}/>}
@@ -188,6 +198,8 @@ export function ChronicleLibraryPanel({ world, cultivator, scopeKey, scribeContr
   const lead = chapter && (chapter.storyFocal ? stampedChronicleLead(chapter) :
     projectChronicleLead(world, chapter.anchors, chapter.endTick));
   const reading = chapter && projectChronicleReading(chapter, lead, true, world);
+  const recapContext=useMemo(()=>!cultivator||world.cultivators.includes(cultivator) ?
+    {world,scopeKey:scopeKey??'chronicle-library',viewer:cultivator}:undefined,[world,scopeKey,cultivator]);
   const excerpt=scopeKey&&(!cultivator||world.cultivators.includes(cultivator))?{world,scopeKey,viewerId:cultivator?.id}:undefined;
 
 
@@ -255,7 +267,7 @@ export function ChronicleLibraryPanel({ world, cultivator, scopeKey, scribeContr
             ? <p className="text-sm text-slate-400">尚无已编成的章节。公开史料累积到结集时会出现新篇。</p>
             : kind === 'chapter' ? <ChapterArchive key={chapter.id} chapter={chapter} reading={reading} lead={lead}
               turningPoints={projectChapterTurningPoints(world,chapter.id,cultivator?.id).arcs}
-              sharedTurningPoints={projectSharedTurningPoints(world,chapter.id,cultivator?.id)} excerpt={excerpt}
+              sharedTurningPoints={projectSharedTurningPoints(world,chapter.id,cultivator?.id)} excerpt={excerpt} recapContext={recapContext}
               resolveBookSources={bookSources(chapter,reading)}
               resolveDialogue={(id)=>publicDialogues.chapter(chapter.id,id)} /> : <ChapterBiographies chapter={chapter} />)}
         </div>
@@ -274,7 +286,7 @@ export function ChronicleLibraryPanel({ world, cultivator, scopeKey, scribeContr
           return <ChapterArchive key={safe.id} chapter={safe} reading={olderReading} lead={olderLead}
             resolveBookSources={bookSources(safe,olderReading)}
             turningPoints={projectChapterTurningPoints(world,safe.id,cultivator?.id).arcs}
-            sharedTurningPoints={projectSharedTurningPoints(world,safe.id,cultivator?.id)} excerpt={excerpt}
+            sharedTurningPoints={projectSharedTurningPoints(world,safe.id,cultivator?.id)} excerpt={excerpt} recapContext={recapContext}
             resolveDialogue={(id)=>publicDialogues.chapter(safe.id,id)} />;
         }} />
       <EraHistoryPanel scopeKey={`${scopeKey??''}:${cultivator?.id??''}`} options={eraOptions}
