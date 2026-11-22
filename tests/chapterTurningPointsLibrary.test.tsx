@@ -15,7 +15,7 @@ const renderedText=(text:string)=>renderToStaticMarkup(<span>{text}</span>).slic
 function regularScenes(html:string){
   const archive=html.match(/<article aria-label="章节正文"[^>]*>([\s\S]*?)<\/article>/)?.[1]??'';
   return [...archive.matchAll(/<div[^>]*data-chronicle-beat="([^"]+)"[^>]*>([\s\S]*?)<\/div>/g)]
-    .map(([,kind,body])=>({kind,prose:[...body.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/g)].map(match=>match[1]),
+    .map(([,kind,body])=>({kind,prose:[...body.matchAll(/<span[^>]*data-chronicle-paragraph-text(?:="[^"]*")?[^>]*>([\s\S]*?)<\/span>/g)].map(match=>match[1]),
       title:body.match(/<h5[^>]*>([^<]+)<\/h5>/)?.[1]}));
 }
 const expectedBeats=(chapter:Parameters<typeof projectChronicleReading>[0])=>

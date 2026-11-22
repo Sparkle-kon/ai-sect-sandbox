@@ -1,3 +1,5 @@
+import { ChronicleBookPage } from './ChronicleBookPage';
+import { createChronicleBookSourceResolver, type ChronicleBookSource } from './chronicleBookSources';
 import {ChapterExcerptPanel,type ChapterExcerptPanelProps} from './ChapterExcerptPanel';
 import {projectSharedTurningPoints,type SharedTurningPoint} from './sharedTurningPointsModel';
 import {ScribeCommissionRead,type ScribeCommissionControls} from './ScribeCommissionRead';
@@ -67,12 +69,13 @@ function chapterForReading(chapter: ChronicleChapter, liveIds: ReadonlySet<strin
   return anchors.length === chapter.anchors.length ? chapter : { ...chapter, anchors, body: '' };
 }
 
-function ChapterArchive({ chapter, reading, lead, turningPoints, sharedTurningPoints, resolveDialogue, excerpt }: {
+function ChapterArchive({ chapter, reading, lead, turningPoints, sharedTurningPoints, resolveDialogue, resolveBookSources, excerpt }: {
   chapter: ChronicleChapter; reading: ReturnType<typeof projectChronicleReading>; lead?: ChronicleLead;
   turningPoints: readonly ChapterTurningPoint[];
   sharedTurningPoints: readonly SharedTurningPoint[];
   excerpt?:Omit<ChapterExcerptPanelProps,'chapterId'>;
   resolveDialogue: (eventId:string)=>PublicDialogueProvenance | undefined;
+  resolveBookSources: (ids:readonly string[],priorChapterId?:string)=>readonly ChronicleBookSource[];
 }) {
   const [readOriginal, setReadOriginal] = useState(false);
   const scenes = new Map(reading.sections.map((entry) => [entry.eventId, entry]));
@@ -83,21 +86,7 @@ function ChapterArchive({ chapter, reading, lead, turningPoints, sharedTurningPo
   return (
     <article aria-label="章节正文" className="space-y-3">
       {hasLead && <p className="break-words text-xs text-amber-200">此篇随{lead.name}一路读去。</p>}
-      {reading.beats.length > 0 ? <div className="space-y-4 font-serif" data-chronicle-prose>
-        {reading.continuity?.opening &&
-          <p data-chronicle-continuity="opening" className="break-words text-sm leading-7 text-slate-100">{reading.continuity.opening.text}</p>}
-        {reading.beats.map((beat, index) => (
-          <div key={`${beat.kind}:${index}`} data-chronicle-beat={beat.kind} className="min-w-0 space-y-2">
-            {beat.kind === 'focal' && beat.title &&
-              <h5 className="break-words text-sm font-semibold text-amber-100">{beat.title}</h5>}
-            {beat.paragraphs.map((paragraph, paragraphIndex) => (
-              <p key={paragraphIndex} className="whitespace-pre-wrap break-words text-sm leading-7 text-slate-100">{paragraph}</p>
-            ))}
-          </div>
-        ))}
-        {reading.continuity?.closing &&
-          <p data-chronicle-continuity="closing" className="break-words text-sm leading-7 text-slate-100">{reading.continuity.closing.text}</p>}
-      </div> : <p className="text-sm text-slate-400">本章没有可写成场景的公开史料。</p>}
+      <ChronicleBookPage reading={reading} resolveSources={resolveBookSources} />
       <ChapterTurningPoints arcs={turningPoints} shared={sharedTurningPoints} />
       {excerpt&&<ChapterExcerptPanel {...excerpt} chapterId={chapter.id}/>}
       <details className="rounded border border-slate-800 bg-slate-950/70 p-2">
@@ -191,6 +180,9 @@ export function ChronicleLibraryPanel({ world, cultivator, scopeKey, scribeContr
   const publicChapters = useMemo(() => publicChronicleChapters(world), [world]);
   const disputed = useMemo(() => disputedArchiveFacts(world, publicChapters), [world, publicChapters]);
   const readable = (entry: ChronicleChapter) => chapterForReading(entry, liveIds, publicById, disputed);
+  const bookSources=(current:ChronicleChapter,reading:ReturnType<typeof projectChronicleReading>)=>
+    createChronicleBookSourceResolver({world,current,reading,readable,
+      resolveDialogue:(chapterId,eventId)=>publicDialogues.chapter(chapterId,eventId)});
   const chapters = publicChapters.filter(({ id }) => recentIds.has(id)).map(readable);
   const chapter = chapters.find(({ id }) => id === requestedChapter) ?? chapters[0];
   const lead = chapter && (chapter.storyFocal ? stampedChronicleLead(chapter) :
@@ -249,7 +241,7 @@ export function ChronicleLibraryPanel({ world, cultivator, scopeKey, scribeContr
           </button>
         ))}
       </div>
-      {reading && <h4 className="break-words font-serif text-lg font-semibold text-slate-100">{reading.title}</h4>}
+      {reading && page === 'biography' && <h4 className="break-words font-serif text-lg font-semibold text-slate-100">{reading.title}</h4>}
       {PAGES.map((kind) => (
         <div
           key={kind}
@@ -264,6 +256,7 @@ export function ChronicleLibraryPanel({ world, cultivator, scopeKey, scribeContr
             : kind === 'chapter' ? <ChapterArchive key={chapter.id} chapter={chapter} reading={reading} lead={lead}
               turningPoints={projectChapterTurningPoints(world,chapter.id,cultivator?.id).arcs}
               sharedTurningPoints={projectSharedTurningPoints(world,chapter.id,cultivator?.id)} excerpt={excerpt}
+              resolveBookSources={bookSources(chapter,reading)}
               resolveDialogue={(id)=>publicDialogues.chapter(chapter.id,id)} /> : <ChapterBiographies chapter={chapter} />)}
         </div>
       ))}
@@ -277,7 +270,9 @@ export function ChronicleLibraryPanel({ world, cultivator, scopeKey, scribeContr
         readChapter={(older) => {
           const safe = readable(older);
           const olderLead = safe.storyFocal ? stampedChronicleLead(safe) : projectChronicleLead(world, safe.anchors, safe.endTick);
-          return <ChapterArchive key={safe.id} chapter={safe} reading={projectChronicleReading(safe, olderLead, true, world)} lead={olderLead}
+          const olderReading=projectChronicleReading(safe, olderLead, true, world);
+          return <ChapterArchive key={safe.id} chapter={safe} reading={olderReading} lead={olderLead}
+            resolveBookSources={bookSources(safe,olderReading)}
             turningPoints={projectChapterTurningPoints(world,safe.id,cultivator?.id).arcs}
             sharedTurningPoints={projectSharedTurningPoints(world,safe.id,cultivator?.id)} excerpt={excerpt}
             resolveDialogue={(id)=>publicDialogues.chapter(safe.id,id)} />;

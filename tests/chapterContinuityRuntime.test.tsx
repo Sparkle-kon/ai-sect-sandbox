@@ -40,6 +40,8 @@ describe('serialized public continuity in both world runtimes and the reader',()
     expect(reading.sections.some(({eventId})=>eventId===priorEvent)).toBe(false);
     expect(read(world,previous).continuity?.opening).toBeUndefined();
     const html=renderToStaticMarkup(<ChronicleLibraryPanel world={world}/>);
+    const chapterHeadings=[...html.matchAll(/<h4[^>]*>([^<]*)<\/h4>/gu)].map(match=>match[1]);
+    expect(chapterHeadings.filter(title=>title===reading.title)).toHaveLength(1);
     const location=html.indexOf('data-chronicle-continuity="opening"');
     expect(location).toBeGreaterThan(0);
     expect(html.indexOf('data-chronicle-beat=',location)).toBeGreaterThan(location);
