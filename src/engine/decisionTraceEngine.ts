@@ -24,7 +24,7 @@ function isSafeAction(action: LLMDecisionPayload['chosenAction']): action is Pub
 
 /** Restricted comparison menu, not a log of private utility branches or model reasoning. */
 export function legalTraceCandidates(world: WorldState, actor: Cultivator): DecisionTraceCandidate[] {
-  if (!actor.alive || actor.hp <= 0) return [];
+  if (!actor.alive || actor.hp <= 0 || actor.positionPlane!==undefined) return [];
   const result: DecisionTraceCandidate[] = [];
   const add = (choice: Omit<DecisionTraceCandidate, 'id'>) => result.push({ ...choice, score: clampScore(choice.score), id: candidateId(choice) });
   const health = actor.hp / Math.max(1, actor.maxHp);

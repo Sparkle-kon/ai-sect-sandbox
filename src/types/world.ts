@@ -1,3 +1,5 @@
+import type {UpperPassageMove,UpperPassageNodeId,UpperPositionPlane,UpperPassageState} from '../engine/upperPassageTerms';
+
 export type SpiritRoot = '金' | '木' | '水' | '火' | '土' | '雷' | '暗' | '天灵根';
 
 export type HerbId = 'jade_leaf' | 'earth_root' | 'star_bloom' | 'shadow_moss';
@@ -167,6 +169,7 @@ export type ActionType =
   | 'WATER_VEIN'
   | 'NORTH_MINING_CHARTER'
   | 'NORTH_WELL_REVIEW'
+  | 'UPPER_PASSAGE'
   | 'TOOL_LOAN'
   | 'FORGE_ARTIFACT'
   | 'BIND_ARTIFACT'
@@ -350,6 +353,7 @@ export interface OrdinaryActionEvidence {
   readonly action:OrdinaryAction;readonly tick:number;readonly streak:1|2|3;
 }
 export interface Cultivator {
+  positionPlane?:UpperPositionPlane;
   ordinaryActionEvidence?: OrdinaryActionEvidence;
   id: string;
   name: string;
@@ -472,6 +476,8 @@ export interface LLMDecisionPayload {
   innerMonologue: string;
   chosenAction: ActionType;
   waterVeinMove?: WaterVeinMove;
+  upperPassageMove?: UpperPassageMove;
+  targetUpperPassageNodeId?: UpperPassageNodeId;
   northWellReviewMove?: NorthWellReviewMove;
   northMiningMove?: NorthMiningCharterMove;
   northMiningStance?: NorthMiningStance;
@@ -1018,6 +1024,7 @@ export type AvatarPendingOrder = { actorId: string; queuedTick: number } & (
   | { action:'NORTH_MINING_CHARTER'; northMiningMove:'propose'; northMiningStance:NorthMiningStance; targetNorthMiningCharterId?:never }
   | { action:'NORTH_MINING_CHARTER'; northMiningMove:'sign'; targetNorthMiningCharterId:string; northMiningStance?:never }
   | { action:'NORTH_WELL_REVIEW'; northWellReviewMove:NorthWellReviewMove;targetNorthMiningCharterId:string }
+  | { action:'UPPER_PASSAGE';upperPassageMove:UpperPassageMove;targetUpperPassageNodeId:UpperPassageNodeId }
   | { action: 'SALVAGE_ARTIFACT'; targetArtifactId: string; targetLocationId: string }
   | { action:'DOCTRINE_MATURITY';doctrineMaturityMove:DoctrineMaturityMove;targetDoctrineFoundingId:string }
   | { action:'DOCTRINE_FOUNDING'; doctrineFoundingMove:DoctrineFoundingMove; targetDoctrineFoundingId?:string;
@@ -2570,9 +2577,9 @@ export interface SharedCommonsPact {
 export interface SharedCommonsState { pacts: SharedCommonsPact[]; nextId: number }
 
 export type ResourceFlowGood = 'stone' | 'jade_seed' | MarketGood;
-export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation' | 'terrain' | 'workshop' | 'road' | 'observatory' | 'pilgrimage' | 'granary' | 'furnace_safety' | 'artifact_salvage' | 'village_supply' | 'civic_memorial' | 'village_fair' | 'sect_stipend' | 'seed_culture' | 'care_followup' | 'danxia_medicine' | 'water_vein' | 'north_mining_charter' | 'north_well_review';
+export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation' | 'terrain' | 'workshop' | 'road' | 'observatory' | 'pilgrimage' | 'granary' | 'furnace_safety' | 'artifact_salvage' | 'village_supply' | 'civic_memorial' | 'village_fair' | 'sect_stipend' | 'seed_culture' | 'care_followup' | 'danxia_medicine' | 'water_vein' | 'north_mining_charter' | 'north_well_review' | 'upper_passage';
 export type ResourceFlowAccount =
-  | { kind: 'actor' | 'site' | 'sect' | 'order' | 'shipment' | 'relocation' | 'workshop' | 'salvage' | 'granary' | 'village_supply' | 'village_fair' | 'seed_lot' | 'seed_plot' | 'danxia_medicine'; id: string }
+  | { kind: 'actor' | 'site' | 'sect' | 'order' | 'shipment' | 'relocation' | 'workshop' | 'salvage' | 'granary' | 'village_supply' | 'village_fair' | 'seed_lot' | 'seed_plot' | 'danxia_medicine' | 'upper_passage'; id: string }
   | { kind: 'oath'; id: string; pocket: 'payment' | 'collateral' };
 export type ResourceFlowVisibility =
   | { kind: 'observer' }
@@ -3386,6 +3393,7 @@ export interface NorthWellRevisitReviewState {
 }
 
 export interface WorldState {
+  upperPassage?:UpperPassageState;
   northWellRevisitLaw?:NorthWellRevisitLaw;
   northWellRevisitReviews?:NorthWellRevisitReviewState;
   northMiningCharters?:NorthMiningCharterState;

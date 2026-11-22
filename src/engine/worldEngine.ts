@@ -1,6 +1,9 @@
+import {onLowerPlane} from './upperPassageIsolation';
+import {recordUpperPassageDeath,settleUpperPassageMortality} from './upperPassageEngine';
 import { recordRegionalActorReturn, recordRegionalEarlyPromotions, recordRegionalLatePromotions } from './regionalPromotionEngine';
 import { beginRegionalSimulationTurn, deferRegionalActorTurn, finishRegionalSimulationTurn, recordRegionalTurnRegistry, renewRegionalProtectionAfterEvent } from './regionalSimulationEngine';
 import {advanceDoctrineMaturity,resolveDoctrineMaturityAction} from './doctrineMaturityEngine';
+import { resolveUpperPassageAction } from './upperPassageEngine';
 import { resolveNorthWellReviewAction } from './northWellRevisitEngine';
 import { resolveNorthMiningCharterAction } from './northMiningCharterEngine';
 import { resolveWaterVeinAction } from './waterVeinEngine';
@@ -195,6 +198,14 @@ function recordAuxiliaryActionEvent(world: WorldState, event: WorldEvent, emit?:
   world.events = [event, ...world.events].slice(0, 120);
 }
 
+function applyUpperPassageDecision(world:WorldState,cultivator:Cultivator,decision:LLMDecisionPayload,
+  explicitAvatarDecision:LLMDecisionPayload|undefined):WorldEvent|null{
+  if(activeAvatar(world)?.id===cultivator.id&&decision!==explicitAvatarDecision)return null;
+  const event=resolveUpperPassageAction(world,cultivator,decision);
+  if(event){cultivator.innerMonologue=decision.innerMonologue;cultivator.currentAction='UPPER_PASSAGE';}
+  return event;
+}
+
 export function applyCultivatorBrainDecision(
   world: WorldState,
   cultivator: Cultivator,
@@ -205,6 +216,15 @@ export function applyCultivatorBrainDecision(
   explicitAvatarDecision?: LLMDecisionPayload,
 ): WorldEvent | null {
   if (!cultivator.alive) return null;
+  // A separate plane cannot spend lower supplies, heal at a lower site or act from a former address.
+  if(cultivator.positionPlane!==undefined){
+    if(decision.chosenAction==='UPPER_PASSAGE')return applyUpperPassageDecision(world,cultivator,decision,explicitAvatarDecision);
+    if(decision.chosenAction==='REST'){
+      cultivator.currentAction='REST';
+      cultivator.innerMonologue='在实到的界路停步，不在旧址另作事务。';
+    }
+    return null;
+  }
   if (isTribulationActive(cultivator)) {
     const forced = decision.chosenAction !== 'FACE_TRIBULATION';
     const stance = !forced && decision.tribulationStance ? decision.tribulationStance : recommendedTribulationStance(cultivator);
@@ -256,6 +276,7 @@ export function applyCultivatorBrainDecision(
     cultivator.innerMonologue = '按已核实的换防关口行进，未到岗前不计驻守。';
     return null;
   }
+  if(decision.chosenAction==='UPPER_PASSAGE')return applyUpperPassageDecision(world,cultivator,decision,explicitAvatarDecision);
   if(decision.chosenAction==='NORTH_WELL_REVIEW'){
     if(activeAvatar(world)?.id===cultivator.id&&decision!==explicitAvatarDecision)return null;
     const applied=resolveNorthWellReviewAction(world,cultivator,decision);
@@ -916,22 +937,48 @@ export function advanceWorldTick(
         cultivator.alive = false;
         cultivator.hp = 0;
         closeInterruptedTrial(cultivator, nextState.tick);
-        dropInheritance(cultivator, nextState);
+        const below = onLowerPlane(cultivator);
+        if(below) dropInheritance(cultivator, nextState);
+        else recordUpperPassageDeath(nextState,cultivator);
         const death: WorldEvent = {
-          id: `evt-${nextState.tick}-${cultivator.id}-oldage`,
+          id: below ? `evt-${nextState.tick}-${cultivator.id}-oldage` : `evt-upper-passage-${nextState.tick}-${cultivator.id}-oldage`,
           tick: nextState.tick,
           year: nextState.year,
           month: nextState.month,
           title: `寿元耗尽：${cultivator.name}坐化陨落`,
-          description: `${cultivator.name}未能突破更高境界，大限将至，于洞府中安然坐化。`,
+          description: below ? `${cultivator.name}未能突破更高境界，大限将至，于洞府中安然坐化。` : '此人已到实际寿限；财物仍与本人的原处记录同存。',
           category: 'death',
           actorIds: [cultivator.id],
-          locationId: cultivator.locationId,
+          ...(below ? {locationId:cultivator.locationId} : {witnessScope:'participants' as const}),
         };
         newEvents.push(death);
         witnessEvent(nextState, death);
         continue;
       }
+    }
+
+    if(!onLowerPlane(cultivator)){
+      const supplied=precomputedDecisions&&Object.hasOwn(precomputedDecisions,cultivator.id)?precomputedDecisions[cultivator.id]:undefined;
+      const explicit=avatarOrder?.actorId===cultivator.id?avatarOrder.decision:undefined;
+      let decisionDraws=0;
+      const decision=explicit??supplied??computeHeuristicDecision(cultivator,nextState,()=>{decisionDraws++;return rng();});
+      if((explicit||supplied)&&traceOptions?.replayDraws){
+        const draws=traceOptions.replayDraws[cultivator.id]??0;
+        for(let step=0;step<Math.min(64,draws);step++)rng();
+      }
+      const capture=traceOptions?.captureTrace!==false;
+      const candidates:DecisionTraceCandidate[]=[]; // no lower trace state crosses the plane
+      if(traceOptions?.tape)rememberReplayDecision(traceOptions.tape,cultivator.id,decision,decisionDraws);
+      const result=applyCultivatorBrainDecision(nextState,cultivator,decision,rng,undefined,event=>{
+        newEvents.push(event);witnessEvent(nextState,event);
+      },explicit);
+      const applied=decision.chosenAction==='UPPER_PASSAGE'&&result!==null;
+      if(supplied)recordDecisionEffect?.(cultivator.id,!explicit&&applied);
+      traceOptions?.onActor?.(cultivator.id,candidates,applied);
+      if(capture)recordDecisionTrace(nextState,cultivator.id,candidates,decision,explicit?'avatar':
+        supplied&&traceOptions?.modelActors?.has(cultivator.id)?'model':'utility',applied);
+      if(result){newEvents.push(result);witnessEvent(nextState,result);}
+      continue;
     }
 
     if(!isTribulationActive(cultivator)&&(activeDanxiaMedicineEscort(nextState,cultivator)||danxiaMedicineActedThisTick(nextState,cultivator))){
@@ -1140,6 +1187,7 @@ export function advanceWorldTick(
   }
   const mainEventIds=new Set(newEvents.map(({id})=>id));
   const completedEvents=[...newEvents,...nextState.events.filter(({id,tick})=>tick===nextState.tick&&!mainEventIds.has(id))];
+  settleUpperPassageMortality(nextState);
   recordEraHistoryTurn(prevState,nextState,completedEvents);
   recordRegionalTurnRegistry(nextState);
   traceOptions?.onCompletedEvents?.(completedEvents);
@@ -1156,7 +1204,12 @@ export function executeGodIntervention(
   prevState: WorldState,
   cmd: GodInterventionCommand
 ): WorldState {
-  if(cmd.type==='SPAWN_TREASURE'&&prevState.locations.some(site=>site.id===cmd.targetLocationId&&isScopedExpeditionGate(site)))return prevState;
+  if(cmd.type==='SPAWN_TREASURE'&&cmd.targetLocationId!==undefined&&
+    !prevState.locations.some(site=>site.id===cmd.targetLocationId&&!isScopedExpeditionGate(site)))return prevState;
+  const lowerAlive=(actor:Cultivator)=>actor.alive&&actor.hp>0&&onLowerPlane(actor);
+  if(cmd.type==='DEMONIC_TIDE'&&!prevState.cultivators.some(lowerAlive))return prevState;
+  if((cmd.type==='TRIBULATION_STRIKE'||cmd.type==='WHISPER_MIND')&&cmd.targetCultivatorId!==undefined&&
+     !prevState.cultivators.some(actor=>actor.id===cmd.targetCultivatorId&&lowerAlive(actor)))return prevState;
   const nextState: WorldState = cloneWorldWithColdHistory(prevState);
 
   switch (cmd.type) {
@@ -1167,7 +1220,7 @@ export function executeGodIntervention(
       loc.spiritQi = clamp(loc.spiritQi + 20, 10, 150);
 
       const luckyOnes = nextState.cultivators.filter(
-        (c) => c.alive && c.locationId === loc.id && !activeRelocationForActor(nextState, c) && !activeEscortForActor(nextState, c) && !pilgrimageCheckpoint(nextState, c) && !courierCheckpoint(nextState, c) && !expeditionRescueCheckpoint(nextState, c) && !boundaryReliefCheckpoint(nextState, c)
+        (c) => lowerAlive(c) && c.locationId === loc.id && !activeRelocationForActor(nextState, c) && !activeEscortForActor(nextState, c) && !pilgrimageCheckpoint(nextState, c) && !courierCheckpoint(nextState, c) && !expeditionRescueCheckpoint(nextState, c) && !boundaryReliefCheckpoint(nextState, c)
       );
       for (const c of luckyOnes) {
         c.qiProgress = clamp(c.qiProgress + 30, 0, 100);
@@ -1200,8 +1253,8 @@ export function executeGodIntervention(
 
     case 'TRIBULATION_STRIKE': {
       const target =
-        cmd.targetCultivatorId ? nextState.cultivators.find((c) => c.alive && c.id === cmd.targetCultivatorId) :
-        nextState.cultivators.find((c) => c.alive);
+        cmd.targetCultivatorId ? nextState.cultivators.find((c) => lowerAlive(c) && c.id === cmd.targetCultivatorId) :
+        nextState.cultivators.find(lowerAlive);
       if (!target) break;
 
       const beforeHp = target.hp;
@@ -1233,7 +1286,7 @@ export function executeGodIntervention(
 
     case 'DEMONIC_TIDE': {
       for (const c of nextState.cultivators) {
-        if (!c.alive) continue;
+        if (!lowerAlive(c)) continue;
         if (c.sectId === 'sect-bloodmoon') {
           c.combatPower = Math.round(c.combatPower * 1.15);
           c.qiProgress = clamp(c.qiProgress + 20, 0, 100);
@@ -1250,15 +1303,15 @@ export function executeGodIntervention(
         description:
           '苍穹化为诡异血色，魔道修士战力暴涨15%，正道与中立修士皆受魔音侵蚀气血受损！',
         category: 'heavenly',
-        actorIds: nextState.cultivators.filter((c) => c.alive).map((c) => c.id),
+        actorIds: nextState.cultivators.filter(lowerAlive).map((c) => c.id),
       });
       break;
     }
 
     case 'WHISPER_MIND': {
       const target =
-        nextState.cultivators.find((c) => c.id === cmd.targetCultivatorId) ??
-        nextState.cultivators.find((c) => c.alive);
+        cmd.targetCultivatorId ? nextState.cultivators.find((c) => c.id === cmd.targetCultivatorId && lowerAlive(c)) :
+        nextState.cultivators.find(lowerAlive);
       if (!target || !cmd.whisperText?.trim()) break;
 
       const whisper = cmd.whisperText.trim();

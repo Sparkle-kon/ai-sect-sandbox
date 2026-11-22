@@ -1,5 +1,5 @@
 import { regionalModelPassiveActorIds } from './regionalSimulationEngine';
-import { requiredBeforeOrdinaryDecision } from './llmBrain';
+import { availableUpperPassageProviderActions,requiredBeforeOrdinaryDecision } from './llmBrain';
 import {activeDanxiaMedicineEscort} from './danxiaMedicineTerms';
 import type { Cultivator, LLMDecisionPayload, WorldState } from '../types/world';
 import { activeAvatar } from './avatarEngine';
@@ -55,13 +55,16 @@ export function modelDecisionCandidates(world: WorldState): Cultivator[] {
   const nextTick = world.tick + 1;
   const commandedId = pending?.queuedTick === world.tick && (world.playerAvatar.possessionUntilTick ?? 0) > nextTick &&
     activeAvatar(world)?.id === pending.actorId ? pending.actorId : undefined;
-  return world.cultivators.filter((actor) => actor.alive && actor.hp > 0 && actor.id !== commandedId && !passive.has(actor.id) &&
-    (world.month < 12 || actor.age + 1 < actor.lifespan) &&
+  return world.cultivators.filter(actor=>{
+    if(!actor.alive||actor.hp<=0||actor.id===commandedId||(world.month===12&&actor.age+1>=actor.lifespan))return false;
+    if(actor.positionPlane!==undefined)return availableUpperPassageProviderActions(actor,world,nextTick).length>0;
+    return !passive.has(actor.id) &&
     (!activeCourierForActor(world, actor) || availableCourierHandoffActions(actor, world, nextTick).some(({ courierHandoffMove }) => courierHandoffMove === 'offer')) &&
     !activeDanxiaMedicineEscort(world,actor)&&!activeEscortForActor(world, actor) && !activeRelocationForActor(world, actor) &&
     !activeSiegeForActor(world, actor) && isEligibleForOccasionDecision(world, actor, nextTick) &&
     (!boundaryReliefCheckpoint(world, actor) || availableBoundaryReliefActions(actor, world, nextTick).length > 0) &&
-    (!pilgrimageCheckpoint(world, actor) || availablePilgrimageActions(actor, world, false, nextTick).length > 0));
+    (!pilgrimageCheckpoint(world, actor) || availablePilgrimageActions(actor, world, false, nextTick).length > 0);
+  });
 }
 
 function isEligibleForOccasionDecision(world: WorldState, actor: Cultivator, nextTick: number): boolean {

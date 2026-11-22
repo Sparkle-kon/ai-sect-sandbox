@@ -1,3 +1,4 @@
+import {onLowerPlane} from './upperPassageIsolation';
 import {danxiaMedicineCheckpoint} from './danxiaMedicineTerms';
 import { isScopedExpeditionGate } from './expeditionOmenTerms';
 import { courierCheckpoint } from './sealedCourierEngine';
@@ -69,6 +70,7 @@ export function terrainTileAt(world: WorldState, x: number, y: number): MapTile 
 }
 
 export function currentVisibleTileIds(world: WorldState, actor: Cultivator): Set<string> {
+  if (!onLowerPlane(actor)) return new Set();
   const site = danxiaMedicineCheckpoint(world,actor) ?? expeditionRescueCheckpoint(world, actor) ?? boundaryReliefCheckpoint(world, actor) ??
     courierCheckpoint(world, actor) ?? pilgrimageCheckpoint(world, actor) ??
     world.locations.find(({ id }) => id === actor.locationId);
@@ -97,6 +99,7 @@ export function noteTerrainVisit(world: WorldState, actor: Cultivator): void {
 
 /** Public landmarks aren't fogged on the agent map; credible rumor reveals only the named destination. */
 export function knownMapLocations(world: WorldState, actor: Cultivator): LocationNode[] {
+  if (!onLowerPlane(actor)) return [];
   const known = new Set([...actor.exploredTileIds, ...currentVisibleTileIds(world, actor)]);
   const leads = new Set(actor.rumors.filter((rumor) => rumor.provenance !== 'fabricated' && !rumor.id.startsWith('rumor-forged-') && rumor.confidence >= 55 &&
     rumor.originTick <= world.tick && world.tick - rumor.originTick <= 10 && rumor.learnedTick <= world.tick).map(({ locationId }) => locationId));

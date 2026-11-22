@@ -1,3 +1,4 @@
+import {isUpperPassageEvent,onLowerPlane} from './upperPassageIsolation';
 import { captureHeritageRelay } from './eraHeritageCapture';
 import { isScopedExpeditionGate } from './expeditionOmenTerms';
 import { courierCheckpoint } from './sealedCourierEngine';
@@ -22,10 +23,12 @@ function learn(cultivator: Cultivator, rumor: Rumor, tick: number): void {
 }
 
 export function witnessEvent(world: WorldState, event: WorldEvent): void {
+  if (isUpperPassageEvent(event)) return;
   capturePublicWitnessFact(world, event);
   if (event.duelWinnerId || event.id.startsWith('evt-settlement-')) captureChronicleErrataSource(world, event);
   const involved = new Set(event.actorIds);
   for (const actor of world.cultivators) {
+    if (!onLowerPlane(actor)) continue;
     const present = event.locationId !== undefined && actor.locationId === event.locationId && !courierCheckpoint(world, actor);
     if (actor.alive && (involved.has(actor.id) || (present && event.witnessScope !== 'participants'))) {
       learn(actor, {
@@ -42,7 +45,7 @@ export function witnessEvent(world: WorldState, event: WorldEvent): void {
 export function fabricateRumor(
   world: WorldState, actor: Cultivator, listener: Cultivator, intent: LLMDecisionPayload['rumorIntent']
 ): void {
-  if (!intent || (actor.personality !== '阴险' && actor.personality !== '诡诈') ||
+  if (!onLowerPlane(actor) || !onLowerPlane(listener) || !intent || (actor.personality !== '阴险' && actor.personality !== '诡诈') ||
       !actor.alive || !listener.alive || actor.id === listener.id || actor.locationId !== listener.locationId) return;
   const publicSites = world.locations.filter(location=>!isScopedExpeditionGate(location));
   const existing = intent === 'EXAGGERATE' && actor.rumors
@@ -66,7 +69,7 @@ export function fabricateRumor(
 }
 
 export function spreadRumors(world: WorldState): void {
-  const live = world.cultivators.filter((item) => item.alive);
+  const live = world.cultivators.filter((item) => item.alive && onLowerPlane(item));
   const privateSites=new Set(world.locations.filter(isScopedExpeditionGate).map(({id})=>id));
   const snapshot = new Map(live.map((item) => {
     item.rumors = item.rumors.filter((rumor) => world.tick - rumor.originTick <= RUMOR_LIFETIME);
@@ -100,6 +103,7 @@ export function spreadRumors(world: WorldState): void {
 }
 
 export function knownRumorLead(cultivator: Cultivator, world: WorldState): string | undefined {
+  if (!onLowerPlane(cultivator)) return undefined;
   return cultivator.rumors.filter((item) => item.lead && item.confidence >= 45 &&
     item.locationId !== cultivator.locationId && world.tick - item.originTick <= RUMOR_LIFETIME &&
     world.locations.some((location) => location.id === item.locationId&&!isScopedExpeditionGate(location))).sort(byValue)[0]?.locationId;

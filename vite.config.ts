@@ -44,6 +44,8 @@ export default defineConfig({
           'cold-water-rules': ['./src/engine/waterVeinTerms.ts'],
           'north-charter-terms': ['./src/engine/northMiningCharterTerms.ts'],
           'old-well-source': ['./src/engine/northWellRevisitTerms.ts','./src/engine/northWellRevisitEvidence.ts'],
+          'upper-positions': ['./src/engine/upperPassageTerms.ts','./src/engine/upperPassageIsolation.ts'],
+          'terrain-ecology': ['./src/engine/terrainSuccessionEngine.ts','./src/engine/weatherEngine.ts'],
           'civic-works': ['./src/engine/villageWorksEngine.ts'],
           'household-register': ['./src/engine/householdNameEngine.ts','./src/engine/mortalAgeCohorts.ts'],
           'institution-terms': ['./src/engine/sectActivity.ts','./src/engine/sectCreditTerms.ts'],

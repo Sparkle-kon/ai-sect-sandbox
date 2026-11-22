@@ -1,3 +1,4 @@
+import {isUpperPassageEvent,onLowerPlane} from './upperPassageIsolation';
 import type { MapEffect, MapPoint, MapPresentation, MapTile, TerrainBiome, WorldEvent, WorldState } from '../types/world';
 import { terrainTileAt } from './terrainEngine';
 import { expeditionRescueCheckpoint } from './expeditionRescueCheckpoint';
@@ -59,6 +60,9 @@ export function deriveMapPresentation(prev: WorldState, next: WorldState, events
   const sameTick = prev.mapPresentation?.tick === next.tick;
   const trails = new Map((sameTick ? prev.mapPresentation.trails : []).map((trail) => [trail.cultivatorId, trail]));
   const effects = new Map((sameTick ? prev.mapPresentation.effects : []).map((effect) => [effect.id, effect]));
+  const aboveIds = new Set(next.cultivators.filter(actor=>!onLowerPlane(actor)).map(actor=>actor.id));
+  for (const id of aboveIds) trails.delete(id);
+  for (const [id,effect] of effects) if (effect.actorIds.some(actorId=>aboveIds.has(actorId))) effects.delete(id);
   const before = new Map(prev.cultivators.map((actor) => [actor.id, actor]));
   const after = new Map(next.cultivators.map((actor) => [actor.id, actor]));
   const prevSites = new Map(prev.locations.map((site) => [site.id, site]));
@@ -79,7 +83,7 @@ export function deriveMapPresentation(prev: WorldState, next: WorldState, events
   const actualReliefArrivals = new Set(next.boundaryReliefs.cases.filter(({ closedTick, status }) =>
     closedTick === next.tick && status === 'completed').map(({ incomingId }) => incomingId));
   for (const entry of events) {
-    if (entry.tick !== next.tick) continue;
+    if (entry.tick !== next.tick || isUpperPassageEvent(entry) || entry.actorIds.some(id=>aboveIds.has(id))) continue;
     const first = entry.actorIds[0] ? after.get(entry.actorIds[0]) : undefined;
     const loc = entry.locationId ?? first?.locationId;
     if (entry.duelWinnerId || entry.id.endsWith('-duel') || entry.id.endsWith('-kill')) put(`${entry.id}-clash`, 'clash', loc, entry.actorIds);
@@ -94,7 +98,7 @@ export function deriveMapPresentation(prev: WorldState, next: WorldState, events
   }
   for (const actor of next.cultivators) {
     const previous = before.get(actor.id);
-    if (!previous) continue;
+    if (!previous || !onLowerPlane(actor) || !onLowerPlane(previous)) continue;
     if (previous.locationId !== actor.locationId && actor.alive && !pilgrimsMoved.has(actor.id) && !couriersMoved.has(actor.id) &&
         !realRescueArrivals.has(actor.id) && !actualReliefArrivals.has(actor.id) &&
         !expeditionRescueCheckpoint(prev, previous) && !boundaryReliefCheckpoint(prev, previous)) {

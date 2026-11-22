@@ -15,6 +15,8 @@ import { availableShortShiftActions } from './shortShiftEngine';
 import { availableCaravanRestitutionActions } from './caravanRestitutionEngine';
 import { availableVillageGranaryActions, projectVillageGranary } from './villageGranaryEngine';
 import { availableVillageFairActions } from './villageFairEngine';
+import { availableUpperPassageActions,utilityUpperPassageDecision,type UpperPassageOption } from './upperPassageEngine';
+import { UPPER_PASSAGE_PATH } from './upperPassageTerms';
 import { availableNorthWellReviewActions, utilityNorthWellReviewDecision } from './northWellRevisitEngine';
 import { availableNorthMiningCharterActions, utilityNorthMiningDecision } from './northMiningCharterEngine';
 import { availableWaterVeinActions, utilityWaterVeinDecision } from './waterVeinEngine';
@@ -172,6 +174,7 @@ function urgentOrdinaryRecovery(actor:Cultivator,world:WorldState,alchemy?:Retur
  * It does not run the full Utility tree or consume RNG, and must never override an actual sanctioned avatar order.
  */
 export function requiredBeforeOrdinaryDecision(actor:Cultivator,world:WorldState):LLMDecisionPayload|undefined{
+  if(actor.positionPlane!==undefined)return undefined;
   if(!actor.alive||actor.hp<=0||!world.cultivators.includes(actor)||activeRelocationForActor(world,actor)||
       activeEscortForActor(world,actor)||activeCourierForActor(world,actor)||courierActedThisTick(world,actor)||
       activePilgrimageForActor(world,actor)||boundaryReliefCheckpoint(world,actor))return undefined;
@@ -321,11 +324,43 @@ function utilityCourierHandoffOffer(actor: Cultivator, world: WorldState, tick =
     targetCourierId: option.targetCourierId, innerMonologue: '原封不动；只在实到的驿站问这位同行是否愿意接递。' } : undefined;
 }
 
+function holdsUpperPassageBody(world:WorldState,actor:Cultivator):boolean {
+  return world.playerAvatar.possessedId===actor.id&&(world.playerAvatar.possessionUntilTick??0)>world.tick;
+}
+const upperPassageRest=():LLMDecisionPayload=>({chosenAction:'REST',innerMonologue:'只在实到的界路停步，不在旧址另作事务。'});
+function upperPassageDecision(option:UpperPassageOption,innerMonologue:string):LLMDecisionPayload{
+  return {chosenAction:option.action,upperPassageMove:option.upperPassageMove,
+    targetUpperPassageNodeId:option.targetUpperPassageNodeId,innerMonologue};
+}
+export function availableUpperPassageProviderActions(actor:Cultivator,world:WorldState,executionTick:number){
+  if(holdsUpperPassageBody(world,actor)||
+    (actor.positionPlane===undefined&&actor.locationId!==UPPER_PASSAGE_PATH[0]))return [];
+  return availableUpperPassageActions(actor,world,executionTick);
+}
+function decodeUpperPassage(parsed:Partial<LLMDecisionPayload>,choices:readonly UpperPassageOption[],
+  allowRest:boolean):LLMDecisionPayload|undefined{
+  if(!parsed||typeof parsed!=='object')return undefined;
+  if(parsed.chosenAction==='REST'&&allowRest&&Object.keys(parsed).every(field=>field==='chosenAction'||field==='innerMonologue'))
+    return upperPassageRest();
+  if(parsed.chosenAction!=='UPPER_PASSAGE'||Object.keys(parsed).some(field=>
+    !['chosenAction','innerMonologue','upperPassageMove','targetUpperPassageNodeId'].includes(field)))return undefined;
+  const selected=choices.find(row=>row.upperPassageMove===parsed.upperPassageMove&&
+    row.targetUpperPassageNodeId===parsed.targetUpperPassageNodeId);
+  if(!selected)return undefined;
+  const line=(typeof parsed.innerMonologue==='string'&&parsed.innerMonologue.trim().slice(0,160))||
+    '沿本人所在的实址与当轮许可行事，不猜界外。';
+  return upperPassageDecision(selected,line);
+}
+
 export function computeHeuristicDecision(
   cultivator: Cultivator,
   world: WorldState,
   rng: () => number = actorFallbackRandom(world, cultivator.id, world.tick)
 ): LLMDecisionPayload {
+  if(cultivator.positionPlane!==undefined){
+    const option=holdsUpperPassageBody(world,cultivator)?undefined:utilityUpperPassageDecision(cultivator,world);
+    return option?upperPassageDecision(option,'按实到的阶与本人所见行事，不代报进境。'):upperPassageRest();
+  }
   if (activeCourierForActor(world, cultivator) || courierActedThisTick(world, cultivator)) {
     return utilityCourierHandoffOffer(cultivator, world) ??
       { chosenAction: 'REST', innerMonologue: '封信由实际关口推进，途中不在旧站另作事务。' };
@@ -927,6 +962,10 @@ export function computeHeuristicDecision(
     targetNorthMiningCharterId:oldWell.targetNorthMiningCharterId,
     innerMonologue:oldWell.northWellReviewMove==='keep'?'按旧井原件和自己的实读保留现行规则，不声称已经复采。':
       '依据原址实读求一人一铲的限期许可，不改门法或既有地权。'};
+  const upperPassage=cultivator.locationId===UPPER_PASSAGE_PATH[0]&&!holdsUpperPassageBody(world,cultivator)?
+    utilityUpperPassageDecision(cultivator,world):undefined;
+  if(upperPassage?.upperPassageMove==='enter')
+    return upperPassageDecision(upperPassage,'凭实存资粮踏进自己所在门槛，未称抵达上界。');
   // Known local water work is weighed after actual harvest/planting, before elective relic hunting.
   const waterVein=utilityWaterVeinDecision(cultivator,world);
   if(waterVein)return {chosenAction:waterVein.action,waterVeinMove:waterVein.waterVeinMove,targetLocationId:waterVein.targetLocationId,
@@ -1532,6 +1571,8 @@ export async function queryCultivatorLLMDecision(
 ): Promise<LLMDecisionPayload> {
   const fallback = (): LLMDecisionPayload => {
     onSource?.('utility');
+    if(cultivator.positionPlane!==undefined)
+      return computeHeuristicDecision(cultivator,world,actorFallbackRandom(world,cultivator.id,requestTick));
     if (activeCourierForActor(world, cultivator)) {
       return (requestTick === world.tick + 1 ? utilityCourierHandoffOffer(cultivator, world, requestTick) : undefined) ??
         { chosenAction: 'REST', innerMonologue: '实际在途，不在旧站另作事务。' };
@@ -1624,8 +1665,18 @@ export async function requestCultivatorLLMDecision(
   requestTick: number,
   options: { signal?: AbortSignal; onStart?: () => void } = {},
 ): Promise<LLMDecisionPayload | undefined> {
-  if (options.signal?.aborted || !config.enabled || !config.apiKey.trim() || activeDanxiaMedicineEscort(world,cultivator)||activeRelocationForActor(world, cultivator) ||
-      activeEscortForActor(world, cultivator)) return undefined;
+  if (options.signal?.aborted || !config.enabled || !config.apiKey.trim())return undefined;
+  if(cultivator.positionPlane!==undefined){
+    const exact=availableUpperPassageProviderActions(cultivator,world,requestTick);
+    if(!exact.length)return undefined;
+    const choices=exact.map(({action,upperPassageMove,targetUpperPassageNodeId})=>
+      ({chosenAction:action,upperPassageMove,targetUpperPassageNodeId}));
+    const prompt=`本人实到独立界路节点 ${cultivator.locationId}。只有这些界路选项，或原地 REST。
+    原样复制动作和同一节点；不填钱、物、其他身份、下界旧址或结果；只返回 JSON。当前许可：${JSON.stringify(choices)}`;
+    return requestDecisionPrompt(config,requestTick,options,prompt,parsed=>decodeUpperPassage(parsed,exact,true),160);
+  }
+  if(activeDanxiaMedicineEscort(world,cultivator)||activeRelocationForActor(world,cultivator)||
+    activeEscortForActor(world,cultivator))return undefined;
   if (activeCourierForActor(world, cultivator)) {
     // No general context is composed for an active carrier at a real post. This is one fair-scheduled request, not a second call.
     if (requestTick !== world.tick + 1) return undefined;
@@ -1686,6 +1737,8 @@ export async function requestCultivatorLLMDecision(
   const arbitrationOptions = availableOathArbitrationActions(cultivator, world);
   const oathOptions = availableOathActions(cultivator, world);
   const marketOptions = availableMarketActions(cultivator, world);
+  const pendingUpperEntry=availableUpperPassageProviderActions(cultivator,world,requestTick)
+    .filter(row=>row.upperPassageMove==='enter');
   const oldWellOptions=world.playerAvatar.possessedId===cultivator.id&&(world.playerAvatar.possessionUntilTick??0)>requestTick ?
     [] : availableNorthWellReviewActions(cultivator,world,requestTick);
   const charterOptions=world.playerAvatar.possessedId===cultivator.id&&(world.playerAvatar.possessionUntilTick??0)>requestTick ?
@@ -1822,6 +1875,8 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 本宗邦交：${JSON.stringify(world.diplomacy.filter((relation) => relation.sectAId === cultivator.sectId || relation.sectBId === cultivator.sectId))}；公示的外事权限：${JSON.stringify(availableDiplomacyActions(cultivator, world))}
 - 赛季复核只选真实可核验收据；提交不会改写原榜：${JSON.stringify(honorReviewOptions)}
 - 临时观象只复制实际地点的 fund、到期 measure 或带原日期 relay。仅 fund 任选列表中的观测位（现地中心省略、边位用 observatoryStation:'edge'）；不填写读数或强度：${JSON.stringify(observatoryOptions)}
+${pendingUpperEntry.length?`- 只有本人现场的界路准入，只复制当前准入与确切门槛节点，不报已登入界：${JSON.stringify(
+  pendingUpperEntry.map(({action,upperPassageMove,targetUpperPassageNodeId})=>({chosenAction:action,upperPassageMove,targetUpperPassageNodeId}))) }`:''}
 ${oldWellOptions.length?`- 旧井复核只复制本人的现场许可、动作与原采契编号；不得补填写水尺、缴款、开门、律令或矿量：${JSON.stringify(oldWellOptions.map(({action,northWellReviewMove,targetNorthMiningCharterId})=>
   ({chosenAction:action,northWellReviewMove,targetNorthMiningCharterId})))}`:''}
 ${charterOptions.length?`- 北脉采契只复制本人的现场许可；不代签，不填写角色、收据、款额或路线：${JSON.stringify(charterOptions.map(({action,northMiningMove,northMiningStance,targetNorthMiningCharterId})=>
@@ -1925,6 +1980,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'WATER_VEIN',
             'NORTH_MINING_CHARTER',
             'NORTH_WELL_REVIEW',
+            'UPPER_PASSAGE',
             'BREW_PILL',
             'USE_PILL',
             'FORGE_ARTIFACT',
@@ -2040,6 +2096,9 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
           if (rescueOnly && chosenAction !== 'EXPEDITION_RESCUE') return undefined;
           if (activeVow && chosenAction !== 'PILGRIMAGE' &&
               (onPilgrimagePath || (chosenAction !== 'REST' && chosenAction !== 'ROUTE_WARNING'))) return undefined;
+          if((parsed.upperPassageMove!==undefined||parsed.targetUpperPassageNodeId!==undefined)&&
+            chosenAction!=='UPPER_PASSAGE')return undefined;
+          if(chosenAction==='UPPER_PASSAGE')return decodeUpperPassage(parsed,pendingUpperEntry,false);
           if(parsed.northWellReviewMove!==undefined&&chosenAction!=='NORTH_WELL_REVIEW')return undefined;
           if(chosenAction==='NORTH_WELL_REVIEW'){
             const exact=oldWellOptions.find(row=>row.northWellReviewMove===parsed.northWellReviewMove&&

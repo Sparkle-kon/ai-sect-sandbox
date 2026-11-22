@@ -1,3 +1,4 @@
+import {onLowerPlane} from './upperPassageIsolation';
 import { regionForPoint, SIMULATION_REGIONS } from './simulationRegionGeometry';
 import { activeRegionalPromotionRegions } from './regionalPromotionEngine';
 import { activeAvatar } from './avatarEngine';
@@ -23,6 +24,7 @@ const open=(status:string)=>status==='active'||status==='offered'||status==='wai
 const risky=(place:LocationNode)=>place.type==='secret_realm'||place.type==='abyss'||isScopedExpeditionGate(place);
 
 export function currentActorRegion(world:WorldState,actor:Cultivator):SimulationRegionId|undefined {
+  if (!onLowerPlane(actor)) return undefined;
   const relocation=world.relocations.plans.find(row=>row.status==='in_transit'&&row.garrisonIds.includes(actor.id));
   const escort=world.escorts.contracts.find(row=>row.status==='active'&&row.escortId===actor.id);
   const proven=danxiaMedicineCheckpoint(world,actor)??courierCheckpoint(world,actor)??pilgrimageCheckpoint(world,actor)??
@@ -159,7 +161,7 @@ export interface RegionalTurn {
 }
 function focusFor(world:WorldState,state:RegionalSimulationState):SimulationRegionId|undefined {
   const avatar=activeAvatar(world);
-  return avatar?currentActorRegion(world,avatar):regionForSite(world,state.focusSiteId);
+  return (avatar && currentActorRegion(world,avatar)) ?? regionForSite(world,state.focusSiteId);
 }
 function regionalCandidates(world:WorldState,focus:SimulationRegionId,protectedActors:ReadonlySet<string>) {
   const candidates=new Map<string,{siteId:string;regionId:SimulationRegionId}>();

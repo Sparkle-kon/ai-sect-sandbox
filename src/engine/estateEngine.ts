@@ -1,3 +1,4 @@
+import {onLowerPlane} from './upperPassageIsolation';
 import type { Cultivator, EstateAssets, EstateEligibility, EstateRecord, EstateState, HerbId, LLMDecisionPayload, PillId, WorldEvent, WorldState } from '../types/world';
 
 const PROBATE_TICKS = 5;
@@ -68,7 +69,7 @@ function takeResidual(estate: EstateRecord, deceased: Cultivator): void {
 }
 
 export function captureEstate(world: WorldState, deceased: Cultivator): WorldEvent | null {
-  if (deceased.alive || !world.cultivators.includes(deceased) || world.estates.entries.some(({ deceasedId }) => deceasedId === deceased.id)) return null;
+  if (deceased.alive || !onLowerPlane(deceased) || !world.cultivators.includes(deceased) || world.estates.entries.some(({ deceasedId }) => deceasedId === deceased.id)) return null;
   const sect = world.sects.find(({ id }) => id === deceased.sectId);
   const locationId = world.locations.find(({ id }) => id === deceased.locationId)?.id ??
     world.locations.find(({ id }) => id === sect?.headquartersId)?.id ?? [...world.locations].sort(byId)[0]?.id;

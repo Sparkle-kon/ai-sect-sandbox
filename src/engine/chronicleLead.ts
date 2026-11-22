@@ -1,3 +1,4 @@
+import {isUpperPassageEvent} from './upperPassageIsolation';
 import type { ChronicleAnchor, WorldEvent, WorldState } from '../types/world';
 
 type StoryFact = ChronicleAnchor | WorldEvent;
@@ -17,7 +18,7 @@ const localOnly = /^(?:evt-(?:sealed-dispatch|sparring|expedition-rescue|short-s
 /** The public reading room never turns a participant's record into public narrative. */
 export function isChronicleStoryFact(fact: StoryFact, throughTick: number): boolean {
   return Boolean(fact.id && fact.title.trim() && Number.isSafeInteger(fact.tick) && fact.tick >= 0 &&
-    fact.tick <= throughTick && !localOnly.test(fact.id) &&
+    fact.tick <= throughTick && !localOnly.test(fact.id) && !isUpperPassageEvent(fact) &&
     (!('witnessScope' in fact) || fact.witnessScope !== 'participants'));
 }
 

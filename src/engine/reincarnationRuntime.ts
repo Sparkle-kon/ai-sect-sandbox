@@ -1,9 +1,10 @@
+import {isUpperPassageEvent,onLowerPlane} from './upperPassageIsolation';
 import type { WorldEvent, WorldState } from '../types/world';
 import { recordReincarnationDeath } from './reincarnationEngine';
 
 /** Only actual living-to-dead transitions can use a canonical death event as proof. */
 export function recordNewDeathsForReincarnation(before: WorldState, after: WorldState, events: readonly WorldEvent[]): void {
-  const recorded = events.filter((event) => event.category === 'death' && event.tick === after.tick);
+  const recorded = events.filter((event) => event.category === 'death' && event.tick === after.tick && !isUpperPassageEvent(event));
   if (!recorded.length) return;
   const previousLiving = new Set(before.cultivators.filter((actor) => actor.alive && actor.hp > 0).map(({ id }) => id));
   const newlyEnlisted = new Set(after.settlements.records
@@ -14,7 +15,7 @@ export function recordNewDeathsForReincarnation(before: WorldState, after: World
   for (const event of recorded.reverse()) for (const id of event.actorIds) {
     if (id === event.duelWinnerId) continue;
     const actor = newlyDead.get(id);
-    if (!actor) continue;
+    if (!actor || !onLowerPlane(actor)) continue;
     recordReincarnationDeath(after, actor, event);
     newlyDead.delete(id);
   }

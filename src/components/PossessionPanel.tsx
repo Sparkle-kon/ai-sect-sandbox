@@ -94,7 +94,7 @@ export function PossessionPanel({ world, selectedCultivatorId, busy, modelReady,
             </>
           )}
         </div>
-        {queued && <p className="text-xs text-violet-200">已排定：{name(queued.actorId)}于 Tick #{queued.queuedTick + 1}{queued.action === 'NORTH_WELL_REVIEW' ? '核验并执行本人排定的旧井复核' : queued.action === 'NORTH_MINING_CHARTER' ? '核验并执行本人排定的采契选择' : queued.action === 'WATER_VEIN' ? '核验并执行排定的北脉水线选择' : queued.action === 'SALVAGE_ARTIFACT' ? '复核已登记的破器拆解' : queued.action==='DANXIA_MEDICINE' ? '复核实际留药与护送选择' : queued.action==='DANXIA_REVIEW' ? '复核原药约的次季选择' : queued.action==='DOCTRINE_FOUNDING' ? '复核另立宗门的合法选择' : queued.action==='DOCTRINE_MATURITY' ? '复核道统并宗的合法选择' : ORDER_LABELS[queued.action]}。</p>}
+        {queued && <p className="text-xs text-violet-200">已排定：{name(queued.actorId)}于 Tick #{queued.queuedTick + 1}{queued.action === 'UPPER_PASSAGE' ? '核验并执行本人排定的界路选择' : queued.action === 'NORTH_WELL_REVIEW' ? '核验并执行本人排定的旧井复核' : queued.action === 'NORTH_MINING_CHARTER' ? '核验并执行本人排定的采契选择' : queued.action === 'WATER_VEIN' ? '核验并执行排定的北脉水线选择' : queued.action === 'SALVAGE_ARTIFACT' ? '复核已登记的破器拆解' : queued.action==='DANXIA_MEDICINE' ? '复核实际留药与护送选择' : queued.action==='DANXIA_REVIEW' ? '复核原药约的次季选择' : queued.action==='DOCTRINE_FOUNDING' ? '复核另立宗门的合法选择' : queued.action==='DOCTRINE_MATURITY' ? '复核道统并宗的合法选择' : ORDER_LABELS[queued.action]}。</p>}
       </div>
       <div role="group" aria-label="交谈方式" className="flex flex-wrap gap-1.5">
         {(['ring', 'avatar'] as const).map((kind) => (

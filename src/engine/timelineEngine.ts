@@ -1,3 +1,4 @@
+import {onLowerPlane} from './upperPassageIsolation';
 import { isScopedExpeditionGate } from './expeditionOmenTerms';
 import { cloneWorldWithColdHistory } from './coldHistoryEngine';
 import { activeAvatar, possessAvatar } from './avatarEngine';
@@ -83,7 +84,7 @@ function validateIntervention(world: WorldState, command: GodInterventionCommand
   const invalid = () => new TimelineError('invalid_intervention', '这条天道指令在所选历史轮次不可执行。');
   if (command.type === 'DEMONIC_TIDE') {
     if (command.targetCultivatorId || command.targetLocationId || command.whisperText ||
-        !world.cultivators.some((actor) => actor.alive && actor.hp > 0)) throw invalid();
+        !world.cultivators.some((actor) => actor.alive && actor.hp > 0 && onLowerPlane(actor))) throw invalid();
     return { type: command.type };
   }
   if (command.type === 'SPAWN_TREASURE') {
@@ -91,7 +92,7 @@ function validateIntervention(world: WorldState, command: GodInterventionCommand
     return { type: command.type, targetLocationId: command.targetLocationId };
   }
   if (command.type !== 'WHISPER_MIND' && command.type !== 'TRIBULATION_STRIKE') throw invalid();
-  if (command.targetLocationId || !world.cultivators.some((actor) => actor.id === command.targetCultivatorId && actor.alive && actor.hp > 0)) throw invalid();
+  if (command.targetLocationId || !world.cultivators.some((actor) => actor.id === command.targetCultivatorId && actor.alive && actor.hp > 0 && onLowerPlane(actor))) throw invalid();
   if (command.type === 'WHISPER_MIND') {
     if (typeof command.whisperText !== 'string' || command.whisperText.length > TIMELINE_MAX_WHISPER) throw invalid();
     const whisperText = cut(command.whisperText, TIMELINE_MAX_WHISPER);

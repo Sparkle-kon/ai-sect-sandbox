@@ -1,3 +1,4 @@
+import {onLowerPlane} from '../engine/upperPassageIsolation';
 import {activeDanxiaMedicineEscort,danxiaMedicineCheckpoint,danxiaMedicineParties} from '../engine/danxiaMedicineTerms';
 import { courierCheckpoint } from '../engine/sealedCourierEngine';
 import { pilgrimageCheckpoint } from '../engine/pilgrimageEngine';
@@ -19,20 +20,21 @@ export const BIOME_PALETTE: Record<TerrainBiome, { base: string; detail: string;
 };
 
 export function createTerrainMapView(world: WorldState, viewer: Cultivator | undefined, fog: boolean) {
-  const current = fog ? (viewer?.alive ? currentVisibleTileIds(world, viewer) : new Set<string>()) : undefined;
-  const known = current ? new Set([...viewer?.exploredTileIds ?? [], ...current]) : undefined;
+  const above = viewer !== undefined && !onLowerPlane(viewer);
+  const current = above || fog ? (viewer?.alive ? currentVisibleTileIds(world, viewer) : new Set<string>()) : undefined;
+  const known = current ? new Set(above ? [] : [...viewer?.exploredTileIds ?? [], ...current]) : undefined;
   const tileState = (tile: MapTile) => !current || current.has(tile.id) ? 'visible' : known?.has(tile.id) ? 'explored' : 'hidden';
   // Dismissing terrain fog never authorizes an unlearned temporary gate or its occupants.
-  const hiddenGates = new Set(world.locations.filter(location => isScopedExpeditionGate(location) &&
+  const hiddenGates = new Set((above ? [] : world.locations).filter(location => isScopedExpeditionGate(location) &&
     !canSeeOccasionLocation(world, viewer, location.id)).map(({ id }) => id));
   const locationTile = new Map<string, MapTile>();
-  for (const location of world.locations) {
+  for (const location of above ? [] : world.locations) {
     if (hiddenGates.has(location.id)) continue;
     const tile = terrainTileAt(world, location.x, location.y);
     if (tile) locationTile.set(location.id, tile);
   }
-  const isCurrentLocation = (id: string) => !hiddenGates.has(id) && (!current || current.has(locationTile.get(id)?.id ?? ''));
-  const seenLocations = world.locations.filter(({ id }) => !hiddenGates.has(id) && (!known || known.has(locationTile.get(id)?.id ?? '')));
+  const isCurrentLocation = (id: string) => locationTile.has(id) && (!current || current.has(locationTile.get(id)?.id ?? ''));
+  const seenLocations = (above ? [] : world.locations).filter(({ id }) => !hiddenGates.has(id) && (!known || known.has(locationTile.get(id)?.id ?? '')));
   const visibleOpenOccasions = world.occasions.filter(occasion => isOpenOccasion(occasion) &&
     isCurrentLocation(occasion.locationId) && canSeeOccasion(world, viewer, occasion));
   const trailPositions = new Map<string, MapPoint>();
@@ -43,7 +45,7 @@ export function createTerrainMapView(world: WorldState, viewer: Cultivator | und
     world.boundaryReliefs.cases.some(({ status }) => status === 'travelling' || status === 'returning')
     ? (current ?? (viewer?.alive ? currentVisibleTileIds(world, viewer) : new Set<string>())) : undefined;
   const liveActors = world.cultivators.filter((actor) => {
-    if (!actor.alive || hiddenGates.has(actor.locationId)) return false;
+    if (above || !actor.alive || !onLowerPlane(actor) || hiddenGates.has(actor.locationId)) return false;
     const medicinal=activeDanxiaMedicineEscort(world,actor);
     if(medicinal){
       if(!viewer||!world.cultivators.includes(viewer)||!danxiaMedicineParties(medicinal).includes(viewer.id))return false;
@@ -73,7 +75,7 @@ export function createTerrainMapView(world: WorldState, viewer: Cultivator | und
 export function mapActorPositions(locations: LocationNode[], actors: Cultivator[], trailPositions?: ReadonlyMap<string, MapPoint>) {
   const groups = new Map<string, Cultivator[]>();
   for (const actor of actors) {
-    if (trailPositions?.has(actor.id)) continue;
+    if (!onLowerPlane(actor) || trailPositions?.has(actor.id)) continue;
     const group = groups.get(actor.locationId) ?? [];
     group.push(actor);
     groups.set(actor.locationId, group);
@@ -88,6 +90,7 @@ export function mapActorPositions(locations: LocationNode[], actors: Cultivator[
   });
   const trailGroups = new Map<string, Array<{ actor: Cultivator; point: MapPoint }>>();
   for (const actor of actors) {
+    if (!onLowerPlane(actor)) continue;
     const point = trailPositions?.get(actor.id);
     if (!point) continue;
     const key = `${point.x}/${point.y}`;

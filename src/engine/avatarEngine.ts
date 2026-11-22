@@ -1,5 +1,7 @@
+import {onLowerPlane} from './upperPassageIsolation';
 import {availableDoctrineMaturityActions,type DoctrineMaturityOption} from './doctrineMaturityEngine';
 import {availableDoctrineFoundingActions,type DoctrineFoundingOption} from './doctrineFoundingEngine';
+import { availableUpperPassageActions,type UpperPassageOption } from './upperPassageEngine';
 import { availableNorthWellReviewActions,type NorthWellReviewOption } from './northWellRevisitEngine';
 import { availableNorthMiningCharterActions,type NorthMiningOption } from './northMiningCharterEngine';
 import { availableWaterVeinActions,type WaterVeinOption } from './waterVeinEngine';
@@ -42,7 +44,7 @@ export function activeAvatar(world: WorldState): Cultivator | undefined {
 export function availableAvatarHosts(world: WorldState): Cultivator[] {
   const state = world.playerAvatar;
   if (!state || world.tick < state.switchAvailableTick || state.essence < AVATAR_POSSESSION_COST) return [];
-  return world.cultivators.filter((person) => person.id !== activeAvatar(world)?.id && availableBody(world, person) &&
+  return world.cultivators.filter((person) => person.id !== activeAvatar(world)?.id && availableBody(world, person) && onLowerPlane(person) &&
     world.locations.some(({ id }) => id === person.locationId));
 }
 
@@ -56,12 +58,31 @@ export function possessAvatar(world: WorldState, actorId: string | null): boolea
     return true;
   }
   if (!availableAvatarHosts(world).some(({ id }) => id === actorId)) return false;
+  return attachAvatar(world,actorId);
+}
+
+function attachAvatar(world:WorldState,actorId:string):boolean{
+  const state=world.playerAvatar;
   delete state.pendingOrder;
   state.essence -= AVATAR_POSSESSION_COST;
   state.possessedId = actorId;
   state.possessionUntilTick = world.tick + POSSESSION_TICKS;
   state.switchAvailableTick = world.tick + 3;
   return true;
+}
+
+/** Explicitly reacquire the same real traveler; lower host lists never enumerate this lane. */
+export function canPossessUpperPassageAvatar(world:WorldState,actorId:string):boolean{
+  const state=world.playerAvatar;
+  if(!state||state.essence<AVATAR_POSSESSION_COST||world.tick<state.switchAvailableTick||
+    activeAvatar(world)?.id===actorId)return false;
+  const actor=world.cultivators.find(row=>row.id===actorId);
+  return !!actor&&!onLowerPlane(actor)&&availableBody(world,actor)&&
+    !!world.upperPassage?.journeys.some(row=>row.actorId===actorId&&row.returnedTick===undefined&&row.deceasedTick===undefined&&
+      row.steps.at(-1)?.nodeId===actor.locationId);
+}
+export function possessUpperPassageAvatar(world:WorldState,actorId:string):boolean{
+  return canPossessUpperPassageAvatar(world,actorId) && attachAvatar(world,actorId);
 }
 
 export function maintainPlayerAvatar(world: WorldState): void {
@@ -80,7 +101,7 @@ export function maintainPlayerAvatar(world: WorldState): void {
 export function queueAvatarOrder(world: WorldState, action: AvatarOrder): boolean {
   const state = world.playerAvatar;
   const host = activeAvatar(world);
-  if (!state || !host || state.pendingOrder || state.essence < AVATAR_ORDER_COST ||
+  if (!state || !host || !onLowerPlane(host) || state.pendingOrder || state.essence < AVATAR_ORDER_COST ||
       (state.possessionUntilTick ?? 0) <= world.tick + 1 || (action !== 'REST' && action !== 'CULTIVATE')) return false;
   state.essence -= AVATAR_ORDER_COST;
   state.pendingOrder = { actorId: host.id, action, queuedTick: world.tick };
@@ -136,6 +157,18 @@ export function queueAvatarNorthWellReview(world:WorldState,actorId:string,optio
   if(!host||!canQueueAvatarSalvage(world,actorId)||option.action!=='NORTH_WELL_REVIEW')return false;
   const exact=availableNorthWellReviewActions(host,world,world.tick+1).find(row=>row.northWellReviewMove===option.northWellReviewMove&&
     row.targetNorthMiningCharterId===option.targetNorthMiningCharterId);
+  if(!exact)return false;
+  world.playerAvatar.essence-=AVATAR_ORDER_COST;
+  world.playerAvatar.pendingOrder={actorId,queuedTick:world.tick,...exact};
+  return true;
+}
+
+/** Spend only the existing command essence; an upper action must still be legal at execution. */
+export function queueAvatarUpperPassage(world:WorldState,actorId:string,option:UpperPassageOption):boolean {
+  const host=activeAvatar(world);
+  if(!host||!canQueueAvatarSalvage(world,actorId)||option.action!=='UPPER_PASSAGE')return false;
+  const exact=availableUpperPassageActions(host,world,world.tick+1).find(row=>row.upperPassageMove===option.upperPassageMove&&
+    row.targetUpperPassageNodeId===option.targetUpperPassageNodeId);
   if(!exact)return false;
   world.playerAvatar.essence-=AVATAR_ORDER_COST;
   world.playerAvatar.pendingOrder={actorId,queuedTick:world.tick,...exact};
@@ -200,7 +233,9 @@ export function consumeAvatarOrder(world: WorldState): { actorId: string; decisi
   if (!order || world.tick <= order.queuedTick) return undefined;
   delete state.pendingOrder;
   if (world.tick !== order.queuedTick + 1 || activeAvatar(world)?.id !== order.actorId) return undefined;
-  const targets = order.action === 'NORTH_WELL_REVIEW' ?
+  const targets = order.action === 'UPPER_PASSAGE' ?
+    {upperPassageMove:order.upperPassageMove,targetUpperPassageNodeId:order.targetUpperPassageNodeId} :
+    order.action === 'NORTH_WELL_REVIEW' ?
     {northWellReviewMove:order.northWellReviewMove,targetNorthMiningCharterId:order.targetNorthMiningCharterId} :
     order.action === 'NORTH_MINING_CHARTER' ?
     (order.northMiningMove==='propose'?{northMiningMove:order.northMiningMove,northMiningStance:order.northMiningStance}:
@@ -247,9 +282,11 @@ export function availableAvatarInteractions(world: WorldState, mode: AvatarInter
   if (mode !== 'avatar' && mode !== 'ring') return [];
   const state = world.playerAvatar;
   if (!state || world.tick - (state.transcript[0]?.tick ?? -100) < GLOBAL_COOLDOWN) return [];
-  const host = mode === 'avatar' ? activeAvatar(world) : undefined;
+  const current=activeAvatar(world);
+  if(current&&!onLowerPlane(current))return [];
+  const host=mode==='avatar'?current:undefined;
   if (mode === 'avatar' && !host) return [];
-  return world.cultivators.filter((target) => availableBody(world, target) && target.id !== host?.id &&
+  return world.cultivators.filter((target) => availableBody(world, target) && onLowerPlane(target) && target.id !== host?.id &&
     (!host || host.locationId === target.locationId) &&
     !state.transcript.some((entry) => entry.targetCultivatorId === target.id && world.tick - entry.tick < TARGET_COOLDOWN))
     .flatMap((target) => intents.filter((intent) => state.essence >= avatarInteractionCost(mode, intent) &&

@@ -1,3 +1,4 @@
+import {onLowerPlane} from './upperPassageIsolation';
 import { registerScriptureOriginal, scriptureEditionModifiers } from './scriptureEngine';
 import type { Cultivator, PersonalityTrait, Technique, WorldEvent, WorldState } from '../types/world';
 import { elementalRelation } from './elementalEngine';
@@ -115,7 +116,7 @@ export function studyTechnique(actor: Cultivator, world: WorldState, techniqueId
 
 export function dropInheritance(actor: Cultivator, world: WorldState): void {
   const technique = actor.authoredTechnique;
-  if (!technique || actor.alive) return;
+  if (!technique || actor.alive || !onLowerPlane(actor)) return;
   const place = world.locations.find((item) => item.id === actor.locationId);
   if (place && !place.inheritanceScrolls.some((item) => item.id === technique.id)) {
     place.inheritanceScrolls.push({ ...technique });

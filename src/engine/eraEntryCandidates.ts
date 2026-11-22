@@ -1,3 +1,4 @@
+import {onLowerPlane} from './upperPassageIsolation';
 import type {Cultivator,LocationNode,WorldState} from '../types/world';
 import {activeAvatar,availableAvatarHosts,AVATAR_ORDER_COST,AVATAR_POSSESSION_COST} from './avatarEngine';
 import {boundaryReliefCheckpoint} from './boundaryReliefCheckpoint';
@@ -29,7 +30,7 @@ const unique=<T>(rows:readonly T[],predicate:(item:T)=>boolean):T|undefined=>{
 const sitePublic=(site:LocationNode|undefined):site is LocationNode=>!!site&&site.type!=='secret_realm'&&site.type!=='abyss';
 
 function actuallyLocal(world:WorldState,actor:Cultivator,site:LocationNode){
-  return actor.locationId===site.id&&!activeCourierForActor(world,actor)&&!courierActedThisTick(world,actor)&&
+  return onLowerPlane(actor)&&actor.locationId===site.id&&!activeCourierForActor(world,actor)&&!courierActedThisTick(world,actor)&&
     !activeRelocationForActor(world,actor)&&!activeEscortForActor(world,actor)&&!pilgrimageCheckpoint(world,actor)&&
     !boundaryReliefCheckpoint(world,actor)&&!expeditionRescueCheckpoint(world,actor)&&
     !world.pilgrimages.journeys.some(row=>(row.organizerId===actor.id||row.companionId===actor.id)&&

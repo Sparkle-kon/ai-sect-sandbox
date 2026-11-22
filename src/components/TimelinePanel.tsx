@@ -1,3 +1,4 @@
+import {onLowerPlane} from '../engine/upperPassageIsolation';
 import { isScopedExpeditionGate } from '../engine/expeditionOmenTerms';
 import type {ReactNode} from 'react';
 import { useState } from 'react';
@@ -22,14 +23,14 @@ const INTERVENTIONS: Record<Intervention, { title: string; target: 'location' | 
 function choicesFor(world: WorldState, type: Intervention) {
   switch (INTERVENTIONS[type].target) {
     case 'location': return world.locations.filter(location=>!isScopedExpeditionGate(location)).map(({ id, name }) => ({ id, name }));
-    case 'cultivator': return world.cultivators.filter(({ alive, hp }) => alive && hp > 0).map(({ id, name }) => ({ id, name }));
+    case 'cultivator': return world.cultivators.filter(actor=>actor.alive && actor.hp > 0 && onLowerPlane(actor)).map(({ id, name }) => ({ id, name }));
     case 'world': return [];
   }
 }
 
 export function buildBranchIntervention(world: WorldState, type: Intervention, targetId: string): GodInterventionCommand | undefined {
   if (!Object.hasOwn(INTERVENTIONS, type)) return undefined;
-  if (type === 'DEMONIC_TIDE') return world.cultivators.some(({ alive, hp }) => alive && hp > 0) ? { type } : undefined;
+  if (type === 'DEMONIC_TIDE') return world.cultivators.some(actor=>actor.alive && actor.hp > 0 && onLowerPlane(actor)) ? { type } : undefined;
   if (!choicesFor(world, type).some(({ id }) => id === targetId)) return undefined;
   return type === 'SPAWN_TREASURE' ? { type, targetLocationId: targetId } : { type, targetCultivatorId: targetId };
 }

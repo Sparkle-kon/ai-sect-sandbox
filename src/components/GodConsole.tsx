@@ -1,3 +1,4 @@
+import {onLowerPlane} from '../engine/upperPassageIsolation';
 import { isScopedExpeditionGate } from '../engine/expeditionOmenTerms';
 import React, { useState } from 'react';
 import { Sparkles, Zap, Skull, MessageSquarePlus, Cpu } from 'lucide-react';
@@ -27,9 +28,10 @@ export const GodConsole: React.FC<GodConsoleProps> = ({
   const targetLocId = permittedSites.find(site=>site.id===requestedTarget)?.id ?? permittedSites[0]?.id;
   const [showLLMConfig, setShowLLMConfig] = useState(false);
 
-  const selectedCultivator =
-    world.cultivators.find((c) => c.id === selectedCultivatorId) ??
-    world.cultivators[0];
+  const lowerLiving = world.cultivators.filter(actor=>onLowerPlane(actor) && actor.alive && actor.hp > 0);
+  const selectedCultivator = selectedCultivatorId
+    ? lowerLiving.find(actor=>actor.id===selectedCultivatorId)
+    : lowerLiving[0];
 
   return (
     <div className="rounded-xl border border-amber-500/30 bg-slate-900/70 p-3.5 space-y-3">
@@ -133,8 +135,9 @@ export const GodConsole: React.FC<GodConsoleProps> = ({
 
         <button
           type="button"
+          disabled={!selectedCultivator}
           onClick={() =>
-            onIntervene({
+            selectedCultivator && onIntervene({
               type: 'TRIBULATION_STRIKE',
               targetCultivatorId: selectedCultivator?.id,
             })
@@ -147,6 +150,7 @@ export const GodConsole: React.FC<GodConsoleProps> = ({
 
         <button
           type="button"
+          disabled={!lowerLiving.length}
           onClick={() => onIntervene({ type: 'DEMONIC_TIDE' })}
           className="px-3 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-xs font-medium flex items-center justify-center gap-1.5"
         >
@@ -167,8 +171,9 @@ export const GodConsole: React.FC<GodConsoleProps> = ({
         />
         <button
           type="button"
+          disabled={!selectedCultivator}
           onClick={() =>
-            onIntervene({
+            selectedCultivator && onIntervene({
               type: 'WHISPER_MIND',
               targetCultivatorId: selectedCultivator?.id,
               whisperText,

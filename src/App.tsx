@@ -73,11 +73,15 @@ import {projectRegionalPromotions} from './engine/regionalPromotionEngine';
 import {isScopedExpeditionGate} from './engine/expeditionOmenTerms';
 import {REGIONAL_BENCHMARK} from './components/regionalBenchmark';
 import type {RegionalFocusOption,RegionalSimulationControls} from './components/RegionalSimulationPanel';
-import { possessAvatar, queueAvatarOrder, queueAvatarSalvage, queueAvatarWaterVein, queueAvatarNorthMiningCharter, queueAvatarNorthWellReview } from './engine/avatarEngine';
+import { possessAvatar, queueAvatarOrder, queueAvatarSalvage, queueAvatarWaterVein, queueAvatarNorthMiningCharter, queueAvatarNorthWellReview, queueAvatarUpperPassage,
+  AVATAR_POSSESSION_COST, canPossessUpperPassageAvatar, possessUpperPassageAvatar } from './engine/avatarEngine';
 import { availableWaterVeinActions, projectWaterVein } from './engine/waterVeinEngine';
 import type { ColdWaterControls } from './components/ColdWaterVeinPanel';
 import type { MiningCharterControls } from './components/NorthMiningCharterPanel';
 import type {NorthWellRevisitControls} from './components/NorthWellRevisitPanel';
+import type {UpperPassageControls,UpperPassageHostControls} from './components/UpperPassagePanel';
+import {availableUpperPassageActions,projectUpperPassage} from './engine/upperPassageEngine';
+import {upperPassagePlane} from './engine/upperPassageTerms';
 import {northWellPanelEvidence} from './components/northWellRevisitView';
 import {availableNorthWellReviewActions,projectNorthWellRevisit,type NorthWellReviewOption} from './engine/northWellRevisitEngine';
 import {useNorthWellRevisitAuthor} from './components/useNorthWellRevisitAuthor';
@@ -124,6 +128,7 @@ const ChronicleLibraryPanel = React.lazy(async () => ({ default: (await import('
 const WorldOccasionsPanel = React.lazy(async () => ({ default: (await import('./components/WorldOccasionsPanel')).WorldOccasionsPanel }));
 const ExpeditionRescuePanel = React.lazy(async () => ({ default: (await import('./components/ExpeditionRescuePanel')).ExpeditionRescuePanel }));
 const BoundaryReliefPanel = React.lazy(async () => ({ default: (await import('./components/BoundaryReliefPanel')).BoundaryReliefPanel }));
+const UpperPassagePanel = React.lazy(async () => ({default:(await import('./components/UpperPassagePanel')).UpperPassagePanel}));
 const NorthWellRevisitPanel = React.lazy(async () => ({default:(await import('./components/NorthWellRevisitPanel')).NorthWellRevisitPanel}));
 const NorthMiningCharterPanel = React.lazy(async () => ({ default: (await import('./components/NorthMiningCharterPanel')).NorthMiningCharterPanel }));
 const ColdWaterVeinPanel = React.lazy(async () => ({ default: (await import('./components/ColdWaterVeinPanel')).ColdWaterVeinPanel }));
@@ -987,6 +992,54 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
       return true;
     }});
   const northWellRevisitAuthor=mayDeclareWellLaw?northWellLawControls:undefined;
+  const upperPassageActive=dashboardOpen&&(workspace==='map'||workspace==='world');
+  const upperPassageView=upperPassageActive?projectUpperPassage(visibleWorld,selectedCultivator):undefined;
+  const upperPassageAway=upperPassageView&&upperPassagePlane(upperPassageView.nodeId);
+  const upperPassageAtWell=workspace==='world'&&upperPassageView&&!upperPassageAway;
+  const upperPassageAvatar=upperPassageView&&!preview&&selectedCultivator&&
+    activeAvatar(world)?.id===selectedCultivator.id?selectedCultivator:undefined;
+  const upperPassageControls:UpperPassageControls|undefined=upperPassageAvatar&&upperPassageView?{
+    scopeKey:`${viewScopeKey}:${upperPassageAvatar.id}:${upperPassageView.nodeId}`,revisionKey:visibleWorld,
+    choices:canQueueAvatarSalvage(world,upperPassageAvatar.id)?availableUpperPassageActions(upperPassageAvatar,world,world.tick+1):[],
+    pending:waterVeinPending?.actorId===upperPassageAvatar.id&&waterVeinPending.action==='UPPER_PASSAGE'
+      ?waterVeinPending.upperPassageMove:undefined,
+    disabled:isRunning||isStepping||fastForwardLocked,
+    onQueue:(choice,revision)=>{
+      if(revision!==world||isRunning||isStepping||fastForwardLocked||browsing.current||stepInFlight.current||
+        fastForwardRun.current||campaignGuard.current||history.current!==timeline||authority.current!==world||
+        saveContextVersion.current!==waterVeinContextVersion)return false;
+      const updated=updateWorld(current=>{
+        if(current!==world)return current;
+        const next=structuredClone(current);
+        return queueAvatarUpperPassage(next,upperPassageAvatar.id,choice)?next:current;
+      });
+      return updated!==world;
+    },
+  }:undefined;
+  const upperPassageHostActor=upperPassageAway&&upperPassageView&&!preview&&selectedCultivator&&
+    canPossessUpperPassageAvatar(world,selectedCultivator.id)?selectedCultivator:undefined;
+  const upperPassageHost:UpperPassageHostControls|undefined=upperPassageHostActor&&upperPassageView?{
+    scopeKey:`${viewScopeKey}:${upperPassageHostActor.id}:${upperPassageView.nodeId}`,revisionKey:visibleWorld,
+    actorName:upperPassageHostActor.name,essenceCost:AVATAR_POSSESSION_COST,
+    disabled:isRunning||isStepping||fastForwardLocked,
+    onConfirm:revision=>{
+      if(revision!==world||isRunning||isStepping||fastForwardLocked||browsing.current||stepInFlight.current||
+        fastForwardRun.current||campaignGuard.current||history.current!==timeline||authority.current!==world||
+        saveContextVersion.current!==waterVeinContextVersion)return false;
+      const next=updateWorld(current=>{
+        if(current!==world)return current;
+        const candidate=structuredClone(current);
+        const exact=candidate.cultivators.find(actor=>actor.id===upperPassageHostActor.id);
+        if(!exact||projectUpperPassage(candidate,exact)?.nodeId!==upperPassageView.nodeId)return current;
+        return possessUpperPassageAvatar(candidate,exact.id)?candidate:current;
+      });
+      if(next!==world)setAvatarNotice(undefined);
+      return next!==world;
+    },
+  }:undefined;
+  const realmView=upperPassageView&&<React.Suspense fallback={<p role="status">查验脚下界路…</p>}>
+    <UpperPassagePanel view={upperPassageView} controls={upperPassageControls} host={upperPassageHost}/>
+  </React.Suspense>;
   const medicineContextVersion=saveContextVersion.current;
   const medicineAvatar=!preview&&selectedCultivator&&activeAvatar(world)?.id===selectedCultivator.id&&
     canQueueAvatarSalvage(world,selectedCultivator.id)?selectedCultivator:undefined;
@@ -1322,7 +1375,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
           <button type="button" data-control-dock="back" ref={backRef} onClick={returnToChronicle} className={`${action} bg-slate-800 text-amber-100`}>返回原纪事</button>
           {!focusTarget && <p role="status" className="break-words text-xs text-amber-200">{CHRONICLE_FOCUS_UNAVAILABLE}</p>}
         </div>} views={{
-        map: <div className="grid min-w-0 items-start gap-2.5 lg:grid-cols-[minmax(0,1fr)_17rem] lg:gap-4">
+        map: upperPassageAway?realmView:<div className="grid min-w-0 items-start gap-2.5 lg:grid-cols-[minmax(0,1fr)_17rem] lg:gap-4">
           <div className="min-w-0"><React.Suspense fallback={<div role="status" className="grid min-h-64 place-items-center rounded-xl border border-slate-800 text-sm text-slate-300">载入舆图…</div>}>
             <WorldMapCanvas compact scopeKey={viewScopeKey} world={visibleWorld} selectedCultivatorId={activeActorId}
             toolsOpen={workspace === 'map' && (foldPreferences.mapTools ?? false)} onToolsOpenChange={(mapTools) =>
@@ -1472,12 +1525,13 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
           ...(preview ? [] : [{ id: 'council', label: '长老议事厅', content: <button type="button" disabled={isStepping} onClick={() => { setCouncilOpenedBefore(true); setCouncilOpen(true); }}
             className={`${action} bg-violet-900/60 text-violet-100 hover:bg-violet-800`}>打开长老议事厅</button> }]),
         ]} />,
-        world: <WorkspaceSections label="世界与设置" initialOpen={opened('world', 'weather')} {...fold('world')} sections={[
+        world: upperPassageAway?realmView:<WorkspaceSections label="世界与设置" initialOpen={opened('world', 'weather')} {...fold('world')} sections={[
           { id: 'weather', label: '灵候图与观测', content: <div className="space-y-2.5">
             <React.Suspense fallback={<p role="status">载入世界记录…</p>}><WeatherAtlasPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense>
-            {(waterVeinView||showMiningCharter||northWellView)&&<React.Suspense fallback={null}><ColdWaterVeinPanel view={waterVeinView} controls={waterVeinControls}>
+            {(waterVeinView||showMiningCharter||northWellView||upperPassageAtWell)&&<React.Suspense fallback={null}><ColdWaterVeinPanel view={waterVeinView} controls={waterVeinControls}>
               {showMiningCharter&&miningCharterView&&<NorthMiningCharterPanel view={miningCharterView} controls={miningCharterControls}/>}
               {northWellView&&<NorthWellRevisitPanel view={northWellView} controls={northWellControls} author={northWellRevisitAuthor}/>}
+              {upperPassageAtWell&&realmView}
             </ColdWaterVeinPanel></React.Suspense>}
             {activeActorId && visibleWorld.shortShifts.shifts.some(({ hostId, workerId }) => activeActorId === hostId || activeActorId === workerId) &&
               <React.Suspense fallback={<p role="status">载入短聘凭证…</p>}><ShortShiftPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense>}
