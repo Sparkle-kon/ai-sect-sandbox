@@ -1,0 +1,111 @@
+import type {ActionType,Cultivator,LocationNode,WorldState} from '../types/world';
+import type {GodInterventionCommand} from '../engine/worldEngine';
+import {isChronicleStoryFact} from '../engine/chronicleLead';
+import {isScopedExpeditionGate} from '../engine/expeditionOmenTerms';
+import {villageEvolutionLocalSettlement} from '../engine/villageEvolutionEngine';
+import {mapActorPositions,type createTerrainMapView} from './terrainMapView';
+
+export type MapEntityTarget={kind:'actor'|'site';id:string};
+export type MapEntityAction='treasure'|'lightning'|'whisper';
+export type MapEntityRead=
+  | {kind:'actor';target:MapEntityTarget&{kind:'actor'};name:string;realm:string;hp:number;maxHp:number;actionLabel:string;monologue?:string}
+  | {kind:'site';target:MapEntityTarget&{kind:'site'};name:string;spiritQi:number;residents:readonly string[];residentCount:number;
+     population?:number;eventTitles:readonly string[]};
+
+type View=ReturnType<typeof createTerrainMapView>;
+const simpleActions:Partial<Record<ActionType,string>>={
+  CULTIVATE:'修炼',REST:'调息',BREAKTHROUGH:'尝试破境',EXPLORE:'游历',DUEL:'斗法',FACE_TRIBULATION:'应对天劫',
+  SOCIALIZE:'交谈',GATHER_HERBS:'采集灵草',BREW_PILL:'炼丹',FORGE_ARTIFACT:'炼器',STUDY_TECHNIQUE:'参悟功法',
+  AUTHOR_TECHNIQUE:'著录功法',TEACH:'传法',DUAL_CULTIVATE:'共同修行',TRADE:'交易',PILGRIMAGE:'朝山巡礼',
+  GUARD_DUTY:'值守',TAME_BEAST:'驯养灵兽',DELIVER_RELIEF:'赈济',
+};
+const cleaned=(text:string)=>text.replace(/[\p{Cc}\p{Cf}\p{Cs}\u2028\u2029]/gu,' ').replace(/\s+/gu,' ').trim();
+const cap=(text:string,n:number)=>Array.from(text).slice(0,n).join('');
+const trueActor=(actor:Cultivator)=>actor.alive&&actor.hp>0&&actor.positionPlane===undefined;
+const MAX_RESIDENT_LABELS=5;
+const MAX_SCENE_TITLES=3;
+const MAX_WHISPER=220; // Same bound as native timeline interventions.
+
+function actorInView(world:WorldState,view:View,id:string):Cultivator|undefined{
+  const roster=world.cultivators.filter(row=>row.id===id),[actor]=roster;
+  return roster.length===1&&actor&&trueActor(actor)&&view.liveActors.filter(row=>row===actor).length===1?actor:undefined;
+}
+function siteInView(world:WorldState,view:View,id:string):LocationNode|undefined{
+  const sites=world.locations.filter(row=>row.id===id),[site]=sites;
+  return sites.length===1&&site&&view.seenLocations.filter(row=>row===site).length===1&&view.isCurrentLocation(id)?site:undefined;
+}
+function monologueLine(actor:Cultivator):string|undefined{
+  const clean=cleaned(actor.innerMonologue);
+  const secret=cleaned(actor.secretGoal);
+  if(!clean||secret&&clean.includes(secret))return undefined;
+  const first=clean.match(/^.*?[。！？.!?](?=$|\s|[^0-9])/u)?.[0]??clean;
+  return cap(first,100)||undefined;
+}
+function localSceneTitles(world:WorldState,siteId:string):string[]{
+  const counts=new Map<string,number>();
+  for(const event of world.events)counts.set(event.id,(counts.get(event.id)??0)+1);
+  const titles=new Set<string>();
+  for(const event of world.events){
+    if(event.locationId!==siteId||event.tick!==world.tick||event.year!==world.year||event.month!==world.month||
+      counts.get(event.id)!==1||event.witnessScope!==undefined||!isChronicleStoryFact(event,world.tick))continue;
+    const title=cap(cleaned(event.title),80);
+    if(title)titles.add(title);
+    if(titles.size>=MAX_SCENE_TITLES)break;
+  }
+  return [...titles];
+}
+function stationaryResidents(world:WorldState,view:View,site:LocationNode):Cultivator[]{
+  const inTransit=new Set<string>();
+  for(const contract of world.escorts.contracts)
+    if(contract.status==='active'&&contract.escortId)inTransit.add(contract.escortId);
+  for(const plan of world.relocations.plans)
+    if(plan.status==='in_transit')for(const id of plan.garrisonIds)inTransit.add(id);
+  const current=new Map<string,Cultivator|undefined>();
+  for(const actor of world.cultivators)current.set(actor.id,current.has(actor.id)?undefined:actor);
+  const seen=new Set<string>();
+  const visible=view.liveActors.filter(actor=>{
+    if(actor.locationId!==site.id||!trueActor(actor)||view.trailPositions.has(actor.id)||inTransit.has(actor.id)||
+      current.get(actor.id)!==actor||seen.has(actor.id))return false;
+    seen.add(actor.id);return true;
+  });
+  return mapActorPositions([site],visible,view.trailPositions).map(row=>row.actor);
+}
+
+export function projectMapEntityPopover(world:WorldState,view:View,target:MapEntityTarget,viewerId?:string|null):MapEntityRead|undefined{
+  if(target.kind==='actor'){
+    const actor=actorInView(world,view,target.id);
+    if(!actor)return undefined;
+    const monologue=viewerId===actor.id?monologueLine(actor):undefined;
+    return {kind:'actor',target:{kind:'actor',id:actor.id},name:cap(cleaned(actor.name),80),
+      realm:`${actor.realm}${actor.realmStage}层`,hp:actor.hp,maxHp:actor.maxHp,
+      actionLabel:simpleActions[actor.currentAction]??'行事中',...(monologue?{monologue}:{})};
+  }
+  if(target.kind!=='site')return undefined;
+  const site=siteInView(world,view,target.id);
+  if(!site)return undefined;
+  const residents=stationaryResidents(world,view,site);
+  const viewers=viewerId?world.cultivators.filter(row=>row.id===viewerId):[];
+  const [viewer]=viewers;
+  const local=viewers.length===1&&viewer&&trueActor(viewer)&&viewer.locationId===site.id&&
+    !view.trailPositions.has(viewer.id)?villageEvolutionLocalSettlement(world,viewer):undefined;
+  return {kind:'site',target:{kind:'site',id:site.id},name:cap(cleaned(site.name),80),spiritQi:site.spiritQi,
+    residents:residents.slice(0,MAX_RESIDENT_LABELS).map(actor=>cap(cleaned(actor.name),60)),residentCount:residents.length,
+    ...(local?.locationId===site.id?{population:local.population}:{}),eventTitles:localSceneTitles(world,site.id)};
+}
+
+export function availableMapEntityActions(world:WorldState,view:View,target:MapEntityTarget):readonly MapEntityAction[]{
+  if(target.kind==='actor')return actorInView(world,view,target.id)?['lightning','whisper']:[];
+  if(target.kind!=='site')return [];
+  const site=siteInView(world,view,target.id);
+  return site&&!isScopedExpeditionGate(site)?['treasure']:[];
+}
+
+export function buildMapEntityCommand(world:WorldState,view:View,target:MapEntityTarget,action:MapEntityAction,
+  whisperText?:string):GodInterventionCommand|undefined{
+  if(!availableMapEntityActions(world,view,target).includes(action))return undefined;
+  if(action==='treasure')return whisperText===undefined?{type:'SPAWN_TREASURE',targetLocationId:target.id}:undefined;
+  if(action==='lightning')return whisperText===undefined?{type:'TRIBULATION_STRIKE',targetCultivatorId:target.id}:undefined;
+  if(action!=='whisper'||typeof whisperText!=='string'||whisperText.length>MAX_WHISPER)return undefined;
+  const text=cleaned(whisperText);
+  return text?{type:'WHISPER_MIND',targetCultivatorId:target.id,whisperText:text}:undefined;
+}

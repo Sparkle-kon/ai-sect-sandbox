@@ -46,6 +46,8 @@ import type { AvatarInteractionRequest, CouncilPlan } from './types/world';
 import { readTimelineHead, readTimelineSnapshot, selectTimelineBranch, forkTimelineAvatarEntry, appendAuthoredTimelineRoot, TIMELINE_MAX_BRANCHES } from './engine/timelineEngine';
 import type { TimelineSnapshot } from './engine/timelineEngine';
 import {findEraEntryCandidate,projectEraEntryCandidates} from './engine/eraEntryCandidates';
+import {applyScopedMapEntityIntervention,type MapEntityPopoverBinding} from './components/mapEntityPopoverWrite';
+import type {MapEntityAction} from './components/mapEntityPopoverModel';
 import {createTerrainMapView} from './components/terrainMapView';
 import { possessAvatar, queueAvatarOrder, queueAvatarSalvage } from './engine/avatarEngine';
 import {projectFrontierSupplyLinks} from './engine/frontierSupplyLinks';
@@ -289,6 +291,18 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   }:undefined;
   const aliveCount = visibleWorld.cultivators.filter((c) => c.alive).length;
   const activeActorId = selectedCultivator?.id ?? null;
+  const inspectionRevision=saveContextVersion.current;
+  const canInspectMap=cockpitOpen||dashboardOpen&&workspace==='map';
+  const canMapWrite=canInspectMap&&!preview&&!isRunning&&!isStepping&&!fastForwardLocked;
+  const handleMapEntityIntervention=(binding:MapEntityPopoverBinding,action:MapEntityAction,whisperText?:string)=>{
+    const starting=authority.current;
+    return updateWorld(current=>applyScopedMapEntityIntervention({
+      world:current,scopeKey:viewScopeKey,revision:saveContextVersion.current,viewerId:activeActorId,
+      canWrite:canMapWrite&&current===world&&history.current===timeline&&!browsing.current&&
+        !stepInFlight.current&&!fastForwardRun.current&&!campaignGuard.current,
+    },binding,action,whisperText))!==starting;
+  };
+
   const mayReadPersonal = Boolean(selectedCultivator?.alive && selectedCultivator.hp > 0);
   const readingRoster = dashboardOpen && workspace === 'people';
   const rosterFocalId = useMemo(() => readingRoster ? projectRosterFocalId(visibleWorld) : undefined,
@@ -617,6 +631,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
     map={immersive??
       <React.Suspense fallback={<p role="status">载入舆图…</p>}>
         <WorldMapCanvas compact scopeKey={viewScopeKey} world={visibleWorld} selectedCultivatorId={activeActorId}
+          inspectionEnabled={canInspectMap} inspectionRevision={inspectionRevision} onEntityIntervention={canMapWrite?handleMapEntityIntervention:undefined}
           onSelectCultivator={setSelectedCultivatorId} onBrushStroke={preview?undefined:handleBrushStroke}/>
       </React.Suspense>}
     inspector={<>{inspect('profile')}{inspect('mind')}</>}
@@ -688,6 +703,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
         map: immersive??<div className="grid min-w-0 items-start gap-2.5 lg:grid-cols-[minmax(0,1fr)_17rem] lg:gap-4">
           <div className="min-w-0"><React.Suspense fallback={<div role="status" className="grid min-h-64 place-items-center rounded-xl border border-slate-800 text-sm text-slate-300">载入舆图…</div>}>
             <WorldMapCanvas compact scopeKey={viewScopeKey} world={visibleWorld} selectedCultivatorId={activeActorId}
+          inspectionEnabled={canInspectMap} inspectionRevision={inspectionRevision} onEntityIntervention={canMapWrite?handleMapEntityIntervention:undefined}
             toolsOpen={workspace === 'map' && (foldPreferences.mapTools ?? false)} onToolsOpenChange={(mapTools) =>
               setFoldPreferences((previous) => (previous.mapTools ?? false) === mapTools ? previous : { ...previous, mapTools })}
             additionalTools={handedness === 'default' && !preview && !isRunning ? <button type="button" disabled={fastForwardLocked} onClick={toggleAutoplay}

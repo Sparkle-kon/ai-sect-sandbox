@@ -37,12 +37,16 @@ import { drawMapConvoys, mapTransitActorIds, visibleMapConvoys, visibleMapEscort
 import { buildMapPresentation, MAP_EFFECT_LABELS, MOTION_MS } from './mapPresentationView';
 import { drawFlights, drawMapEffects } from './mapPresentationDraw';
 import { projectMapTerritories } from './mapTerritorySemantics';
+import {MapEntityPopover} from './MapEntityPopover';
+import {resolveMapEntityHit,type MapEntityPaintedFrame} from './mapEntityHit';
+import {availableMapEntityActions,projectMapEntityPopover,type MapEntityAction,type MapEntityTarget} from './mapEntityPopoverModel';
+import type {MapEntityPopoverBinding} from './mapEntityPopoverWrite';
 import { paintedMapMarks } from './mapPaintedSemantics';
 import {projectPhysicalAtlas} from '../engine/physicalAtlasEngine';
 import {drawPhysicalAtlas,physicalAtlasMapMarks,PhysicalAtlasSummary,planPhysicalAtlasDrawing} from './physicalAtlasMap';
-import { centerCamera, clientToMapViewport, closestViewportTarget, DEFAULT_CAMERA, MAP_HEIGHT, MAP_WIDTH, MAX_ZOOM, screenToMap, zoomCamera } from './mapCamera';
+import { centerCamera, clientToMapViewport, DEFAULT_CAMERA, MAP_HEIGHT, MAP_WIDTH, MAX_ZOOM, mapToScreen, screenToMap, zoomCamera } from './mapCamera';
 import type { CameraPoint, MapCamera } from './mapCamera';
-import { CLUSTER_RADIUS_PX, mapActorPage, pickActorMarker, planActorMarkers, visibleMarkerMembers } from './mapActorClusters';
+import { CLUSTER_RADIUS_PX, mapActorPage, planActorMarkers, visibleMarkerMembers } from './mapActorClusters';
 import type { MapActorMarker, MarkerViewport } from './mapActorClusters';
 import { focusMapPoint, mapCameraCommand, mapKeyboardCommand, shouldAnimateMap } from './mapKeyboard';
 import type { MapCameraCommand } from './mapKeyboard';
@@ -86,12 +90,21 @@ const WEATHER_MARK = {
   霜息: { symbol: '霜', color: '#bae6fd' },
 };
 
+interface MapInspection extends MapEntityPopoverBinding {
+  anchor:{x:number;y:number};
+  pinned:boolean;
+  trigger?:HTMLButtonElement;
+}
+
 interface WorldMapCanvasProps {
   world: WorldState;
   selectedCultivatorId: string | null;
   onSelectCultivator: (id: string) => void;
   onSelectLocation?: (loc: LocationNode) => void;
   onBrushStroke?: (kind: GodBrushKind, points: MapPoint[]) => void;
+  inspectionEnabled?:boolean;
+  inspectionRevision?:number;
+  onEntityIntervention?:(binding:MapEntityPopoverBinding,action:MapEntityAction,whisperText?:string)=>boolean;
   compact?: boolean;
   scopeKey?: string;
   toolsOpen?: boolean;
@@ -107,6 +120,9 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   onSelectCultivator,
   onSelectLocation,
   onBrushStroke,
+  inspectionEnabled=true,
+  inspectionRevision=0,
+  onEntityIntervention,
   compact = false,
   scopeKey = '',
   toolsOpen,
@@ -117,6 +133,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [camera, setCamera] = useState(DEFAULT_CAMERA);
+  const [inspection,setInspection]=useState<MapInspection>();
   const [annotationView, setAnnotationView] = useState<typeof import('./mapAnnotationView')>();
   const hasNotes = Boolean(world.annotations?.notes.length);
   useEffect(() => {
@@ -142,6 +159,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     if (previous.x !== next.x || previous.y !== next.y || previous.zoom !== next.zoom) {
       cameraRef.current = next;
       setCamera(next);
+      setInspection(undefined);
     }
   };
   const manualCamera = (next: MapCamera) => { setFollowsSelection(false); updateCamera(next); };
@@ -340,9 +358,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     ...paintedMapMarks(world,mapView,territorySemantics.markers,hazards,convoys,
       escortedCaravan,presentation,villageSupplyCheckpoints,routeWarningMarks)] : [],
   [explorerOpen,atlasDrawing,world,mapView,territorySemantics,hazards,convoys,escortedCaravan,presentation,villageSupplyCheckpoints,routeWarningMarks]);
-  const paintedActors = useRef<{
-    markers: ReturnType<typeof planActorMarkers>; positions: typeof actorPositions; camera: MapCamera; size: MarkerViewport; scope: string;
-  }>();
+  const paintedActors = useRef<MapEntityPaintedFrame>();
   const actorById = useMemo(() => new Map(actorPositions.map(({ actor }) => [actor.id, actor])), [actorPositions]);
   const clusterActors = useMemo(() =>
     cluster && cluster.scope === clusterScope && world.tick >= cluster.tick
@@ -956,29 +972,79 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     id: event.pointerId, pointerType: event.pointerType, client: { x: event.clientX, y: event.clientY },
   });
 
-  const useTap = (screen: CameraPoint, isTouch: boolean, canvas: HTMLCanvasElement) => {
-    const size = canvas.getBoundingClientRect();
-    const radius = isTouch ? 22 : Math.max(10, cameraRef.current.zoom * 20 * size.width / MAP_WIDTH);
-    const painted = paintedActors.current;
-    if (!painted || painted.scope !== clusterScope || painted.positions !== actorPositions || painted.camera !== cameraRef.current ||
-        painted.size.width !== size.width || painted.size.height !== size.height) return;
-    const picked = pickActorMarker(painted.markers, { x: screen.x * size.width / MAP_WIDTH, y: screen.y * size.height / MAP_HEIGHT }, isTouch);
-    if (picked) {
-      const members = visibleMarkerMembers(picked, actorById);
-      if (picked.kind === 'actor' && members[0]) {
-        setCluster(undefined);
-        onSelectCultivator(members[0].id);
-      } else if (picked.kind === 'cluster' && members.length > 0) {
-        setClusterSearch('');
-        setClusterPage(0);
-        setCluster({ marker: picked, scope: clusterScope, tick: world.tick });
-      }
+  const hitAt=(screen:CameraPoint,isTouch:boolean,canvas:HTMLCanvasElement)=>resolveMapEntityHit({
+    screen,isTouch,size:canvas.getBoundingClientRect(),painted:paintedActors.current,scope:clusterScope,
+    positions:actorPositions,camera:cameraRef.current,actorById,seenLocations,isCurrentLocation,
+  });
+  const describeInspection=(target:MapEntityTarget,anchor:MapInspection['anchor'],pinned:boolean,trigger?:HTMLButtonElement):MapInspection=>({
+    world,scopeKey,revision:inspectionRevision,viewerId:selectedCultivatorId,fog,target,anchor,pinned,trigger,
+  });
+  const matchesView=(binding:MapInspection|undefined):binding is MapInspection=>Boolean(binding&&
+    binding.world===world&&binding.scopeKey===scopeKey&&binding.revision===inspectionRevision&&
+    binding.viewerId===selectedCultivatorId&&binding.fog===fog&&inspectionEnabled&&!armedBrush);
+  const currentInspection=matchesView(inspection)?inspection:undefined;
+  const inspected=useMemo(()=>currentInspection&&projectMapEntityPopover(world,mapView,currentInspection.target,selectedCultivatorId),
+    [world,mapView,currentInspection,selectedCultivatorId]);
+  useEffect(()=>{
+    setInspection(former=>matchesView(former)?former:undefined);
+  },[world,scopeKey,inspectionRevision,selectedCultivatorId,fog,inspectionEnabled,armedBrush]);
+  const dismissal=()=>{
+    setInspection(undefined);
+    const trigger=currentInspection?.trigger;
+    if(currentInspection?.pinned)(trigger?.isConnected?trigger:canvasRef.current)?.focus({preventScroll:true});
+  };
+  const focusInspection=()=>{
+    if(!currentInspection||!inspected)return;
+    if(currentInspection.target.kind==='actor'){
+      locateActor(currentInspection.target.id);
+      setFollowsSelection(true);
+    }else{
+      const site=seenLocations.find(location=>location.id===currentInspection.target.id&&isCurrentLocation(location.id));
+      if(site)focusSite(site);
+    }
+    setInspection(undefined);
+    canvasRef.current?.focus({preventScroll:true});
+  };
+  const commitInspection=(action:MapEntityAction,whisperText?:string)=>{
+    if(!currentInspection?.pinned||!inspected||fog||!onEntityIntervention)return false;
+    if(!onEntityIntervention(currentInspection,action,whisperText))return false;
+    setFocusMessage(`天道干预已施于：${inspected.name}`);
+    dismissal();
+    return true;
+  };
+  const pinFromIndex=(target:MapEntityTarget,point:MapPoint,trigger:HTMLButtonElement)=>{
+    if(!inspectionEnabled||armedBrush||!projectMapEntityPopover(world,mapView,target,selectedCultivatorId))return;
+    const screen=mapToScreen(cameraRef.current,point);
+    setCluster(undefined);
+    setInspection(describeInspection(target,{x:screen.x*100/MAP_WIDTH,y:screen.y*100/MAP_HEIGHT},true,trigger));
+    canvasRef.current?.scrollIntoView({block:'nearest'});
+  };
+  const useTap=(screen:CameraPoint,isTouch:boolean,canvas:HTMLCanvasElement)=>{
+    const hit=hitAt(screen,isTouch,canvas);
+    if(hit.kind==='stale')return;
+    if(hit.kind==='cluster'){
+      setInspection(undefined);
+      setClusterSearch('');
+      setClusterPage(0);
+      setCluster({marker:hit.marker,scope:clusterScope,tick:world.tick});
       return;
     }
     setCluster(undefined);
-    const clickedLocation = closestViewportTarget(seenLocations.filter((site) => isCurrentLocation(site.id)),
-      cameraRef.current, screen, size, radius);
-    if (clickedLocation) focusSite(clickedLocation);
+    if(inspectionEnabled&&(hit.kind==='actor'||hit.kind==='site'))setInspection(describeInspection({kind:hit.kind,id:hit.id},hit.anchor,true));
+    else setInspection(undefined);
+  };
+  const peekAt=(event:React.PointerEvent<HTMLCanvasElement>)=>{
+    if(!inspectionEnabled||event.buttons!==0||!(event.pointerType==='mouse'||event.pointerType==='pen')||armedBrush||currentInspection?.pinned)return;
+    const screen=clientToMapViewport(event.currentTarget.getBoundingClientRect(),{x:event.clientX,y:event.clientY});
+    if(!screen)return;
+    const hit=hitAt(screen,false,event.currentTarget);
+    if(hit.kind==='stale')return;
+    if(hit.kind!=='actor'&&hit.kind!=='site'){
+      if(currentInspection)setInspection(undefined);
+      return;
+    }
+    if(currentInspection?.target.kind===hit.kind&&currentInspection.target.id===hit.id)return;
+    setInspection(describeInspection({kind:hit.kind,id:hit.id},hit.anchor,false));
   };
   const adoptGesture = (transition: MapGestureTransition, canvas?: HTMLCanvasElement) => {
     gesture.current = transition.state;
@@ -994,6 +1060,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const startGesture = (event: React.PointerEvent<HTMLCanvasElement>) => {
     if (event.button !== 0 && gesture.current.phase === 'idle') return;
     const canvas = event.currentTarget;
+    if(currentInspection&&!currentInspection.pinned)setInspection(undefined);
     const result = beginMapGesture(gesture.current, contactFor(event), frameFor(canvas));
     adoptGesture(result);
     if (result.state.phase !== 'idle') {
@@ -1001,8 +1068,10 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       catch { /* The document-level cancel path still prevents an off-map release from painting. */ }
     }
   };
-  const updateGesture = (event: React.PointerEvent<HTMLCanvasElement>) =>
+  const updateGesture = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if(gesture.current.phase==='idle'){peekAt(event);return;}
     adoptGesture(moveMapGesture(gesture.current, contactFor(event), frameFor(event.currentTarget)));
+  };
   const endGesture = (event: React.PointerEvent<HTMLCanvasElement>) =>
     adoptGesture(endMapGesture(gesture.current, contactFor(event), frameFor(event.currentTarget)), event.currentTarget);
   const cancelGesture = (event: React.PointerEvent<HTMLCanvasElement>) =>
@@ -1078,7 +1147,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         </div>
       </div>
 
-      <p id={keyboardHelp} className="sr-only">{'方向键平移，加号或减号缩放，Home 复位，F 定位所选修士。山河索引可按地点、修士或事件定位。'}{atlasDrawing.borders.length>0?'当前可见的域界与跨界路标也可在山河索引的路径与行程中定位。':''}</p>
+      <p id={keyboardHelp} className="sr-only">{'方向键平移，加号或减号缩放，Home 复位，F 定位所选修士。山河索引可定位，亦可检视眼前修士和地点。'}{atlasDrawing.borders.length>0?'当前可见的域界与跨界路标也可在山河索引的路径与行程中定位。':''}</p>
       <div className="relative">
         <canvas
         ref={canvasRef}
@@ -1088,6 +1157,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         aria-describedby={keyboardHelp}
         onKeyDown={(event) => {
           if (event.currentTarget !== event.target || event.nativeEvent.isComposing) return;
+          if(event.key==='Escape'&&currentInspection){event.preventDefault();dismissal();return;}
           const command = mapKeyboardCommand(event);
           if (!command) return;
           event.preventDefault();
@@ -1095,13 +1165,19 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         }}
         onPointerDown={startGesture}
         onPointerMove={updateGesture}
+        onPointerLeave={()=>{if(currentInspection&&!currentInspection.pinned)setInspection(undefined);}}
         onPointerUp={endGesture}
         onPointerCancel={cancelGesture}
         onLostPointerCapture={cancelGesture}
         style={{ touchAction: !compact || toolsExpanded && touchPan || armedBrush ? 'none' : 'pan-y' }}
         className={`w-full h-auto select-none block focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-amber-300 ${armedBrush ? 'cursor-crosshair' : 'cursor-grab active:cursor-grabbing'}`}
-        aria-label="修仙世界地图。选择修士可查看下方识海状态摘要；也可通过识海面板的修士按钮切换。雷劫用静态闪电标注；围攻地点用玫红虚线圈标注；各地渡劫、驻守、围攻和活跃盛会可在下方列表查看；本月移动、交锋和可见灵兽也有文字摘要。"
+        aria-label="修仙世界地图。点击修士或地点可检视详情，使用聚焦追踪可选择修士或定位地点。雷劫用静态闪电标注；围攻地点用玫红虚线圈标注；各地渡劫、驻守、围攻和活跃盛会可在下方列表查看；本月移动、交锋和可见灵兽也有文字摘要。"
       />
+        {currentInspection&&inspected&&<MapEntityPopover
+          key={`${currentInspection.scopeKey}:${currentInspection.revision}:${world.tick}:${world.interventionSequence}:${currentInspection.target.kind}:${currentInspection.target.id}:${currentInspection.pinned}`}
+          data={inspected} anchor={currentInspection.anchor} pinned={currentInspection.pinned} readOnly={fog||!onEntityIntervention}
+          actions={currentInspection.pinned&&!fog&&onEntityIntervention?availableMapEntityActions(world,mapView,currentInspection.target):[]}
+          onClose={dismissal} onFocus={focusInspection} onCommit={commitInspection}/>}
         <button
           type="button"
           className={`absolute bottom-2 right-2 w-24 overflow-hidden rounded border border-slate-500 bg-slate-950/90 shadow-md sm:w-36 ${compact ? 'hidden sm:block' : ''}`}
@@ -1136,7 +1212,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       {observedSalvageSites.size > 0 && <p className="sr-only">当前见到 {observedSalvageSites.size} 处已发现并封存原货的地点，不显示货主身份。</p>}
       {localGranary && <p className="sr-only">在场确认：村镇义仓有实际库存。</p>}
       {compact && <p className="min-w-0 break-words border-t border-slate-800 px-3 py-2 text-xs text-slate-300" aria-label="地图当前选择">
-        {selected ? <>当前选择：<span className="text-slate-100">{selected.name}</span> · {selected.alive ? `${selected.realm}${selected.realmStage}层` : '已陨落'}</> : '轻触地图选择修士。'}
+        {selected ? <>当前选择：<span className="text-slate-100">{selected.name}</span> · {selected.alive ? `${selected.realm}${selected.realmStage}层` : '已陨落'}</> : '轻触地图检视修士或地点。'}
         {compact && ownCurrentFurnaceRecovery && isCurrentLocation(ownCurrentFurnaceRecovery) &&
           <span className="block break-words text-emerald-300">本轮在此拆解原器，实回一份玄土根</span>}
       </p>}
@@ -1317,7 +1393,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           </select>
         </label>
         <span className="text-slate-400">
-          {fog ? '修士视野中不可使用天道画笔。' : armedBrush ? '单指松开才落笔；双指或中断会取消此笔。' : compact ? '双指缩放；单指上下滚动，选拖图后可单指平移。' : '滚轮或双指缩放，拖动平移，点击选择。'}
+          {fog ? '修士视野中不可使用天道画笔。' : armedBrush ? '单指松开才落笔；双指或中断会取消此笔。' : compact ? '双指缩放；单指上下滚动，选拖图后可单指平移。' : '滚轮或双指缩放，拖动平移，点击检视。'}
         </span>
       </div>
       {additionalTools !== undefined && <div className="border-b border-slate-800 px-3 py-2">{additionalTools}</div>}
@@ -1327,6 +1403,11 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           <MapKeyboardExplorer world={world} view={mapView} actorPositions={actorPositions} presentation={presentation}
             selected={selectedPoint?.actor} follows={followsSelection} zoom={camera.zoom} onCamera={activateCamera}
             onActor={(actor) => locateActor(actor.id)} onSite={focusSite} marks={semanticMarks} villageLabels={villageMapLabels}
+            onInspectActor={(actor,trigger)=>{
+              const point=actorPositions.find(row=>row.actor===actor);
+              if(point)pinFromIndex({kind:'actor',id:actor.id},point,trigger);
+            }}
+            onInspectSite={(site,trigger)=>pinFromIndex({kind:'site',id:site.id},site,trigger)}
             onPoint={(point) => {
               abandonGesture();
               commandCamera(focusMapPoint(cameraRef.current,point));

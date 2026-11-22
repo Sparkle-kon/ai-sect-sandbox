@@ -16,7 +16,7 @@
 - [x] **[V1-1] 大屏全息同屏指挥台模式 (Panoramic God-View Cockpit Mode)**：构建 `src/components/PanoramicCockpit.tsx`。在宽屏桌面端（或通过顶栏一键切换「全息大盘 / 故事书卷」视图，同时保持现有默认测试契约 100% 兼容），提供无需层层翻找折叠菜单的同屏三栏指挥台：**左栏为 2D 九州动态沙盒大地图 (`WorldMapCanvas`) + 快捷时间推演控制栏**；**中栏为当前主角戏剧舞台 + 当月核心奇遇/冲突焦点**；**右栏为选中修士的识海思维链 (`AgentInspector`) + 因果关系拓扑 (`RelationshipGraph`) + 实时编年史流**。补充组件与切换测试。
 - [x] **[V1-2] `App.tsx` 架构解耦第一刀：抽离世界推演与时间线控制器 (`useWorldSimulationController`)**：当前 `src/App.tsx` 已膨胀至 2000+ 行。将世界状态推进、快进 Worker 编排、时间线分支切换、自动播放定时器以及 Fair Model Turn 调度逻辑抽离至 `src/controllers/useWorldSimulationController.ts`，使 `App.tsx` 大幅瘦身并保持所有既有单元测试与集成测试零回归。
 - [x] **[V1-3] `App.tsx` 架构解耦第二刀：聚合零散制度小面板为三大主题总览中心 (`InstitutionHubPanel`)**：将散落在 `App.tsx` 中的几十个微型制度/账本面板（如工坊、借器、运费、乡祠、驿站、观象、静养、义仓等）按领域整合进 `src/components/hubs/SectAffairsHub.tsx`（宗门内政与工坊总览）、`src/components/hubs/CivicWorldHub.tsx`（九州民生与坊市商路总览）、`src/components/hubs/ChronicleArchiveHub.tsx`（天机史馆与考据总览），用清晰的二级 Tab 替代冗长的手风琴堆叠，将 `App.tsx` 行数压缩 40% 以上。
-- [ ] **[V1-4] 地图悬浮气泡检视器与就地交互 (`MapEntityPopover`)**：在 `WorldMapCanvas` 上点击或悬停任意灵脉地点、村镇或修士时，直接在地图旁弹出高颜值的半透明古风悬浮检视卡（显示该地灵气/驻留修士/正在发生的大事件/聚落人口，或该修士的境界/气血条/当前动作/内心独白一句话），并支持在悬浮卡上一键「聚焦追踪」、「神念传音」或「降下机缘/雷劫」，无需跳转到其他工作区才能看清地图上的内容。
+- [x] **[V1-4] 地图悬浮气泡检视器与就地交互 (`MapEntityPopover`)**：在 `WorldMapCanvas` 上点击或悬停任意灵脉地点、村镇或修士时，直接在地图旁弹出高颜值的半透明古风悬浮检视卡（显示该地灵气/驻留修士/正在发生的大事件/聚落人口，或该修士的境界/气血条/当前动作/内心独白一句话），并支持在悬浮卡上一键「聚焦追踪」、「神念传音」或「降下机缘/雷劫」，无需跳转到其他工作区才能看清地图上的内容。
 - [ ] **[V1-5] 顶栏全局修仙界态势感知仪 (`WorldPulseBar`)**：在全息指挥台与沙盒工作区顶部增加紧凑的「天地气运态势条」，直观显示：当前九域灵潮节气图标、正魔势力气运对比条、当世战力榜首（天下第一人）、正在渡劫或激战的高危预警闪光标签（点击可直接将地图镜头平滑聚焦到事发地点）。
 
 ### V2　九州山河画卷与 2D Canvas 斗法/天劫视觉奇观 (Canvas Visual Spectacle)

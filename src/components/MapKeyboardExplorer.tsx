@@ -22,6 +22,8 @@ const markLabel = { territory: '宗门领地', hazard: '灾害与地块', route:
 const standardLabel = { sites: '地点', actors: '可见修士', events: '当前可见事件' } as const;
 type MarkKind = PaintedMapMark['kind'];
 type ExplorerKind = keyof typeof standardLabel | MarkKind;
+type MapInspection = { kind: 'actor'; entity: Cultivator } | { kind: 'site'; entity: LocationNode };
+type ExplorerRow = { key: string; title: string; summary: string; activate: () => void; inspection?: MapInspection };
 const noMarks: readonly PaintedMapMark[] = [];
 const isMarkKind = (kind: string): kind is MarkKind => Object.hasOwn(markLabel, kind);
 
@@ -99,7 +101,7 @@ export function mapExplorerIndex(world: WorldState, view: Terrain, actorPosition
 }
 
 export function MapKeyboardExplorer({ world, view, actorPositions, presentation, selected, follows, zoom, marks = noMarks, villageLabels,
-  onFollow, onCamera, onSite, onActor, onPoint, onFocusLost }: {
+  onFollow, onCamera, onSite, onActor, onInspectSite, onInspectActor, onPoint, onFocusLost }: {
   world: WorldState;
   view: Terrain;
   actorPositions: ActorPositions;
@@ -113,6 +115,8 @@ export function MapKeyboardExplorer({ world, view, actorPositions, presentation,
   onCamera: (command: MapCameraCommand) => void;
   onSite: (site: LocationNode) => void;
   onActor: (actor: Cultivator) => void;
+  onInspectActor?: (actor: Cultivator, trigger: HTMLButtonElement) => void;
+  onInspectSite?: (site: LocationNode, trigger: HTMLButtonElement) => void;
   onPoint?: (point: MapPoint) => void;
   onFocusLost: () => void;
 }) {
@@ -129,20 +133,33 @@ export function MapKeyboardExplorer({ world, view, actorPositions, presentation,
   const layer = isMarkKind(kind) ? kind : undefined;
   const layerRows = layer && onPoint ? exactPaintedMarks(marks, layer) : [];
   const siteQuery = siteSearch.trim().toLowerCase();
-  const rows = kind === 'sites' ? index.sites.filter(({ site }) => !villageLabels?.size || !siteQuery ||
+  const rows: ExplorerRow[] = kind === 'sites' ? index.sites.filter(({ site }) => !villageLabels?.size || !siteQuery ||
     [site.name, villageLabels.get(site.id)?.name].some((name) => name?.toLowerCase().includes(siteQuery))).map(({ site, current }) => {
     const village = villageLabels?.get(site.id);
     return { key: site.id, title: site.name,
       summary: [village && village.name !== site.name ? village.name : undefined, village?.stage, current ? '当前可定位' : '已探索，当前不可见']
-        .filter(Boolean).join(' · '), activate: () => onSite(site) };
+        .filter(Boolean).join(' · '), activate: () => onSite(site),
+      inspection: current && onInspectSite ? { kind: 'site', entity: site } : undefined };
   })
     : kind === 'actors' ? actorPage.actors.map((actor) => ({ key: actor.id, title: actor.name,
-      summary: `${actor.realm} ${actor.realmStage}层`, activate: () => onActor(actor) }))
+      summary: `${actor.realm} ${actor.realmStage}层`, activate: () => onActor(actor),
+      inspection: onInspectActor ? { kind: 'actor', entity: actor } : undefined }))
       : kind === 'events' ? index.events.map(({ id, label, site }) => ({ key: id, title: label, summary: site.name, activate: () => onSite(site) })) : [];
   const count = kind === 'actors' ? actorPage.total : layer ? layerRows.length : rows.length;
   const pages = Math.max(1, Math.ceil(count / PAGE_SIZE));
   const currentPage = Math.min(page, pages - 1);
   const visible = kind === 'actors' ? rows : rows.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+  const currentInspection = useRef({ visible, onInspectActor, onInspectSite });
+  currentInspection.current = { visible, onInspectActor, onInspectSite };
+  const inspect = (intent: MapInspection, trigger: HTMLButtonElement) => {
+    const latest = currentInspection.current;
+    // A stale index target cannot inspect a new frame's same ID or a now-invisible site.
+    const matches = latest.visible.filter(({ inspection }) => inspection?.kind === intent.kind &&
+      inspection.entity.id === intent.entity.id);
+    if (matches.length !== 1 || matches[0].inspection?.entity !== intent.entity) return;
+    if (intent.kind === 'actor') latest.onInspectActor?.(intent.entity, trigger);
+    else latest.onInspectSite?.(intent.entity, trigger);
+  };
   useEffect(() => {
     const previous = focusOwner.current;
     if (previous && !previous.isConnected) {
@@ -185,12 +202,17 @@ export function MapKeyboardExplorer({ world, view, actorPositions, presentation,
           if (latest.kind === layer) activatePaintedMark(latest.marks, layer, id, latest.onPoint);
         }} />}
       {visible.length > 0 && <ul className="grid min-w-0 gap-1.5 sm:grid-cols-2" aria-label="可定位目标">
-        {visible.map((row) => <li key={`${kind}-${row.key}`} className="min-w-0">
-          <button type="button" className={`${control} w-full break-words py-1 text-left`} onClick={row.activate}
-            aria-pressed={kind === 'actors' ? row.key === selected?.id : undefined}>
-            {row.title}<span className="block text-slate-400">{row.summary}</span>
-          </button>
-        </li>)}
+        {visible.map((row) => {
+          const inspection = row.inspection;
+          return <li key={`${kind}-${row.key}`} className={`min-w-0${inspection ? ' flex items-stretch gap-1' : ''}`}>
+            <button type="button" className={`${control} ${inspection ? 'flex-1' : 'w-full'} break-words py-1 text-left`} onClick={row.activate}
+              aria-pressed={kind === 'actors' ? row.key === selected?.id : undefined}>
+              {row.title}<span className="block text-slate-400">{row.summary}</span>
+            </button>
+            {inspection && <button type="button" className={`${control} min-w-11 shrink-0`}
+              aria-label={`检视 ${row.title}`} onClick={(event) => inspect(inspection, event.currentTarget)}>检视</button>}
+          </li>;
+        })}
       </ul>}
       {pages > 1 && <div className="flex flex-wrap gap-1.5" aria-label="地图索引分页">
         <button type="button" className={control} disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>上一页</button>
