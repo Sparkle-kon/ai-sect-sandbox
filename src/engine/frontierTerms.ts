@@ -1,3 +1,4 @@
+import type { FrontierNightHuntState } from '../types/frontierNightHunt';
 import type {FrontierDrylandsState} from './frontierDrylandTerms';
 import type {FrontierProductionState} from './frontierProductionTerms';
 import type {FrontierTradeState} from './frontierTradeTerms';
@@ -165,7 +166,7 @@ export interface FrontierResidence {
 }
 export interface FrontierState {
   version:1;visits:FrontierVisit[];residences:FrontierResidence[];
-  production?:FrontierProductionState;trade?:FrontierTradeState;port?:FrontierPortState;drylands?:FrontierDrylandsState;
+  production?:FrontierProductionState;trade?:FrontierTradeState;port?:FrontierPortState;drylands?:FrontierDrylandsState;nightHunt?:FrontierNightHuntState;
 }
 export const frontierVisitId=(tick:number,actorId:string)=>`frontier-visit-${tick}-${actorId}`;
 export const frontierResidenceId=(tick:number,actorId:string)=>`frontier-home-${tick}-${actorId}`;

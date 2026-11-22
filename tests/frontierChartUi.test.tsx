@@ -26,3 +26,19 @@ describe('scoped frontier native chart display',()=>{
     expect(renderToStaticMarkup(<FrontierChart chart={{...chart,currentTileId:'s01'}}/>)).toBe('');
   });
 });
+
+describe('proved night trail in known terrain only',()=>{
+  const trail={chartId:chart.chartId,tileId:'n11'};
+  it('annotates only the already admitted exact non-sea cell',()=>{
+    const html=renderToStaticMarkup(<FrontierChart chart={chart} trail={trail}/>);
+    expect(html).toContain('此处已知的泉眼 · 第 2 行，第 2 列 · 此处曾查见足迹');
+    expect(html).not.toContain('n11');
+  });
+  it('omits absent, foreign, unknown and sea marks from accessible terrain',()=>{
+    for(const invalid of [undefined,{...trail,chartId:'chart-south-marsh'},{...trail,tileId:'n-out'}]){
+      expect(renderToStaticMarkup(<FrontierChart chart={chart} trail={invalid}/>)).not.toContain('曾查见足迹');
+    }
+    const maritime:FrontierChartData={...chart,tiles:chart.tiles.map(tile=>tile.tileId===trail.tileId?{...tile,surface:'sea'}:tile)};
+    expect(renderToStaticMarkup(<FrontierChart chart={maritime} trail={trail}/>)).not.toContain('曾查见足迹');
+  });
+});

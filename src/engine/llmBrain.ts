@@ -1,3 +1,5 @@
+import { availableFrontierNightHuntActions, projectFrontierNightHunt } from './frontierNightHunt';
+import { exactFrontierNightHuntDecision, frontierNightHuntCommand } from './frontierNightHuntCognition';
 import { availableSchoolFormChoices, schoolFormDuelForParticipant } from './schoolFormDuel';
 import { exactSchoolFormDecision, schoolFormCommand } from './schoolFormDuelCognition';
 import { availableCalamityArrayChoices } from './calamityArray';
@@ -803,6 +805,16 @@ export function computeHeuristicDecision(
   if (cultivator.positionPlane === 'immortal') return ascensionQuietWait();
   if (ascensionDutyActive(world, cultivator)) return utilityAscensionDecision(cultivator, world) ?? ascensionQuietWait();
   if(cultivator.positionPlane==='frontier'){
+    if(activeAvatar(world)!==cultivator){
+      const hunt=availableFrontierNightHuntActions(cultivator,world,world.tick);
+      if(hunt.length){
+        const before=projectFrontierNightHunt(world,cultivator);
+        const stance=cultivator.hp<cultivator.maxHp*.45?'return':before?.observed?'wait':'trace';
+        const option=hunt.find(row=>row.frontierNightHuntMove===stance);
+        const exact=option&&exactFrontierNightHuntDecision(frontierNightHuntCommand(option),hunt);
+        if(exact)return exact;
+      }
+    }
     // No Utility signature, fee-bearing travel or escrow without an explicit choice.
     const option=availableFrontierProviderActions(cultivator,world).find(row=>row.action==='FRONTIER_PRODUCTION'&&
       (row.frontierProductionMove==='harvest'||row.frontierProductionMove==='draw_tide')||
@@ -2358,6 +2370,15 @@ export async function requestCultivatorLLMDecision(
     }, 165);
   }
   if(cultivator.positionPlane==='frontier'){
+    const hunt=availableFrontierNightHuntActions(cultivator,world,requestTick);
+    if(hunt.length){
+      if(requestTick!==world.tick+1||activeAvatar(world)===cultivator)return undefined;
+      const menu=hunt.map(frontierNightHuntCommand);
+      return requestDecisionPrompt(config,requestTick,options,
+        '只原样抄写本人此刻可做的一项雪岭行止。不要填写妖兽、足迹位置、气候预报、伤势、奖励或结局。许可：'+JSON.stringify(menu),
+        parsed=>requestTick===world.tick+1&&activeAvatar(world)!==cultivator&&exactFrontierNightHuntDecision(parsed,hunt)
+          ?exactFrontierNightHuntDecision(parsed,availableFrontierNightHuntActions(cultivator,world,requestTick)):undefined,155);
+    }
     const exact=availableFrontierProviderActions(cultivator,world,requestTick);
     if(!exact.length)return undefined;
     const prompt=`本人实到另图 ${cultivator.locationId}。只复制一条原生许可，或返回 REST。不要填写资金、数量、货物、住户、天气或结果；只返回 JSON。许可：${JSON.stringify(exact.map(frontierCommand))}`;

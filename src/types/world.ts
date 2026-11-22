@@ -1,3 +1,4 @@
+import type { FrontierNightHuntMove } from './frontierNightHunt';
 import type { SchoolFormDuelChoice, SchoolFormDuelContact } from './schoolFormDuel';
 import type { TaughtSwordPractice } from './taughtSwordForm';
 import type { BeastDuelChoice, BeastDuelContact } from './beastDuelProtection';
@@ -133,6 +134,7 @@ export type ActionType =
   | 'GRAND_SIEGE_HERO'
   | 'BATTLEFIELD_REVISIT'
   | 'CALAMITY_ARRAY'
+  | 'FRONTIER_NIGHT_HUNT'
   | 'AUDIENCE_PLEDGE'
   | 'CULTIVATE'
   | 'BREAKTHROUGH'
@@ -594,6 +596,7 @@ export interface LLMDecisionPayload {
   targetSchoolFormContactId?: string;
   calamityArrayStance?: 'joint' | 'local';
   targetCalamityHazardId?: string;
+  frontierNightHuntMove?: FrontierNightHuntMove;
   targetBattlefieldSiegeId?: string;
   grandSiegeHeroMove?: GrandSiegeHeroMove;
   targetRoguelikeEncounterId?:string;

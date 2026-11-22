@@ -1,3 +1,4 @@
+import { projectFrontierNightHunt } from '../../engine/frontierNightHunt';
 import React, { type ReactNode } from 'react';
 import type { useWorldSimulationController } from '../../controllers/useWorldSimulationController';
 import type { Cultivator } from '../../types/world';
@@ -383,8 +384,12 @@ export function useCivicRealmViews({
     const actor=visibleWorld.cultivators.find(row=>row.id===option.targetCultivatorId);
     return actor?[[actor.id,actor.name]]:[];
   }));
+  const visibleNightHunt=frontierView?.scope==='frontier'&&selectedCultivator
+    ?projectFrontierNightHunt(visibleWorld,selectedCultivator):undefined;
+  const nightTrail=visibleNightHunt?.observed&&frontierView?.scope==='frontier'&&frontierView.site?.id===visibleNightHunt.siteId
+    ?{chartId:frontierView.chartId,tileId:visibleNightHunt.siteId}:undefined;
   const frontierRealmView=frontierView&&<React.Suspense fallback={<p role="status">查验亲到的地界…</p>}>
-    <FrontierPanel view={frontierView} production={frontierProduction} trade={frontierTrade} controls={frontierControls}
+    <FrontierPanel view={frontierView} nightTrail={nightTrail} production={frontierProduction} trade={frontierTrade} controls={frontierControls}
       host={frontierHost} tradeCandidates={frontierCandidates}
       portPanel={portLocal||portTrades.length||portChoices.length?
         <FrontierPortPanel movement={frontierView} local={portLocal} trades={portTrades}

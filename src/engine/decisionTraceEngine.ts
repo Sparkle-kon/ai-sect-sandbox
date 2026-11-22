@@ -1,3 +1,5 @@
+import { availableFrontierNightHuntActions } from './frontierNightHunt';
+import { exactFrontierNightHuntDecision } from './frontierNightHuntCognition';
 import { availableSchoolFormChoices, schoolFormDuelForParticipant } from './schoolFormDuel';
 import { exactSchoolFormDecision } from './schoolFormDuelCognition';
 import { availableCalamityArrayChoices } from './calamityArray';
@@ -110,6 +112,7 @@ export function recordDecisionTrace(world: WorldState, actorId: string, candidat
     decision.targetForbiddenDuelId !== undefined || decision.forbiddenArtChoice !== undefined ||
     decision.chosenAction === 'GRAND_SIEGE_HERO' || decision.targetGrandSiegeId !== undefined || decision.grandSiegeHeroMove !== undefined ||
     decision.chosenAction === 'BEAST_DUEL_RESPONSE' || decision.targetBeastDuelId !== undefined || decision.beastDuelChoice !== undefined ||
+    decision.chosenAction === 'FRONTIER_NIGHT_HUNT' || decision.frontierNightHuntMove !== undefined ||
     decision.chosenAction === 'SCHOOL_FORM_DUEL' || decision.schoolFormChoice !== undefined || decision.targetSchoolFormContactId !== undefined ||
     decision.chosenAction === 'CALAMITY_ARRAY' || decision.targetCalamityHazardId !== undefined || decision.calamityArrayStance !== undefined ||
     decision.chosenAction === 'BATTLEFIELD_REVISIT' || decision.targetBattlefieldSiegeId !== undefined || decision.battlefieldRevisitMove !== undefined ||
@@ -264,6 +267,11 @@ export function rememberReplayDecision(tape: DecisionReplayTape, actorId: string
     availableBeastDuelChoices(state.base,beastOwner),true);
   const beastFields=beastResponse?{targetBeastDuelId:beastResponse.targetBeastDuelId,beastDuelChoice:beastResponse.beastDuelChoice,
     ...(beastResponse.targetLocationId?{targetLocationId:beastResponse.targetLocationId}:{})}:undefined;
+  const nightAction=decision.chosenAction==='FRONTIER_NIGHT_HUNT';
+  const nightActor=nightAction?state.base.cultivators.find(row=>row.id===actorId):undefined;
+  const hunt=nightActor&&exactFrontierNightHuntDecision(decision,
+    availableFrontierNightHuntActions(nightActor,state.base,state.base.tick+1),true);
+  const nightFields=hunt?{frontierNightHuntMove:hunt.frontierNightHuntMove,targetFrontierSiteId:hunt.targetFrontierSiteId}:undefined;
   const schoolAction=decision.chosenAction==='SCHOOL_FORM_DUEL';
   const schoolActor=schoolAction?state.base.cultivators.find(row=>row.id===actorId):undefined;
   const schoolContact=schoolActor&&schoolFormDuelForParticipant(state.base,schoolActor);
@@ -290,9 +298,9 @@ export function rememberReplayDecision(tape: DecisionReplayTape, actorId: string
   const ascent = stance ? { ascensionMove: stance.ascensionMove, ...(stance.targetAscensionTrialId === undefined ? {} :
     { targetAscensionTrialId: stance.targetAscensionTrialId }) } : undefined;
   state.decisions.set(actorId, { ...(forbiddenAction || grandSiegeAction || dungeonAction || heavenlyAction || daoPathAction ||
-      auctionAction || auctionAmbush || clanAction || ascensionAction || revisitAction || beastAction || arrayAction || schoolAction ? {} : details),
+      auctionAction || auctionAmbush || clanAction || ascensionAction || revisitAction || beastAction || arrayAction || schoolAction || nightAction ? {} : details),
     chosenAction: decision.chosenAction, innerMonologue: '', ...(cohortInviteeIds ? { cohortInviteeIds } : {}),
-    ...personalHeartChoice, ...personalForbiddenChoice, ...personalHeroChoice, ...dungeonFields, ...chosenAlchemy, ...pathFields, ...auctionFields, ...ambushFields, ...clanFields, ...ascent, ...revisitFields, ...beastFields, ...arrayFields, ...schoolFields });
+    ...personalHeartChoice, ...personalForbiddenChoice, ...personalHeroChoice, ...dungeonFields, ...chosenAlchemy, ...pathFields, ...auctionFields, ...ambushFields, ...clanFields, ...ascent, ...revisitFields, ...beastFields, ...arrayFields, ...schoolFields, ...nightFields });
   if (personalHeartChoice && heartModel) state.heartModelActors.add(actorId);
   else state.heartModelActors.delete(actorId);
   if (personalForbiddenChoice && forbiddenModel) state.forbiddenModelActors.add(actorId);
