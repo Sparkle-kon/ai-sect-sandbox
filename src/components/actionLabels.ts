@@ -7,6 +7,7 @@ const ACTION_LABELS = {
   BEAST_DUEL_RESPONSE: '刃下护契',
   GRAND_SIEGE_HERO: '阵前抉择',
   BATTLEFIELD_REVISIT: '重访旧战场',
+  CALAMITY_ARRAY: '守阵避瘴',
   AUDIENCE_PLEDGE: '践行密议',
   WATER_VEIN: '实察井水、借脉或采矿',
   NORTH_MINING_CHARTER: '办理寒玉采契',

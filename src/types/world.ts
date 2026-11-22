@@ -129,6 +129,7 @@ export type ActionType =
   | 'BEAST_DUEL_RESPONSE'
   | 'GRAND_SIEGE_HERO'
   | 'BATTLEFIELD_REVISIT'
+  | 'CALAMITY_ARRAY'
   | 'AUDIENCE_PLEDGE'
   | 'CULTIVATE'
   | 'BREAKTHROUGH'
@@ -586,6 +587,8 @@ export interface LLMDecisionPayload {
   forbiddenArtChoice?: ForbiddenArtChoice;
   targetGrandSiegeId?: string;
   battlefieldRevisitMove?: 'repair' | 'seek';
+  calamityArrayStance?: 'joint' | 'local';
+  targetCalamityHazardId?: string;
   targetBattlefieldSiegeId?: string;
   grandSiegeHeroMove?: GrandSiegeHeroMove;
   targetRoguelikeEncounterId?:string;

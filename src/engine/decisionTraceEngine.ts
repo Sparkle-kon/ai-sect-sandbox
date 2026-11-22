@@ -1,3 +1,5 @@
+import { availableCalamityArrayChoices } from './calamityArray';
+import { exactCalamityArrayDecision } from './calamityArrayCognition';
 import { availableBeastDuelChoices, beastDuelContactForParticipant } from './beastDuelProtection';
 import { exactBeastDuelResponse } from './beastDuelCognition';
 import { availableBattlefieldRevisits } from './battlefieldRevisit';
@@ -106,6 +108,7 @@ export function recordDecisionTrace(world: WorldState, actorId: string, candidat
     decision.targetForbiddenDuelId !== undefined || decision.forbiddenArtChoice !== undefined ||
     decision.chosenAction === 'GRAND_SIEGE_HERO' || decision.targetGrandSiegeId !== undefined || decision.grandSiegeHeroMove !== undefined ||
     decision.chosenAction === 'BEAST_DUEL_RESPONSE' || decision.targetBeastDuelId !== undefined || decision.beastDuelChoice !== undefined ||
+    decision.chosenAction === 'CALAMITY_ARRAY' || decision.targetCalamityHazardId !== undefined || decision.calamityArrayStance !== undefined ||
     decision.chosenAction === 'BATTLEFIELD_REVISIT' || decision.targetBattlefieldSiegeId !== undefined || decision.battlefieldRevisitMove !== undefined ||
     decision.chosenAction === 'EXPEDITION_DUNGEON' || decision.targetDungeonRoomId !== undefined || decision.dungeonMove !== undefined ||
     decision.chosenAction === 'DAO_PATH' || decision.targetDaoPathId !== undefined || decision.daoPathMove !== undefined ||
@@ -258,6 +261,12 @@ export function rememberReplayDecision(tape: DecisionReplayTape, actorId: string
     availableBeastDuelChoices(state.base,beastOwner),true);
   const beastFields=beastResponse?{targetBeastDuelId:beastResponse.targetBeastDuelId,beastDuelChoice:beastResponse.beastDuelChoice,
     ...(beastResponse.targetLocationId?{targetLocationId:beastResponse.targetLocationId}:{})}:undefined;
+  const arrayAction = decision.chosenAction === 'CALAMITY_ARRAY';
+  const arrayActor = arrayAction ? current.cultivators.find(row => row.id === actorId) : undefined;
+  const arrayIntent = arrayActor && exactCalamityArrayDecision(decision,
+    availableCalamityArrayChoices(current, arrayActor, live?.tick ?? state.base.tick + 1), true);
+  const arrayFields = arrayIntent ? { calamityArrayStance: arrayIntent.calamityArrayStance,
+    targetCalamityHazardId: arrayIntent.targetCalamityHazardId, targetLocationId: arrayIntent.targetLocationId } : undefined;
   const revisitAction=decision.chosenAction==='BATTLEFIELD_REVISIT';
   const revisitor=revisitAction?current.cultivators.find(row=>row.id===actorId):undefined;
   const revisited=revisitor&&exactBattlefieldRevisitDecision(decision,
@@ -272,9 +281,9 @@ export function rememberReplayDecision(tape: DecisionReplayTape, actorId: string
   const ascent = stance ? { ascensionMove: stance.ascensionMove, ...(stance.targetAscensionTrialId === undefined ? {} :
     { targetAscensionTrialId: stance.targetAscensionTrialId }) } : undefined;
   state.decisions.set(actorId, { ...(forbiddenAction || grandSiegeAction || dungeonAction || heavenlyAction || daoPathAction ||
-      auctionAction || auctionAmbush || clanAction || ascensionAction || revisitAction || beastAction ? {} : details),
+      auctionAction || auctionAmbush || clanAction || ascensionAction || revisitAction || beastAction || arrayAction ? {} : details),
     chosenAction: decision.chosenAction, innerMonologue: '', ...(cohortInviteeIds ? { cohortInviteeIds } : {}),
-    ...personalHeartChoice, ...personalForbiddenChoice, ...personalHeroChoice, ...dungeonFields, ...chosenAlchemy, ...pathFields, ...auctionFields, ...ambushFields, ...clanFields, ...ascent, ...revisitFields, ...beastFields });
+    ...personalHeartChoice, ...personalForbiddenChoice, ...personalHeroChoice, ...dungeonFields, ...chosenAlchemy, ...pathFields, ...auctionFields, ...ambushFields, ...clanFields, ...ascent, ...revisitFields, ...beastFields, ...arrayFields });
   if (personalHeartChoice && heartModel) state.heartModelActors.add(actorId);
   else state.heartModelActors.delete(actorId);
   if (personalForbiddenChoice && forbiddenModel) state.forbiddenModelActors.add(actorId);

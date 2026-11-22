@@ -1,3 +1,4 @@
+import { resolveCalamityArrayProtection } from './calamityArray';
 import {reconcileAscensionInterruptions} from './ascensionEngine';
 import { interruptStoryChoicesOnDeath } from './interruptedStoryChoices';
 import {disasterShelterCheckpoint} from './disasterShelterCheckpoint';
@@ -170,9 +171,13 @@ export function advanceMapHazards(world: WorldState): WorldEvent[] {
     const first=people[0];
     const locationId=first&&disasterShelterCheckpoint(world,first)?
       world.locations.find(site=>terrainTileAt(world,site.x,site.y)?.id===hazard.tileId)?.id:first?.locationId;
-    const damage = hurt(world, people, (person) => Math.max(1, Math.round(person.maxHp *
-      (hazard.kind === 'beast_tide' ? .06 + intensity * .025 : .035 + intensity * .022))), BRUSH_TITLES[hazard.kind],
+    const nominal = (person: Cultivator) => Math.max(1, Math.round(person.maxHp *
+      (hazard.kind === 'beast_tide' ? .06 + intensity * .025 : .035 + intensity * .022)));
+    const ward = hazard.kind === 'cursed_miasma' && intensity >= 2
+      ? resolveCalamityArrayProtection(world, hazard, people, nominal) : undefined;
+    const damage = hurt(world, people, person => ward?.damage.get(person.id) ?? nominal(person), BRUSH_TITLES[hazard.kind],
       hazard.kind === 'beast_tide');
+    if (ward) events.push(...ward.events);
     if (!damage.length) continue;
     const defeated = people.some((person) => !person.alive);
     events.push({ id, tick: world.tick, year: world.year, month: world.month, title: BRUSH_TITLES[hazard.kind],

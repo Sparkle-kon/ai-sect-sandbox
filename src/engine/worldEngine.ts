@@ -1,3 +1,5 @@
+import { availableCalamityArrayChoices, isPrivateCalamityArrayEvent, recordCalamityArrayChoice } from './calamityArray';
+import { exactCalamityArrayDecision } from './calamityArrayCognition';
 import { beastDuelContactForParticipant, beastDuelGuardEvent, consumeBeastDuelContact, openBeastDuelContact, openBeastDuelEvent,
   prepareBeastDuelResolution, pruneInvalidBeastDuelContacts, settleBeastGuard, settleBeastWithdraw } from './beastDuelProtection';
 import type { BeastDuelContact } from '../types/beastDuelProtection';
@@ -823,6 +825,11 @@ export function applyCultivatorBrainDecision(
     case 'GRAND_SIEGE_HERO':
       // The native attack round, not this individual turn, owns actual array and resource settlement.
       return null;
+    case 'CALAMITY_ARRAY': {
+      if (modelInput && activeAvatar(world) === cultivator) return null;
+      const exact = exactCalamityArrayDecision(decision, availableCalamityArrayChoices(world, cultivator, world.tick), true);
+      return exact ? recordCalamityArrayChoice(world, cultivator, exact) : null;
+    }
     case 'BATTLEFIELD_REVISIT': {
       if(modelInput&&activeAvatar(world)===cultivator)return null;
       const exact=exactBattlefieldRevisitDecision(decision,availableBattlefieldRevisits(world,cultivator,world.tick),true);
@@ -1475,6 +1482,14 @@ export function advanceWorldTick(
     const modelProposal = supplied && traceOptions?.modelActors?.has(cultivator.id) ? supplied : undefined;
     let provided = avatarDecision ?? supplied;
     let modelOrdinaryReplaced=false;
+    if (modelProposal?.chosenAction === 'CALAMITY_ARRAY' && !avatarDecision) {
+      const old = prevState.cultivators.find(actor => actor.id === cultivator.id);
+      if (!old || activeAvatar(prevState) === old ||
+        !exactCalamityArrayDecision(modelProposal, availableCalamityArrayChoices(prevState, old, nextState.tick), true)) {
+        provided = undefined;
+        modelOrdinaryReplaced = true;
+      }
+    }
     if(modelProposal?.chosenAction==='BATTLEFIELD_REVISIT'&&!avatarDecision){
       const old=prevState.cultivators.find(actor=>actor.id===cultivator.id);
       if(!old||activeAvatar(prevState)===old||
@@ -1789,7 +1804,7 @@ export function advanceWorldTick(
         if (receipt && evt.id === `evt-${receipt.id}`) recordReliefCompetition(nextState, receipt);
       }
       newEvents.push(evt);
-      if(!isBattlefieldRevisitEvent(evt))witnessEvent(nextState, evt);
+      if(!isBattlefieldRevisitEvent(evt)&&!isPrivateCalamityArrayEvent(evt))witnessEvent(nextState, evt);
       if(decision.chosenAction==='SOCIALIZE'&&cultivator.currentAction==='SOCIALIZE'){
         const after=recordTournamentBanquetAfterTalk(nextState,evt);
         if(after&&!newEvents.some(row=>row.id===after.id))newEvents.push(after);

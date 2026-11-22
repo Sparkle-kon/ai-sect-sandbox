@@ -1,3 +1,5 @@
+import { availableCalamityArrayChoices } from './calamityArray';
+import { calamityArrayCommand, exactCalamityArrayDecision } from './calamityArrayCognition';
 import { availableBeastDuelChoices, beastDuelContactForParticipant } from './beastDuelProtection';
 import { beastDuelCommand, exactBeastDuelResponse } from './beastDuelCognition';
 import { availableBattlefieldRevisits } from './battlefieldRevisit';
@@ -1371,6 +1373,15 @@ export function computeHeuristicDecision(
       c.locationId === cultivator.locationId && !activeDanxiaMedicineEscort(world,c) && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) && !courierCheckpoint(world, c) && !boundaryReliefCheckpoint(world, c) && !disasterShelterCheckpoint(world,c)
   );
 
+  if (activeAvatar(world) !== cultivator && cultivator.hp >= cultivator.maxHp * .45) {
+    const wards = availableCalamityArrayChoices(world, cultivator, world.tick);
+    const stance = cultivator.personality === '阴险' ? 'local' : 'joint';
+    const ward = wards.find(option => option.calamityArrayStance === stance);
+    if (ward) {
+      const exact = exactCalamityArrayDecision(calamityArrayCommand(ward), wards);
+      if (exact) return exact;
+    }
+  }
   const refuge=urgentOrdinaryRefuge(cultivator,world);
   if(refuge)return refuge;
   const alchemy = availableAlchemy(cultivator, world);
@@ -2489,6 +2500,16 @@ export async function requestCultivatorLLMDecision(
         exactBeastDuelResponse(parsed,beastContact.id,availableBeastDuelChoices(world,cultivator)):undefined,160);
   }
 
+  const wards = availableCalamityArrayChoices(world, cultivator, requestTick);
+  if (wards.length) {
+    if (requestTick !== world.tick + 1 || activeAvatar(world) === cultivator) return undefined;
+    const menu = wards.map(calamityArrayCommand);
+    return requestDecisionPrompt(config, requestTick, options,
+      '只原样复制一项本人守阵的许可。不替他宗应允，不可填写独白、代价、伤势、获救或结局：' + JSON.stringify(menu),
+      parsed => requestTick === world.tick + 1 && activeAvatar(world) !== cultivator &&
+        exactCalamityArrayDecision(parsed, wards)
+        ? exactCalamityArrayDecision(parsed, availableCalamityArrayChoices(world, cultivator, requestTick)) : undefined, 160);
+  }
   const battlefield=availableBattlefieldRevisits(world,cultivator,requestTick);
   if(battlefield.length){
     if(requestTick!==world.tick+1||activeAvatar(world)===cultivator)return undefined;
