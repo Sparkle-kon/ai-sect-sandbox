@@ -1,7 +1,9 @@
 import type { DialogueExchange,WorldState } from '../types/world';
 import { decodeWorldSave,encodeWorldSave,WORLD_SAVE_MAX_BYTES,worldSaveByteCount } from './storageEngine';
 
-export const SHARE_SAVE_REDACTED_TEXT='（共享副本已隐去）';
+import { SHARE_SAVE_REDACTED_TEXT } from './shareSaveRedactionText';
+
+export { SHARE_SAVE_REDACTED_TEXT } from './shareSaveRedactionText';
 
 export interface ShareSavePrivacyCounts {
   readonly privateNotes:number;
@@ -49,7 +51,9 @@ const dialogueCount=(rows:readonly {dialogue?:DialogueExchange}[])=>rows.filter(
 function countsFor(world:WorldState):ShareSavePrivacyCounts{
   return {
     privateNotes:world.annotations.notes.length,
-    avatarTranscriptFields:world.playerAvatar.transcript.reduce((sum,row)=>sum+presentCount([row.message,row.reply,row.effect]),0),
+    avatarTranscriptFields:world.playerAvatar.transcript.reduce((sum,row)=>sum+presentCount([row.message,row.reply,row.effect]),0)+
+      (world.playerAvatar.audience?.sessions.reduce((sum,session)=>sum+session.turns.reduce(
+        (turns,turn)=>turns+presentCount([turn.message,turn.reply]),0),0)??0),
     actorThoughtFields:world.cultivators.reduce((sum,row)=>sum+presentCount([row.innerMonologue,row.secretGoal]),0),
     whisperMemoryFields:world.cultivators.reduce((sum,row)=>sum+presentCount([...row.memories,...row.coreMemories]
       .filter(memory=>memory.category==='whisper').map(memory=>memory.content)),0),
@@ -81,6 +85,11 @@ function redactedClone(world:WorldState):WorldState{
   copy.annotations.notes=[];
   for(const entry of copy.playerAvatar.transcript){
     entry.message=hiddenText(entry.message);entry.reply=hiddenText(entry.reply);entry.effect=hiddenText(entry.effect);
+  }
+  for(const session of copy.playerAvatar.audience?.sessions??[]){
+    for(const turn of session.turns){
+      turn.message=hiddenText(turn.message);turn.reply=hiddenText(turn.reply);
+    }
   }
   for(const actor of copy.cultivators){
     actor.innerMonologue=hiddenText(actor.innerMonologue);
@@ -125,6 +134,7 @@ function allowedChange(path:readonly PathPart[],leftParent:unknown,rightParent:u
   const last=path.at(-1);
   if(pathIs(path,['annotations','notes']))return true;
   if((last==='message'||last==='reply'||last==='effect')&&pathIs(path,['playerAvatar','transcript',ITEM,last]))return true;
+  if((last==='message'||last==='reply')&&pathIs(path,['playerAvatar','audience','sessions',ITEM,'turns',ITEM,last]))return true;
   if((last==='innerMonologue'||last==='secretGoal')&&pathIs(path,['cultivators',ITEM,last]))return true;
   if(last==='content'&&(pathIs(path,['cultivators',ITEM,'memories',ITEM,last])||
     pathIs(path,['cultivators',ITEM,'coreMemories',ITEM,last]))&&isPrivateKind(leftParent,rightParent,'category','whisper'))return true;

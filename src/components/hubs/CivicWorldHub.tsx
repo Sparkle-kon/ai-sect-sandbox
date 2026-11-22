@@ -1,3 +1,4 @@
+import type {RingAudiencePanelProps} from '../RingAudiencePanel';
 import React, {useMemo,type ReactNode} from 'react';
 import {BarChart3,RotateCcw} from 'lucide-react';
 import type {useWorldSimulationController} from '../../controllers/useWorldSimulationController';
@@ -56,13 +57,14 @@ export interface CivicWorldHubProps {
   authoredEra?:AuthoredEraLaunchController;
   handedness:HandednessPreference;
   onChangeHandedness:(value:string)=>void;
+  audience?:RingAudiencePanelProps;
   onIntervene:(command:GodInterventionCommand)=>void;
   onAnalytics:()=>void;
 }
 
 export function CivicWorldHub({
   simulation,active,selectedCultivator,atlasExtras,initialOpen='weather',rememberedOpen,onOpenChange,
-  authoredEra,handedness,onChangeHandedness,onIntervene,onAnalytics,
+  authoredEra,handedness,onChangeHandedness,audience,onIntervene,onAnalytics,
 }:CivicWorldHubProps) {
   const {
     world,visibleWorld,authority,timeline,history,saveContextVersion,viewScopeKey,sourceBranch,preview,browsing,
@@ -179,7 +181,7 @@ export function CivicWorldHub({
             coverage={fairModelCoverage}
             configured={llmConfig.enabled} hasCredential={Boolean(llmConfig.apiKey.trim())} model={llmConfig.model || 'gpt-4o-mini'} /></React.Suspense>
           <React.Suspense fallback={<p role="status">载入天道控制台…</p>}><GodConsole world={world} selectedCultivatorId={activeActorId} llmConfig={llmConfig}
-            onUpdateLLMConfig={changeLlmConfig} onIntervene={onIntervene} /></React.Suspense>
+            onUpdateLLMConfig={changeLlmConfig} audience={audience} audienceScope={viewScopeKey} onIntervene={onIntervene} /></React.Suspense>
         </div> },
         { id: 'scenario', label: '剧本编辑与复演', content: <React.Suspense fallback={<p role="status">载入剧本编辑器…</p>}>
           <ScenarioPanel world={world} busy={isStepping} onApply={replaceWorld} authoredEra={authoredEra} />

@@ -83,12 +83,14 @@ export default defineConfig({
           // Private theatre selection and its save proof are shared by UI, native and storage.
           'heart-demon-rules': ['./src/engine/heartDemonEngine.ts', './src/engine/interruptedStoryChoices.ts',
             './src/engine/storageHeartDemonValidation.ts', './src/types/heartDemon.ts', './src/engine/tribulationTerms.ts'],
+          'ring-audience-proof': ['./src/engine/ringAudienceTerms.ts', './src/engine/storageRingAudienceValidation.ts'],
           // Authored and model-selected voice variants do not pull in the simulation rule graph.
           'wild-persona-voices': ['./src/engine/wildPersonaEngine.ts', './src/engine/dialogueEngine.ts'],
           // Public bond projections share a narrow proof format, independently of raw relationship panels.
           'dramatic-bond-proof': ['./src/types/dramaticBond.ts', './src/engine/dramaticBondTerms.ts', './src/engine/storageDramaticBondValidation.ts'],
           'dramatic-bond-story': ['./src/engine/dramaticBondEngine.ts', './src/components/DramaticBondRead.tsx',
-            './src/components/useDramaticBondRead.ts'],
+            './src/components/useDramaticBondRead.ts', './src/engine/ringAudienceEngine.ts', './src/engine/ringAudienceDialogue.ts',
+            './src/components/RingAudiencePanel.tsx', './src/components/useRingAudienceControls.ts'],
           // Truce and storage need the typed siege proof, not the active combat graph.
           'grand-siege-proof': ['./src/engine/grandSiegeProof.ts', './src/engine/storageGrandSiegeValidation.ts', './src/types/grandSiege.ts'],
           // The game seed depends only on trace state; keep the optional replay rules separate.

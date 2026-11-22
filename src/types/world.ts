@@ -1,3 +1,4 @@
+import type {RingAudienceState} from './ringAudience';
 import type { DramaticBondState } from './dramaticBond';
 import type { GrandSiegeHeroMove, GrandSiegeTheatre } from './grandSiege';
 import type { ForbiddenArtChoice, ForbiddenArtScar, ForbiddenDuelContact } from './forbiddenArt';
@@ -110,6 +111,7 @@ export type ActionType =
   | 'AWAKEN_DESTINY'
   | 'FORBIDDEN_ART'
   | 'GRAND_SIEGE_HERO'
+  | 'AUDIENCE_PLEDGE'
   | 'CULTIVATE'
   | 'BREAKTHROUGH'
   | 'EXPLORE'
@@ -1173,6 +1175,7 @@ export interface AvatarTranscriptEntry extends AvatarInteractionRequest {
   effect: string;
 }
 export interface PlayerAvatarState {
+  audience?:RingAudienceState;
   possessedId?: string;
   possessionUntilTick?: number;
   switchAvailableTick: number;

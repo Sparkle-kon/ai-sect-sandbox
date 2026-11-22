@@ -1,3 +1,4 @@
+import {useRingAudienceControls} from './components/useRingAudienceControls';
 import {useDramaticBondRead} from './components/useDramaticBondRead';
 import {GrandSiegeMapScene} from './components/GrandSiegeMapScene';
 import {availableWaypostMealActions} from './engine/waypostMealEngine';
@@ -150,6 +151,8 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
       setAvatarNotice(undefined);
     },
   });
+
+  const getAudience=useRingAudienceControls(simulation);
 
   const {
     world,visibleWorld,authority,timeline,history,saveTimelineId,saveContextVersion,restoredReadingOrigin,
@@ -798,6 +801,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
               {canReturnEraEntry && <button type="button" disabled={isStepping||fastForwardLocked} onClick={returnEraEntry}
                 className={`${action} bg-slate-800 text-amber-100`}>返回入世前的年代</button>}
               <PossessionPanel world={world} selectedCultivatorId={activeActorId} busy={isStepping}
+                audience={getAudience('ring',activeActorId??undefined)} audienceScope={viewScopeKey}
                 modelReady={llmConfig.enabled && Boolean(llmConfig.apiKey.trim())} notice={avatarNotice}
                 onPossess={handlePossess} onOrder={handleAvatarOrder} onSpeak={(request) => void handleAvatarSpeak(request)} />
             </React.Suspense> }]),
@@ -828,6 +832,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
           onCouncil={()=>{setCouncilOpenedBefore(true);setCouncilOpen(true);}}/>,
         world:immersive??<CivicWorldHub simulation={simulation} active={dashboardOpen&&workspace==='world'}
           selectedCultivator={selectedCultivator} atlasExtras={atlasExtras}
+          audience={getAudience('heaven',activeActorId??undefined)}
           initialOpen={opened('world','weather')} {...fold('world')} authoredEra={authoredEra}
           handedness={handedness} onChangeHandedness={changeHandedness} onIntervene={handleGodIntervene}
           onAnalytics={()=>setAnalyticsOpen(true)}/>,

@@ -1,3 +1,4 @@
+import {RING_AUDIENCE_TABOO_TECHNIQUE,expireRingAudiences,finishRingAudienceExecution,pendingRingAudienceExecution} from './ringAudienceEngine';
 import { personaLine } from './wildPersonaEngine';
 import { captureDramaticBondFact } from './dramaticBondEngine';
 import { availableGrandSiegeHeroActions } from './grandSiegeTheatreEngine';
@@ -695,6 +696,8 @@ export function applyCultivatorBrainDecision(
       return resolveInfirmaryAction(world, cultivator, decision);
     case 'CARE_FOLLOWUP':
       return resolveCareFollowupAction(world, cultivator, decision);
+    case 'AUDIENCE_PLEDGE':
+      return null; // Only a real sealed audience can execute through the native turn below.
     case 'GRAND_SIEGE_HERO':
       // The native attack round, not this individual turn, owns actual array and resource settlement.
       return null;
@@ -1203,6 +1206,42 @@ export function advanceWorldTick(
       continue;
     }
 
+    const audience=nextState.playerAvatar.audience&&!isTribulationActive(cultivator)&&!activeSiegeForActor(nextState,cultivator)&&
+      !activeOccasionForActor(nextState,cultivator)&&avatarOrder?.actorId!==cultivator.id&&
+      !activeRoguelikeEncounter(nextState,cultivator)&&!activeDestinyTraitOffer(nextState,cultivator)
+      ?pendingRingAudienceExecution(nextState,cultivator):undefined;
+    if(audience?.aim==='challenge_master'&&audience.leaderId){
+      const duel=applyCultivatorBrainDecision(nextState,cultivator,{chosenAction:'DUEL',targetCultivatorId:audience.leaderId,
+        innerMonologue:'只与真正眼前的掌门当面分说。'},rng,undefined,
+        event=>{newEvents.push(event);witnessEvent(nextState,event);});
+      if(duel){
+        if(duel.duelWinnerId&&duel.actorIds[1]===audience.leaderId)finishRingAudienceExecution(nextState,audience,duel,'confronted');
+        captureWitnessedPersonalScene(nextState,duel);captureDramaticBondFact(nextState,duel);
+        newEvents.push(duel);witnessEvent(nextState,duel);
+        renewRegionalProtectionAfterEvent(regionalTurn);
+        if(precomputedDecisions&&Object.hasOwn(precomputedDecisions,cultivator.id))recordDecisionEffect?.(cultivator.id,false);
+        continue;
+      }
+    }else if(audience&&audience.aim!=='challenge_master'){
+      const effect=audience.aim==='leave_sect'?'left':'learned';
+      if(effect==='left'){
+        cultivator.sectId='';cultivator.sectRank='外门弟子';cultivator.contribution=0;
+        delete cultivator.guardAssignment;
+      }else{
+        cultivator.qiProgress-=10;
+        cultivator.technique={id:RING_AUDIENCE_TABOO_TECHNIQUE,name:'藏锋逆息诀',spiritRoot:cultivator.spiritRoot};
+        cultivator.techniqueMastery=10;
+      }
+      cultivator.currentAction='AUDIENCE_PLEDGE';
+      const execution:WorldEvent={id:`evt-${nextState.tick}-${cultivator.id}-audience-${effect}`,tick:nextState.tick,year:nextState.year,month:nextState.month,
+        title:effect==='left'?'离山立身':'禁诀入门',description:effect==='left'?'已亲自卸下门中名籍，此刻仍在原处。':'实耗十点灵气，已学藏锋逆息诀的入门一式。',
+        category:effect==='left'?'diplomacy':'breakthrough',actorIds:[cultivator.id],locationId:cultivator.locationId,witnessScope:'participants'};
+      finishRingAudienceExecution(nextState,audience,execution,effect);
+      newEvents.push(execution);
+      if(precomputedDecisions&&Object.hasOwn(precomputedDecisions,cultivator.id))recordDecisionEffect?.(cultivator.id,false);
+      continue;
+    }
+
     const supplied = precomputedDecisions && Object.hasOwn(precomputedDecisions, cultivator.id) ? precomputedDecisions[cultivator.id] : undefined;
     const avatarDecision = avatarOrder?.actorId === cultivator.id ? avatarOrder.decision : undefined;
     const modelProposal = supplied && traceOptions?.modelActors?.has(cultivator.id) ? supplied : undefined;
@@ -1442,6 +1481,7 @@ export function advanceWorldTick(
   const completedEvents=[...newEvents,...nextState.events.filter(({id,tick})=>tick===nextState.tick&&!mainEventIds.has(id))];
   settleUpperPassageMortality(nextState);
   settleFrontierMortality(nextState);
+  expireRingAudiences(nextState);
   finalizeDestinyTraitOffers(nextState);
   pruneInvalidForbiddenDuelContacts(nextState);
   recordEraHistoryTurn(prevState,nextState,completedEvents);

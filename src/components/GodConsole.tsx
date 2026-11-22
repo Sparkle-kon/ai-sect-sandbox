@@ -1,3 +1,4 @@
+import {RingAudiencePanel,type RingAudiencePanelProps} from './RingAudiencePanel';
 import {onLowerPlane} from '../engine/upperPassageIsolation';
 import { isScopedExpeditionGate } from '../engine/expeditionOmenTerms';
 import React, { useState } from 'react';
@@ -10,6 +11,8 @@ interface GodConsoleProps {
   selectedCultivatorId: string | null;
   llmConfig: LLMConfig;
   onUpdateLLMConfig: (cfg: LLMConfig) => void;
+  audience?: RingAudiencePanelProps;
+  audienceScope?: string;
   onIntervene: (cmd: GodInterventionCommand) => void;
 }
 
@@ -19,6 +22,8 @@ export const GodConsole: React.FC<GodConsoleProps> = ({
   llmConfig,
   onUpdateLLMConfig,
   onIntervene,
+  audience,
+  audienceScope,
 }) => {
   const [whisperText, setWhisperText] = useState(
     '立刻前往上古陨仙墟夺取机缘，顺便刺杀血月老祖！'
@@ -102,6 +107,8 @@ export const GodConsole: React.FC<GodConsoleProps> = ({
           </div>
         </div>
       )}
+
+      {audience?.role==='heaven'&&<RingAudiencePanel key={audienceScope} {...audience} canExchange={world.playerAvatar.essence>=audience.exchangeCost} modelReady={llmConfig.enabled&&Boolean(llmConfig.apiKey.trim())}/>}
 
       {/* Quick God Actions */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
