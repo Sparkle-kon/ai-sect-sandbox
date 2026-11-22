@@ -86,7 +86,7 @@ export async function enrichAnnualReflections(world: WorldState, config: LLMConf
   const endpoint = `${config.apiBaseUrl.replace(/\/+$/, '')}/chat/completions`;
   const cultivators = await Promise.all(world.cultivators.map(async (cultivator) => {
     const findings = cultivator.reflections.filter((entry) => entry.tick === world.tick);
-    if (!cultivator.alive || !findings.length) return cultivator;
+    if (!cultivator.alive || cultivator.positionPlane === 'immortal' || !findings.length) return cultivator;
     const recalled = new Map(recallMemories(cultivator, world.tick, Infinity).map((memory) => [memory.id, memory]));
     const observations = findings.map((entry) => ({
       id: entry.id, kind: entry.kind, theme: entry.theme, baseStatement: entry.statement,

@@ -20,7 +20,7 @@ const descriptions:Record<Category,string>={
   power:'眼下可见的战力。榜序不等于实战胜负。',
   karma:'只列负业未消之人。业力是修行所载，不是罪名。',
   alchemy:'只数可核实的成丹批次，不以名望和资质代替。',
-  lives:'有据便记，无据则留白。不把未归或失踪写作陨落。',
+  lives:'有据便记，无据则留白。暂入上界不等于飞升，未归也不等于陨落。',
 };
 const control='min-h-11 min-w-0 rounded-md border border-amber-300/30 px-2 py-1 text-sm text-amber-100 [overflow-wrap:anywhere] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300 disabled:opacity-50';
 const pageSize=12;
@@ -34,10 +34,11 @@ const ink:Record<Motif,string>={
   destiny:'M68 25c-10-2-8-10 0-14 9 4 10 12 0 14m0 3v5',
   ending:'M56 31h27m-23-5h19m-15-6h11',
 };
-function MountainSeal({kind}:{kind?:Motif}){
-  return <svg aria-hidden="true" focusable="false" viewBox="0 0 96 40"
+function MountainSeal({kind,ascended=false}:{kind?:Motif;ascended?:boolean}){
+  return <svg aria-hidden="true" focusable="false" viewBox="0 0 96 40" data-immortal-seal={ascended?"open":undefined}
     className={kind?'h-8 w-16 shrink-0 text-amber-400/60':'h-12 w-28 shrink-0 text-amber-300/60'}>
-    {kind?<path d={ink[kind]} fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>:<circle cx="68" cy="11" r="7" fill="none" stroke="currentColor" strokeWidth=".7"/>}
+    {ascended?<path d="M66 17V9l9-5 9 5v13M63 9h24m-18 5h12m-8 2 2 7 2-7m-7 1-3 7m14-7 3 7"
+      fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/>:kind?<path d={ink[kind]} fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>:<circle cx="68" cy="11" r="7" fill="none" stroke="currentColor" strokeWidth=".7"/>}
     <path d="M2 35 23 23 33 30 51 10 77 32 85 27 94 35Z" fill="currentColor" opacity=".19"/>
     <path d="m2 35 21-12 10 7L51 10l26 22 8-5 9 8M16 36h66M41 22l10-12 10 12-8-2-5 2-3-2" fill="none" stroke="currentColor" strokeWidth=".9" strokeLinecap="round" strokeLinejoin="round"/>
   </svg>;
@@ -45,8 +46,10 @@ function MountainSeal({kind}:{kind?:Motif}){
 const normalize=(label:string)=>label.normalize('NFKC').toLocaleLowerCase('zh').trim();
 
 type Biography=View['memorials'][number]|View['ascended'][number];
-export function BiographyScroll({row,ending,titleRef,onReturn}:{row:Biography;ending:'陨落'|'飞升';titleRef?:RefObject<HTMLHeadingElement>;onReturn:()=>void}){
+export function BiographyScroll({row,titleRef,onReturn}:{row:Biography;titleRef?:RefObject<HTMLHeadingElement>;onReturn:()=>void}){
   const lifeTitleId=useId();
+  const ascended='ascensionTick' in row;
+  const ending=ascended?'飞升':'陨落';
   return <article className="space-y-3" aria-labelledby={lifeTitleId}>
       <button type="button" className={control} onClick={onReturn}>返回榜卷</button>
       <header className="flex min-w-0 items-center justify-between gap-2 border-b border-amber-300/25 pb-2">
@@ -55,13 +58,13 @@ export function BiographyScroll({row,ending,titleRef,onReturn}:{row:Biography;en
           <h3 id={lifeTitleId} ref={titleRef} tabIndex={-1} className="font-serif text-xl font-bold text-amber-100 outline-none [overflow-wrap:anywhere]">{row.name}传</h3>
           <p className="text-sm text-slate-300 [overflow-wrap:anywhere]">{[row.title,row.realm].filter(Boolean).join(' · ')}</p>
         </div>
-        <MountainSeal/>
+        <MountainSeal ascended={ascended}/>
       </header>
       <ol className="space-y-3 border-l border-amber-500/30 pl-3">
         {row.scenes.map((scene,index)=><li key={`${scene.tick}:${index}`} className="rounded-md bg-slate-900/80 p-3">
           <div className="flex items-start justify-between gap-2">
             <h4 className="font-serif text-base font-semibold leading-snug text-amber-100 [overflow-wrap:anywhere]">{scene.title}</h4>
-            <MountainSeal kind={scene.kind}/>
+            <MountainSeal kind={scene.kind} ascended={ascended&&scene.kind==='ending'}/>
           </div>
           <p className="mb-1 text-xs text-slate-400">{scene.year}年{scene.month}月</p>
           <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-200 [overflow-wrap:anywhere]">{scene.text}</p>
@@ -93,7 +96,7 @@ export function HallOfImmortalsRead({view}:{view:View}){
   const ranked=category==='lives'?[]:view.rankings[category];
   const count=category==='lives'?filtered.length:ranked.length;
   return <div className="space-y-4 px-3 pb-4 pt-3 sm:px-5">
-    {chosen?<BiographyScroll row={chosen.row} ending={chosen.ending} titleRef={heading} onReturn={returnToList}/>:<>
+    {chosen?<BiographyScroll row={chosen.row} titleRef={heading} onReturn={returnToList}/>:<>
       <div role="group" aria-label="封神榜卷类别" className="grid grid-cols-4 gap-1.5">
         {tabs.map(([key,label])=><button key={key} type="button" aria-pressed={category===key}
           onClick={()=>{setCategory(key);setLimit(pageSize);}} className={`${control} aria-pressed:bg-amber-900/70 aria-pressed:text-white`}>{label}</button>)}

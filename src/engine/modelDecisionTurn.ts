@@ -1,5 +1,7 @@
+import { availableAscensionActions } from './ascensionEngine';
+import { ascensionDutyActive } from './ascensionPresence';
 import { regionalModelPassiveActorIds } from './regionalSimulationEngine';
-import { availableUpperPassageProviderActions,availableFrontierProviderActions,availableDungeonModelOptions,grandSiegeHeroReservedForPlayer,requiredBeforeOrdinaryDecision } from './llmBrain';
+import { availableUpperPassageProviderActions,availableFrontierProviderActions,availableDungeonModelOptions,availableAutonomousAscensionActions,grandSiegeHeroReservedForPlayer,requiredBeforeOrdinaryDecision } from './llmBrain';
 import { availableGrandSiegeHeroActions, hasQueuedGrandSiegeHero } from './grandSiegeTheatreEngine';
 import { activeForbiddenDuel, availableForbiddenArtOptions, forbiddenDuelForParticipant } from './forbiddenArtEngine';
 import { activeHeartDemon, isHeartDemonGuided } from './heartDemonEngine';
@@ -62,9 +64,12 @@ export function modelDecisionCandidates(world: WorldState): Cultivator[] {
   const commandedId = pending?.queuedTick === world.tick && (world.playerAvatar.possessionUntilTick ?? 0) > nextTick &&
     avatar?.id === pending.actorId ? pending.actorId : undefined;
   return world.cultivators.filter(actor=>{
-    if(!actor.alive||actor.hp<=0||actor.id===commandedId||(world.month===12&&actor.age+1>=actor.lifespan))return false;
+    if(!actor.alive||actor.hp<=0||actor.positionPlane==='immortal'||actor.id===commandedId||(world.month===12&&actor.age+1>=actor.lifespan))return false;
     if(actor.positionPlane==='frontier')return availableFrontierProviderActions(actor,world,nextTick).length>0;
     if(actor.positionPlane!==undefined)return availableUpperPassageProviderActions(actor,world,nextTick).length>0;
+    if(ascensionDutyActive(world,actor)||actor.realm==='渡劫'&&actor.realmStage===9&&
+        availableAscensionActions(actor,world,nextTick).some(row=>row.ascensionMove==='start'))
+      return availableAutonomousAscensionActions(actor,world,nextTick).length>0;
     const trial = actor.tribulation;
     const theatre = trial?.stage === 'heart_demon' && (trial.heartTheatreArmed === true || trial.heartDemon !== undefined);
     const heart = theatre ? activeHeartDemon(world, actor) : undefined;

@@ -1,3 +1,4 @@
+import { ascensionDutyActive } from './ascensionPresence';
 import { currentPublic, roundEventId, theatreOf } from './grandSiegeProof';
 import type {createTerrainMapView} from '../components/terrainMapView';
 import type {GrandSiegeFighter,GrandSiegeHeroMove,GrandSiegeHeroOrder,GrandSiegeHeroOrigin,GrandSiegeRound,GrandSiegeTheatre} from '../types/grandSiege';
@@ -72,7 +73,7 @@ export function recordGrandSiegeArrival(world:WorldState,siege:SectSiege,event:W
   theatre.arrivedTick=world.tick;
 }
 export function isGrandSiegeFighterPresent(world:WorldState,actor:Cultivator,siteId:string){
-  return actor.alive&&actor.hp>0&&actor.positionPlane===undefined&&actor.locationId===siteId&&
+  return actor.alive&&actor.hp>0&&actor.positionPlane===undefined&&!ascensionDutyActive(world,actor)&&actor.locationId===siteId&&
     actor.tribulation?.stage!=='lightning'&&actor.tribulation?.stage!=='heart_demon'&&
     !activeDanxiaMedicineEscort(world,actor)&&!activeEscortForActor(world,actor)&&!activeCourierForActor(world,actor)&&
     !activeRelocationForActor(world,actor)&&!activePilgrimageForActor(world,actor)&&!disasterShelterLocksTravel(world,actor)&&

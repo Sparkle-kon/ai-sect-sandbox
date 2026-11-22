@@ -28,19 +28,22 @@ export function earnedSectRank(actor: Cultivator): SectRank {
 }
 
 export function rewardContribution(actor: Cultivator, world: WorldState, points: number): void {
-  if (actor.alive && Number.isFinite(points) && world.sects.some((sect) => sect.id === actor.sectId)) {
+  if (actor.alive && actor.positionPlane !== 'immortal' && Number.isFinite(points) && world.sects.some((sect) => sect.id === actor.sectId)) {
     actor.contribution = clamp(actor.contribution + Math.trunc(points), 0, 9999);
   }
 }
 
-const liveMembers = (world: WorldState, sect: Sect) => world.cultivators.filter((person) => person.alive && person.hp > 0 && person.sectId === sect.id && !isRetiredFromService(person));
+// A reversible excursion keeps the original office rules. An actual irreversible departure does not.
+const politicalBody = (person: Cultivator) => person.alive && person.hp > 0 && person.positionPlane !== 'immortal';
+const liveMembers = (world: WorldState, sect: Sect) => world.cultivators.filter((person) =>
+  politicalBody(person) && person.sectId === sect.id && !isRetiredFromService(person));
 function affinity(world: WorldState, a: Cultivator, b: Cultivator): number {
   return world.relationships.find((edge) => (edge.fromId === a.id && edge.toId === b.id) ||
     (edge.fromId === b.id && edge.toId === a.id))?.affinity ?? 0;
 }
 
 function supporters(world: WorldState, sect: Sect, candidate: Cultivator, incumbent?: Cultivator, local = false): Cultivator[] {
-  const eligible = local ? world.cultivators.filter((person) => person.alive && person.hp > 0 &&
+  const eligible = local ? world.cultivators.filter((person) => politicalBody(person) &&
     person.locationId === sect.headquartersId) : liveMembers(world, sect);
   return eligible.filter((person) => !isRetiredFromService(person) && person.id !== candidate.id && person.id !== incumbent?.id &&
     affinity(world, person, candidate) >= (person.sectId === sect.id ? 25 : 65) &&
@@ -58,7 +61,7 @@ function event(world: WorldState, sect: Sect, label: string, title: string, desc
 function appoint(world: WorldState, sect: Sect, candidate: Cultivator, method: SectSuccession['method'],
   backing: Cultivator[], previousLeaderId: string | undefined): void {
   for (const person of world.cultivators) {
-    if (person.sectId === sect.id && person.sectRank === '掌门') person.sectRank = earnedSectRank(person);
+    if (person.sectId === sect.id && person.sectRank === '掌门' && person.positionPlane !== 'immortal') person.sectRank = earnedSectRank(person);
   }
   sect.leaderId = candidate.id;
   delete sect.officeVacancy;
@@ -73,7 +76,7 @@ export function maintainSectPolitics(world: WorldState): WorldEvent[] {
     const members = liveMembers(world, sect);
     const incumbent = members.find((person) => person.id === sect.leaderId);
     for (const person of world.cultivators) {
-      if (person.sectId !== sect.id || (!person.alive && person.sectRank !== '掌门')) continue;
+      if (person.sectId !== sect.id || person.positionPlane === 'immortal' || (!person.alive && person.sectRank !== '掌门')) continue;
       person.sectRank = person.id === incumbent?.id ? '掌门' : earnedSectRank(person);
     }
     if (incumbent) continue;
@@ -120,7 +123,7 @@ export function maintainSectPolitics(world: WorldState): WorldEvent[] {
 
 export function availableLeadershipActions(actor: Cultivator, world: WorldState): LeadershipOption[] {
   const sect = world.sects.find((item) => item.id === actor.sectId);
-  if (!sect || !actor.alive || actor.hp <= 0 || isRetiredFromService(actor) || actor.locationId !== sect.headquartersId || actor.id === sect.leaderId ||
+  if (!sect || !politicalBody(actor) || isRetiredFromService(actor) || actor.locationId !== sect.headquartersId || actor.id === sect.leaderId ||
       (sect.succession && world.tick - sect.succession.tick < 3)) return [];
   const incumbent = liveMembers(world, sect).find((person) => person.id === sect.leaderId && person.locationId === actor.locationId);
   if (!incumbent) return [];

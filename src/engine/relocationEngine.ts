@@ -1,3 +1,4 @@
+import { ascensionDutyActive } from './ascensionPresence';
 import {doctrineFoundingPinnedRelocationIds} from './doctrineFoundingTerms';
 import { activeCourierForActor } from './sealedCourierEngine';
 import type { Cultivator, LLMDecisionPayload, LocationNode, MapPoint, RelocationMove, RelocationPlan, RelocationState,
@@ -66,7 +67,7 @@ function weakened(world: WorldState, sect: Sect, origin: LocationNode): boolean 
 }
 
 function availablePerson(world: WorldState, actor: Cultivator): boolean {
-  return live(actor) && !world.sieges.some((siege) => (siege.status === 'marching' || siege.status === 'sieging') &&
+  return live(actor) && !ascensionDutyActive(world,actor) && !world.sieges.some((siege) => (siege.status === 'marching' || siege.status === 'sieging') &&
     siege.participantIds.includes(actor.id)) &&
     !world.occasions.some((occasion) => (occasion.status === 'registration' || occasion.status === 'running') &&
       occasion.participantIds.includes(actor.id)) &&
@@ -192,7 +193,7 @@ function arrive(world: WorldState, plan: RelocationPlan, sect: Sect, origin: Loc
   sect.arrayHp = 0;
   sect.arrayMaxHp = 0;
   restoreCustody(sect, plan);
-  const travelers = world.cultivators.filter((actor) => plan.garrisonIds.includes(actor.id) && live(actor) &&
+  const travelers = world.cultivators.filter((actor) => plan.garrisonIds.includes(actor.id) && live(actor) && !ascensionDutyActive(world,actor) &&
     actor.locationId === origin.id && actor.sectId === sect.id);
   for (const actor of travelers) {
     actor.locationId = destination.id;

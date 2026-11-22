@@ -1,3 +1,4 @@
+import { ascensionDutyActive } from './ascensionPresence';
 import type {ClanMove,CultivationClanChild,CultivationUnion} from '../types/cultivationClan';
 import type {Cultivator,LLMDecisionPayload,LocationNode,WorldEvent,WorldState} from '../types/world';
 import {activeDanxiaMedicineEscort} from './danxiaMedicineTerms';
@@ -29,7 +30,7 @@ const liveAdult=(actor:Cultivator|undefined):actor is Cultivator=>
 const clanSite=(site:LocationNode|undefined):site is LocationNode=>!!site&&!isScopedExpeditionGate(site)&&
   site.type!=='secret_realm'&&site.type!=='abyss';
 function local(world:WorldState,actor:Cultivator,siteId=actor.locationId):boolean{
-  return liveAdult(actor)&&actor.locationId===siteId&&actor.tribulation?.stage!=='lightning'&&actor.tribulation?.stage!=='heart_demon'&&
+  return liveAdult(actor)&&!ascensionDutyActive(world,actor)&&actor.locationId===siteId&&actor.tribulation?.stage!=='lightning'&&actor.tribulation?.stage!=='heart_demon'&&
     !world.forbiddenDuels?.some(row=>row.attackerId===actor.id||row.defenderId===actor.id)&&
     !world.sieges.some(row=>(row.status==='marching'||row.status==='sieging')&&row.participantIds.includes(actor.id))&&
     !world.occasions.some(row=>(row.status==='registration'||row.status==='running')&&row.participantIds.includes(actor.id)&&

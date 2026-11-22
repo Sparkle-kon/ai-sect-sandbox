@@ -1,4 +1,5 @@
 import type { ChronicleChapter, ProtagonistArc, ProtagonistEvidence, WorldState } from '../types/world';
+import { verifiedImmortalAscension } from './ascensionProof';
 import { isChronicleStoryFact } from './chronicleLead';
 import { PROTAGONIST_OPEN_WINDOW, PROTAGONIST_SUPPORT_LIMIT, PROTAGONIST_SUSTAIN_WINDOW,
   protagonistFactIndex, qualifiesProtagonistOpening } from './protagonistSuccession';
@@ -30,6 +31,9 @@ export function validateProtagonistHistory(
   };
   for (const arc of arcs) {
     const { id, actorId, openedTick, endedTick, opening, support, death, closeReason, predecessorArcId } = arc;
+    const terminalActor = closeReason === 'receded' && endedTick !== undefined &&
+      endedTick - openedTick < PROTAGONIST_SUSTAIN_WINDOW ? entities.get(actorId) : undefined;
+    const exactDeparture = terminalActor && verifiedImmortalAscension(world, terminalActor)?.terminal.tick === endedTick;
     if (id !== `protagonist-arc-${openedTick}` || known.has(id) || !actors.has(actorId) ||
         openedTick > (lastEvaluatedTick ?? -1) || predecessorArcId !== previous?.id ||
         (previous !== undefined && (previous.endedTick === undefined || openedTick < previous.endedTick ||
@@ -37,7 +41,7 @@ export function validateProtagonistHistory(
         ((endedTick === undefined) !== (closeReason === undefined)) ||
         (endedTick !== undefined && (endedTick <= openedTick || endedTick > (lastEvaluatedTick ?? -1))) ||
         ((closeReason === 'public_death') !== (death !== undefined)) ||
-        (closeReason === 'receded' && endedTick! - openedTick < PROTAGONIST_SUSTAIN_WINDOW))
+        (closeReason === 'receded' && endedTick! - openedTick < PROTAGONIST_SUSTAIN_WINDOW && !exactDeparture))
       return fail('protagonistSuccession.arcs.timeline');
 
     const precedingEvidence = new Set(previous ?

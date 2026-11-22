@@ -1,3 +1,4 @@
+import { ascensionDutyActive } from './ascensionPresence';
 import {activeSiegeForActor,isActiveSiege as active} from './siegeParticipants';
 export {activeSiegeForActor} from './siegeParticipants';
 import { finishGrandSiegeTheatre } from './grandSiegeProof';
@@ -22,7 +23,7 @@ const MAX_FORCE = 8;
 const MAX_ROUNDS = 7;
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
 const live = (actor: Cultivator) => actor.alive && actor.hp > 0;
-const isPresentBelow = (actor:Cultivator) => live(actor) && onLowerPlane(actor);
+const isPresentBelow = (world:WorldState,actor:Cultivator) => live(actor) && onLowerPlane(actor) && !ascensionDutyActive(world,actor);
 const belowRoster = (world:WorldState,ids:readonly string[]) => ids.filter(id=>{
   const actor=world.cultivators.find(row=>row.id===id);
   return actor===undefined||onLowerPlane(actor);
@@ -51,7 +52,7 @@ export function adjustSectAffinity(world: WorldState, a: string, b: string, delt
 const isAlly = (world: WorldState, a: string, b: string) => a === b || sectRelation(world, a, b)?.pact === 'alliance';
 
 function forceCandidates(world: WorldState, attacker: Sect, defender: Sect, actor: Cultivator): Cultivator[] {
-  const candidates = world.cultivators.filter((person) => isPresentBelow(person) && isAlly(world, attacker.id, person.sectId) &&
+  const candidates = world.cultivators.filter((person) => isPresentBelow(world,person) && isAlly(world, attacker.id, person.sectId) &&
     person.sectId !== defender.id && !isAlly(world, defender.id, person.sectId) && !activeRelocationForActor(world, person) && !activeEscortForActor(world, person) && !activeCourierForActor(world, person) && !activeSiegeForActor(world, person) &&
     !world.occasions.some((item) => (item.status === 'registration' || item.status === 'running') && item.participantIds.includes(person.id)) &&
     person.tribulation?.stage !== 'lightning' && person.tribulation?.stage !== 'heart_demon')
@@ -62,7 +63,7 @@ function forceCandidates(world: WorldState, attacker: Sect, defender: Sect, acto
 
 export function availableDiplomacyActions(actor: Cultivator, world: WorldState): DiplomaticOption[] {
   const own = world.sects.find(({ id }) => id === actor.sectId);
-  if (!isSectActive(own) || !isPresentBelow(actor) || own.leaderId !== actor.id || actor.locationId !== own.headquartersId || activeRelocationForSect(world, own.id) || activeSiegeForActor(world, actor)) return [];
+  if (!isSectActive(own) || !isPresentBelow(world,actor) || own.leaderId !== actor.id || actor.locationId !== own.headquartersId || activeRelocationForSect(world, own.id) || activeSiegeForActor(world, actor)) return [];
   if (!world.locations.some((site) => site.id === own.headquartersId && (!site.ownerSectId || site.ownerSectId === own.id))) return [];
   const result: DiplomaticOption[] = [];
   for (const target of world.sects) {
@@ -195,7 +196,7 @@ export function advanceDiplomacy(world: WorldState, rng: () => number, theatre?:
     const target = world.sects.find(({ id }) => id === demand.targetSectId);
     demand.resolvedTick = world.tick;
     if (activeCeasefireBetween(world, demand.demanderSectId, demand.targetSectId)) { demand.status = 'rejected'; continue; }
-    const force = (id: string) => livedPower(world.cultivators.filter((actor) => actor.sectId === id && isPresentBelow(actor)));
+    const force = (id: string) => livedPower(world.cultivators.filter((actor) => actor.sectId === id && isPresentBelow(world,actor)));
     if (demander && target && demander.id !== target.id && Number.isFinite(demand.amount) && demand.amount > 0 &&
         target.spiritStones >= demand.amount && force(demander.id) > 0 && force(demander.id) >= force(target.id) * 1.25 &&
         sectRelation(world, demander.id, target.id)?.pact !== 'alliance') {
@@ -219,8 +220,8 @@ export function advanceDiplomacy(world: WorldState, rng: () => number, theatre?:
       continue;
     }
     const raiders = [...new Set(siege.participantIds)].map((id) => world.cultivators.find((person) => person.id === id))
-      .filter((person): person is Cultivator => Boolean(person && isPresentBelow(person) && isAlly(world, person.sectId, attacker.id)));
-    const defenders = world.cultivators.filter((person) => isPresentBelow(person) && !siege.participantIds.includes(person.id) &&
+      .filter((person): person is Cultivator => Boolean(person && isPresentBelow(world,person) && isAlly(world, person.sectId, attacker.id)));
+    const defenders = world.cultivators.filter((person) => isPresentBelow(world,person) && !siege.participantIds.includes(person.id) &&
       person.locationId === siege.destinationId && !activeCourierForActor(world, person) && isAlly(world, defender.id, person.sectId));
     const site=world.locations.find(row=>row.id===siege.destinationId);
     const displaced=!!siege.theatre&&(!isSectActive(attacker)||!isSectActive(defender)||defender.headquartersId!==siege.destinationId||

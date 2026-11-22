@@ -41,7 +41,8 @@ export const avatarInteractionCost = (mode: AvatarInteractionMode, intent: Avata
 const clamp = (value: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, value));
 const clean = (value: unknown, max: number) => typeof value === 'string' ?
   value.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, max) : '';
-const availableBody = (world: WorldState, actor: Cultivator) => actor.alive && actor.hp > 0 && !isTribulationActive(actor) && !activeDanxiaMedicineEscort(world,actor) && !danxiaMedicineActedThisTick(world,actor) &&
+const availableBody = (world: WorldState, actor: Cultivator) => actor.alive && actor.hp > 0 &&
+  actor.positionPlane !== 'immortal' && !isTribulationActive(actor) && !activeDanxiaMedicineEscort(world,actor) && !danxiaMedicineActedThisTick(world,actor) &&
   !activeSiegeForActor(world, actor) && !world.occasions.some((holiday) =>
     (holiday.status === 'registration' || holiday.status === 'running') && holiday.participantIds.includes(actor.id));
 

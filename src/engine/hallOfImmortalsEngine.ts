@@ -1,3 +1,4 @@
+import {verifiedImmortalAscension} from './ascensionProof';
 import {artifactPowerMultiplier,equippedArtifact} from './artifactEngine';
 import {DESTINY_TRAIT_CATALOG} from './destinyTraitCatalog';
 import {destinyTraitEarnedEventId} from './destinyTraitEngine';
@@ -31,19 +32,20 @@ export interface BiographyScene{
   title:string;
   text:string;
 }
-export interface HallMemorial{
+interface HallLife {
   actorId:string;
   name:string;
   title:string;
   realm:Cultivator['realm'];
-  deathTick:number;
   scenes:BiographyScene[];
 }
+export interface HallMemorial extends HallLife {deathTick:number}
+export interface HallAscended extends HallLife {ascensionTick:number}
 export interface HallOfImmortalsView {
   rankings:{power:HallRankEntry[];karma:HallRankEntry[];alchemy:HallRankEntry[]};
   memorials:HallMemorial[];
   /** A return-capable UpperPassage journey is not ascension. Only irreversible qualified evidence can fill this. */
-  ascended:HallMemorial[];
+  ascended:HallAscended[];
 }
 
 const RANK_SIZE=12;
@@ -146,7 +148,7 @@ export function projectHallOfImmortals(world:WorldState,scope:HallOfImmortalsSco
     deathCounts.set(row.actorId,(deathCounts.get(row.actorId)??0)+1);
     eventCounts.set(row.eventId,(eventCounts.get(row.eventId)??0)+1);
   }
-  const selected=new Map<string,{row:Death;actor:Cultivator;scenes:BiographyScene[]}>();
+  const selected=new Map<string,{row:Pick<Death,'tick'|'year'|'month'|'locationId'>;actor:Cultivator;scenes:BiographyScene[];ending:'death'|'ascension'}>();
   for(const row of world.eraHistory.receipts){
     if(row.kind!=='death'||row.tick>through||!knownSite(row.locationId)||deathCounts.get(row.actorId)!==1||
       eventCounts.get(row.eventId)!==1||!row.eventId.startsWith(`evt-${row.tick}-`))continue;
@@ -154,7 +156,18 @@ export function projectHallOfImmortals(world:WorldState,scope:HallOfImmortalsSco
     if(!actor||actor.alive||actor.hp!==0||
       hot.has(row.eventId)&&(!original||!eraHistoryMatchesLiveEvent(row,original))||
       archived.has(row.eventId)&&(!anchor||!eraHistoryCompatibleArchiveAnchor(row,anchor)))continue;
-    selected.set(row.actorId,{row,actor,scenes:[]});
+    selected.set(row.actorId,{row,actor,scenes:[],ending:'death'});
+  }
+  for(const actor of actors.values()){
+    if(!actor||actor.positionPlane!=='immortal'||selected.has(actor.id))continue;
+    const trial=verifiedImmortalAscension(world,actor),terminal=trial?.terminal;
+    if(!trial||trial.phase!=='succeeded'||terminal?.status!=='succeeded'||terminal.tick>through||!knownSite(trial.siteId))continue;
+    const matches=(proof:Fact|undefined)=>!!proof&&proof.id===terminal.eventId&&proof.tick===terminal.tick&&
+      proof.year===terminal.year&&proof.month===terminal.month&&proof.locationId===trial.siteId&&proof.category==='heavenly'&&
+      isChronicleStoryFact(proof,through)&&proof.actorIds.length===1&&proof.actorIds[0]===actor.id;
+    if(hot.has(terminal.eventId)&&!matches(hot.get(terminal.eventId))||
+      archived.has(terminal.eventId)&&!matches(archived.get(terminal.eventId)))continue;
+    selected.set(actor.id,{row:{...entryDate(terminal),locationId:trial.siteId},actor,scenes:[],ending:'ascension'});
   }
   if(!selected.size)return empty;
   const add=(actorId:string,scene:BiographyScene)=>{
@@ -219,7 +232,7 @@ export function projectHallOfImmortals(world:WorldState,scope:HallOfImmortalsSco
       }
     }
   }
-  for(const {row,actor,scenes} of selected.values()){
+  for(const {row,actor,scenes,ending:kind} of selected.values()){
     for(const stamp of actor.destinyTraits?.earned??[]){
       const detail=DESTINY_TRAIT_CATALOG[stamp.traitId];
       const proof=source(destinyTraitEarnedEventId(stamp.id));
@@ -229,11 +242,16 @@ export function projectHallOfImmortals(world:WorldState,scope:HallOfImmortalsSco
       add(actor.id,{...entryDate(proof),kind:'destiny',title:'一念命格',
         text:`踏入${stamp.realm}后，觉醒命格「${detail.name}」。`});
     }
-    const ending:BiographyScene={...entryDate(row),kind:'ending',title:'英魂留录',text:`其陨落一事有原籍存录，见于${fromText(sites.get(row.locationId!)!.name)}。`};
+    const place=fromText(sites.get(row.locationId!)!.name);
+    const ending:BiographyScene={...entryDate(row),kind:'ending',
+      title:kind==='ascension'?'仙门接引':'英魂留录',
+      text:kind==='ascension'?`其于${place}度完飞升之劫，随仙门而去。此后不再身行下界。`:`其陨落一事有原籍存录，见于${place}。`};
     scenes.sort((a,b)=>a.tick-b.tick||cmp(a.title,b.title));
-    empty.memorials.push({...actorLabel(actor),deathTick:row.tick,scenes:[...scenes,ending]});
+    if(kind==='ascension')empty.ascended.push({...actorLabel(actor),ascensionTick:row.tick,scenes:[...scenes,ending]});
+    else empty.memorials.push({...actorLabel(actor),deathTick:row.tick,scenes:[...scenes,ending]});
   }
   // Native history is appended chronologically; reverse only the independent completed profiles.
   empty.memorials.reverse();
+  empty.ascended.sort((a,b)=>b.ascensionTick-a.ascensionTick||cmp(a.actorId,b.actorId));
   return empty;
 }

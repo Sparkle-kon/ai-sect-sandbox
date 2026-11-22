@@ -1,3 +1,6 @@
+import { availableAscensionActions } from './ascensionEngine';
+import { ASCENSION_PRIVATE_COMMAND_KEYS, exactAscensionDecision } from './ascensionCognition';
+import { ascensionDutyActive } from './ascensionPresence';
 import { availableCultivationClanActions } from './cultivationClanEngine';
 import { CLAN_PRIVATE_COMMAND_KEYS, exactCultivationClanDecision } from './cultivationClanCognition';
 import { availableImmortalAuctionActions, eligibleAuctionAmbush } from './immortalAuctionEngine';
@@ -101,6 +104,8 @@ export function recordDecisionTrace(world: WorldState, actorId: string, candidat
     decision.chosenAction === 'DAO_PATH' || decision.targetDaoPathId !== undefined || decision.daoPathMove !== undefined ||
     decision.chosenAction === 'IMMORTAL_AUCTION' || AUCTION_PRIVATE_COMMAND_KEYS.some(key => decision[key] !== undefined) ||
     decision.chosenAction === 'CULTIVATION_CLAN' || CLAN_PRIVATE_COMMAND_KEYS.some(key => decision[key] !== undefined) ||
+    decision.chosenAction === 'ASCENSION' || ASCENSION_PRIVATE_COMMAND_KEYS.some(key => decision[key] !== undefined) ||
+    ascensionDutyActive(world,{id:actorId}) ||
     decision.chosenAction === 'HEAVENLY_ALCHEMY' || decision.heavenlyAlchemyMove !== undefined ||
     decision.targetHeavenlyRecipeId !== undefined || decision.heavenlyAlchemyHeat !== undefined || decision.heavenlyAlchemyQuality !== undefined;
   const picks: DecisionTraceCandidate[] = [];
@@ -236,10 +241,16 @@ export function rememberReplayDecision(tape: DecisionReplayTape, actorId: string
   const clanFields = signed ? signed.clanMove === 'propose'
     ? { clanMove: signed.clanMove, targetCultivatorId: signed.targetCultivatorId }
     : { clanMove: signed.clanMove, targetCultivationUnionId: signed.targetCultivationUnionId } : undefined;
+  const ascensionAction = decision.chosenAction === 'ASCENSION';
+  const ascender = ascensionAction ? current.cultivators.find(row => row.id === actorId) : undefined;
+  const stance = ascender && exactAscensionDecision(decision,
+    availableAscensionActions(ascender, current, live?.tick ?? state.base.tick + 1), true);
+  const ascent = stance ? { ascensionMove: stance.ascensionMove, ...(stance.targetAscensionTrialId === undefined ? {} :
+    { targetAscensionTrialId: stance.targetAscensionTrialId }) } : undefined;
   state.decisions.set(actorId, { ...(forbiddenAction || grandSiegeAction || dungeonAction || heavenlyAction || daoPathAction ||
-      auctionAction || auctionAmbush || clanAction ? {} : details),
+      auctionAction || auctionAmbush || clanAction || ascensionAction ? {} : details),
     chosenAction: decision.chosenAction, innerMonologue: '', ...(cohortInviteeIds ? { cohortInviteeIds } : {}),
-    ...personalHeartChoice, ...personalForbiddenChoice, ...personalHeroChoice, ...dungeonFields, ...chosenAlchemy, ...pathFields, ...auctionFields, ...ambushFields, ...clanFields });
+    ...personalHeartChoice, ...personalForbiddenChoice, ...personalHeroChoice, ...dungeonFields, ...chosenAlchemy, ...pathFields, ...auctionFields, ...ambushFields, ...clanFields, ...ascent });
   if (personalHeartChoice && heartModel) state.heartModelActors.add(actorId);
   else state.heartModelActors.delete(actorId);
   if (personalForbiddenChoice && forbiddenModel) state.forbiddenModelActors.add(actorId);

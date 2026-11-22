@@ -1,6 +1,7 @@
 import type {ChronicleAnchor,ProtagonistArc,ProtagonistEvidence,ProtagonistSuccessionState,WorldEvent,WorldState} from '../types/world';
 import {isChronicleStoryFact,type ChronicleLead} from './chronicleLead';
 import {sameGeneratedWorld} from './worldIdentity';
+import {verifiedImmortalAscension} from './ascensionProof';
 
 export const PROTAGONIST_OPEN_WINDOW=24;
 export const PROTAGONIST_SUSTAIN_WINDOW=12;
@@ -108,7 +109,7 @@ function pickLead(world:WorldState,arcs:readonly ProtagonistArc[],all:Map<string
   const previous=arcs.at(-1);
   const predecessorIds=new Set(previous?[...previous.opening,...previous.support,...(previous.death?[previous.death]:[])].map(row=>row.eventId):[]);
   const mostRecent=new Map(arcs.map(row=>[row.actorId,row.endedTick??0]));
-  const living=new Set(world.cultivators.filter(row=>row.alive&&row.hp>0).map(row=>row.id));
+  const living=new Set(world.cultivators.filter(row=>row.alive&&row.hp>0&&row.positionPlane!=='immortal').map(row=>row.id));
   const choices: QualifiedLead[]=[];
   for(const [actorId,rows] of all){
     if(!living.has(actorId))continue;
@@ -173,6 +174,9 @@ export function advanceProtagonistSuccession(world:WorldState,previous?:WorldSta
       close(current,throughTick,death?'public_death':'evidence_lost',death);
     }else if(current.opening.some(row=>!evidenceStillAllowed(index,row,current.actorId))){
       close(current,throughTick,'evidence_lost');
+    }else if(actor.positionPlane==='immortal'&&verifiedImmortalAscension(previous,actor)?.terminal.tick===throughTick){
+      // A proven departure ends participation in the lower story, not the person's life.
+      close(current,throughTick,'receded');
     }else{
       sustain(current,facts);
       const recent=[...current.opening,...current.support].filter(row=>row.tick>throughTick-PROTAGONIST_SUSTAIN_WINDOW&&
@@ -192,6 +196,10 @@ export function projectProtagonistSuccession(world:WorldState,throughTick=world.
   if(!Number.isSafeInteger(throughTick)||throughTick<0||throughTick>world.tick)return {active:undefined,archived:[]};
   const index=protagonistFactIndex(world,throughTick);
   const people=new Map(world.cultivators.map(row=>[row.id,row.name.trim()]));
+  const livingLead=world.protagonistSuccession.arcs.at(-1);
+  const departing=livingLead&&livingLead.endedTick===undefined
+    ? world.cultivators.find(row=>row.id===livingLead.actorId&&row.positionPlane==='immortal') : undefined;
+  const departureTick=departing&&verifiedImmortalAscension(world,departing)?.terminal.tick;
   const projectedProof=(proof:ProtagonistEvidence)=>{
     const original=index.byId.get(proof.eventId),title=original&&cut(original.title,80);
     return {...proof,...(title?{title}:{})};
@@ -209,7 +217,8 @@ export function projectProtagonistSuccession(world:WorldState,throughTick=world.
       ...(death?{death}:{}),evidence:available.map(projectedProof),
       compromised:arc.opening.some(row=>!evidenceStillAllowed(index,row,arc.actorId))};
   });
-  return {active:slices.find(row=>row.endedTick===undefined&&!row.compromised&&!!row.name),archived:slices.filter(row=>row.endedTick!==undefined)};
+  return {active:slices.find(row=>row.endedTick===undefined&&!row.compromised&&!!row.name&&
+    !(departureTick!==undefined&&departureTick<=throughTick&&row.actorId===departing?.id)),archived:slices.filter(row=>row.endedTick!==undefined)};
 }
 
 export function projectEarnedChronicleLead(world:WorldState,chapterFacts:readonly Fact[],throughTick:number):

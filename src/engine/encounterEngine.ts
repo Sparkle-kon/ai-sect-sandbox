@@ -1,3 +1,4 @@
+import { ascensionDutyActive } from './ascensionPresence';
 import {disasterShelterCheckpoint} from './disasterShelterCheckpoint';
 import {activeDanxiaMedicineEscort} from './danxiaMedicineTerms';
 import { courierCheckpoint } from './sealedCourierEngine';
@@ -24,9 +25,9 @@ export function firstActorRelationships(edges: readonly RelationshipEdge[], acto
 }
 
 export function availableEncounters(actor: Cultivator, world: WorldState) {
-  if (activeDanxiaMedicineEscort(world,actor)||activeRelocationForActor(world, actor) || activeEscortForActor(world, actor) || pilgrimageCheckpoint(world, actor) || courierCheckpoint(world, actor) || disasterShelterCheckpoint(world,actor)) return [];
+  if (actor.positionPlane !== undefined || ascensionDutyActive(world,actor) || activeDanxiaMedicineEscort(world,actor)||activeRelocationForActor(world, actor) || activeEscortForActor(world, actor) || pilgrimageCheckpoint(world, actor) || courierCheckpoint(world, actor) || disasterShelterCheckpoint(world,actor)) return [];
   const location = world.locations.find((place) => place.id === actor.locationId);
-  const nearby = world.cultivators.filter((other) => other.alive && other.id !== actor.id &&
+  const nearby = world.cultivators.filter((other) => other.alive && other.id !== actor.id && other.positionPlane === undefined && !ascensionDutyActive(world,other) &&
     other.locationId === actor.locationId && !activeDanxiaMedicineEscort(world,other) && !activeRelocationForActor(world, other) && !activeEscortForActor(world, other) && !pilgrimageCheckpoint(world, other) && !courierCheckpoint(world, other) && !disasterShelterCheckpoint(world,other));
   if (!nearby.length) return [];
   const edges = firstActorRelationships(world.relationships, actor.id);

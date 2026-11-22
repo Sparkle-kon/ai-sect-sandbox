@@ -30,7 +30,7 @@ describe('Hall of Immortals surfaces',()=>{
   it('renders a scene-led illustrated scroll without manufacturing missing milestones',()=>{
     const html=renderToStaticMarkup(<BiographyScroll row={{actorId:'hidden-person',name:'青萝',
       title:'散修',realm:'练气',deathTick:15,scenes:[{kind:'ending',tick:15,year:2,month:3,
-        title:'剑影止处',text:'青萝行至山口，此后剑声绝。'}]}} ending="陨落" onReturn={vi.fn()}/>);
+        title:'剑影止处',text:'青萝行至山口，此后剑声绝。'}]}} onReturn={vi.fn()}/>);
     expect(html).toContain('青萝传');
     expect(html).toContain('剑影止处');
     expect(html).toContain('青萝行至山口');

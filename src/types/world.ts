@@ -1,3 +1,4 @@
+import type { AscensionMove, AscensionState } from './ascension';
 import type { ClanMove } from './cultivationClan';
 import type { CultivationClanHeritage, CultivationClanState } from './cultivationClan';
 import type { TianjiGazetteState } from './tianjiGazette';
@@ -189,6 +190,7 @@ export type ActionType =
   | 'DAO_PATH'
   | 'IMMORTAL_AUCTION'
   | 'CULTIVATION_CLAN'
+  | 'ASCENSION'
   | 'USE_PILL'
   | 'VILLAGE_CENSUS'
   | 'FIELD_OBSERVATORY'
@@ -445,7 +447,7 @@ export interface Cultivator {
   daoPath?: DaoPathState;
   destinyTraits?: DestinyTraitProgress;
   forbiddenScars?: ForbiddenArtScar[];
-  positionPlane?:UpperPositionPlane|FrontierPositionPlane;
+  positionPlane?:UpperPositionPlane|FrontierPositionPlane|'immortal';
   ordinaryActionEvidence?: OrdinaryActionEvidence;
   id: string;
   name: string;
@@ -705,6 +707,8 @@ export interface LLMDecisionPayload {
   targetTechniqueId?: string;
   targetHerbId?: HerbId;
   targetPillId?: PillId;
+  ascensionMove?: AscensionMove;
+  targetAscensionTrialId?: string;
   clanMove?: ClanMove;
   targetCultivationUnionId?: string;
   auctionMove?: ImmortalAuctionMove;
@@ -3716,6 +3720,7 @@ export interface WorldState {
   immortalAuction?: ImmortalAuctionState;
   tianjiGazette?: TianjiGazetteState;
   cultivationClans?: CultivationClanState;
+  ascension?: AscensionState;
   oaths: OathState;
   oathArbitrations: OathArbitrationState;
   mentorship: MentorshipState;

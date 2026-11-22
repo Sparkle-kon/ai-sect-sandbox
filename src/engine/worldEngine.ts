@@ -1,3 +1,6 @@
+import { availableAscensionActions, reconcileAscensionInterruptions, resolveAscensionAction } from './ascensionEngine';
+import { ascensionQuietWait, exactAscensionDecision } from './ascensionCognition';
+import { ascensionDutyActive } from './ascensionPresence';
 import { advanceCultivationClans, availableCultivationClanActions, resolveCultivationClanAction } from './cultivationClanEngine';
 import { exactCultivationClanDecision } from './cultivationClanCognition';
 import { publishTianjiGazette } from './tianjiGazetteEngine';
@@ -142,7 +145,7 @@ import {
   WorldEvent,
   WorldState,
 } from '../types/world';
-import { availableAutonomousCultivationClanActions, availableAutonomousDaoPathActions, availableAutonomousHeavenlyAlchemyActions, availableAutonomousImmortalAuctionActions, computeHeuristicDecision, currentAuctionAmbushOffer, daoPathTurnLocked, dungeonDecisionOccasion, exactDaoPathDecision, exactDungeonDecision, exactHeavenlyAlchemyDecision, isProviderPersonaDecision, requiredBeforeOrdinaryDecision, utilityCeasefireDecision, utilityDungeonDecision, utilityExpeditionRescueDecision, waitForOwnClanChoice } from './llmBrain';
+import { availableAutonomousAscensionActions, availableAutonomousCultivationClanActions, availableAutonomousDaoPathActions, availableAutonomousHeavenlyAlchemyActions, availableAutonomousImmortalAuctionActions, computeHeuristicDecision, currentAuctionAmbushOffer, daoPathTurnLocked, dungeonDecisionOccasion, exactDaoPathDecision, exactDungeonDecision, exactHeavenlyAlchemyDecision, isProviderPersonaDecision, requiredBeforeOrdinaryDecision, utilityCeasefireDecision, utilityDungeonDecision, utilityExpeditionRescueDecision, utilityAscensionDecision, waitForOwnClanChoice } from './llmBrain';
 import { maintainMemories, recordMemory } from './memoryEngine';
 import { synthesizeReflections } from './reflectionEngine';
 import { fabricateRumor, knownRumorLead, spreadRumors, witnessEvent } from './rumorEngine';
@@ -386,7 +389,20 @@ export function applyCultivatorBrainDecision(
   modelInput = false,
   allowForbiddenDuel = true,
 ): WorldEvent | null {
-  if (!cultivator.alive) return null;
+  if (!cultivator.alive || cultivator.positionPlane === 'immortal') return null;
+  if (decision.chosenAction === 'ASCENSION' || ascensionDutyActive(world, cultivator)) {
+    if (decision.chosenAction !== 'ASCENSION') return null;
+    const autonomous = modelInput || isProviderPersonaDecision(decision);
+    const choices = autonomous ? availableAutonomousAscensionActions(cultivator, world) : availableAscensionActions(cultivator, world);
+    const exact = exactAscensionDecision(decision, choices, true);
+    if (!exact) return null;
+    const event = resolveAscensionAction(world, cultivator, exact);
+    if (event) {
+      cultivator.currentAction = 'ASCENSION';
+      cultivator.innerMonologue = exact.innerMonologue;
+    }
+    return event;
+  }
   if(cultivator.positionPlane==='frontier'){
     if(isFrontierAction(decision.chosenAction))return applyFrontierDecision(world,cultivator,decision,rng,explicitAvatarDecision);
     if(decision.chosenAction==='REST'){
@@ -968,7 +984,7 @@ export function applyCultivatorBrainDecision(
 
     case 'SOCIALIZE': {
       const target = world.cultivators.find((c) =>
-        c.alive && c.id !== cultivator.id && c.locationId === cultivator.locationId && !activeDanxiaMedicineEscort(world,c) && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) && !courierCheckpoint(world, c) && !expeditionRescueCheckpoint(world, c) && !boundaryReliefCheckpoint(world, c) && !disasterShelterCheckpoint(world,c) &&
+        c.alive && c.id !== cultivator.id && !ascensionDutyActive(world,c) && c.locationId === cultivator.locationId && !activeDanxiaMedicineEscort(world,c) && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) && !courierCheckpoint(world, c) && !expeditionRescueCheckpoint(world, c) && !boundaryReliefCheckpoint(world, c) && !disasterShelterCheckpoint(world,c) &&
         (decision.targetCultivatorId === undefined || c.id === decision.targetCultivatorId)
       );
       if (!target) return null;
@@ -1005,7 +1021,7 @@ export function applyCultivatorBrainDecision(
 
     case 'SCHEMING': {
       const target = world.cultivators.find((c) =>
-        c.alive && c.id !== cultivator.id && c.locationId === cultivator.locationId && !activeDanxiaMedicineEscort(world,c) && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) && !courierCheckpoint(world, c) && !expeditionRescueCheckpoint(world, c) && !boundaryReliefCheckpoint(world, c) && !disasterShelterCheckpoint(world,c) &&
+        c.alive && c.id !== cultivator.id && !ascensionDutyActive(world,c) && c.locationId === cultivator.locationId && !activeDanxiaMedicineEscort(world,c) && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) && !courierCheckpoint(world, c) && !expeditionRescueCheckpoint(world, c) && !boundaryReliefCheckpoint(world, c) && !disasterShelterCheckpoint(world,c) &&
         (decision.targetCultivatorId === undefined || c.id === decision.targetCultivatorId)
       );
       if (!target) return null;
@@ -1059,7 +1075,7 @@ export function applyCultivatorBrainDecision(
       return null;
     case 'DUEL': {
       const defender = world.cultivators.find((c) =>
-        c.alive && c.id !== cultivator.id && c.locationId === cultivator.locationId && !activeDanxiaMedicineEscort(world,c) && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) && !courierCheckpoint(world, c) && !expeditionRescueCheckpoint(world, c) && !boundaryReliefCheckpoint(world, c) && !disasterShelterCheckpoint(world,c) &&
+        c.alive && c.id !== cultivator.id && !ascensionDutyActive(world,c) && c.locationId === cultivator.locationId && !activeDanxiaMedicineEscort(world,c) && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) && !courierCheckpoint(world, c) && !expeditionRescueCheckpoint(world, c) && !boundaryReliefCheckpoint(world, c) && !disasterShelterCheckpoint(world,c) &&
         (decision.targetCultivatorId === undefined || c.id === decision.targetCultivatorId)
       );
       if (!defender || forbiddenDuelForParticipant(world,defender) || forbiddenDuelForParticipant(world,cultivator)) return null;
@@ -1156,7 +1172,7 @@ export function advanceWorldTick(
   pruneInvalidForbiddenDuelContacts(nextState);
 
   for (const cultivator of [...nextState.cultivators]) {
-    if (!cultivator.alive) continue;
+    if (!cultivator.alive || cultivator.positionPlane === 'immortal') continue;
 
     // Age increment every 12 months
     if (nextState.month === 1) {
@@ -1185,6 +1201,39 @@ export function advanceWorldTick(
         witnessEvent(nextState, death);
         continue;
       }
+    }
+
+    if (ascensionDutyActive(nextState, cultivator)) {
+      const supplied = precomputedDecisions && Object.hasOwn(precomputedDecisions, cultivator.id)
+        ? precomputedDecisions[cultivator.id] : undefined;
+      const explicit = avatarOrder?.actorId === cultivator.id && avatarOrder.decision.chosenAction === 'ASCENSION' ?
+        avatarOrder.decision : undefined;
+      const requested = explicit ?? supplied;
+      const provider = !explicit && Boolean(supplied && (traceOptions?.modelActors?.has(cultivator.id) || isProviderPersonaDecision(supplied)));
+      const earlier = provider ? prevState.cultivators.find(actor => actor.id === cultivator.id) : undefined;
+      const originallyOffered = !provider || earlier && exactAscensionDecision(requested,
+        availableAutonomousAscensionActions(earlier, prevState, nextState.tick), true);
+      const accepted = originallyOffered ? exactAscensionDecision(requested, provider
+        ? availableAutonomousAscensionActions(cultivator, nextState)
+        : availableAscensionActions(cultivator, nextState), true) : undefined;
+      const native = accepted ?? utilityAscensionDecision(cultivator, nextState);
+      const recorded = native ?? ascensionQuietWait();
+      if (traceOptions?.tape) rememberReplayDecision(traceOptions.tape, cultivator.id, recorded, 0, false, false, false, nextState);
+      const event = native && applyCultivatorBrainDecision(nextState, cultivator, native, rng, undefined, undefined, explicit,
+        provider && Boolean(accepted));
+      if (event) {
+        newEvents.push(event);
+        witnessEvent(nextState, event);
+        renewRegionalProtectionAfterEvent(regionalTurn);
+      } else {
+        cultivator.currentAction = 'ASCENSION';
+        cultivator.innerMonologue = recorded.innerMonologue;
+      }
+      if (supplied) recordDecisionEffect?.(cultivator.id, !explicit && Boolean(accepted && event));
+      traceOptions?.onActor?.(cultivator.id, [], Boolean(event));
+      if (traceOptions?.captureTrace !== false) recordDecisionTrace(nextState, cultivator.id, [], recorded,
+        explicit ? 'avatar' : provider && accepted ? 'model' : 'utility', Boolean(event));
+      continue;
     }
 
     if(!onLowerPlane(cultivator)){
@@ -1332,6 +1381,18 @@ export function advanceWorldTick(
     const modelProposal = supplied && traceOptions?.modelActors?.has(cultivator.id) ? supplied : undefined;
     let provided = avatarDecision ?? supplied;
     let modelOrdinaryReplaced=false;
+    if (provided?.chosenAction === 'ASCENSION') {
+      const provider = !avatarDecision && Boolean(modelProposal || isProviderPersonaDecision(provided));
+      const earlier = provider ? prevState.cultivators.find(actor => actor.id === cultivator.id) : undefined;
+      const originallyOffered = !provider || earlier && exactAscensionDecision(provided,
+        availableAutonomousAscensionActions(earlier, prevState, nextState.tick), true);
+      const legal = originallyOffered && exactAscensionDecision(provided, provider
+        ? availableAutonomousAscensionActions(cultivator, nextState) : availableAscensionActions(cultivator, nextState), true);
+      if (!legal) {
+        provided = requiredBeforeOrdinaryDecision(cultivator, nextState) ?? ascensionQuietWait();
+        modelOrdinaryReplaced = provider;
+      }
+    }
     if (provided?.chosenAction === 'CULTIVATION_CLAN') {
       const fromProvider = !avatarDecision && Boolean(modelProposal || isProviderPersonaDecision(provided));
       const earlier = fromProvider ? prevState.cultivators.find(person => person.id === cultivator.id) : undefined;
@@ -1493,7 +1554,7 @@ export function advanceWorldTick(
     const candidates = (captureTrace || traceOptions?.onActor) && decision.chosenAction !== 'EXPEDITION_DUNGEON' &&
       decision.chosenAction !== 'HEAVENLY_ALCHEMY' && decision.chosenAction !== 'DAO_PATH' &&
       decision.chosenAction !== 'IMMORTAL_AUCTION' && decision.targetAuctionAmbushLotId === undefined &&
-      decision.chosenAction !== 'CULTIVATION_CLAN' ?
+      decision.chosenAction !== 'CULTIVATION_CLAN' && decision.chosenAction !== 'ASCENSION' ?
       legalTraceCandidates(nextState, cultivator) : [];
     const chosenByModel = Boolean(modelProposal && !modelOrdinaryReplaced && !modelStoryChoiceReplaced && !expeditionModelReplaced);
     if (traceOptions?.tape) rememberReplayDecision(traceOptions.tape, cultivator.id, decision, decisionDraws, chosenByModel, false, false, nextState);
@@ -1551,6 +1612,7 @@ export function advanceWorldTick(
   }
 
   for (const cultivator of nextState.cultivators) {
+    if (cultivator.positionPlane === 'immortal') continue;
     expireScheme(cultivator, nextState.tick);
     if (!cultivator.alive) {
       closeInterruptedTrial(cultivator, nextState.tick);
@@ -1611,6 +1673,10 @@ export function advanceWorldTick(
   for(const event of [...advanceDisasterShelters(nextState), ...advanceSeasonalHousing(nextState), ...advanceMentorTransfers(nextState), ...advanceSectStipends(nextState)]) {
     newEvents.push(event);
     witnessEvent(nextState,event);
+  }
+  for (const event of reconcileAscensionInterruptions(nextState)) {
+    newEvents.push(event);
+    witnessEvent(nextState, event);
   }
   recordRegionalLatePromotions(nextState,prevState,newEvents);
   advanceCivicMemorials(nextState);

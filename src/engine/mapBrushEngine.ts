@@ -1,3 +1,4 @@
+import {reconcileAscensionInterruptions} from './ascensionEngine';
 import { interruptStoryChoicesOnDeath } from './interruptedStoryChoices';
 import {disasterShelterCheckpoint} from './disasterShelterCheckpoint';
 import {reconcileDisasterShelterDeaths} from './disasterShelterEngine';
@@ -133,6 +134,7 @@ export function applyMapBrush(prev: WorldState, kind: GodBrushKind, points: MapP
   }
   brushEvents.push(...advanceSanctuaries(world), ...advanceResearch(world), ...advancePilgrimages(world), ...reconcileCourierDeaths(world), ...reconcileDisasterShelterDeaths(world), ...advanceHouseholds(world), ...advanceWorkshops(world), ...advanceRelicExhibits(world), ...advanceProbation(world), ...advanceToolLoans(world), ...advanceEstates(world));
   reconcileRelicCustody(world);
+  brushEvents.push(...reconcileAscensionInterruptions(world));
   recordNewDeathsForReincarnation(prev, world, brushEvents);
   archiveChronicleEvents(world, brushEvents);
   world.events = [...brushEvents, ...world.events].slice(0, 120);

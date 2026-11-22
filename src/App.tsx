@@ -1,3 +1,5 @@
+import {useAscensionChime} from './components/useAscensionChime';
+import {useAscensionControls} from './components/useAscensionControls';
 import {useCultivationClanControls} from './components/useCultivationClanControls';
 import {useDaoPathControls} from './components/useDaoPathControls';
 import {useHeavenlyAlchemyControls} from './components/useHeavenlyAlchemyControls';
@@ -306,6 +308,8 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   const heavenlyAlchemyControls=useHeavenlyAlchemyControls(simulation,selectedCultivator);
   const daoPathControls=useDaoPathControls(simulation,selectedCultivator);
   const clanControls=useCultivationClanControls(simulation,selectedCultivator);
+  const ascensionControls=useAscensionControls(simulation,selectedCultivator);
+  const onListenAscension=useAscensionChime(simulation,selectedCultivator);
   const campaignStopOptions=useMemo(()=>readingChronicle&&campaign.available&&!preview?
     visibleCampaignStopOptions(visibleWorld,selectedCultivator):[],[readingChronicle,campaign.available,preview,visibleWorld,selectedCultivator]);
   const campaignSelectedStop=campaign.active&&campaign.record?.stopCondition?{
@@ -435,7 +439,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
     }
   }:undefined;
   const inspect = (workspaceSection: 'profile' | 'cultivation' | 'mind') => <React.Suspense fallback={<p role="status">载入修士档案…</p>}>
-    <AgentInspector world={visibleWorld} cultivator={selectedCultivator} heavenlyAlchemyControls={heavenlyAlchemyControls} daoPathControls={daoPathControls} clanControls={clanControls} onSelectCultivator={setSelectedCultivatorId}
+    <AgentInspector world={visibleWorld} cultivator={selectedCultivator} heavenlyAlchemyControls={heavenlyAlchemyControls} daoPathControls={daoPathControls} clanControls={clanControls} ascensionControls={ascensionControls} onListenAscension={onListenAscension} onSelectCultivator={setSelectedCultivatorId}
       workspaceSection={workspaceSection} allowPersonalThought={!preview&&visibleWorld===world}
       publicBonds={workspaceSection==='profile'?bonds.publicArcs:undefined} personalBonds={workspaceSection==='profile'?bonds.personal:undefined}
       artifactSalvage={{scopeKey:viewScopeKey,busy:isStepping||fastForwardLocked,readOnly:!!preview,onConfirm:queueSelectedSalvage}}/>

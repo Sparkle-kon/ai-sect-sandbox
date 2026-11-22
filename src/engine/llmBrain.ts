@@ -1,3 +1,7 @@
+import { activeAscensionForActor, availableAscensionActions, type AscensionOption } from './ascensionEngine';
+import { ASCENSION_PRIVATE_COMMAND_KEYS, ascensionCommand, ascensionQuietWait, exactAscensionDecision } from './ascensionCognition';
+import { ascensionDutyActive } from './ascensionPresence';
+import { ascensionDamage } from './ascensionTerms';
 import { availableCultivationClanActions, type CultivationClanOption } from './cultivationClanEngine';
 import { CLAN_PRIVATE_COMMAND_KEYS, cultivationClanCommand, exactCultivationClanDecision } from './cultivationClanCognition';
 import { dramaticBondReadVenue, matchesDramaticBondFact } from './dramaticBondTerms';
@@ -170,6 +174,30 @@ export function utilityExpeditionRescueDecision(actor: Cultivator, world: WorldS
   const thought = option.rescueMove === 'signal' ? '向确能收到的在场见证人发出求援。' : option.rescueMove === 'accept' ?
     '我自愿携实物补给接应，只沿已核实的撤离路。' : '已脱离伤势所致的求援条件；在尚未交付补给时撤信。';
   return { ...option, chosenAction: option.action, innerMonologue: thought };
+}
+
+export function availableAutonomousAscensionActions(actor: Cultivator, world: WorldState,
+  executionTick = world.tick): readonly AscensionOption[] {
+  if (actor.positionPlane !== undefined || actor.realm !== '渡劫' || actor.realmStage !== 9 ||
+      activeAvatar(world) === actor || world.month === 12 && executionTick === world.tick + 1 && actor.age + 1 >= actor.lifespan)
+    return [];
+  const actions = availableAscensionActions(actor, world, executionTick);
+  return actor.hp >= actor.maxHp * .77 ? actions : actions.filter(option => option.ascensionMove !== 'start');
+}
+
+export function utilityAscensionDecision(actor: Cultivator, world: WorldState): LLMDecisionPayload | undefined {
+  const options = availableAutonomousAscensionActions(actor, world);
+  const opening = options.find(row => row.ascensionMove === 'start');
+  if (opening) return exactAscensionDecision(ascensionCommand(opening), options);
+  const trial = activeAscensionForActor(world, actor);
+  const wave = trial && ([1, 2, 3] as const)[trial.waves.length];
+  if (!wave) return undefined;
+  const safe = (stance: 'guard' | 'advance') => actor.hp > ascensionDamage(actor.maxHp, wave, stance);
+  const picked = actor.personality === '狂傲' && actor.hp >= actor.maxHp * .85 && safe('advance')
+    ? options.find(row => row.ascensionMove === 'advance') : undefined;
+  const choice = picked ?? options.find(row => row.ascensionMove === 'guard' && safe('guard')) ??
+    options.find(row => row.ascensionMove === 'advance' && safe('advance')) ?? options.find(row => row.ascensionMove === 'retreat');
+  return choice ? exactAscensionDecision(ascensionCommand(choice), options) : undefined;
 }
 
 function sharedClanHistory(world: WorldState, actor: Cultivator, counterpartId: string, executionTick: number): boolean {
@@ -531,6 +559,7 @@ function utilityHeartDemonDecision(world: WorldState, actor: Cultivator): LLMDec
  */
 export function requiredBeforeOrdinaryDecision(actor:Cultivator,world:WorldState):LLMDecisionPayload|undefined{
   if(actor.positionPlane!==undefined)return undefined;
+  if(ascensionDutyActive(world,actor))return utilityAscensionDecision(actor,world)??ascensionQuietWait();
   if(!actor.alive||actor.hp<=0||!world.cultivators.includes(actor)||activeRelocationForActor(world,actor)||
       activeEscortForActor(world,actor)||activeCourierForActor(world,actor)||courierActedThisTick(world,actor)||
       activePilgrimageForActor(world,actor)||boundaryReliefCheckpoint(world,actor))return undefined;
@@ -753,6 +782,8 @@ export function computeHeuristicDecision(
   world: WorldState,
   rng: () => number = actorFallbackRandom(world, cultivator.id, world.tick)
 ): LLMDecisionPayload {
+  if (cultivator.positionPlane === 'immortal') return ascensionQuietWait();
+  if (ascensionDutyActive(world, cultivator)) return utilityAscensionDecision(cultivator, world) ?? ascensionQuietWait();
   if(cultivator.positionPlane==='frontier'){
     // No Utility signature, fee-bearing travel or escrow without an explicit choice.
     const option=availableFrontierProviderActions(cultivator,world).find(row=>row.action==='FRONTIER_PRODUCTION'&&
@@ -791,6 +822,8 @@ export function computeHeuristicDecision(
       innerMonologue: tribulationStance === 'focus' ? '抱守道心，不为幻象所动。' : '雷云不散，且运转护身法诀抵挡。',
     };
   }
+  const ascent = utilityAscensionDecision(cultivator, world);
+  if (ascent) return ascent;
   const contact = forbiddenDuelForParticipant(world, cultivator);
   if (contact) return chooseForbiddenArtDecision(world, cultivator) ??
     { chosenAction: 'REST', innerMonologue: '且待眼前交手依实况分明。' };
@@ -2248,7 +2281,29 @@ export async function requestCultivatorLLMDecision(
   requestTick: number,
   options: { signal?: AbortSignal; onStart?: () => void } = {},
 ): Promise<LLMDecisionPayload | undefined> {
-  if (options.signal?.aborted || !config.enabled || !config.apiKey.trim())return undefined;
+  if (options.signal?.aborted || !config.enabled || !config.apiKey.trim() || cultivator.positionPlane === 'immortal') return undefined;
+  const inAscension = ascensionDutyActive(world, cultivator);
+  const potential = cultivator.realm === '渡劫' && cultivator.realmStage === 9 && cultivator.positionPlane === undefined
+    ? availableAscensionActions(cultivator, world, requestTick) : [];
+  if (inAscension || potential.some(row => row.ascensionMove === 'start')) {
+    if (requestTick !== world.tick + 1) return undefined;
+    const allowed = availableAutonomousAscensionActions(cultivator, world, requestTick);
+    if (!allowed.length) return undefined;
+    const actualSite = cultivator.locationId;
+    const originalTrial = activeAscensionForActor(world, cultivator);
+    const menu = allowed.map(ascensionCommand);
+    const prompt = '只原样复制一项已核天关许可。每次只处置当月这一重。' +
+      '不能填写别人、地点、波次、伤害、灵气、境界、独白、是否幸存或预报结果。许可：' +
+      JSON.stringify(inAscension ? menu : [...menu, { chosenAction: 'REST' }]);
+    return requestDecisionPrompt(config, requestTick, options, prompt, parsed => {
+      if (requestTick !== world.tick + 1 || cultivator.locationId !== actualSite || activeAvatar(world) === cultivator ||
+          activeAscensionForActor(world, cultivator) !== originalTrial) return undefined;
+      if (!inAscension && parsed?.chosenAction === 'REST' && Object.hasOwn(parsed, 'chosenAction') && Object.keys(parsed).length === 1)
+        return ascensionQuietWait();
+      if (!exactAscensionDecision(parsed, allowed)) return undefined;
+      return exactAscensionDecision(parsed, availableAutonomousAscensionActions(cultivator, world, requestTick));
+    }, 165);
+  }
   if(cultivator.positionPlane==='frontier'){
     const exact=availableFrontierProviderActions(cultivator,world,requestTick);
     if(!exact.length)return undefined;
@@ -2779,6 +2834,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
               Object.hasOwn(parsed, 'targetDaoPathId') || Object.hasOwn(parsed, 'daoPathMove') ||
               AUCTION_PRIVATE_COMMAND_KEYS.some(key => Object.hasOwn(parsed, key)) ||
               CLAN_PRIVATE_COMMAND_KEYS.some(key => Object.hasOwn(parsed, key)) ||
+              ASCENSION_PRIVATE_COMMAND_KEYS.some(key => Object.hasOwn(parsed, key)) ||
               ['heavenlyAlchemyMove', 'targetHeavenlyRecipeId', 'heavenlyAlchemyHeat', 'heavenlyAlchemyQuality']
                 .some(key => Object.hasOwn(parsed, key))) return undefined;
           const validActions: ActionType[] = [

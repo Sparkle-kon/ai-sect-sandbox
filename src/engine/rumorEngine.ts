@@ -37,6 +37,8 @@ export function witnessEvent(world: WorldState, event: WorldEvent): void {
   // Family assent, refusal, and the waiting/newborn ledger are never public rumor or even generic self-rumor.
   if (event.witnessScope === 'participants' && event.category === 'diplomacy' &&
       /^evt-[1-9]\d*-clan-union-[1-9]\d*-(?:propose|accept|refuse|ceremony_offer|family_offer|family_accept|family_refuse|birth|lost|expired)$/.test(event.id)) return;
+  if (event.witnessScope === 'participants' && event.category === 'heavenly' &&
+      /^evt-[1-9]\d*-.+-ascension-interrupted$/u.test(event.id)) return;
   capturePublicWitnessFact(world, event);
   if (event.duelWinnerId || event.id.startsWith('evt-settlement-')) captureChronicleErrataSource(world, event);
   const involved = new Set(event.actorIds);

@@ -1,3 +1,6 @@
+import {AscensionPanel,type AscensionControls} from './AscensionPanel';
+import {projectAscension} from '../engine/ascensionEngine';
+import {verifiedImmortalAscension} from '../engine/ascensionProof';
 import {CultivationClanRead,type ClanControls} from './CultivationClanRead';
 import {projectCultivationClans} from '../engine/cultivationClanEngine';
 import {CultivatorPortrait} from './CultivatorPortrait';
@@ -64,6 +67,8 @@ interface AgentInspectorProps {
   heavenlyAlchemyControls?:HeavenlyAlchemyControls;
   daoPathControls?:DaoPathControls;
   clanControls?:ClanControls;
+  ascensionControls?:AscensionControls;
+  onListenAscension?:()=>Promise<boolean>;
 }
 
 export const AgentInspector: React.FC<AgentInspectorProps> = ({
@@ -75,7 +80,7 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
   workshopReleaseControls,
   workshopEstateControls,
   craftTrainingControls,
-  heavenlyAlchemyControls,daoPathControls,clanControls,
+  heavenlyAlchemyControls,daoPathControls,clanControls,ascensionControls,onListenAscension,
   publicBonds,personalBonds,allowPersonalThought=false,
 }) => {
   if (!cultivator) {
@@ -93,8 +98,10 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
   const bounty = relevantBounty(world.bounties, cultivator.id);
   const profile = !workspaceSection || workspaceSection === 'profile';
   const clan=profile?projectCultivationClans(world,cultivator):undefined;
+  const ascended=profile&&cultivator.positionPlane==='immortal'&&!!verifiedImmortalAscension(world,cultivator);
   const portrait = profile ? projectCultivatorPortrait(world,cultivator) : undefined;
   const cultivation = !workspaceSection || workspaceSection === 'cultivation';
+  const ascension=cultivation?projectAscension(world,cultivator):undefined;
   const daoPath=cultivation?projectDaoPath(world,cultivator):undefined;
   const mind = !workspaceSection || workspaceSection === 'mind';
   const ownThought=mind&&canReadOwnPersona(world,cultivator,allowPersonalThought);
@@ -156,7 +163,7 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
               : 'bg-rose-500/20 text-rose-400'
           }`}
         >
-          {cultivator.alive ? `当前: ${cultivator.currentAction}` : '已陨落'}
+          {ascended?'已飞升':cultivator.alive?`当前: ${cultivator.currentAction}`:'已陨落'}
         </span>
       </div>}
 
@@ -267,6 +274,7 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
       {profile && <SpiritBeastPanel world={world} cultivator={cultivator} location={location} beasts={world.spiritBeasts ?? []} />}
       {cultivation && <>
       <TribulationPanel cultivator={cultivator} />
+      {ascension&&<AscensionPanel key={cultivator.id} view={ascension} controls={ascensionControls} onListen={onListenAscension}/>}
       <TechniquePanel world={world} cultivator={cultivator} sect={sect} location={location} cultivators={world.cultivators} />
       {daoPath&&<DaoPathRead key={daoPath.actorId} view={daoPath} tick={world.tick} controls={daoPathControls}/>}
       {scriptureCatalog?.original && <React.Suspense fallback={<p role="status" className="text-xs text-slate-400">载入经义校勘…</p>}>
