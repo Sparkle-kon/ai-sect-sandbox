@@ -3,12 +3,14 @@ import {expeditionRescueCheckpoint} from './expeditionRescueCheckpoint';
 import {recordEraWorkshopSettlement} from './eraHistoryIndex';
 import type {
   CultivationRealm, Cultivator, LLMDecisionPayload, LocationNode, WorkshopCloseReason, WorkshopCapacityMove, WorkshopMove, WorkshopOrder,
-  WorkshopInstitutionClosure, WorkshopOutputGrade, WorkshopQualityFloor, WorkshopState, WorkshopTier, WorkshopWorkReceipt, ToolLoan, WorldEvent, WorldState,
+  WorkshopEstateReleaseReason, WorkshopInstitutionClosure, WorkshopOutputGrade, WorkshopQualityFloor, WorkshopState, WorkshopTier, WorkshopWorkReceipt, ToolLoan, WorldEvent, WorldState,
 } from '../types/world';
 import { ARTIFACT_RULES } from './artifactEngine';
 import { canUseFurnace, claimFurnaceUse } from './furnaceReservationEngine';
 import { isFurnaceSafetyClosed } from './furnaceSafetyEngine';
 import { effectiveWorkshopDeadline,effectiveWorkshopQuantity,WORKSHOP_CAPACITY_RECOVERY_TICKS } from './workshopCapacityTerms';
+import {WORKSHOP_ESTATE_OFFER_TICKS,WORKSHOP_ESTATE_REPLY_TICKS,WORKSHOP_ESTATE_WORK_TICKS,
+  workshopEstateBeneficiary,workshopEstateFor,type WorkshopEstateOption} from './workshopEstateTerms';
 import { activeEscortForActor } from './escortEngine';
 import { pilgrimageCheckpoint } from './pilgrimageEngine';
 import { activeRelocationForActor } from './relocationEngine';
@@ -55,6 +57,8 @@ export function workshopTerms(tier: WorkshopTier, quantity: 1 | 2 = 1) {
 
 const alive = (actor?: Cultivator): actor is Cultivator => Boolean(actor?.alive && actor.hp > 0);
 const participant = (actor: Cultivator, order: WorkshopOrder) => actor.id === order.patronId || actor.id === order.makerId;
+const deliveryPatron=(world:WorldState,order:WorkshopOrder)=>person(world,
+  order.estateContinuation?.phase==='resumed'?order.estateContinuation.beneficiaryId??'':order.patronId);
 const person = (world: WorldState, id: string) => world.cultivators.find(actor => actor.id === id);
 const at = (world: WorldState, id: string) => world.locations.find(site => site.id === id);
 const active = (world: WorldState, order: WorkshopOrder) => order.status === 'active' &&
@@ -111,7 +115,7 @@ export function availableWorkshopActions(actor: Cultivator, world: WorldState, i
   const result: WorkshopOption[] = [];
   const makerWorked = orders.some(order => order.makerId === actor.id && order.work.at(-1)?.tick === executionTick);
   for (const order of orders) {
-    if (!participant(actor, order)) continue;
+    if (!participant(actor, order)||workshopEstateHoldDue(world,order,executionTick)) continue;
     const site = at(world, order.siteId);
     const patron = person(world, order.patronId);
     if (offered(world, order)) {
@@ -126,19 +130,25 @@ export function availableWorkshopActions(actor: Cultivator, world: WorldState, i
       }
     }
     if (active(world, order)) {
-      result.push(choice('cancel', order.id));
+      const continuation=order.estateContinuation;
+      const recipient=deliveryPatron(world,order);
+      if (!continuation)result.push(choice('cancel', order.id));
       if (actor.id !== order.makerId || makerWorked || executionTick <= (order.acceptedTick ?? Infinity) ||
+          continuation&&(continuation.phase!=='resumed'||executionTick<=(continuation.resumeTick??Infinity)||
+            !workshopEstateCustodyUnchanged(order)||!recipient||
+            recipient.id!==workshopEstateBeneficiary(world,order,executionTick)||
+            !releaseLocal(world,recipient,site,executionTick)||!releaseLocal(world,actor,site,executionTick)) ||
           executionTick >= (effectiveWorkshopDeadline(order) ?? -Infinity) ||
-          !makerEligible(world, actor, site, order.tier) || !availableAt(world, patron, site) || order.work.length >= effectiveWorkshopQuantity(order) * 2 || (order.capacityAmendment && order.work.length!==1)) continue;
+          !makerEligible(world, actor, site, order.tier) || !availableAt(world, recipient, site) || order.work.length >= effectiveWorkshopQuantity(order) * 2 || (order.capacityAmendment && order.work.length!==1)) continue;
       const finish = order.work.length % 2 === 1;
       const terms = workshopTerms(order.tier, order.quantity);
       if (order.escrowHerbs < 1 || order.escrowStones < (finish ? terms.finishFuel + terms.feePerPiece : terms.blankFuel)) continue;
-      if (finish && (patron.artifacts.length >= WORKSHOP_CAPACITY ||
+      if (finish && (recipient.artifacts.length >= WORKSHOP_CAPACITY ||
           hasCanonicalArtifact(world, artifactIdFor(order, Math.floor(order.work.length / 2) + 1)))) continue;
       if (canUseFurnace(world, actor, order.siteId, 'workshop', order.id, executionTick)) {
         const option=choice('work',order.id);
         result.push(option);
-        if(finish)for(const targetToolLoanId of availableWorkshopToolUses(world,actor,order,executionTick))
+        if(finish&&!continuation)for(const targetToolLoanId of availableWorkshopToolUses(world,actor,order,executionTick))
           result.push({...option,targetToolLoanId});
       }
     }
@@ -164,9 +174,14 @@ export function availableWorkshopActions(actor: Cultivator, world: WorldState, i
 }
 
 function event(world: WorldState, order: WorkshopOrder, phase: string, title: string, description: string): WorldEvent {
+  const beneficiary=order.estateContinuation?.beneficiaryId;
+  const actorIds=phase.startsWith('estate-')?
+    beneficiary?[beneficiary,order.makerId]:[order.makerId]:
+    phase==='finish-1'&&order.estateContinuation?.phase==='completed'&&beneficiary?
+      [beneficiary,order.makerId]:[order.patronId,order.makerId];
   const receipt:WorldEvent={
     id:`evt-workshop-${order.id}-${world.tick}-${phase}`,tick:world.tick,year:world.year,month:world.month,
-    category:'diplomacy',title,description,actorIds:[order.patronId,order.makerId],locationId:order.siteId,witnessScope:'participants',
+    category:'diplomacy',title,description,actorIds,locationId:order.siteId,witnessScope:'participants',
   };
   recordEraWorkshopSettlement(world,order,receipt);
   return receipt;
@@ -188,7 +203,7 @@ function refund(world:WorldState,order:WorkshopOrder,patron:Cultivator,stones=or
   order.escrowHerbs-=herbs;
 }
 
-function settle(world: WorldState, order: WorkshopOrder, status: Exclude<WorkshopOrder['status'], 'active' | 'offered'>,
+function settle(world: WorldState, order: WorkshopOrder, status: Exclude<WorkshopOrder['status'], 'active' | 'offered' | 'probate_hold'>,
   reason?: WorkshopCloseReason): boolean {
   if (order.settledTick !== undefined) return false;
   if (order.escrowStones > 0 || order.escrowHerbs > 0) {
@@ -220,15 +235,17 @@ function gradeWork(maker: Cultivator, site: LocationNode, order: WorkshopOrder, 
 
 function work(world: WorldState, order: WorkshopOrder, maker: Cultivator, rng: () => number,tool?:ToolLoan): WorldEvent {
   const site = at(world, order.siteId)!;
-  const patron = person(world, order.patronId)!;
+  const patron = deliveryPatron(world,order)!;
   const terms = workshopTerms(order.tier, order.quantity);
   const piece = (order.work.length < 2 ? 1 : 2) as 1 | 2;
   const stage = order.work.length % 2 === 0 ? 'blank' : 'finish';
   const stonesUsed = stage === 'blank' ? terms.blankFuel : terms.finishFuel;
   order.escrowStones -= stonesUsed;
   order.escrowHerbs -= 1;
+  const workVisibility=order.estateContinuation?.phase==='resumed'?
+    {kind:'participants' as const,actorIds:[patron.id,order.makerId]}:visibility(order);
   const fields = { kind: 'consumption' as const, from: flowWorkshop(order.id), mechanism: 'workshop' as const,
-    refId: order.id, visibility: visibility(order) };
+    refId: order.id, visibility: workVisibility };
   recordResourceFlow(world, { ...fields, good: 'stone', amount: stonesUsed, reason: 'workshop_fuel' });
   recordResourceFlow(world, { ...fields, good: WORKSHOP_HERB, amount: 1, reason: 'workshop_material' });
   const row: WorkshopWorkReceipt = { tick: world.tick, makerId: maker.id, piece, stage, stonesUsed, herbsUsed: 1 };
@@ -252,9 +269,12 @@ function work(world: WorldState, order: WorkshopOrder, maker: Cultivator, rng: (
     maker.spiritStones += terms.feePerPiece;
     Object.assign(row, { artifactId, feePaid: terms.feePerPiece });
     recordResourceFlow(world, { kind: 'transfer', good: 'stone', amount: terms.feePerPiece, from: flowWorkshop(order.id), to: flowActor(maker.id),
-      mechanism: 'workshop', refId: order.id, reason: 'workshop_wage', visibility: visibility(order) });
+      mechanism: 'workshop', refId: order.id, reason: 'workshop_wage', visibility: workVisibility });
   }
-  if (piece === effectiveWorkshopQuantity(order)) settle(world, order, 'completed');
+  if (piece === effectiveWorkshopQuantity(order)&&settle(world, order, 'completed')&&order.estateContinuation?.phase==='resumed'){
+    order.estateContinuation.phase='completed';
+    order.estateContinuation.closedTick=world.tick;
+  }
   const outcome = row.artifactId ? `已实际交付，支付${row.feePaid}灵石工钱` : '未达契约门槛，无成品也无工钱';
   const suffix=order.status==='completed' ?
     (order.capacityAmendment?`；按补签完成保留工序，原承诺尚有一件已授权不再制作；累计实退${order.refundedStones}灵石、${order.refundedHerbs}份余料`:
@@ -457,6 +477,13 @@ export function advanceWorkshops(world: WorldState): WorldEvent[] {
   const events: WorldEvent[] = [];
   for (const order of world.workshops.orders) {
     advanceWorkshopReleaseNegotiations(order,world.tick);
+    if(order.estateContinuation){
+      const transition=advanceWorkshopEstate(world,order);
+      if(transition)events.push(transition);
+      continue;
+    }
+    const hold=holdWorkshopEstate(world,order);
+    if(hold){events.push(hold);continue;}
     if (order.status !== 'active' && order.status !== 'offered') continue;
     const patron = person(world, order.patronId), maker = person(world, order.makerId);
     const reason: WorkshopCloseReason | undefined = !alive(patron) ? 'patron_unavailable' : !alive(maker) ? 'maker_unavailable' :
@@ -471,18 +498,21 @@ export function advanceWorkshops(world: WorldState): WorldEvent[] {
     }
   }
   const toolProofOrders = new Set(world.toolLoans.loans.flatMap(({workshopId,origin})=>[workshopId,origin.orderId]));
-  const terminal = world.workshops.orders.filter(order => order.settledTick !== undefined && !order.capacityAmendment && !order.releaseNegotiations?.length && !toolProofOrders.has(order.id))
+  const terminal = world.workshops.orders.filter(order => order.settledTick !== undefined && !order.capacityAmendment && !order.releaseNegotiations?.length && !order.estateContinuation && !toolProofOrders.has(order.id))
     .sort((a, b) => (b.settledTick! - a.settledTick!) || Number(b.id.slice(11)) - Number(a.id.slice(11)))
     .slice(0, WORKSHOP_TERMINAL_LIMIT);
   const retain = new Set(terminal.map(({ id }) => id));
-  world.workshops.orders = world.workshops.orders.filter(order => order.settledTick === undefined || !!order.capacityAmendment || !!order.releaseNegotiations?.length || toolProofOrders.has(order.id) || retain.has(order.id));
+  world.workshops.orders = world.workshops.orders.filter(order => order.settledTick === undefined || !!order.capacityAmendment || !!order.releaseNegotiations?.length || !!order.estateContinuation || toolProofOrders.has(order.id) || retain.has(order.id));
   return events;
 }
 
 /** Private terms and job receipts are participant records, not world intelligence. */
 export function visibleWorkshopOrders(world: WorldState, actor?: Cultivator): WorkshopOrder[] {
   return actor && person(world, actor.id) === actor
-    ? world.workshops.orders.filter(order => order.offeredTick <= world.tick && participant(actor, order)) : [];
+    ? world.workshops.orders.filter(order => order.offeredTick <= world.tick && (participant(actor, order)||
+        order.estateContinuation?.beneficiaryId===actor.id||
+        order.status==='probate_hold'&&workshopEstateBeneficiary(world,order,world.tick+1)===actor.id&&
+          releaseLocal(world,actor,at(world,order.siteId),world.tick))) : [];
 }
 
 export const WORKSHOP_RELEASE_OFFER_TICKS=2;
@@ -595,4 +625,104 @@ export function resolveWorkshopReleaseAction(world:WorldState,actor:Cultivator,p
   Object.assign(negotiation,{status:'accepted',responderId:actor.id,closedTick:world.tick,returnedStones,returnedHerbs});
   return event(world,order,'release-accepted','双方应允释约',
     `已按原托管实退${returnedStones}灵石与${returnedHerbs}份玄土根；旧交割与实发工钱不重算。`);
+}
+
+export type {WorkshopEstateOption} from './workshopEstateTerms';
+export {WORKSHOP_ESTATE_OFFER_TICKS,WORKSHOP_ESTATE_REPLY_TICKS,WORKSHOP_ESTATE_WORK_TICKS} from './workshopEstateTerms';
+
+/** This is the original funded blank, not a newly created artifact or estate asset. */
+export function workshopEstateBlank(order:WorkshopOrder){
+  const blank=order.work[0], terms=workshopTerms(order.tier,1);
+  if(order.institution||order.disbandmentId||order.capacityOffer||order.capacityAmendment||order.releaseNegotiations?.length||
+    order.quantity!==1||order.acceptedTick===undefined||order.deadlineTick===undefined||!blank||
+    blank.piece!==1||blank.stage!=='blank'||blank.makerId!==order.makerId||blank.tick<=order.acceptedTick||
+    blank.tick>=order.deadlineTick||blank.stonesUsed!==terms.blankFuel||blank.herbsUsed!==1||
+    blank.quality!==undefined||blank.qualityScore!==undefined||blank.feePaid!==undefined||blank.artifactId!==undefined||
+    blank.toolUse!==undefined)return undefined;
+  return {blank,stones:terms.totalStones-blank.stonesUsed,herbs:terms.totalHerbs-blank.herbsUsed};
+}
+function workshopEstateCustodyUnchanged(order:WorkshopOrder):boolean{
+  const source=workshopEstateBlank(order),estate=order.estateContinuation;
+  return !!source&&order.work.length===1&&source.stones===order.escrowStones&&source.herbs===order.escrowHerbs&&
+    !order.refundedStones&&!order.refundedHerbs&&(!estate||estate.heldStones===source.stones&&estate.heldHerbs===source.herbs);
+}
+
+function estateVisit(world:WorldState,order:WorkshopOrder,phase:'hold'|'offer'|'accept',title:string,description:string):WorldEvent{
+  return event(world,order,`estate-${phase}`,title,description);
+}
+function workshopEstateHoldDue(world:WorldState,order:WorkshopOrder,tick:number):boolean{
+  if(order.status!=='active'||order.estateContinuation||order.settledTick!==undefined||tick>=(order.deadlineTick??0))return false;
+  const patron=person(world,order.patronId);
+  return !!patron&&!patron.alive&&patron.hp===0&&onLowerPlane(patron)&&alive(person(world,order.makerId))&&
+    !world.estates.entries.some(estate=>estate.deceasedId===patron.id&&estate.openedTick!==tick)&&
+    !!at(world,order.siteId)&&workshopEstateCustodyUnchanged(order);
+}
+function holdWorkshopEstate(world:WorldState,order:WorkshopOrder):WorldEvent|null{
+  if(!workshopEstateHoldDue(world,order,world.tick))return null;
+  order.estateContinuation={estateId:`estate-${order.patronId}`,heldTick:world.tick,heldStones:order.escrowStones,heldHerbs:order.escrowHerbs,phase:'held'};
+  order.status='probate_hold';
+  return estateVisit(world,order,'hold','旧坯留炉，余料封账','原委托人已不在世。只守原坯与余款，不提前交遗产或给任何人另记一单。');
+}
+function releaseWorkshopEstate(world:WorldState,order:WorkshopOrder,reason:WorkshopEstateReleaseReason):WorldEvent|null{
+  const chain=order.estateContinuation;
+  if(!chain||chain.phase==='released'||chain.phase==='completed'||!workshopEstateCustodyUnchanged(order)||
+    !settle(world,order,'cancelled','estate_returned'))return null;
+  chain.phase='released';chain.closedTick=world.tick;chain.releaseReason=reason;
+  return event(world,order,'estate-release','遗托续制未成，原余料归账',
+    `只退尚存的${order.refundedStones}灵石和${order.refundedHerbs}份玄土根，回原委托人的同一遗产；旧坯不重作、不估价。`);
+}
+function advanceWorkshopEstate(world:WorldState,order:WorkshopOrder):WorldEvent|null{
+  const chain=order.estateContinuation;
+  if(!chain||chain.phase==='released'||chain.phase==='completed')return null;
+  const tick=world.tick,estate=workshopEstateFor(world,order),site=at(world,order.siteId);
+  const maker=person(world,order.makerId);
+  if(!site)return releaseWorkshopEstate(world,order,'site_unavailable');
+  if(!alive(maker))return releaseWorkshopEstate(world,order,'maker_unavailable');
+  if(estate?.status==='unclaimed')return releaseWorkshopEstate(world,order,'unclaimed');
+  if(!estate||estate.status==='open'||estate.settledTick===undefined||estate.settledTick>=tick)return null;
+  const id=workshopEstateBeneficiary(world,order,tick);
+  if(!id||!alive(person(world,id)))return releaseWorkshopEstate(world,order,'heir_unavailable');
+  if(chain.phase==='held'&&tick>=estate.settledTick+WORKSHOP_ESTATE_OFFER_TICKS||
+    chain.phase==='offered'&&tick>=(chain.replyUntilTick??0)||
+    chain.phase==='resumed'&&tick>=(chain.workUntilTick??0))return releaseWorkshopEstate(world,order,'lapsed');
+  return null;
+}
+
+export function availableWorkshopEstateActions(actor:Cultivator,world:WorldState,tick=world.tick):WorkshopEstateOption[]{
+  if((tick!==world.tick&&tick!==world.tick+1)||person(world,actor.id)!==actor||!alive(actor))return [];
+  const choices:WorkshopEstateOption[]=[];
+  for(const order of world.workshops.orders){
+    const chain=order.estateContinuation;
+    if(order.status!=='probate_hold'||!chain||chain.heldTick>=tick||!workshopEstateCustodyUnchanged(order))continue;
+    const estate=workshopEstateFor(world,order),id=workshopEstateBeneficiary(world,order,tick);
+    if(!id||!estate||estate.settledTick===undefined)continue;
+    const heir=person(world,id),maker=person(world,order.makerId),site=at(world,order.siteId);
+    if(!releaseLocal(world,heir,site,tick)||!releaseLocal(world,maker,site,tick))continue;
+    const add=(workshopEstateMove:WorkshopEstateOption['workshopEstateMove'])=>
+      choices.push({action:'WORKSHOP_ESTATE',workshopEstateMove,targetWorkshopId:order.id});
+    if(chain.phase==='held'&&actor===heir&&tick<estate.settledTick+WORKSHOP_ESTATE_OFFER_TICKS)add('offer');
+    if(chain.phase!=='offered'||actor!==maker||chain.beneficiaryId!==id||
+      tick<=(chain.offeredTick??Infinity)||tick>=(chain.replyUntilTick??0))continue;
+    add('decline');
+    const occupied=world.workshops.orders.some(other=>other!==order&&active(world,other)&&
+      (other.makerId===order.makerId||other.siteId===order.siteId));
+    if(!occupied&&heir.artifacts.length<WORKSHOP_CAPACITY&&makerEligible(world,maker,site,order.tier))add('accept');
+  }
+  return choices;
+}
+export function resolveWorkshopEstateAction(world:WorldState,actor:Cultivator,payload:LLMDecisionPayload):WorldEvent|null{
+  if(payload.chosenAction!=='WORKSHOP_ESTATE'||Object.keys(payload).some(key=>
+    !['chosenAction','innerMonologue','workshopEstateMove','targetWorkshopId'].includes(key)))return null;
+  const choice=availableWorkshopEstateActions(actor,world).find(row=>row.workshopEstateMove===payload.workshopEstateMove&&row.targetWorkshopId===payload.targetWorkshopId);
+  const order=choice&&world.workshops.orders.find(row=>row.id===choice.targetWorkshopId),chain=order?.estateContinuation;
+  if(!choice||!order||!chain)return null;
+  const tick=world.tick;
+  if(choice.workshopEstateMove==='offer'){
+    chain.phase='offered';chain.beneficiaryId=actor.id;chain.offeredTick=tick;chain.replyUntilTick=tick+WORKSHOP_ESTATE_REPLY_TICKS;
+    return estateVisit(world,order,'offer','裁定继承人只请续原坯','此处仍是原契、原工匠、原托管；只等工匠下一月亲答。');
+  }
+  if(choice.workshopEstateMove==='decline')return releaseWorkshopEstate(world,order,'declined');
+  chain.phase='resumed';chain.resumeTick=tick;chain.workUntilTick=tick+WORKSHOP_ESTATE_WORK_TICKS;
+  order.status='active';
+  return estateVisit(world,order,'accept','原工匠当面应下续制','从原坯接手，下月才走原来最后一道工序；未重交灵石，未另起一张委托。');
 }

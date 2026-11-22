@@ -158,6 +158,7 @@ export type ActionType =
   | 'SEASON_REVIEW'
   | 'PROBATION'
   | 'SCRIBE_COMMISSION'
+  | 'WORKSHOP_ESTATE'
   | 'WORKSHOP_RELEASE'
   | 'WORKSHOP'
   | 'FURNACE_RESERVATION'
@@ -636,6 +637,7 @@ export interface LLMDecisionPayload {
   probationVote?: ProbationVote;
   workshopMove?: WorkshopMove;
   workshopReleaseMove?: WorkshopReleaseMove;
+  workshopEstateMove?: WorkshopEstateMove;
   scribeCommissionMove?: ScribeCommissionMove;
   targetScribeCommissionId?: string;
   targetWorkshopReleaseId?: string;
@@ -1069,6 +1071,7 @@ export type AvatarInteractionCommand = AvatarInteractionRequest;
 export type AvatarOrder = 'REST' | 'CULTIVATE';
 export type AvatarPendingOrder = { actorId: string; queuedTick: number } & (
   | { action: AvatarOrder }
+  | {action:'WORKSHOP_ESTATE';workshopEstateMove:'offer'|'accept'|'decline';targetWorkshopId:string}
   | {action:'SCRIBE_COMMISSION';scribeCommissionMove:'offer';targetCultivatorId:string;targetChronicleSourceId:string;targetScribeCommissionId?:never}
   | {action:'SCRIBE_COMMISSION';scribeCommissionMove:'accept'|'decline'|'withdraw'|'verify'|'deliver';targetScribeCommissionId:string;targetCultivatorId?:never;targetChronicleSourceId?:never}
   | {action:'WORKSHOP_RELEASE';workshopReleaseMove:'propose';targetWorkshopId:string;targetWorkshopReleaseId?:never}
@@ -2689,9 +2692,9 @@ export type WorkshopMove = 'offer' | 'accept' | 'work' | 'cancel' | 'decline';
 export type WorkshopTier = '法器' | '灵器';
 export type WorkshopQualityFloor = 'standard' | 'fine';
 export type WorkshopOutputGrade = 'failed' | WorkshopQualityFloor;
-export type WorkshopStatus = 'offered' | 'active' | 'completed' | 'cancelled' | 'declined' | 'expired';
+export type WorkshopStatus = 'offered' | 'active' | 'probate_hold' | 'completed' | 'cancelled' | 'declined' | 'expired';
 export type WorkshopCloseReason = 'patron_cancelled' | 'maker_cancelled' | 'offer_expired' |
-  'mutual_release' | 'work_expired' | 'patron_unavailable' | 'maker_unavailable' | 'site_unavailable' | 'institution_closed';
+  'mutual_release' | 'estate_returned' | 'work_expired' | 'patron_unavailable' | 'maker_unavailable' | 'site_unavailable' | 'institution_closed';
 
 export type ToolLoanMove='offer'|'accept'|'decline'|'withdraw'|'release'|'reclaim';
 export interface ToolLoanUse {
@@ -2764,7 +2767,24 @@ export interface WorkshopReleaseNegotiation {
   closedTick?:number; responderId?:string; returnedStones?:number; returnedHerbs?:number;
   supersededBy?:'work_changed'|'contract_closed';
 }
+export type WorkshopEstateMove = 'offer' | 'accept' | 'decline';
+export type WorkshopEstateReleaseReason = 'unclaimed' | 'declined' | 'lapsed' | 'maker_unavailable' | 'heir_unavailable' | 'site_unavailable';
+export interface WorkshopEstateContinuation {
+  estateId: string;
+  heldTick: number;
+  heldStones: number;
+  heldHerbs: number;
+  phase: 'held' | 'offered' | 'resumed' | 'released' | 'completed';
+  beneficiaryId?: string;
+  offeredTick?: number;
+  replyUntilTick?: number;
+  resumeTick?: number;
+  workUntilTick?: number;
+  closedTick?: number;
+  releaseReason?: WorkshopEstateReleaseReason;
+}
 export interface WorkshopOrder {
+  estateContinuation?: WorkshopEstateContinuation;
   releaseNegotiations?:WorkshopReleaseNegotiation[];
   capacityOffer?: WorkshopCapacityOffer;
   capacityAmendment?: WorkshopCapacityAmendment;

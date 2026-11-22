@@ -38,7 +38,7 @@ import { advanceRoads, resolveRoadAction } from './roadEngine';
 import { advanceProbation, resolveProbationAction } from './probationEngine';
 import { advanceRelicExhibits, resolveRelicExhibitAction } from './relicExhibitEngine';
 import { advanceScribeCommissions, resolveScribeCommissionAction } from './scribeCommissionEngine';
-import { advanceWorkshopInstitutionClosures, advanceWorkshops, resolveWorkshopAction, resolveWorkshopCapacityAction, resolveWorkshopReleaseAction } from './workshopEngine';
+import { advanceWorkshopInstitutionClosures, advanceWorkshops, resolveWorkshopAction, resolveWorkshopCapacityAction, resolveWorkshopEstateAction, resolveWorkshopReleaseAction } from './workshopEngine';
 import { openFurnaceTurn, resolveFurnaceReservationAction, settleFurnaceTurn } from './furnaceReservationEngine';
 import { advanceSparring, resolveSparringAction, sparringLocksActor } from './sparringEngine';
 import { resolveExpeditionRescueAction } from './expeditionRescueEngine';
@@ -315,6 +315,15 @@ export function applyCultivatorBrainDecision(
     if (applied) {
       cultivator.innerMonologue = decision.innerMonologue;
       cultivator.currentAction = 'SCRIBE_COMMISSION';
+    }
+    return applied;
+  }
+  if (decision.chosenAction === 'WORKSHOP_ESTATE') {
+    if (activeAvatar(world)?.id === cultivator.id && decision !== explicitAvatarDecision) return null;
+    const applied = resolveWorkshopEstateAction(world, cultivator, decision);
+    if (applied) {
+      cultivator.innerMonologue = decision.innerMonologue;
+      cultivator.currentAction = 'WORKSHOP_ESTATE';
     }
     return applied;
   }

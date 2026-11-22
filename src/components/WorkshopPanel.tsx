@@ -1,3 +1,4 @@
+import {WorkshopEstateRead,type WorkshopEstateControls} from './WorkshopEstateRead';
 import {WorkshopReleaseRead,type WorkshopReleaseControls} from './WorkshopReleaseRead';
 import { visibleWorkshopOrders, workshopTerms } from '../engine/workshopEngine';
 import { WORKSHOP_CAPACITY_RECOVERY_TICKS } from '../engine/workshopCapacityTerms';
@@ -8,13 +9,13 @@ import type { Cultivator, WorldState } from '../types/world';
 
 type Order = ReturnType<typeof visibleWorkshopOrders>[number];
 const STATUS: Record<Order['status'], string> = {
-  offered: '等待工匠同意', active: '工期内', completed: '已完成工序并结算',
+  offered: '等待工匠同意', active: '工期内', probate_hold:'依原单封护旧坯', completed: '已完成工序并结算',
   cancelled: '已终止', declined: '工匠未同意', expired: '已过期',
 };
 const CLOSE: Record<NonNullable<Order['closeReason']>, string> = {
   patron_cancelled: '委托方取消', maker_cancelled: '工匠取消', offer_expired: '邀约过期',
   work_expired: '工期已满', patron_unavailable: '委托方无法交接', maker_unavailable: '工匠无法继续', site_unavailable: '工坊地点已失效',
-  institution_closed: '原山门工坊章程终止', mutual_release:'双方同意停作余件',
+  institution_closed: '原山门工坊章程终止', mutual_release:'双方同意停作余件', estate_returned:'遗下原单已按实余料结案',
 };
 const QUALITY = { failed: '未成品', standard: '合格', fine: '精良' } as const;
 
@@ -69,11 +70,10 @@ function CapacityReceipt({ order, tick, patron, receipts }: {
   </div>;
 }
 
-export function WorkshopPanel({ world, cultivator, releaseControls }: { world: WorldState; cultivator: Cultivator; releaseControls?:WorkshopReleaseControls }) {
-  const actor = world.cultivators.find(({ id }) => id === cultivator.id);
+export function WorkshopPanel({ world, cultivator, releaseControls, estateControls }: { world: WorldState; cultivator: Cultivator; releaseControls?:WorkshopReleaseControls; estateControls?:WorkshopEstateControls }) {
+  const actor = world.cultivators.includes(cultivator)?cultivator:undefined;
   if (!actor) return null;
-  const orders = visibleWorkshopOrders(world, actor).filter(({ patronId, makerId, offeredTick }) =>
-    (patronId === actor.id || makerId === actor.id) && offeredTick <= world.tick)
+  const orders = visibleWorkshopOrders(world, actor).filter(({ offeredTick })=>offeredTick<=world.tick)
     .sort((a, b) => (b.settledTick ?? b.offeredTick) - (a.settledTick ?? a.offeredTick));
   const toolLoans = projectToolLoans(world, actor);
   if (!orders.length && !toolLoans.length) return null;
@@ -89,6 +89,9 @@ export function WorkshopPanel({ world, cultivator, releaseControls }: { world: W
         {orders.length > 0 && <ol aria-label="本角色可查的工坊委制" className="max-h-[27rem] space-y-2 overflow-y-auto">
           {orders.map((order) => {
             const patron = order.patronId === actor.id;
+            const maker=order.makerId===actor.id;
+            const beneficiary=order.estateContinuation?.beneficiaryId===actor.id;
+            const receivesItem=order.estateContinuation?beneficiary:patron;
             const accepted = order.acceptedTick !== undefined && order.acceptedTick <= world.tick;
             const receipts = order.work.filter(({ tick }) => tick <= world.tick);
             const completedPieces = receipts.filter(({ stage }) => stage === 'finish').length;
@@ -99,26 +102,27 @@ export function WorkshopPanel({ world, cultivator, releaseControls }: { world: W
               order.settledTick !== undefined && order.settledTick <= world.tick;
             return (
               <li key={order.id} className="min-w-0 space-y-1.5 break-words rounded border border-slate-800 p-2">
-                <h5 className="font-semibold text-indigo-100">{patron ? '本人委制' : '本人承制'} · {order.tier} ×{order.quantity} · {label}</h5>
-                <p>对方 {people.get(patron ? order.makerId : order.patronId) ?? '修士未详'} · {known.get(order.siteId) ?? '工坊地点此时未观测'}</p>
+                <h5 className="font-semibold text-indigo-100">{patron?(order.estateContinuation?'本人旧委制':'本人委制'):maker?'本人承制':'本人可查的继承原单'} · {order.tier} ×{order.quantity} · {label}</h5>
+                <p>对方 {people.get(patron||!maker?order.makerId:order.estateContinuation?.beneficiaryId??order.patronId)??'修士未详'} · {known.get(order.siteId) ?? '工坊地点此时未观测'}</p>
                 <p>约定最低品质：{QUALITY[order.qualityFloor]} · 邀约 Tick #{order.offeredTick}
                   {!accepted && order.status === 'offered' && ` · 回应截止 Tick #${order.offerExpiresTick}`}
                 </p>
                 <p>约定整单托管 {terms.totalStones} 灵石与玄土根 {terms.totalHerbs} 株；每件只有实际交割才付工钱 {terms.feePerPiece} 灵石。</p>
                 {accepted ? <>
-                  <p>工匠同意 Tick #{order.acceptedTick}{order.deadlineTick !== undefined && ` · 工期截止 Tick #${order.deadlineTick}`}</p>
+                  <p>工匠同意 Tick #{order.acceptedTick}{order.deadlineTick !== undefined && ` · ${order.estateContinuation?'原工期':'工期'}截止 Tick #${order.deadlineTick}`}</p>
                   <p>实际工序 {receipts.length}/{order.quantity * 2} · 已验质 {completedPieces}/{order.quantity} 件 · 实际交割 {delivered} 件</p>
                 </> : <p className="text-slate-400">没有已同意的承制记录，未开工。</p>}
                 {order.closeReason !== 'institution_closed' && <p>当前托管 {order.escrowStones} 灵石与玄土根 {order.escrowHerbs} 株 · 已实退 {order.refundedStones} 灵石与玄土根 {order.refundedHerbs} 株</p>}
                 <CapacityReceipt order={order} tick={world.tick} patron={patron} receipts={receipts} />
                 <WorkshopReleaseRead key={releaseControls?.scopeKey??actor.id} order={order} actorId={actor.id} tick={world.tick} controls={releaseControls}/>
+                <WorkshopEstateRead key={'estate:'+ (estateControls?.scopeKey??actor.id)} order={order} actorId={actor.id} tick={world.tick} controls={estateControls}/>
                 {order.closeReason && (order.closeReason !== 'institution_closed' || institutionClosed) &&
                   <p>结案：{CLOSE[order.closeReason]}{order.settledTick !== undefined && ` · Tick #${order.settledTick}`}</p>}
                 {institutionClosed && <ClosureReceipt world={world} order={order} patron={patron} />}
                 {!order.closeReason && order.settledTick !== undefined && <p>已结算 Tick #{order.settledTick}</p>}
                 {!!receipts.length && <ol aria-label="逐件实际耗材与品质凭证" className="space-y-1.5 border-t border-slate-800 pt-2">
                   {receipts.map((receipt, index) => {
-                    const stillHeld = patron && receipt.artifactId && actor.artifacts.some(({ id }) => id === receipt.artifactId);
+                    const stillHeld = receivesItem && receipt.artifactId && actor.artifacts.some(({ id }) => id === receipt.artifactId);
                     const missedFloor = receipt.quality === 'failed' || (receipt.quality === 'standard' && order.qualityFloor === 'fine');
                     return (
                       <li key={index} className="rounded bg-slate-900/80 p-2">
@@ -126,7 +130,7 @@ export function WorkshopPanel({ world, cultivator, releaseControls }: { world: W
                         <p>实际耗用 {receipt.stonesUsed} 灵石、玄土根 {receipt.herbsUsed} 株{receipt.feePaid !== undefined && ` · 实付工费 ${receipt.feePaid} 灵石`}</p>
                         {receipt.quality !== undefined && <p className={receipt.artifactId ? 'text-emerald-200' : 'text-amber-200'}>
                           实测品质：{QUALITY[receipt.quality]}{receipt.qualityScore !== undefined && `（评分 ${receipt.qualityScore}）`}
-                          {receipt.artifactId ? (patron ? stillHeld ? ' · 已验收入库，当前仍持有' : ' · 曾验收入库，当前未持有' : ' · 已交割') : missedFloor ? ' · 未达到约定品质，无成品入库' : ' · 未交割，无成品入库'}
+                          {receipt.artifactId ? (receivesItem ? stillHeld ? ' · 已验收入库，当前仍持有' : ' · 曾验收入库，当前未持有' : ' · 已交割') : missedFloor ? ' · 未达到约定品质，无成品入库' : ' · 未交割，无成品入库'}
                         </p>}
                       </li>
                     );

@@ -1,10 +1,11 @@
+import type {WorkshopEstateControls} from './components/WorkshopEstateRead';
 import {availableScribeCommissionActions} from './engine/scribeCommissionEngine';
 import type {ScribeCommissionControls} from './components/ScribeCommissionRead';
-import {availableWorkshopReleaseActions,type WorkshopReleaseOption} from './engine/workshopEngine';
+import {availableWorkshopReleaseActions,availableWorkshopEstateActions,type WorkshopReleaseOption} from './engine/workshopEngine';
 import type {WorkshopReleaseControls} from './components/WorkshopReleaseRead';
 import {AuthoredEraChronicle} from './components/AuthoredEraChronicle';
 import {useAuthoredEraLaunch} from './components/useAuthoredEraLaunch';
-import {activeAvatar,canQueueAvatarSalvage,queueAvatarDanxiaMedicine,queueAvatarDanxiaReview,queueAvatarDoctrineFounding,queueAvatarDoctrineMaturity,queueAvatarWorkshopRelease,queueAvatarScribeCommission} from './engine/avatarEngine';
+import {activeAvatar,canQueueAvatarSalvage,queueAvatarDanxiaMedicine,queueAvatarDanxiaReview,queueAvatarDoctrineFounding,queueAvatarDoctrineMaturity,queueAvatarWorkshopRelease,queueAvatarWorkshopEstate,queueAvatarScribeCommission} from './engine/avatarEngine';
 import {availableDanxiaMedicineActions,type DanxiaMedicineOption} from './engine/danxiaMedicineEngine';
 import type {DanxiaMedicineControlsProps} from './components/DanxiaMedicineControls';
 import {availableDanxiaReviewActions,type DanxiaReviewOption} from './engine/danxiaSeasonReviewEngine';
@@ -1357,10 +1358,26 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
       return updated!==world;
     }
   }:undefined;
+  const workshopEstateControls:WorkshopEstateControls|undefined=workshopAvatar?{
+    scopeKey:`${viewScopeKey}:${workshopAvatar.id}`,revisionKey:world,disabled:isStepping||fastForwardLocked,
+    choices:canQueueAvatarSalvage(world,workshopAvatar.id)?availableWorkshopEstateActions(workshopAvatar,world,world.tick+1):[],
+    pending:world.playerAvatar.pendingOrder?.action==='WORKSHOP_ESTATE'?world.playerAvatar.pendingOrder:undefined,
+    onQueue:(choice,revision)=>{
+      if(revision!==world||browsing.current||stepInFlight.current||fastForwardRun.current||campaignGuard.current||
+        history.current!==timeline||authority.current!==world||saveContextVersion.current!==medicineContextVersion)return false;
+      const updated=updateWorld(current=>{
+        const clone=structuredClone(current);
+        return queueAvatarWorkshopEstate(clone,workshopAvatar.id,choice)?clone:current;
+      });
+      if(updated!==world)setIsRunning(false);
+      return updated!==world;
+    }
+  }:undefined;
   const inspect = (workspaceSection: 'profile' | 'cultivation' | 'mind' | 'sect') => <React.Suspense fallback={<p role="status">载入修士档案…</p>}>
     <AgentInspector world={visibleWorld} cultivator={selectedCultivator} onSelectCultivator={setSelectedCultivatorId} workspaceSection={workspaceSection} medicineControls={workspaceSection==='sect'?medicineControls:undefined}
       seasonReviewControls={workspaceSection==='sect'?seasonReviewControls:undefined}
       workshopReleaseControls={workspaceSection==='sect'?workshopReleaseControls:undefined}
+      workshopEstateControls={workspaceSection==='sect'?workshopEstateControls:undefined}
       artifactSalvage={{ scopeKey:viewScopeKey, busy:isStepping || fastForwardLocked, readOnly:!!preview, onConfirm:queueSelectedSalvage }} />
   </React.Suspense>;
   const openWorkspace = (next: WorkspaceId) => {

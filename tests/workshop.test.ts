@@ -180,15 +180,16 @@ describe('commissioned workshop inventory, quality and participant receipts', ()
     expect(patron.herbs[WORKSHOP_HERB]).toBe(17);
   });
 
-  it('releases deceased patron refund into the exact actor ledger, then normal probate adopts it', () => {
+  it('keeps the immediate deceased-patron refund for a batch outside the single-blank probate continuation', () => {
     const { world, patron, start, step } = fixture();
-    const order = start();
+    const order = start(2);
     step(order.id);
-    const terms = workshopTerms('法器', 1);
+    const terms = workshopTerms('法器', 2);
     patron.alive = false;
     patron.hp = 0;
     expect(advanceWorkshops(world)).toHaveLength(1);
     expect(order.closeReason).toBe('patron_unavailable');
+    expect(order.estateContinuation).toBeUndefined();
     expect(patron.spiritStones).toBe(400 - terms.blankFuel);
     expect(advanceEstates(world)).toHaveLength(1);
     const estate = world.estates.entries.find(({ deceasedId }) => deceasedId === patron.id)!;

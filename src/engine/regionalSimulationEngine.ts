@@ -143,7 +143,12 @@ function activeParties(world:WorldState):Set<string> {
   for(const row of world.oaths.contracts)if(open(row.status)||row.escrow.payment>0||row.escrow.collateral>0)add(row.requesterId,row.providerId);
   for(const row of world.markets.orders)if(row.status==='open')add(row.actorId);
   for(const row of world.markets.shipments)if(row.status==='in_transit')add(row.sellerId,row.buyerId);
-  for(const row of world.workshops.orders)if(open(row.status)||row.escrowStones>0||row.escrowHerbs>0)add(row.patronId,row.makerId);
+  for(const row of world.workshops.orders)if(open(row.status)||row.escrowStones>0||row.escrowHerbs>0){
+    const continuation=row.estateContinuation;
+    const adjudicated=continuation&&world.estates.entries.find(estate=>estate.id===continuation.estateId&&
+      estate.deceasedId===row.patronId&&estate.status==='settled')?.beneficiaryId;
+    add(row.patronId,row.makerId,adjudicated);
+  }
   for(const row of world.scribeCommissions?.commissions??[])
     if(row.status==='offered'||row.status==='accepted'||row.status==='verified')add(row.patronId,row.scribeId);
   for(const row of world.toolLoans.loans)if(open(row.status)||!!row.custody)add(row.lenderId,row.borrowerId);
