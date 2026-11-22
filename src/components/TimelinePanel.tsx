@@ -4,6 +4,7 @@ import type {ReactNode} from 'react';
 import { useState } from 'react';
 import { TIMELINE_MAX_BRANCHES, TIMELINE_MAX_TICKS } from '../engine/timelineEngine';
 import type { WorldTimeline } from '../engine/timelineEngine';
+import {sameGeneratedWorld} from '../engine/worldIdentity';
 import type { GodInterventionCommand } from '../engine/worldEngine';
 import type { WorldState } from '../types/world';
 import { FastForwardPanel } from './FastForwardPanel';
@@ -56,6 +57,19 @@ export interface TimelinePanelProps {
   comparisonScopeKey?: string;
   verificationSource?: ReplayVerificationSource;
   eraEntry?:ReactNode;
+}
+
+/** The worker audits the actual retained frame, not a mutable or differently serialized live view. */
+export function resolveReplayVerificationSource(timeline:WorldTimeline,view:ReplayVerificationSource|undefined,
+  previewTick:number|null):ReplayVerificationSource|undefined{
+  if(!view||timeline.activeBranchId!==view.branchId)return undefined;
+  const branches=timeline.branches.filter(row=>row.id===view.branchId);
+  if(branches.length!==1)return undefined;
+  const wanted=previewTick??branches[0].snapshots.at(-1)?.tick;
+  if(wanted===undefined||wanted!==view.world.tick)return undefined;
+  const retained=branches[0].snapshots.filter(frame=>frame.tick===wanted);
+  if(retained.length!==1||retained[0].world.tick!==wanted||!sameGeneratedWorld(view.world,retained[0].world))return undefined;
+  return {...view,world:retained[0].world};
 }
 
 const control = 'rounded border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-100 disabled:opacity-40';
@@ -189,7 +203,8 @@ export function TimelinePanel({ timeline, previewTick, busy, onPreview, onSelect
       {eraEntry}
       <EraCounterpointPanel timeline={timeline} viewerId={comparisonViewerId} scopeKey={comparisonScopeKey} />
       <BranchComparisonPanel timeline={timeline} viewerId={comparisonViewerId} scopeKey={comparisonScopeKey} preferredTick={previewTick} />
-      <ReplayReceiptPanel source={verificationSource} />
+      <ReplayReceiptPanel key={verificationSource?.sessionEpoch ?? 'local-replay'}
+        source={resolveReplayVerificationSource(timeline,verificationSource,previewTick)} timeline={timeline} />
       {fastForward && <FastForwardPanel controls={fastForward} timeline={timeline} branchLimit={!canFork} blocked={busy || previewTick !== null || !!pending} />}
       {notice && <p role="status" className="break-words text-xs text-violet-200">{notice}</p>}
     </section>

@@ -2,12 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import type {
   ReplayReceipt, ReplayReceiptOutcome, ReplayReceiptRequest, ReplayReceiptResponse, ReplayReceiptSource,
 } from '../engine/replayReceiptEngine';
+import { LinkedReplayReceiptRead, type ReplayReceiptShelf } from './LinkedReplayReceiptRead';
+import type { WorldTimeline } from '../engine/timelineEngine';
 import type { WorldState } from '../types/world';
 
 export interface ReplayVerificationSource {
   world: WorldState;
   branchId: string;
   scopeKey: string;
+  sessionEpoch?: number;
   busy: boolean;
 }
 
@@ -41,7 +44,8 @@ const COVERAGE: Record<ReplayReceiptOutcome['status'], string> = {
 };
 
 export function sameReplayVerificationSource(a: ReplayVerificationSource, b?: ReplayVerificationSource) {
-  return !!b && !a.busy && !b.busy && a.world === b.world && a.branchId === b.branchId && a.scopeKey === b.scopeKey;
+  return !!b && !a.busy && !b.busy && a.world === b.world && a.branchId === b.branchId && a.scopeKey === b.scopeKey &&
+    a.sessionEpoch === b.sessionEpoch;
 }
 
 function sameRequestedReplaySource(a: ReplayReceiptSource, b: ReplayReceiptSource) {
@@ -85,7 +89,8 @@ export function startReplayVerification(request: ReplayReceiptRequest, stillCurr
     if (!data || data.type !== 'replay_receipt' || data.runId !== request.runId ||
         !data.source || !sameRequestedReplaySource(request.source, data.source) ||
         !data.outcome || !['verified', 'mismatch', 'unavailable'].includes(data.outcome.status) ||
-        (data.outcome.status !== 'unavailable' && !displayableReceipt(data.outcome.receipt))) {
+        (data.outcome.status !== 'unavailable' && (!displayableReceipt(data.outcome.receipt) ||
+          (request.source.kind === 'branch' && data.outcome.receipt.sourceCheckpoint.tick !== request.source.tick)))) {
       failure();
       return;
     }
@@ -133,7 +138,8 @@ export function ReplayReceiptResult({ choice, outcome, branchId }: { choice: Rep
   </section>;
 }
 
-function ReplayReceiptControls({ source }: { source?: ReplayVerificationSource }) {
+function ReplayReceiptControls({ source, timeline, shelf, onKeep }: { source?: ReplayVerificationSource;
+  timeline?: WorldTimeline; shelf: ReplayReceiptShelf; onKeep:(row:ReplayReceiptShelf[number])=>void }) {
   const [choice, setChoice] = useState<ReplayChoice>('branch');
   const [results, setResults] = useState<Partial<Record<ReplayChoice, ReplayDisplay>>>({});
   const [running, setRunning] = useState(false);
@@ -219,14 +225,18 @@ function ReplayReceiptControls({ source }: { source?: ReplayVerificationSource }
     {running && <p role="status">正在本地核验；尚未取得回执。</p>}
     {cancelled && <p role="status">已取消；本次没有可用回执。</p>}
     {visibleResult && <ReplayReceiptResult choice={visibleResult.choice} outcome={visibleResult.outcome} branchId={visibleResult.source.branchId} />}
+    {timeline && <LinkedReplayReceiptRead timeline={timeline} source={source} outcome={choice === 'branch' ? visibleResult?.outcome : undefined}
+      shelf={shelf} onKeep={onKeep} />}
   </div>;
 }
 
-export function ReplayReceiptPanel({ source }: { source?: ReplayVerificationSource }) {
+export function ReplayReceiptPanel({ source, timeline }: { source?: ReplayVerificationSource; timeline?:WorldTimeline }) {
+  const [shelf,setShelf] = useState<ReplayReceiptShelf>([]);
   const [open, setOpen] = useState(false);
   return <details className="min-w-0 rounded border border-slate-800 bg-slate-950/60 px-2"
     onToggle={(event) => setOpen(event.currentTarget.open)}>
     <summary className="flex min-h-11 cursor-pointer items-center text-xs font-semibold text-violet-100">本地复演核验回执</summary>
-    {open && <div className="pb-2"><ReplayReceiptControls source={source} /></div>}
+    {open && <div className="pb-2"><ReplayReceiptControls source={source} timeline={timeline} shelf={shelf}
+      onKeep={(row)=>setShelf((prior)=>prior.some((existing)=>existing.digest===row.digest) ? prior : [...prior,row])} /></div>}
   </details>;
 }

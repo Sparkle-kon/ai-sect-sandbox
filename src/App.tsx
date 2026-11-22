@@ -1860,7 +1860,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
                 historical={Boolean(preview)} notice={eraEntryNotice?.scope===viewScopeKey?eraEntryNotice.text:undefined}
                 onObserve={eraObserve} onFollow={eraFollow} onPossess={eraPossess} /></React.Suspense>}
               comparisonViewerId={activeActorId ?? undefined} comparisonScopeKey={viewScopeKey}
-              verificationSource={{world:visibleWorld,branchId:timeline.activeBranchId,scopeKey:viewScopeKey,
+              verificationSource={{world:visibleWorld,branchId:timeline.activeBranchId,scopeKey:viewScopeKey,sessionEpoch:viewEpoch,
                 busy:isStepping || isRunning || fastForwardLocked}}
               onPreview={handleTimelinePreview} onSelectBranch={handleTimelineSelectBranch} onFork={handleTimelineFork} notice={timelineNotice}
               fastForward={{ ...(campaign.active||campaign.working?{phase:campaignPhase}:fastForwardView),
