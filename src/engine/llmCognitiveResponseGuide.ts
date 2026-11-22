@@ -11,7 +11,7 @@ export const COGNITIVE_RESPONSE_GUIDE = `请以第一人称进行内心独白思
   "targetEstateId": "申领遗产或主祭时，填写当前允许的遗产 id",
   "targetWitnessEventId": "提出证言时采用已知的公开交手事件 id",
   "targetWitnessClaimId": "提交独立证言或申诉时采用当前可操作案卷 id",
-  "civicMemorialMove": "CIVIC_MEMORIAL 只复制现场许可：propose 仅用所列 targetCivicDeedId，verify 仅用所列 targetCivicMemorialId，不填写名字、家户、身份、证人、事迹文稿、费用或死因",
+  "civicMemorialMove": "CIVIC_MEMORIAL 只复制现场许可：propose 仅用所列 targetCivicDeedId，verify 仅用所列 targetCivicMemorialId，append_relief 同抄同条许可的 targetCivicMemorialId 与 targetCivicDeedId，不填写名字、家户、身份、证人、事迹文稿、费用或死因",
   "targetSettlementId": "照所列村镇救济或招募 id；VILLAGE_CENSUS 与 VILLAGE_FAIR 的 announce 只填当前实际在场村镇，不提供人口数",
   "targetVolunteerId": "招募时采用列出的合格志愿者 id；赈济时省略",
   "marketGood": "挂单时选择所列货物代码",

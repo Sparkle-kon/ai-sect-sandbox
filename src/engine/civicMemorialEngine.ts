@@ -1,5 +1,6 @@
 import type { CivicErrataEvidence,CivicMemorial,CivicMemorialMove,CivicReliefDeed,Cultivator,HouseholdMember,LLMDecisionPayload,
   MortalSettlement,SettlementRecord,WorldEvent,WorldState } from '../types/world';
+import type {CivicMemorialAddition} from '../types/civicMemorialAddition';
 import { flowActor,recordResourceFlow } from './resourceFlowEngine';
 import { SETTLEMENT_RELIEF } from './settlementReliefTerms';
 import { granaryAt,presentAtVillageGranary } from './villageGranaryEngine';
@@ -84,9 +85,54 @@ function canVerify(world:WorldState,actor:Cultivator,village:MortalSettlement,ro
   return alive(proposer)&&proposer.id!==deed.subjectId&&local(world,proposer,tick)?.id===village.id&&hasSupplies(proposer)?proposer:undefined;
 }
 
+
+const sameCivicIdentity=(first:CivicReliefDeed,later:CivicReliefDeed)=>
+  first.subjectId===later.subjectId&&first.volunteerId===later.volunteerId&&first.householdId===later.householdId&&
+  first.settlementId===later.settlementId&&first.siteId===later.siteId&&first.name===later.name&&first.enrolledTick===later.enrolledTick;
+export const civicMemorialAdditionId=(memorialId:string,deedId:string)=>`${memorialId}-addendum-${deedId}`;
+
+export function civicMemorialRawRelief(world:WorldState,deed:CivicReliefDeed):SettlementRecord|undefined{
+  const originals=world.settlements.records.filter(row=>row.id===deed.reliefRecordId);
+  const [record]=originals;
+  if(originals.length!==1||!record||deed.stones!==SETTLEMENT_RELIEF.stones||deed.herbs!==SETTLEMENT_RELIEF.jade_leaf||
+    !publicReliefMatches(record,deed.settlementId,deed.subjectId,deed.tick))return undefined;
+  const events=world.events.filter(row=>row.id===`evt-${record.id}`);
+  if(events.length>1||events.some(row=>row.witnessScope!==undefined||row.tick!==deed.tick||
+    row.locationId!==deed.siteId||row.category!=='diplomacy'||row.title!=='凡村赈济'||row.description!==record.description||
+    row.actorIds.length!==1||row.actorIds[0]!==deed.subjectId))return undefined;
+  return record;
+}
+
+/** Keep exact originals of verified inscriptions and cited addenda; never reconstruct missing records. */
+export function civicMemorialPinnedReliefIds(world:WorldState):ReadonlySet<string>{
+  const cited=new Set<string>();
+  for(const row of world.civicMemorials.memorials){
+    if(row.status!=='verified')continue;
+    cited.add(row.deedId);
+    for(const addition of row.additions??[])cited.add(addition.deedId);
+  }
+  return new Set(world.civicMemorials.deeds.flatMap(deed=>cited.has(deed.id)?[deed.reliefRecordId]:[]));
+}
+
+function civicLaterReliefValid(world:WorldState,row:CivicMemorial,first:CivicReliefDeed,later:CivicReliefDeed,witnessId:string,tick:number){
+  const verification=row.verification;
+  return row.status==='verified'&&verification!==undefined&&first.id===row.deedId&&first.id!==later.id&&
+    first.reliefRecordId!==later.reliefRecordId&&first.tick<verification.tick&&verification.tick<later.tick&&later.tick<tick&&
+    sameCivicIdentity(first,later)&&witnessId!==first.subjectId&&witnessId!==row.proposerId&&
+    witnessId!==verification.verifierId&&later.witnessIds.includes(witnessId)&&
+    !!civicMemorialRawRelief(world,first)&&!!civicMemorialRawRelief(world,later);
+}
+function canAppendRelief(world:WorldState,actor:Cultivator,village:MortalSettlement,row:CivicMemorial,
+  first:CivicReliefDeed,later:CivicReliefDeed,tick:number,cited:ReadonlySet<string>){
+  return actor.positionPlane===undefined&&
+    first.settlementId===village.id&&first.siteId===village.locationId&&!!matchesSubject(world,village,later)&&
+    !cited.has(later.id)&&civicLaterReliefValid(world,row,first,later,actor.id,tick);
+}
+
 export type CivicMemorialOption =
   | {action:'CIVIC_MEMORIAL';civicMemorialMove:'propose';targetCivicDeedId:string;targetCivicMemorialId?:never}
-  | {action:'CIVIC_MEMORIAL';civicMemorialMove:'verify';targetCivicMemorialId:string;targetCivicDeedId?:never};
+  | {action:'CIVIC_MEMORIAL';civicMemorialMove:'verify';targetCivicMemorialId:string;targetCivicDeedId?:never}
+  | {action:'CIVIC_MEMORIAL';civicMemorialMove:'append_relief';targetCivicMemorialId:string;targetCivicDeedId:string};
 
 export function availableCivicMemorialActions(actor:Cultivator,world:WorldState,executionTick=world.tick):CivicMemorialOption[]{
   if((executionTick!==world.tick&&executionTick!==world.tick+1)||!world.civicMemorials.deeds.length)return [];
@@ -94,10 +140,17 @@ export function availableCivicMemorialActions(actor:Cultivator,world:WorldState,
   if(!village)return [];
   const state=world.civicMemorials;
   if(state.memorials.some(row=>row.openedTick===executionTick&&row.proposerId===actor.id||
-    row.verification?.tick===executionTick&&row.verification.verifierId===actor.id))return [];
+    row.verification?.tick===executionTick&&row.verification.verifierId===actor.id||
+    row.additions?.some(item=>item.appendedTick===executionTick&&item.witnessId===actor.id)))return [];
   const options:CivicMemorialOption[]=[];
   const deeds=new Map(state.deeds.filter(row=>row.settlementId===village.id).map(row=>[row.id,row]));
   const occupied=new Set<string>();
+  const cited=new Set(state.memorials.flatMap(row=>row.additions?.map(addition=>addition.deedId)??[]));
+  const laterByIdentity=new Map<string,CivicReliefDeed[]>();
+  for(const deed of deeds.values())if(deed.tick<executionTick&&deed.witnessIds.includes(actor.id)&&!cited.has(deed.id)){
+    const key=identityKey(deed),previous=laterByIdentity.get(key);
+    if(previous)previous.push(deed);else laterByIdentity.set(key,[deed]);
+  }
   for(const row of state.memorials){
     const pending=openingLive(row,executionTick);
     if(!pending&&row.status!=='verified')continue;
@@ -106,6 +159,10 @@ export function availableCivicMemorialActions(actor:Cultivator,world:WorldState,
     occupied.add(identityKey(deed));
     if(pending&&canVerify(world,actor,village,row,deed,executionTick))
       options.push({action:'CIVIC_MEMORIAL',civicMemorialMove:'verify',targetCivicMemorialId:row.id});
+    if(row.status==='verified')for(const later of laterByIdentity.get(identityKey(deed))??[]){
+      if(canAppendRelief(world,actor,village,row,deed,later,executionTick,cited))
+        options.push({action:'CIVIC_MEMORIAL',civicMemorialMove:'append_relief',targetCivicMemorialId:row.id,targetCivicDeedId:later.id});
+    }
   }
   if(hasSupplies(actor)&&existingDonation(world,village.id,actor.id,executionTick))for(const deed of deeds.values()){
     if(deed.subjectId===actor.id||deed.tick>=executionTick||
@@ -115,7 +172,7 @@ export function availableCivicMemorialActions(actor:Cultivator,world:WorldState,
   return options;
 }
 
-function event(world:WorldState,row:CivicMemorial,deed:CivicReliefDeed,move:CivicMemorialMove):WorldEvent{
+function event(world:WorldState,row:CivicMemorial,deed:CivicReliefDeed,move:Exclude<CivicMemorialMove,'append_relief'>):WorldEvent{
   return {id:`evt-${row.id}-${move}-${world.tick}`,tick:world.tick,year:world.year,month:world.month,category:'diplomacy',
     title:move==='propose'?'村中提议查验前居民赈济实据':'乡祠核实本名与实际赈济',
     description:move==='propose'?'本轮只登记；须原事另一位实际在场者择日复核。':
@@ -142,6 +199,18 @@ export function resolveCivicMemorialAction(world:WorldState,actor:Cultivator,dec
   }
   const row=state.memorials.find(source=>source.id===choice.targetCivicMemorialId)!;
   const deed=state.deeds.find(source=>source.id===row.deedId)!;
+  if(choice.civicMemorialMove==='append_relief'){
+    if(decision.spokenLine!==undefined)return null;
+    const later=state.deeds.find(source=>source.id===choice.targetCivicDeedId);
+    if(!later||!deed)return null;
+    const addition:CivicMemorialAddition={id:civicMemorialAdditionId(row.id,later.id),deedId:later.id,
+      witnessId:actor.id,appendedTick:world.tick};
+    (row.additions??=[]).push(addition);
+    return {id:`evt-${addition.id}-${world.tick}`,tick:world.tick,year:world.year,month:world.month,
+      category:'diplomacy',title:'乡祠留下一页新赈据',
+      description:'当时在场的人按实补录另一笔已经交付的赈济。原碑、原签和旧说仍照原样留下。',
+      actorIds:[actor.id],locationId:later.siteId,witnessScope:'participants'};
+  }
   const village=local(world,actor,world.tick);
   const proposer=village&&canVerify(world,actor,village,row,deed,world.tick);
   const subject=village&&matchesSubject(world,village,deed);
@@ -190,12 +259,14 @@ export function advanceCivicMemorials(world:WorldState):void{
 export interface CivicPlaqueView {
   id:string;name:string;subjectStatus:'recruited'|'deceased';deedTick:number;inscribedTick:number;
   nameAmbiguous:boolean;
+  additions?:Array<{id:string;deedTick:number;appendedTick:number;stones:number;herbs:number;own?:true}>;
   errata?:{readings:Array<{tick:number;reading:'full_supplies'|'unfunded'}>;correction?:{tick:number;reading:'full_supplies'}};
 }
 export interface CivicMemorialView {
   settlementId:string;siteId:string;plaques:CivicPlaqueView[];
   proposals:Array<{id:string;name:string;deedTick:number;expiresTick:number;own:boolean;canVerify:boolean}>;
   candidates:Array<{id:string;name:string;deedTick:number;subjectStatus:'recruited'|'deceased'}>;
+  appendCandidates?:Array<{memorialId:string;deedId:string;name:string;deedTick:number;stones:number;herbs:number}>;
 }
 export function projectLocalCivicMemorialCount(world:WorldState,viewer?:Cultivator):{siteId:string;count:number}|undefined{
   const village=viewer&&local(world,viewer,world.tick);
@@ -219,8 +290,15 @@ export function projectCivicMemorials(world:WorldState,viewer?:Cultivator):Civic
     const deed=deeds.get(row.deedId),triage=row.verification;
     if(!deed||row.status!=='verified'||!triage||triage.tick>world.tick)return [];
     const errata=deed.errata;
+    const additions:CivicPlaqueView['additions']=row.additions?.flatMap(addition=>{
+      const later=deeds.get(addition.deedId);
+      if(!later||addition.appendedTick>world.tick||addition.id!==civicMemorialAdditionId(row.id,later.id)||
+        !civicLaterReliefValid(world,row,deed,later,addition.witnessId,addition.appendedTick))return [];
+      return [{id:addition.id,deedTick:later.tick,appendedTick:addition.appendedTick,stones:later.stones,herbs:later.herbs,
+        ...(addition.witnessId===viewer.id?{own:true as const}:{})}];
+    });
     return [{id:row.id,name:deed.name,subjectStatus:triage.subjectStatus,deedTick:deed.tick,inscribedTick:triage.tick,
-      nameAmbiguous:byName(deed.name,deed.subjectId),
+      nameAmbiguous:byName(deed.name,deed.subjectId),...(additions?.length?{additions}:{}),
       ...(errata?{errata:{readings:errata.retellings.map(({tick,reading})=>({tick,reading})),
         ...(errata.correction?{correction:{tick:errata.correction.tick,reading:errata.correction.reading}}:{})}}:{})}];
   });
@@ -236,5 +314,12 @@ export function projectCivicMemorials(world:WorldState,viewer?:Cultivator):Civic
     const status=deed&&matchesSubject(world,village,deed)?.status;
     return deed&&status?[{id:deed.id,name:deed.name,deedTick:deed.tick,subjectStatus:status}]:[];
   });
-  return {settlementId:village.id,siteId:village.locationId,plaques,proposals,candidates};
+  const appendCandidates=choices.flatMap(option=>{
+    if(option.civicMemorialMove!=='append_relief')return [];
+    const later=deeds.get(option.targetCivicDeedId);
+    return later?[{memorialId:option.targetCivicMemorialId,deedId:later.id,name:later.name,deedTick:later.tick,
+      stones:later.stones,herbs:later.herbs}]:[];
+  });
+  return {settlementId:village.id,siteId:village.locationId,plaques,proposals,candidates,
+    ...(appendCandidates.length?{appendCandidates}:{})};
 }

@@ -15,6 +15,8 @@ import type { ScribeCommissionMove, ScribeCommissionState } from './scribeCommis
 
 import type { WaypostMealMove, WaypostMealState, WaypostMealWitness } from './waypostMeal';
 
+import type { CivicMemorialAddition } from './civicMemorialAddition';
+
 import type { MarketFreightMove, MarketFreightTerms } from './marketFreight';
 
 import type { DisasterShelterMove, DisasterShelterState } from './disasterShelter';
@@ -1092,6 +1094,7 @@ export type AvatarInteractionCommand = AvatarInteractionRequest;
 export type AvatarOrder = 'REST' | 'CULTIVATE';
 export type AvatarPendingOrder = { actorId: string; queuedTick: number } & (
   | { action: AvatarOrder }
+  | {action:'CIVIC_MEMORIAL';civicMemorialMove:'append_relief';targetCivicMemorialId:string;targetCivicDeedId:string}
   | {action:'MARKET_FREIGHT';marketFreightMove:'offer';targetShipmentId:string;targetCultivatorId:string;targetEscortId?:never}
   | {action:'MARKET_FREIGHT';marketFreightMove:'accept'|'decline'|'withdraw';targetEscortId:string;targetShipmentId?:never;targetCultivatorId?:never}
   | {action:'DISASTER_SHELTER';disasterShelterMove:'offer';targetCultivatorId:string;targetDisasterShelterId?:never}
@@ -1392,7 +1395,7 @@ export interface SettlementRecord {
   description: string;
   oldAgeCohorts?: MortalOldAgeSlice[];
 }
-export type CivicMemorialMove = 'propose'|'verify';
+export type CivicMemorialMove = 'propose'|'verify'|'append_relief';
 export interface CivicErrataEvidence {
   retellings:Array<{id:string;tick:number;reading:ChronicleReliefReading}>;
   correction?:{id:string;tick:number;reading:'full_supplies'};
@@ -1445,6 +1448,7 @@ export interface CivicReliefDeed {
   errata?:CivicErrataEvidence;
 }
 export interface CivicMemorial {
+  additions?: CivicMemorialAddition[];
   id:string;
   deedId:string;
   proposerId:string;

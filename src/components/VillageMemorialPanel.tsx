@@ -1,3 +1,4 @@
+import {CivicMemorialAppendRead,type CivicMemorialAppendControls} from './CivicMemorialAppendRead';
 import { projectCivicMemorials } from '../engine/civicMemorialEngine';
 import type { Cultivator, WorldState } from '../types/world';
 
@@ -6,10 +7,10 @@ const READING = {
   unfunded: '说法称：赈济物资未实际拨付',
 } as const;
 
-export function VillageMemorialPanel({ world, cultivator, villageId }: {
-  world: WorldState; cultivator: Cultivator; villageId: string;
+export function VillageMemorialPanel({ world, cultivator, villageId, appendControls }: {
+  world: WorldState; cultivator: Cultivator; villageId: string;appendControls?:CivicMemorialAppendControls;
 }) {
-  const memorials = projectCivicMemorials(world, cultivator);
+  const memorials = world.cultivators.includes(cultivator)?projectCivicMemorials(world, cultivator):undefined;
   if (memorials?.settlementId !== villageId || !memorials.plaques.length && !memorials.proposals.length) return null;
 
   return <section aria-label="乡祠纪事" className="min-w-0 space-y-2 break-words border-t border-amber-500/25 pt-2 text-xs leading-relaxed">
@@ -32,6 +33,8 @@ export function VillageMemorialPanel({ world, cultivator, villageId }: {
             </>}
           </div>
         </details>
+        <CivicMemorialAppendRead key={appendControls?.scopeKey??cultivator.id} world={world} plaque={plaque}
+          settlementId={villageId} controls={appendControls}/>
       </li>)}
     </ol>}
     {memorials.proposals.length > 0 && <ul aria-label="本人可查的待核提议" className="space-y-1 text-slate-300">

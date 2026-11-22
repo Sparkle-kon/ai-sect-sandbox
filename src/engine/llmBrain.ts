@@ -185,6 +185,9 @@ function urgentOrdinaryRecovery(actor:Cultivator,world:WorldState,alchemy?:Retur
     spokenLine:'且慢动手，待某调息片刻！'};
 }
 
+const holdsCivicAppendAvatar=(actor:Cultivator,world:WorldState,tick:number)=>
+  world.playerAvatar.possessedId===actor.id&&(world.playerAvatar.possessionUntilTick??0)>tick;
+
 /**
  * Narrow live execution guard for a provider-chosen ordinary fallback only.
  * It does not run the full Utility tree or consume RNG, and must never override an actual sanctioned avatar order.
@@ -1004,6 +1007,13 @@ export function computeHeuristicDecision(
   const civicAtVillage = world.civicMemorials.deeds.length > 0 && !cultivator.guardAssignment &&
     cultivator.hp >= cultivator.maxHp * .75 &&
     world.settlements.villages.some(({ locationId }) => locationId === cultivator.locationId);
+  if(civicAtVillage&&!holdsCivicAppendAvatar(cultivator,world,world.tick)&&world.civicMemorials.memorials.some(
+    row=>row.status==='verified'&&row.verification&&row.verification.tick<(world.civicMemorials.deeds.at(-1)?.tick??0))){
+    const additions=availableCivicMemorialActions(cultivator,world).filter(row=>row.civicMemorialMove==='append_relief');
+    if(additions.length===1)return {chosenAction:'CIVIC_MEMORIAL',civicMemorialMove:'append_relief',
+      targetCivicDeedId:additions[0].targetCivicDeedId,targetCivicMemorialId:additions[0].targetCivicMemorialId,
+      innerMonologue:'不是重刻旧碑，只把我亲见、留账的后来一次赈济另记一行。'};
+  }
   if (civicAtVillage && world.civicMemorials.memorials.some(({ status, openedTick, expiresTick }) =>
       status === 'proposed' && openedTick < world.tick && expiresTick > world.tick)) {
     const confirm = availableCivicMemorialActions(cultivator, world).filter(({ civicMemorialMove }) => civicMemorialMove === 'verify');
@@ -1900,6 +1910,7 @@ export async function requestCultivatorLLMDecision(
   const shortShiftOptions = availableShortShiftActions(cultivator, world, requestTick);
   const censusOptions = availableVillageCensusActions(cultivator, world);
   const civicMemorialOptions = availableCivicMemorialActions(cultivator, world, requestTick)
+    .filter(row=>row.civicMemorialMove!=='append_relief'||!holdsCivicAppendAvatar(cultivator,world,requestTick))
     .map(({ civicMemorialMove, targetCivicDeedId, targetCivicMemorialId }) =>
       ({ civicMemorialMove, targetCivicDeedId, targetCivicMemorialId }));
   const roadOptions = availableRoadActions(cultivator, world);
@@ -2029,7 +2040,7 @@ ${waterVeinOptions.length ? `- 本人在场的水线许可，只抄 waterVeinMov
 - 合班传法只用真正可执行的 offer、accept、leave、teach、attend 或 cancel。offer 原样复制功法编号与完整有序的受邀名单，其余只用班号；出席、功法熟练度与出师由实练凭据核验，不许填写这些结果：${JSON.stringify(cohortOptions)}
 - 跨宗短聘只复制现场许可的 offer、accept、decline、withdraw 或 work；offer 用已列的目标修士和真实观象日期，其他只用该短聘编号。不能填写报酬、地点、天气或宗籍：${JSON.stringify(shortShiftOptions)}
 - 坊籍核点必须本人在场，只可复制已列村落：${JSON.stringify(censusOptions)}
-- 乡祠只复制本人在村实际许可：propose 仅用 targetCivicDeedId，verify 仅用 targetCivicMemorialId。不可填写姓名、家户、证人、材料、费用、故事或死因，不替别人证明：${JSON.stringify(civicMemorialOptions)}
+- 乡祠只复制本人在村实际许可：propose 仅用 targetCivicDeedId，verify 仅用 targetCivicMemorialId；append_relief 必须抄同条许可的 targetCivicMemorialId 与 targetCivicDeedId，只指真实后据。不可填写姓名、家户、证人、材料、费用、故事或死因，不替别人证明：${JSON.stringify(civicMemorialOptions)}
 - 驿路选项要求实地维修和真实资源；巡礼只有实际列出的付费路才可选，普通路线不另收路费：${JSON.stringify(roadOptions)}
 - 赎责见习必须复制已列动作；赈济另走真实 DELIVER_RELIEF，复籍不抹去原处分：${JSON.stringify(probationOptions)}
 - 古器陈列只能由真实双方当面应允；复制许可参数，不改写原件持有史：${JSON.stringify(exhibitOptions)}
@@ -2735,9 +2746,12 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
           const legalCivicMemorial = chosenAction === 'CIVIC_MEMORIAL' ? civicMemorialOptions.find((item) =>
             item.civicMemorialMove === parsed.civicMemorialMove && item.targetCivicDeedId === parsed.targetCivicDeedId &&
             item.targetCivicMemorialId === parsed.targetCivicMemorialId) : undefined;
-          if (chosenAction === 'CIVIC_MEMORIAL' && (!legalCivicMemorial || Object.keys(parsed).some((field) =>
-            !['chosenAction', 'innerMonologue', 'civicMemorialMove',
-              legalCivicMemorial.civicMemorialMove === 'propose' ? 'targetCivicDeedId' : 'targetCivicMemorialId'].includes(field)))) return undefined;
+          if(chosenAction==='CIVIC_MEMORIAL'){
+            if(!legalCivicMemorial)return undefined;
+            const fields=legalCivicMemorial.civicMemorialMove==='propose'?['targetCivicDeedId']:
+              legalCivicMemorial.civicMemorialMove==='verify'?['targetCivicMemorialId']:['targetCivicDeedId','targetCivicMemorialId'];
+            if(Object.keys(parsed).some(field=>!['chosenAction','innerMonologue','civicMemorialMove',...fields].includes(field)))return undefined;
+          }
           const legalCensus = chosenAction === 'VILLAGE_CENSUS' ? censusOptions.find((item) =>
             item.targetSettlementId === parsed.targetSettlementId) : undefined;
           if (chosenAction === 'VILLAGE_CENSUS' && (!legalCensus || parsed.targetLocationId !== undefined ||

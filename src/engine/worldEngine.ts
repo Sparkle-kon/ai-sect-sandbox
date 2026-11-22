@@ -517,6 +517,7 @@ export function applyCultivatorBrainDecision(
     case 'VILLAGE_FAIR':
       return resolveVillageFairAction(world,cultivator,decision);
     case 'CIVIC_MEMORIAL':
+      if(decision.civicMemorialMove==='append_relief'&&activeAvatar(world)?.id===cultivator.id&&decision!==explicitAvatarDecision)return null;
       return resolveCivicMemorialAction(world,cultivator,decision);
     case 'WORKSHOP_CAPACITY':
       return resolveWorkshopCapacityAction(world, cultivator, decision);

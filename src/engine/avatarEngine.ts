@@ -1,3 +1,4 @@
+import {availableCivicMemorialActions,type CivicMemorialOption} from './civicMemorialEngine';
 import {availableMarketFreightActions,type MarketFreightOption} from './escortEngine';
 import {availableDisasterShelterActions} from './disasterShelterEngine';
 import type {DisasterShelterOption} from '../types/disasterShelter';
@@ -363,6 +364,21 @@ export function queueAvatarMarketFreight(world:WorldState,actorId:string,choice:
   return true;
 }
 
+export function queueAvatarCivicMemorialAppend(world:WorldState,actorId:string,
+  choice:Extract<CivicMemorialOption,{civicMemorialMove:'append_relief'}>):boolean {
+  const host=activeAvatar(world);
+  if(!host||!onLowerPlane(host)||!canQueueAvatarSalvage(world,actorId)||
+    choice.action!=='CIVIC_MEMORIAL'||choice.civicMemorialMove!=='append_relief')return false;
+  const options=availableCivicMemorialActions(host,world,world.tick+1).filter(option=>
+    option.civicMemorialMove==='append_relief'&&option.targetCivicMemorialId===choice.targetCivicMemorialId&&
+    option.targetCivicDeedId===choice.targetCivicDeedId);
+  const exact=options[0];
+  if(options.length!==1||exact?.civicMemorialMove!=='append_relief')return false;
+  world.playerAvatar.essence-=AVATAR_ORDER_COST;
+  world.playerAvatar.pendingOrder={actorId,queuedTick:world.tick,...exact};
+  return true;
+}
+
 export function consumeAvatarOrder(world: WorldState): { actorId: string; decision: LLMDecisionPayload } | undefined {
   const state = world.playerAvatar;
   const order = state?.pendingOrder;
@@ -377,6 +393,9 @@ export function consumeAvatarOrder(world: WorldState): { actorId: string; decisi
     ...(order.scribeCommissionMove==='offer'?
       {targetChronicleSourceId:order.targetChronicleSourceId,targetCultivatorId:order.targetCultivatorId}:
       {targetScribeCommissionId:order.targetScribeCommissionId})}};
+  if(order.action==='CIVIC_MEMORIAL')return {actorId:order.actorId,decision:{
+    chosenAction:order.action,innerMonologue:'只给旧乡祠附上另一次有据的实赈，不改原册。',civicMemorialMove:order.civicMemorialMove,
+    targetCivicMemorialId:order.targetCivicMemorialId,targetCivicDeedId:order.targetCivicDeedId}};
   if(order.action==='MARKET_FREIGHT')return {actorId:order.actorId,decision:{
     chosenAction:order.action,innerMonologue:'只核实这批货、实际载力与本人应承。',marketFreightMove:order.marketFreightMove,
     ...(order.marketFreightMove==='offer'?

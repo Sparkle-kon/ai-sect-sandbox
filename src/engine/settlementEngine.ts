@@ -2,7 +2,7 @@ import {disasterShelterPinnedRecordIds} from './disasterShelterCheckpoint';
 import { finishVillageEvolution, noteVillageEvolutionSettlement, observeVillageEvolution, planVillageEvolutionMigration, recordVillageEvolutionMigration, villageEvolutionBlocksMigration, villageEvolutionLocalObserverIds, villageEvolutionPinnedSettlementIds } from './villageEvolutionEngine';
 import {danxiaReviewPinnedReliefIds} from './danxiaSeasonTerms';
 import {recordEraMigration} from './eraHistoryIndex';
-import { captureCivicReliefDeed } from './civicMemorialEngine';
+import { captureCivicReliefDeed,civicMemorialPinnedReliefIds } from './civicMemorialEngine';
 import { closeVillageCensusPeriod, openVillageCensusPeriod, recordVillageCensusMaturation, recordVillageCensusSettlement } from './villageCensusEngine';
 import { recordProbationRelief } from './probationEngine';
 import { initializeHouseholds, matureHouseholdBirth, recordHouseholdBirth, recordHouseholdMigration, recordHouseholdMortality, recordHouseholdOldAge,
@@ -113,6 +113,7 @@ function log(world: WorldState, village: MortalSettlement, row: Omit<SettlementR
     const pinned=danxiaReviewPinnedReliefIds(world);
     for(const id of villageEvolutionPinnedSettlementIds(world))pinned.add(id);
     for(const id of disasterShelterPinnedRecordIds(world))pinned.add(id);
+    for(const id of civicMemorialPinnedReliefIds(world))pinned.add(id);
     world.settlements.records=world.settlements.records.filter((entry,index)=>index>=tail||pinned.has(entry.id));
   }
   if (actual.kind === 'relief') {

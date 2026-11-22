@@ -1,3 +1,4 @@
+import type {CivicMemorialAppendControls} from './CivicMemorialAppendRead';
 import {DisasterShelterRead,type DisasterShelterControls} from './DisasterShelterRead';
 import {projectDisasterShelters} from '../engine/disasterShelterEngine';
 import { projectSeasonalHousing } from '../engine/seasonalHousingEngine';
@@ -27,7 +28,7 @@ const PEOPLE_LABELS: Record<RecordEntry['kind'], string> = {
   disaster: '遇难', old_age:'寿终', migration: '迁出', relief: '受益', recruitment: '自愿入门', growth: '新生',
 };
 
-export function MortalVillagesPanel({ world, cultivator, shelterControls }: { world: WorldState; cultivator: Cultivator | undefined; shelterControls?:DisasterShelterControls }) {
+export function MortalVillagesPanel({ world, cultivator, shelterControls, memorialControls }: { world: WorldState; cultivator: Cultivator | undefined; shelterControls?:DisasterShelterControls; memorialControls?:CivicMemorialAppendControls }) {
   const terrain = createTerrainMapView(world, cultivator, true);
   const knownLocations = new Set(terrain.seenLocations.map(({ id }) => id));
   const villages = (world.settlements?.villages ?? []).filter(({ locationId }) => knownLocations.has(locationId));
@@ -92,7 +93,7 @@ export function MortalVillagesPanel({ world, cultivator, shelterControls }: { wo
                     {evolutionDetails}
                     {census && householdView && cultivator && <HouseholdRegisterPanel world={world} census={census} view={householdView} cultivator={cultivator} />}
                     {cultivator && <CensusPanel world={world} cultivator={cultivator} villageId={village.id} />}
-                    {cultivator && <VillageMemorialPanel world={world} cultivator={cultivator} villageId={village.id} />}
+                    {cultivator && <VillageMemorialPanel world={world} cultivator={cultivator} villageId={village.id} appendControls={memorialControls} />}
                     {cultivator && <VillageSupplyPanel world={world} cultivator={cultivator} settlementId={village.id} />}
                     {cultivator && <VillageFairPanel world={world} cultivator={cultivator} villageId={village.id} />}
                     {worksView.length > 0 && <VillageWorksPanel world={world} village={village} projects={worksView} />}

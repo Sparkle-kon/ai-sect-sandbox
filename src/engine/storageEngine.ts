@@ -90,7 +90,7 @@ import { validateVillageSupplyHistory } from './storageVillageSupplyValidation';
 import { createRouteWarningsState } from './routeWarningEngine';
 import { createPavilionLoansState } from './pavilionLoanEngine';
 import { validatePavilionLoanHistory } from './storagePavilionLoanValidation';
-import { createCivicMemorialsState } from './civicMemorialEngine';
+import { availableCivicMemorialActions, createCivicMemorialsState } from './civicMemorialEngine';
 import { validateCivicMemorialHistory } from './storageCivicMemorialValidation';
 import { createVillageFairsState,VILLAGE_FAIR_CAPACITY } from './villageFairEngine';
 import { validateVillageFairHistory } from './storageVillageFairValidation';
@@ -763,7 +763,8 @@ const shape = structure({
     memorials:arr(SAVE_COLLECTION_LIMIT,structure({id,deedId:id,proposerId:id,
       proposerDonationTick:tick,proposerDonationKind:one('donate','donate_roots','donate_stones'),openedTick:tick,expiresTick:tick,
       status:one('proposed','verified','expired'),verification:optional(structure({tick,verifierId:id,
-        subjectStatus:one('recruited','deceased'),stonesSpent:count,earthRootsSpent:count}))})),
+        subjectStatus:one('recruited','deceased'),stonesSpent:count,earthRootsSpent:count})),
+      additions:optional(arr(SAVE_COLLECTION_LIMIT,structure({id,deedId:id,witnessId:id,appendedTick:tick})))})),
   }),
   pavilionLoans:structure({nextLoanId:num(1,Number.MAX_SAFE_INTEGER,true),nextShiftId:num(1,Number.MAX_SAFE_INTEGER,true),
     copies:arr(SAVE_COLLECTION_LIMIT,structure({editionId:id,originalId:id,sectId:id,siteId:id,shelvedTick:tick,shelvedById:id,shelvingShiftId:id})),
@@ -1310,6 +1311,8 @@ const shape = structure({
           ?structure({...fields,craftTrainingMove:one('offer'),targetCultivatorId:id,targetCraftTraineeId:id})(value,path)
           :structure({...fields,craftTrainingMove:one('join','decline','blank','finish','withdraw'),targetCraftTrainingId:id})(value,path);
       }
+      if(order?.action==='CIVIC_MEMORIAL')return structure({...fixed,action:one('CIVIC_MEMORIAL'),
+        civicMemorialMove:one('append_relief'),targetCivicMemorialId:id,targetCivicDeedId:id})(value,path);
       if(order?.action==='MARKET_FREIGHT'){
         const fields={...fixed,action:one('MARKET_FREIGHT')};
         return 'marketFreightMove' in order&&order.marketFreightMove==='offer'
@@ -2783,6 +2786,14 @@ function verifyWorld(value: unknown): WorldState {
           return option.craftTrainingMove===localWaterOrder.craftTrainingMove&&option.targetCraftTrainingId===localWaterOrder.targetCraftTrainingId;
         return false;
       }))fail('playerAvatar.craftTrainingOrder');
+  }
+  if(localWaterOrder?.action==='CIVIC_MEMORIAL'){
+    const ordered=w.cultivators.find(row=>row.id===localWaterOrder.actorId);
+    if(localWaterOrder.queuedTick!==w.tick||(w.playerAvatar.possessionUntilTick??0)<=w.tick+1||
+      w.playerAvatar.possessedId!==localWaterOrder.actorId||!ordered||
+      !availableCivicMemorialActions(ordered,w,w.tick+1).some(option=>option.civicMemorialMove==='append_relief'&&
+        option.targetCivicMemorialId===localWaterOrder.targetCivicMemorialId&&option.targetCivicDeedId===localWaterOrder.targetCivicDeedId))
+      fail('playerAvatar.civicMemorialOrder');
   }
   if(localWaterOrder?.action==='MARKET_FREIGHT'){
     const ordered=w.cultivators.find(row=>row.id===localWaterOrder.actorId);

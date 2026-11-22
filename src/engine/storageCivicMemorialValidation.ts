@@ -1,15 +1,16 @@
-import type { CivicReliefDeed,WorldState } from '../types/world';
-import { CIVIC_MEMORIAL_COST,CIVIC_MEMORIAL_OFFER_TICKS } from './civicMemorialEngine';
+import type { CivicMemorial,CivicReliefDeed,WorldEvent,WorldState } from '../types/world';
+import { CIVIC_MEMORIAL_COST,CIVIC_MEMORIAL_OFFER_TICKS,civicMemorialAdditionId } from './civicMemorialEngine';
 import { SETTLEMENT_RELIEF } from './settlementReliefTerms';
 import { VILLAGE_GRANARY_RECEIPT_LIMIT } from './villageGranaryEngine';
 import { CHRONICLE_ERRATA_WINDOW } from './chronicleErrataEngine';
 
 export function validateCivicMemorialHistory(world:WorldState,people:ReadonlySet<string>,fail:(path:string)=>never):void {
   const {deeds,memorials,nextDeedId,nextMemorialId}=world.civicMemorials;
+  const validateAdditions=()=>validateCivicMemorialAdditions(world,memorials,people,fail);
   if(!deeds.length&&!memorials.length){
     if(world.resourceFlow.months.some(month=>month.entries.some(row=>row.mechanism==='civic_memorial'||row.reason==='civic_memorial_supplies')))
       fail('civicMemorials.memorials.journal');
-    return;
+    return validateAdditions();
   }
   const byDeed=new Map<string,CivicReliefDeed>(), sourceIds=new Set<string>();
   const villages=new Map(world.settlements.villages.map((row)=>[row.id,row]));
@@ -106,6 +107,7 @@ export function validateCivicMemorialHistory(world:WorldState,people:ReadonlySet
       fail('civicMemorials.memorials.verification');
     verificationById.set(row.id,{tick,proposerId:row.proposerId,verifierId});
   }
+  validateAdditions();
   const complete=new Set<number>(),journal=new Map<string,Set<string>>();
   for(const month of world.resourceFlow.months){
     if(month.totalEntries===month.entries.length)complete.add(month.tick);
@@ -123,4 +125,94 @@ export function validateCivicMemorialHistory(world:WorldState,people:ReadonlySet
     }
   }
   for(const [id,row] of verificationById)if(complete.has(row.tick)&&journal.get(id)?.size!==2)fail('civicMemorials.memorials.journal');
+}
+
+
+const overlayId=/^civic-memorial-[1-9][0-9]*-addendum-/u;
+const overlayEvent=(id:string)=>id.startsWith('evt-')&&overlayId.test(id.slice(4));
+
+/** Rebind each signed overlay to both independent paid documents. Historic participants need
+ * not still be alive or on site. A retained death strictly before signing contradicts it. */
+function validateCivicMemorialAdditions(world:WorldState,memorials:readonly CivicMemorial[],people:ReadonlySet<string>,
+  fail:(path:string)=>never):void{
+  const history=world.eraHistory?.receipts??[];
+  const turn=world.tick;
+  const expected=new Map<string,{tick:number;siteId:string;witnessId:string}>();
+  const acts=new Set<string>(),cited=new Set<string>();
+  const stamp=(actorId:string,tick:number)=>JSON.stringify([actorId,tick]);
+  const chapters=[...world.chronicleArchive.chapters,...world.coldHistory.chapters];
+  const exposed=(rows:readonly {id:string}[])=>rows.some(row=>overlayEvent(row.id));
+  if(exposed(world.chronicleArchive.anchors)||chapters.some(row=>exposed(row.anchors))||
+    history.some(row=>overlayEvent(row.eventId))||world.chronicleErrata.sources.some(row=>overlayEvent(row.sourceEventId))||
+    world.eraHeritage?.facts.some(row=>overlayEvent(row.source.sourceEventId))||
+    world.chronicleCausality.nodes.some(row=>overlayEvent(row.eventId)||row.predecessors.some(item=>overlayEvent(item.eventId))))
+    return fail('civicMemorials.additions.archive');
+  if(world.resourceFlow.months.some(month=>month.entries.some(row=>overlayId.test(row.refId))))
+    return fail('civicMemorials.additions.journal');
+
+  if(memorials.some(row=>row.additions!==undefined)){
+    const deeds=new Map(world.civicMemorials.deeds.map(row=>[row.id,row]));
+    const source=new Map(world.settlements.records.map(row=>[row.id,row]));
+    const deaths=new Map(world.estates.entries.map(row=>[row.deceasedId,row.openedTick]));
+    const events=new Map<string,WorldEvent[]>();
+    for(const row of world.events){
+      const rows=events.get(row.id);
+      if(rows)rows.push(row);else events.set(row.id,[row]);
+    }
+    const sourceConfirmed=(deed:CivicReliefDeed)=>{
+      const receipt=source.get(deed.reliefRecordId);
+      if(!receipt||receipt.id!==`settlement-${deed.tick}-relief-${deed.settlementId}-${deed.subjectId}`||
+        receipt.kind!=='relief'||receipt.tick!==deed.tick||receipt.actorId!==deed.subjectId||receipt.settlementId!==deed.settlementId||
+        receipt.people!==0||receipt.targetSettlementId!==undefined||receipt.volunteerId!==undefined||receipt.cultivatorId!==undefined||
+        receipt.stones!==SETTLEMENT_RELIEF.stones||receipt.herbs!==SETTLEMENT_RELIEF.jade_leaf)return false;
+      const originals=events.get(`evt-${receipt.id}`)??[],[event]=originals;
+      return originals.length===0||originals.length===1&&event.witnessScope===undefined&&event.tick===receipt.tick&&
+        event.locationId===deed.siteId&&event.category==='diplomacy'&&event.title==='凡村赈济'&&event.description===receipt.description&&
+        event.actorIds.length===1&&event.actorIds[0]===deed.subjectId;
+    };
+    const samePerson=(a:CivicReliefDeed,b:CivicReliefDeed)=>
+      a.subjectId===b.subjectId&&a.volunteerId===b.volunteerId&&a.householdId===b.householdId&&a.settlementId===b.settlementId&&
+      a.siteId===b.siteId&&a.name===b.name&&a.enrolledTick===b.enrolledTick;
+    for(const row of memorials){
+      acts.add(stamp(row.proposerId,row.openedTick));
+      if(row.verification)acts.add(stamp(row.verification.verifierId,row.verification.tick));
+    }
+    for(const row of memorials){
+      if(row.additions===undefined)continue;
+      const original=deeds.get(row.deedId),verify=row.verification;
+      if(!row.additions.length||row.status!=='verified'||!verify||!original||original.tick>=verify.tick||!sourceConfirmed(original))
+        return fail('civicMemorials.additions.source');
+      let previous=verify.tick;
+      for(const addition of row.additions){
+        const later=deeds.get(addition.deedId),{witnessId,appendedTick}=addition;
+        if(!later||later.id===original.id||later.reliefRecordId===original.reliefRecordId||!samePerson(later,original)||
+          addition.id!==civicMemorialAdditionId(row.id,later.id)||cited.has(later.id)||
+          later.tick<=verify.tick||appendedTick<=later.tick||appendedTick<previous||appendedTick>turn||!sourceConfirmed(later))
+          return fail('civicMemorials.additions.source');
+        const action=stamp(witnessId,appendedTick);
+        if(witnessId===row.proposerId||witnessId===verify.verifierId||witnessId===original.subjectId||
+          !people.has(witnessId)||!later.witnessIds.includes(witnessId)||(deaths.get(witnessId)??Infinity)<appendedTick||
+          history.some(event=>event.kind==='death'&&event.actorId===witnessId&&event.tick<appendedTick)||acts.has(action))
+          return fail('civicMemorials.additions.witness');
+        acts.add(action);
+        cited.add(later.id);
+        previous=appendedTick;
+        expected.set(`evt-${addition.id}-${appendedTick}`,{tick:appendedTick,siteId:later.siteId,witnessId});
+      }
+    }
+  }
+  const seen=new Set<string>();
+  let oldest=Infinity;
+  for(const event of world.events){
+    oldest=Math.min(oldest,event.tick);
+    if(!overlayEvent(event.id))continue;
+    const proof=expected.get(event.id);
+    if(!proof||seen.has(event.id)||event.category!=='diplomacy'||event.witnessScope!=='participants'||
+      event.tick!==proof.tick||event.locationId!==proof.siteId||event.actorIds.length!==1||event.actorIds[0]!==proof.witnessId||
+      event.dialogue!==undefined||event.duelWinnerId!==undefined||event.damage!==undefined)
+      return fail('civicMemorials.additions.event');
+    seen.add(event.id);
+  }
+  // The oldest retained month may be only half represented; later ones have not rotated.
+  for(const [id,proof] of expected)if(proof.tick>oldest&&!seen.has(id))return fail('civicMemorials.additions.event');
 }
