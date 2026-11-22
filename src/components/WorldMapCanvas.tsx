@@ -1,3 +1,4 @@
+import {cultivationClanMapSites,drawCultivationClanMapSeal} from './cultivationClanMapMark';
 import {drawCultivatorRealmAura} from './cultivatorRealmAuraDraw';
 import {projectMapCultivatorHalos} from './cultivatorPortraitModel';
 import {drawImmortalAuctionMapMark,immortalAuctionMapMark} from './immortalAuctionMapMark';
@@ -311,6 +312,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       .map(({ siteId }) => siteId));
   }, [world, selected]);
   const { seenLocations, isCurrentLocation } = mapView;
+  const clanCeremonies=useMemo(()=>cultivationClanMapSites(world,isCurrentLocation,!!preview),[world,isCurrentLocation,preview]);
   const realmHalos=useMemo(()=>projectMapCultivatorHalos(world,mapView),[world,mapView]);
   const auctionMark=useMemo(()=>immortalAuctionMapMark(world,isCurrentLocation,!!preview),[world,isCurrentLocation,preview]);
   const arenaMarks=useMemo(()=>tournamentArenaMapMarks(world,isCurrentLocation),[world,isCurrentLocation]);
@@ -719,6 +721,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
 
         const arenaRound=arenaMarks.get(loc.id);
         if(arenaRound!==undefined)drawTournamentArenaMark(ctx,loc.x,loc.y,arenaRound);
+        if(clanCeremonies.has(loc.id))drawCultivationClanMapSeal(ctx,loc.x,loc.y);
         if(auctionMark?.siteId===loc.id)drawImmortalAuctionMapMark(ctx,loc.x,loc.y,auctionMark.count);
         if(dungeonMark?.siteId===loc.id)drawDungeonMapMark(ctx,loc.x,loc.y,dungeonMark.room);
 
@@ -1094,7 +1097,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener?.('change',stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, atlasDrawing, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, observedSalvageSites, localGranary, villageMapLabels, civicObservation, usedVillageSegments, furnaceShift, localPavilionDesk, localMemorial, localVillageFair, localStipend, localSeedCulture, localToolLoans, localAlignedWeather, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope, scenicRelief, qiFlow, inspectionEnabled, letters, travel, flightAlignments, combatVfx, actorBadgeFacts, hasBadgeQuote, domes, strategic, arenaMarks, dungeonMark, alchemyMarks, daoMarks, auctionMark, realmHalos]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, atlasDrawing, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, observedSalvageSites, localGranary, villageMapLabels, civicObservation, usedVillageSegments, furnaceShift, localPavilionDesk, localMemorial, localVillageFair, localStipend, localSeedCulture, localToolLoans, localAlignedWeather, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope, scenicRelief, qiFlow, inspectionEnabled, letters, travel, flightAlignments, combatVfx, actorBadgeFacts, hasBadgeQuote, domes, strategic, arenaMarks, dungeonMark, alchemyMarks, daoMarks, auctionMark, realmHalos, clanCeremonies]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1693,6 +1696,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                 {tile && <span className="text-slate-400">· {tile.biome} · 地格灵气 {tile.spiritQi} · {world.sects.find(({ id }) => id === tile.ownerSectId)?.name ?? '无所属宗门'}</span>}
                 {fog && (visibleActorsAtSite.get(location.id) ?? 0) > 0 &&
                   <span className="text-slate-300">· 可见修士 {visibleActorsAtSite.get(location.id)} 位（山河索引可查）</span>}
+                {clanCeremonies.has(location.id)&&<span className="text-amber-200">· 本月实有结契大典</span>}
                 {auctionMark?.siteId===location.id&&<span className="text-amber-200">· 万宝会 · 实有拍品 {auctionMark.count} 件</span>}
                 {daoMarks.filter(mark=>mark.siteId===location.id).map((mark,index)=><span key={index} className="text-cyan-200">· 本月实见{DAO_PATHS[mark.pathId].name}招式</span>)}
                 {alchemyMarks.some(mark=>mark.siteId===location.id)&&<span className="text-amber-200">· 本月实有丹雷</span>}

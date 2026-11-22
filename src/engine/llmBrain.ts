@@ -1,3 +1,6 @@
+import { availableCultivationClanActions, type CultivationClanOption } from './cultivationClanEngine';
+import { CLAN_PRIVATE_COMMAND_KEYS, cultivationClanCommand, exactCultivationClanDecision } from './cultivationClanCognition';
+import { dramaticBondReadVenue, matchesDramaticBondFact } from './dramaticBondTerms';
 import { availableImmortalAuctionActions, eligibleAuctionAmbush, type ImmortalAuctionOption } from './immortalAuctionEngine';
 import { IMMORTAL_AUCTION_SITE, immortalAuctionOpening } from './immortalAuctionTerms';
 import { auctionAmbushCommand, AUCTION_PRIVATE_COMMAND_KEYS, exactAuctionAmbushDecision, exactImmortalAuctionDecision,
@@ -168,6 +171,62 @@ export function utilityExpeditionRescueDecision(actor: Cultivator, world: WorldS
     '我自愿携实物补给接应，只沿已核实的撤离路。' : '已脱离伤势所致的求援条件；在尚未交付补给时撤信。';
   return { ...option, chosenAction: option.action, innerMonologue: thought };
 }
+
+function sharedClanHistory(world: WorldState, actor: Cultivator, counterpartId: string, executionTick: number): boolean {
+  const candidates = world.dramaticBonds?.facts.filter(row => (row.kind === 'practice' || row.kind === 'encounter') &&
+    row.tick < executionTick && row.tick <= world.tick && row.siteId === actor.locationId && row.actorIds.includes(actor.id) && row.actorIds.includes(counterpartId));
+  if (!candidates?.some(row => row.kind === 'practice')) return false;
+  const dates = new Set<number>();
+  let practiced = false;
+  for (const fact of candidates) {
+    if (candidates.filter(row => row.sourceEventId === fact.sourceEventId).length !== 1 || !dramaticBondReadVenue(world, fact)) continue;
+    const retained = world.events.filter(event => event.id === fact.sourceEventId);
+    if (retained.length > 1 || retained.length === 1 && !matchesDramaticBondFact(fact, retained[0])) continue;
+    dates.add(fact.tick);
+    practiced ||= fact.kind === 'practice';
+    if (practiced && dates.size >= 2) return true;
+  }
+  return false;
+}
+
+/** Native eligibility is necessary but not a personality's agreement. Each body decides from present proof. */
+export function availableAutonomousCultivationClanActions(actor: Cultivator, world: WorldState,
+  executionTick = world.tick): readonly CultivationClanOption[] {
+  if (!world.dramaticBonds?.facts.some(row => row.kind === 'practice' && row.actorIds.includes(actor.id)) ||
+      activeAvatar(world) === actor || actor.guardAssignment || actor.hp < actor.maxHp * .8 ||
+      actor.qiProgress >= 92 || daoPathTurnLocked(actor, world)) return [];
+  const ownThreshold = actor.personality === '痴情' ? 72 : actor.personality === '刚正' ? 83 :
+    actor.personality === '逍遥' ? 86 : actor.personality === '苟道' ? 92 : undefined;
+  if (ownThreshold === undefined) return [];
+  const native = availableCultivationClanActions(actor, world, executionTick);
+  if (!native.length) return [];
+  const edges = firstActorRelationships(world.relationships, actor.id);
+  return native.filter(option => {
+    if (option.clanMove === 'propose' && executionTick % 12 !== 0) return false;
+    const pairing = option.clanMove === 'propose' ? undefined :
+      world.cultivationClans?.unions.find(row => row.id === option.targetCultivationUnionId);
+    const otherId = option.clanMove === 'propose' ? option.targetCultivatorId : pairing?.parents.find(id => id !== actor.id);
+    if (!otherId || !sharedClanHistory(world, actor, otherId, executionTick)) return false;
+    const edge = edges.get(otherId);
+    if (!edge || edge.type === '血仇') return false;
+    if (option.clanMove === 'refuse' || option.clanMove === 'family_refuse') return true;
+    const family = option.clanMove === 'family_offer' || option.clanMove === 'family_accept';
+    return edge.affinity >= ownThreshold + (family && actor.personality !== '痴情' ? 5 : 0);
+  });
+}
+
+export function utilityCultivationClanDecision(actor: Cultivator, world: WorldState): LLMDecisionPayload | undefined {
+  const menu = availableAutonomousCultivationClanActions(actor, world);
+  const order = ['family_accept', 'ceremony', 'accept', 'family_offer', 'ceremony_offer', 'propose', 'family_refuse', 'refuse'] as const;
+  for (const move of order) {
+    const option = menu.find(row => row.clanMove === move);
+    if (option) return exactCultivationClanDecision(cultivationClanCommand(option), menu);
+  }
+  return undefined;
+}
+
+export const waitForOwnClanChoice = (): LLMDecisionPayload =>
+  ({ chosenAction: 'REST', innerMonologue: '未作本月新的约定，在本人实到处稍候。' });
 
 export function availableAutonomousImmortalAuctionActions(actor: Cultivator, world: WorldState,
   executionTick = world.tick): readonly ImmortalAuctionOption[] {
@@ -1453,6 +1512,8 @@ export function computeHeuristicDecision(
     }
   }
 
+  const family = utilityCultivationClanDecision(cultivator, world);
+  if (family) return family;
   const auction = utilityImmortalAuctionDecision(cultivator, world);
   if (auction) return auction;
 
@@ -2009,8 +2070,13 @@ export async function queryCultivatorLLMDecision(
     return due ? { ...due, chosenAction: 'FIELD_OBSERVATORY', innerMonologue: '如期到场，实测再与旧预测相比。' }
       : computeHeuristicDecision(cultivator, world, actorFallbackRandom(world, cultivator.id, requestTick));
   };
+  const familyInquiry = config.enabled && Boolean(config.apiKey.trim()) && requestTick === world.tick + 1 &&
+    availableAutonomousCultivationClanActions(cultivator, world, requestTick).length > 0;
   const answer = await requestCultivatorLLMDecision(cultivator, world, config, requestTick);
-  if (!answer) return fallback();
+  if (!answer) {
+    if (familyInquiry) { onSource?.('utility'); return waitForOwnClanChoice(); }
+    return fallback();
+  }
   onSource?.('llm');
   return answer;
 }
@@ -2348,6 +2414,21 @@ export async function requestCultivatorLLMDecision(
     row.status === 'extracting' && (row.explorerId === cultivator.id || row.rescuerId === cultivator.id));
   if (rescueOnly && !rescueOptions.length) return undefined;
   if (!activeVow && !boundaryReliefOnly && !rescueOnly && requestTick === world.tick + 1) {
+    const family = availableAutonomousCultivationClanActions(cultivator, world, requestTick);
+    if (family.length) {
+      const originalSite = cultivator.locationId;
+      const menu = family.map(cultivationClanCommand);
+      const prompt = '这只关于本人的独立选择，任何一项都不代别人表示同意。' +
+        '原样复制一个许可的 JSON 对象；不愿决定可选 REST。不写独白、亲密叙述、孕育、后人、灵根、人物设定或未来结果。许可：' +
+        JSON.stringify([...menu, { chosenAction: 'REST' }]);
+      return requestDecisionPrompt(config, requestTick, options, prompt, parsed => {
+        if (requestTick !== world.tick + 1 || cultivator.locationId !== originalSite || activeAvatar(world) === cultivator) return undefined;
+        if (parsed?.chosenAction === 'REST' && Object.hasOwn(parsed, 'chosenAction') && Object.keys(parsed).length === 1)
+          return waitForOwnClanChoice();
+        if (!exactCultivationClanDecision(parsed, family)) return undefined;
+        return exactCultivationClanDecision(parsed, availableAutonomousCultivationClanActions(cultivator, world, requestTick));
+      }, 170);
+    }
     const auction = availableAutonomousImmortalAuctionActions(cultivator, world, requestTick);
     if (auction.length) {
       const originalSite = cultivator.locationId;
@@ -2697,6 +2778,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
               Object.hasOwn(parsed, 'targetDungeonRoomId') || Object.hasOwn(parsed, 'dungeonMove') ||
               Object.hasOwn(parsed, 'targetDaoPathId') || Object.hasOwn(parsed, 'daoPathMove') ||
               AUCTION_PRIVATE_COMMAND_KEYS.some(key => Object.hasOwn(parsed, key)) ||
+              CLAN_PRIVATE_COMMAND_KEYS.some(key => Object.hasOwn(parsed, key)) ||
               ['heavenlyAlchemyMove', 'targetHeavenlyRecipeId', 'heavenlyAlchemyHeat', 'heavenlyAlchemyQuality']
                 .some(key => Object.hasOwn(parsed, key))) return undefined;
           const validActions: ActionType[] = [

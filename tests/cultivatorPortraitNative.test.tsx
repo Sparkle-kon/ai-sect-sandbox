@@ -90,18 +90,26 @@ describe('native portrait identities',()=>{
     const originalCount=world.cultivators.length;
     const volunteers=new Map<string,MortalVolunteer>();
     const recruitReceipts=new Map<string,SettlementRecord>();
-    while(world.tick<44){
+    const pair=['recruit-village-loc-market-east-vol-3','recruit-village-loc-market-vol-8'] as const;
+    const together=()=>{
+      const [first,second]=pair.map(id=>world.cultivators.find(row=>row.id===id));
+      return !!first?.alive&&!!second?.alive&&first.locationId===second.locationId&&
+        createTerrainMapView(world,first,true).liveActors.includes(second);
+    };
+    // The two original recruits really meet again, regardless of the exact
+    // route they choose once the new optional clan system is present.
+    while(world.tick<80&&(world.tick<44||!together())){
       for(const village of world.settlements.villages)for(const volunteer of village.volunteers)
         volunteers.set(volunteer.id,structuredClone(volunteer));
       world=naturallyContinue(world);
       for(const row of world.settlements.records)
         if(row.kind==='recruitment'&&row.tick===world.tick&&row.cultivatorId)recruitReceipts.set(row.cultivatorId,row);
     }
-    const pair=['recruit-village-loc-market-east-vol-3','recruit-village-loc-market-vol-8'] as const;
+    expect(together()).toBe(true);
     expect(world.cultivators.length).toBeGreaterThan(originalCount);
     for(const id of pair){
       const person=actor(world,id),receipt=recruitReceipts.get(id);
-      expect(person).toMatchObject({id,name:'杜清禾',alive:true,locationId:'loc-market'});
+      expect(person).toMatchObject({id,name:'杜清禾',alive:true});
       expect(receipt).toMatchObject({kind:'recruitment',people:1,cultivatorId:id});
       const volunteer=volunteers.get(receipt!.volunteerId!);
       expect(volunteer).toMatchObject({name:person.name,gender:fictionalGenderFor(world.random.seed,receipt!.volunteerId!)});

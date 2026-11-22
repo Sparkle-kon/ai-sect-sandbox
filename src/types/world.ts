@@ -1,3 +1,5 @@
+import type { ClanMove } from './cultivationClan';
+import type { CultivationClanHeritage, CultivationClanState } from './cultivationClan';
 import type { TianjiGazetteState } from './tianjiGazette';
 import type { ImmortalAuctionMove, ImmortalAuctionPillId } from './immortalAuction';
 import type { ImmortalAuctionState } from './immortalAuction';
@@ -186,6 +188,7 @@ export type ActionType =
   | 'HEAVENLY_ALCHEMY'
   | 'DAO_PATH'
   | 'IMMORTAL_AUCTION'
+  | 'CULTIVATION_CLAN'
   | 'USE_PILL'
   | 'VILLAGE_CENSUS'
   | 'FIELD_OBSERVATORY'
@@ -436,6 +439,7 @@ export type FictionalGender = 'woman' | 'man';
 
 export interface Cultivator {
   gender?: FictionalGender;
+  clanHeritage?: CultivationClanHeritage;
   publicAlchemy?: PublicAlchemyPractice[];
   heavenlyAlchemy?: HeavenlyAlchemyState;
   daoPath?: DaoPathState;
@@ -701,6 +705,8 @@ export interface LLMDecisionPayload {
   targetTechniqueId?: string;
   targetHerbId?: HerbId;
   targetPillId?: PillId;
+  clanMove?: ClanMove;
+  targetCultivationUnionId?: string;
   auctionMove?: ImmortalAuctionMove;
   targetAuctionLotId?: string;
   targetAuctionArtifactId?: string;
@@ -3709,6 +3715,7 @@ export interface WorldState {
   markets: MarketState;
   immortalAuction?: ImmortalAuctionState;
   tianjiGazette?: TianjiGazetteState;
+  cultivationClans?: CultivationClanState;
   oaths: OathState;
   oathArbitrations: OathArbitrationState;
   mentorship: MentorshipState;

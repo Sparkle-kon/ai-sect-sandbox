@@ -1,3 +1,5 @@
+import { advanceCultivationClans, availableCultivationClanActions, resolveCultivationClanAction } from './cultivationClanEngine';
+import { exactCultivationClanDecision } from './cultivationClanCognition';
 import { publishTianjiGazette } from './tianjiGazetteEngine';
 import { advanceImmortalAuctions, availableImmortalAuctionActions, recordImmortalAuctionDeparture, resolveImmortalAuctionAction } from './immortalAuctionEngine';
 import { exactAuctionAmbushDecision, exactImmortalAuctionDecision } from './immortalAuctionCognition';
@@ -140,7 +142,7 @@ import {
   WorldEvent,
   WorldState,
 } from '../types/world';
-import { availableAutonomousDaoPathActions, availableAutonomousHeavenlyAlchemyActions, availableAutonomousImmortalAuctionActions, computeHeuristicDecision, currentAuctionAmbushOffer, daoPathTurnLocked, dungeonDecisionOccasion, exactDaoPathDecision, exactDungeonDecision, exactHeavenlyAlchemyDecision, isProviderPersonaDecision, requiredBeforeOrdinaryDecision, utilityCeasefireDecision, utilityDungeonDecision, utilityExpeditionRescueDecision } from './llmBrain';
+import { availableAutonomousCultivationClanActions, availableAutonomousDaoPathActions, availableAutonomousHeavenlyAlchemyActions, availableAutonomousImmortalAuctionActions, computeHeuristicDecision, currentAuctionAmbushOffer, daoPathTurnLocked, dungeonDecisionOccasion, exactDaoPathDecision, exactDungeonDecision, exactHeavenlyAlchemyDecision, isProviderPersonaDecision, requiredBeforeOrdinaryDecision, utilityCeasefireDecision, utilityDungeonDecision, utilityExpeditionRescueDecision, waitForOwnClanChoice } from './llmBrain';
 import { maintainMemories, recordMemory } from './memoryEngine';
 import { synthesizeReflections } from './reflectionEngine';
 import { fabricateRumor, knownRumorLead, spreadRumors, witnessEvent } from './rumorEngine';
@@ -498,6 +500,20 @@ export function applyCultivatorBrainDecision(
     return applied;
   }
   if (decision.chosenAction !== 'EXPEDITION_RESCUE' && activeDungeonForActor(world, cultivator)) return null;
+  if (decision.chosenAction === 'CULTIVATION_CLAN') {
+    if (daoPathTurnLocked(cultivator, world)) return null;
+    const autonomous = modelInput || isProviderPersonaDecision(decision);
+    const options = autonomous ? availableAutonomousCultivationClanActions(cultivator, world) :
+      availableCultivationClanActions(cultivator, world);
+    const exact = exactCultivationClanDecision(decision, options, true);
+    if (!exact) return null;
+    const applied = resolveCultivationClanAction(world, cultivator, exact);
+    if (applied) {
+      cultivator.currentAction = 'CULTIVATION_CLAN';
+      cultivator.innerMonologue = exact.innerMonologue;
+    }
+    return applied;
+  }
   if (decision.targetAuctionAmbushLotId !== undefined &&
       !exactAuctionAmbushDecision(decision, currentAuctionAmbushOffer(cultivator, world), true)) return null;
   if (decision.chosenAction === 'IMMORTAL_AUCTION') {
@@ -1095,6 +1111,8 @@ export function advanceWorldTick(
   traceOptions?: {
     tape?: DecisionReplayTape;
     modelActors?: ReadonlySet<string>;
+    /** An attempted online choice that did not validate cannot become an offline assent. */
+    suppressAutoClanConsent?: ReadonlySet<string>;
     captureTrace?: boolean;
     capturePresentation?: boolean;
     onWatchBatch?: (events: readonly WorldEvent[]) => void;
@@ -1314,6 +1332,19 @@ export function advanceWorldTick(
     const modelProposal = supplied && traceOptions?.modelActors?.has(cultivator.id) ? supplied : undefined;
     let provided = avatarDecision ?? supplied;
     let modelOrdinaryReplaced=false;
+    if (provided?.chosenAction === 'CULTIVATION_CLAN') {
+      const fromProvider = !avatarDecision && Boolean(modelProposal || isProviderPersonaDecision(provided));
+      const earlier = fromProvider ? prevState.cultivators.find(person => person.id === cultivator.id) : undefined;
+      const offered = !fromProvider || earlier && exactCultivationClanDecision(provided,
+        availableAutonomousCultivationClanActions(earlier, prevState, nextState.tick), true);
+      const actual = offered && !daoPathTurnLocked(cultivator, nextState) &&
+        exactCultivationClanDecision(provided, fromProvider ? availableAutonomousCultivationClanActions(cultivator, nextState)
+          : availableCultivationClanActions(cultivator, nextState), true);
+      if (!actual) {
+        provided = requiredBeforeOrdinaryDecision(cultivator, nextState) ?? waitForOwnClanChoice();
+        modelOrdinaryReplaced = fromProvider;
+      }
+    }
     if (provided?.chosenAction === 'IMMORTAL_AUCTION' || provided?.targetAuctionAmbushLotId !== undefined) {
       const fromProvider = !avatarDecision && Boolean(modelProposal || isProviderPersonaDecision(provided));
       const isAuction = provided.chosenAction === 'IMMORTAL_AUCTION';
@@ -1451,13 +1482,18 @@ export function advanceWorldTick(
       const replayedDraws = traceOptions.replayDraws[cultivator.id] ?? 0;
       for (let draw = 0; draw < Math.min(64, replayedDraws); draw++) rng();
     }
-    const decision = expeditionOrder ?? provided ?? fieldNegotiation ??
+    const planned = expeditionOrder ?? provided ?? fieldNegotiation ??
       computeHeuristicDecision(cultivator, nextState, () => { decisionDraws++; return rng(); });
+    // Invalid/declined online output may leave no order. Record the actual quiet fallback, never a new private signature.
+    const decision = !expeditionOrder && !provided && !fieldNegotiation &&
+      (traceOptions?.suppressAutoClanConsent?.has(cultivator.id) || modelProposal !== undefined) &&
+      planned.chosenAction === 'CULTIVATION_CLAN' ? waitForOwnClanChoice() : planned;
 
     const captureTrace = traceOptions?.captureTrace !== false;
     const candidates = (captureTrace || traceOptions?.onActor) && decision.chosenAction !== 'EXPEDITION_DUNGEON' &&
       decision.chosenAction !== 'HEAVENLY_ALCHEMY' && decision.chosenAction !== 'DAO_PATH' &&
-      decision.chosenAction !== 'IMMORTAL_AUCTION' && decision.targetAuctionAmbushLotId === undefined ?
+      decision.chosenAction !== 'IMMORTAL_AUCTION' && decision.targetAuctionAmbushLotId === undefined &&
+      decision.chosenAction !== 'CULTIVATION_CLAN' ?
       legalTraceCandidates(nextState, cultivator) : [];
     const chosenByModel = Boolean(modelProposal && !modelOrdinaryReplaced && !modelStoryChoiceReplaced && !expeditionModelReplaced);
     if (traceOptions?.tape) rememberReplayDecision(traceOptions.tape, cultivator.id, decision, decisionDraws, chosenByModel, false, false, nextState);
@@ -1568,7 +1604,7 @@ export function advanceWorldTick(
         result.origin==='player'?'avatar':result.origin,true);
     },
   }), ...advanceOccasions(nextState, rng), ...advanceOaths(nextState), ...advanceMarkets(nextState), ...advanceWitnesses(nextState), ...advanceSeasonReviews(nextState, (state, seasonId) =>
-    publicCompetitionStandings(state, seasonId).find(({ rank }) => rank === 1)), ...maintainSectPolitics(nextState), ...advanceDoctrineFoundings(nextState), ...advanceDoctrineMaturity(nextState,prevState), ...advanceBounties(nextState), ...advanceResearch(nextState), ...advanceWorkshops(nextState), ...advanceCraftTraining(nextState), ...advanceScribeCommissions(nextState), ...advanceDamageAssurance(nextState), ...advanceRelicExhibits(nextState), ...advanceProbation(nextState), ...advanceToolLoans(nextState), ...advanceWaypostMeals(nextState), ...advanceImmortalAuctions(nextState), ...advanceEstates(nextState), ...advanceDoctrines(nextState), ...advanceSectCredit(nextState), ...advanceSanctuaries(nextState), ...advancePilgrimages(nextState), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceCareFollowups(nextState), ...advanceDanxiaShortages(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...reconcileCourierDeaths(nextState), ...advanceHouseholds(nextState), ...advanceHouseholdNames(nextState)]) {
+    publicCompetitionStandings(state, seasonId).find(({ rank }) => rank === 1)), ...maintainSectPolitics(nextState), ...advanceDoctrineFoundings(nextState), ...advanceDoctrineMaturity(nextState,prevState), ...advanceBounties(nextState), ...advanceResearch(nextState), ...advanceWorkshops(nextState), ...advanceCraftTraining(nextState), ...advanceScribeCommissions(nextState), ...advanceDamageAssurance(nextState), ...advanceRelicExhibits(nextState), ...advanceProbation(nextState), ...advanceToolLoans(nextState), ...advanceWaypostMeals(nextState), ...advanceImmortalAuctions(nextState), ...advanceEstates(nextState), ...advanceDoctrines(nextState), ...advanceSectCredit(nextState), ...advanceSanctuaries(nextState), ...advancePilgrimages(nextState), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceCareFollowups(nextState), ...advanceDanxiaShortages(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...reconcileCourierDeaths(nextState), ...advanceHouseholds(nextState), ...advanceHouseholdNames(nextState), ...advanceCultivationClans(nextState)]) {
     newEvents.push(event);
     witnessEvent(nextState, event);
   }

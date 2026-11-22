@@ -34,6 +34,9 @@ export function witnessEvent(world: WorldState, event: WorldEvent): void {
   // Scoped auction receipts have their own actual on-site reader. No generic witness or flying-sword copy.
   if (event.witnessScope === 'participants' && event.category === 'diplomacy' && event.locationId === IMMORTAL_AUCTION_SITE &&
       /^evt-[1-9]\d*-auction-lot-[1-9]\d*-(?:consign-.+|bid-.+|sold|withdrawn|no_bid|unavailable)$/.test(event.id)) return;
+  // Family assent, refusal, and the waiting/newborn ledger are never public rumor or even generic self-rumor.
+  if (event.witnessScope === 'participants' && event.category === 'diplomacy' &&
+      /^evt-[1-9]\d*-clan-union-[1-9]\d*-(?:propose|accept|refuse|ceremony_offer|family_offer|family_accept|family_refuse|birth|lost|expired)$/.test(event.id)) return;
   capturePublicWitnessFact(world, event);
   if (event.duelWinnerId || event.id.startsWith('evt-settlement-')) captureChronicleErrataSource(world, event);
   const involved = new Set(event.actorIds);

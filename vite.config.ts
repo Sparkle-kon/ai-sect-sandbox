@@ -84,6 +84,8 @@ export default defineConfig({
           'heart-demon-rules': ['./src/engine/heartDemonEngine.ts', './src/engine/interruptedStoryChoices.ts',
             './src/engine/storageHeartDemonValidation.ts', './src/types/heartDemon.ts', './src/engine/tribulationTerms.ts'],
           'expedition-rooms-live': ['./src/engine/expeditionDungeonEngine.ts','./src/engine/siegeParticipants.ts'],
+          'cultivation-clan-proof': ['./src/types/cultivationClan.ts','./src/engine/cultivationClanTerms.ts','./src/engine/storageCultivationClanValidation.ts'],
+          'timeline-history-proof': ['./src/engine/storageEraHistoryValidation.ts'],
           'tianji-gazette-proof': ['./src/engine/tianjiGazetteTerms.ts','./src/engine/storageTianjiGazetteValidation.ts'],
           'tianji-gazette-live': ['./src/engine/tianjiGazetteEngine.ts'],
           'immortal-auction-proof': ['./src/types/immortalAuction.ts','./src/engine/immortalAuctionTerms.ts','./src/engine/storageImmortalAuctionValidation.ts'],

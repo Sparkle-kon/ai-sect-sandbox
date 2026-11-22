@@ -170,7 +170,7 @@ export function useWorldSimulationController({
         let canonicalEraBatch:readonly WorldEvent[]=[];
         const tick = advanceWorldTick(starting, decisions, undefined, 'deferred', (id, effective) => {
           if (effective && modelActors.has(id)) applied.add(id);
-        }, { tape, modelActors, onWatchBatch: (events) => { canonicalWatchBatch = events; },
+        }, { tape, modelActors, suppressAutoClanConsent:new Set(turn.startedActorIds), onWatchBatch: (events) => { canonicalWatchBatch = events; },
           onCompletedEvents:events=>{canonicalEraBatch=events;} });
         const [reflected, dramatized] = await Promise.all([
           enrichAnnualReflections(tick, llmConfig), enrichTickDialogues(tick, llmConfig),

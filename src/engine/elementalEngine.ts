@@ -20,8 +20,14 @@ export function elementalRelation(source: SpiritRoot, target: SpiritRoot): Eleme
 }
 
 export function cultivationMultiplier(actor: Cultivator, place: LocationNode | undefined): number {
-  const own = elementalRelation(actor.spiritRoot, actor.technique.spiritRoot);
-  const rootFactor = own === 'matching' ? 1.12 : own === 'nurturing' ? 1.08 : own === 'overcoming' ? 0.84 : 1;
+  const byRoot = (root:SpiritRoot) => {
+    const own=elementalRelation(root,actor.technique.spiritRoot);
+    return own==='matching'?1.12:own==='nurturing'?1.08:own==='overcoming'?.84:1;
+  };
+  const roots=actor.clanHeritage?.roots;
+  const first=byRoot(actor.spiritRoot);
+  // The actual recorded secondary root benefits the existing affinity law, never stacking above its native cap.
+  const rootFactor=roots?.[0]===actor.spiritRoot&&roots[1]!==undefined?Math.max(first,byRoot(roots[1])):first;
   if (!place) return rootFactor;
   const ambient = elementalRelation(place.spiritRoot, actor.technique.spiritRoot);
   const siteFactor = ambient === 'matching' ? 1.27 : ambient === 'nurturing' ? 1.17 : ambient === 'overcoming' ? 0.76 : 1;

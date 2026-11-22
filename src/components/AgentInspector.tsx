@@ -1,3 +1,5 @@
+import {CultivationClanRead,type ClanControls} from './CultivationClanRead';
+import {projectCultivationClans} from '../engine/cultivationClanEngine';
 import {CultivatorPortrait} from './CultivatorPortrait';
 import {projectCultivatorPortrait} from './cultivatorPortraitModel';
 import {DaoPathRead,type DaoPathControls} from './DaoPathRead';
@@ -61,6 +63,7 @@ interface AgentInspectorProps {
   craftTrainingControls?:CraftTrainingControls;
   heavenlyAlchemyControls?:HeavenlyAlchemyControls;
   daoPathControls?:DaoPathControls;
+  clanControls?:ClanControls;
 }
 
 export const AgentInspector: React.FC<AgentInspectorProps> = ({
@@ -72,7 +75,7 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
   workshopReleaseControls,
   workshopEstateControls,
   craftTrainingControls,
-  heavenlyAlchemyControls,daoPathControls,
+  heavenlyAlchemyControls,daoPathControls,clanControls,
   publicBonds,personalBonds,allowPersonalThought=false,
 }) => {
   if (!cultivator) {
@@ -89,6 +92,7 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
   const location = extractionPoint || reliefPoint ? undefined : world.locations.find((l) => l.id === cultivator.locationId);
   const bounty = relevantBounty(world.bounties, cultivator.id);
   const profile = !workspaceSection || workspaceSection === 'profile';
+  const clan=profile?projectCultivationClans(world,cultivator):undefined;
   const portrait = profile ? projectCultivatorPortrait(world,cultivator) : undefined;
   const cultivation = !workspaceSection || workspaceSection === 'cultivation';
   const daoPath=cultivation?projectDaoPath(world,cultivator):undefined;
@@ -160,6 +164,9 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
       {profile&&<ForbiddenArtScarsRead world={world} actor={cultivator}/>}
 
       {profile&&world.cultivators.includes(cultivator)&&<ActorDramaticBondRead actorId={cultivator.id} publicArcs={publicBonds} personal={personalBonds}/>}
+
+      {clan&&<CultivationClanRead key={cultivator.id} view={clan} tick={world.tick} controls={clanControls}
+        named={id=>world.cultivators.find(actor=>actor.id===id)?.name??'修士未详'}/>}
 
       {mind&&<PersonaDossierRead world={world} actor={cultivator} live={allowPersonalThought}/>}
 

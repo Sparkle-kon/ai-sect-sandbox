@@ -1,13 +1,14 @@
 import { createInitialWorld } from '../data/initialWorld';
-import type { LLMDecisionPayload, WorldState } from '../types/world';
+import type { LLMDecisionPayload, WorldEvent, WorldState } from '../types/world';
 import { adjustSectAffinity, resolveDiplomacyAction, SIEGE_COST } from './diplomacyEngine';
+import { clanChildActorId, clanEventId, CLAN_ADULT_AGE, CLAN_MATURITY_TICKS } from './cultivationClanTerms';
 import { CORE_LIMIT, EPISODIC_LIMIT } from './memoryEngine';
 import { advanceWorldTick } from './worldEngine';
 
 export interface BalanceSettings { populationScenario?: 'evolving' | 'baseline'; seed: number; ticks?: number; restBelow?: number }
 export interface BalanceReport {
   seed: number; steps: number; restBelow: number; populationScenario: 'evolving' | 'baseline'; initialLiving: number; finalLiving: number;
-  minimumLiving: number; maximumLiving: number; maximumRoster: number; verifiedRecruits: number; extinctAtTick?: number;
+  minimumLiving: number; maximumLiving: number; maximumRoster: number; verifiedRecruits: number; verifiedClanAdults: number; extinctAtTick?: number;
   maximumEpisodicMemory: number; maximumCoreMemory: number; maximumRumors: number; maximumReflections: number;
   maximumTreasury: number; maximumPersonalStones: number; maximumTotalHerbs: number;
   activeSieges: number; completedSieges: number; longestObservedSiege: number; distinctSieges: number;
@@ -24,19 +25,54 @@ const threshold = (restBelow = 0) => {
   return restBelow;
 };
 
+/** Authoritative accounting for new playable clan residents, including events outside the bounded hot feed. */
+export function verifyBalanceClanEntrants(before: WorldState, world: WorldState, events: readonly WorldEvent[]) {
+  const entrantIds = new Set<string>();
+  let invalid = false;
+  const matured = world.cultivationClans?.children.filter(child => child.maturedTick === world.tick) ?? [];
+  const receipts = events.filter(event => /^evt-[1-9]\d*-clan-union-[1-9]\d*-mature$/u.test(event.id));
+  if (matured.length !== receipts.length) invalid = true;
+  for (const child of matured) {
+    const actorId = clanChildActorId(child.id), id = clanEventId(world.tick, child.unionId, 'mature');
+    const now = world.cultivators.filter(actor => actor.id === actorId);
+    const older = before.cultivationClans?.children.filter(row => row.id === child.id) ?? [];
+    const origin = world.cultivationClans?.unions.filter(row => row.id === child.unionId) ?? [];
+    const current = receipts.filter(event => event.id === id);
+    const [actor] = now, [prior] = older, [union] = origin, [receipt] = current;
+    if (entrantIds.has(actorId) || now.length !== 1 || older.length !== 1 || origin.length !== 1 || current.length !== 1 ||
+        before.cultivators.some(row => row.id === actorId) || prior.maturedTick !== undefined ||
+        prior.unionId !== child.unionId || prior.birthTick !== child.birthTick || prior.maturesAtTick !== child.maturesAtTick ||
+        child.maturesAtTick !== child.birthTick + CLAN_MATURITY_TICKS || world.tick < child.maturesAtTick ||
+        union.plan?.status !== 'born' || union.plan.childId !== child.id || union.plan.closedTick !== child.birthTick ||
+        union.clanId !== child.clanId || union.siteId !== child.siteId ||
+        !actor.alive || actor.hp <= 0 || actor.age !== CLAN_ADULT_AGE || actor.sectId !== '' || actor.positionPlane !== undefined ||
+        actor.locationId !== child.siteId || actor.clanHeritage?.childId !== child.id || actor.clanHeritage.clanId !== child.clanId ||
+        actor.clanHeritage.innateTrait !== child.innateTrait || JSON.stringify(actor.clanHeritage.roots) !== JSON.stringify(child.roots) ||
+        receipt.tick !== world.tick || receipt.year !== world.year || receipt.month !== world.month ||
+        receipt.locationId !== child.siteId || receipt.category !== 'breakthrough' || receipt.witnessScope !== undefined ||
+        receipt.actorIds.length !== 1 || receipt.actorIds[0] !== actorId) {
+      invalid = true;
+      continue;
+    }
+    entrantIds.add(actorId);
+  }
+  return { entrantIds, invalid };
+}
+
 export function runBalanceSimulation({ seed, ticks, restBelow = 0, populationScenario = 'evolving' }: BalanceSettings): BalanceReport {
   const steps = duration(ticks);
   const rest = threshold(restBelow);
   if (!checkNat(seed, 0xffffffff)) throw new RangeError('Seed must be uint32.');
   let world = createInitialWorld(seed);
-  // A named control case isolates stress from new village intake. Live gameplay and the CLI use evolving.
+  // The control isolates stress from both village intake and new authored clan lineages; live gameplay evolves both.
   if (populationScenario === 'baseline') world.settlements = { villages: [], records: [] };
   const initialLiving = world.cultivators.filter(({ alive }) => alive).length;
   const initialRoster = new Set(world.cultivators.map(({ id }) => id));
   const verifiedRecruitment = new Set<string>();
+  const verifiedClanAdults = new Set<string>();
   const report: BalanceReport = {
     seed, steps, restBelow: rest, populationScenario, initialLiving, finalLiving: initialLiving, minimumLiving: initialLiving, maximumLiving: initialLiving,
-    maximumRoster: world.cultivators.length, verifiedRecruits: 0, maximumEpisodicMemory: 0, maximumCoreMemory: 0, maximumTreasury: 0,
+    maximumRoster: world.cultivators.length, verifiedRecruits: 0, verifiedClanAdults: 0, maximumEpisodicMemory: 0, maximumCoreMemory: 0, maximumTreasury: 0,
     maximumPersonalStones: 0, maximumTotalHerbs: 0, maximumRumors: 0, maximumReflections: 0,
     activeSieges: 0, completedSieges: 0, longestObservedSiege: 0, distinctSieges: 0, supervisedRestOrders: 0, violations: [],
   };
@@ -48,7 +84,7 @@ export function runBalanceSimulation({ seed, ticks, restBelow = 0, populationSce
   const processedSieges = new Set<string>();
   const nonnegative = (n: number) => Number.isFinite(n) && n >= 0;
   const active = (status: WorldState['sieges'][number]['status']) => status === 'marching' || status === 'sieging';
-  function observe() {
+  function observe(before?: WorldState, completed: readonly WorldEvent[] = []) {
     const present = world.cultivators.filter(({ alive }) => alive).length;
     report.finalLiving = present;
     report.minimumLiving = Math.min(report.minimumLiving, present);
@@ -58,8 +94,15 @@ export function runBalanceSimulation({ seed, ticks, restBelow = 0, populationSce
     for (const row of world.settlements.records) if (row.kind === 'recruitment' && row.tick === world.tick &&
       row.people === 1 && row.cultivatorId && row.volunteerId && row.cultivatorId === `recruit-${row.volunteerId}`) verifiedRecruitment.add(row.cultivatorId);
     report.verifiedRecruits = verifiedRecruitment.size;
+    if (before) {
+      const actual = verifyBalanceClanEntrants(before, world, completed);
+      if (actual.invalid) violation('population_growth');
+      if (populationScenario === 'evolving') for (const id of actual.entrantIds) verifiedClanAdults.add(id);
+    }
+    report.verifiedClanAdults = verifiedClanAdults.size;
     const currentIds = new Set(world.cultivators.map(({ id }) => id));
-    if (currentIds.size !== world.cultivators.length || world.cultivators.some(({ id }) => !initialRoster.has(id) && !verifiedRecruitment.has(id)) ||
+    if (currentIds.size !== world.cultivators.length || world.cultivators.some(({ id }) => !initialRoster.has(id) && !verifiedRecruitment.has(id) && !verifiedClanAdults.has(id)) ||
+        populationScenario === 'baseline' && !!world.cultivationClans?.unions.length ||
         world.settlements.villages.some(({ population, capacity }) => population < 0 || population > capacity)) violation('population_growth');
     if (new Set(world.cultivators.map(({ id }) => id)).size !== world.cultivators.length) violation('duplicate_cultivator');
     let herbs = 0;
@@ -109,9 +152,14 @@ export function runBalanceSimulation({ seed, ticks, restBelow = 0, populationSce
       overrides[actor.id] = { chosenAction: 'REST', innerMonologue: '压力测试：伤势较重，优先休整。' };
       report.supervisedRestOrders++;
     }
-    world = advanceWorldTick(world, rest ? overrides : undefined, undefined, 'utility', undefined,
-      { captureTrace: false, capturePresentation: false });
-    observe();
+    const before = world;
+    let completed: readonly WorldEvent[] = [];
+    world = advanceWorldTick(before, rest ? overrides : undefined, undefined, 'utility', undefined, {
+      captureTrace: false, capturePresentation: false,
+      ...(populationScenario === 'baseline' ? { suppressAutoClanConsent: new Set(before.cultivators.map(actor => actor.id)) } : {}),
+      onCompletedEvents: events => { completed = events; },
+    });
+    observe(before, completed);
   }
   if (report.extinctAtTick !== undefined) {
     report.violations.push({ tick: report.extinctAtTick, code: 'population_extinction' });

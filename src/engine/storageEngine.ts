@@ -7,6 +7,9 @@ import { validateHeavenlyAlchemyHistory } from './storageHeavenlyAlchemyValidati
 import { validateDaoPathHistory } from './storageDaoPathValidation';
 import { validateImmortalAuctionHistory } from './storageImmortalAuctionValidation';
 import { validateTianjiGazetteHistory } from './storageTianjiGazetteValidation';
+import { validateCultivationClanHistory } from './storageCultivationClanValidation';
+import { CLAN_BIRTH_EARNED_MONTHS, CLAN_CEREMONY_QI } from './cultivationClanTerms';
+import { CLAN_INNATE_TRAITS } from '../types/cultivationClan';
 import { TIANJI_GAZETTE_HISTORY, TIANJI_GAZETTE_KINDS } from './tianjiGazetteTerms';
 import { IMMORTAL_AUCTION_HISTORY, IMMORTAL_AUCTION_MAX_BID, IMMORTAL_AUCTION_MAX_BIDS } from './immortalAuctionTerms';
 import { IMMORTAL_AUCTION_PILLS } from '../types/immortalAuction';
@@ -291,7 +294,7 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE ROGUELIKE_ENCOUNTER AWAKEN_DESTINY FORBIDDEN_ART GRAND_SIEGE_HERO AUDIENCE_PLEDGE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL HEAVENLY_ALCHEMY DAO_PATH USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT SALVAGE_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER IMMORTAL_AUCTION RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE DOCTRINE_FOUNDING DOCTRINE_MATURITY RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT MARKET_FREIGHT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE WAYPOST_MEAL DISASTER_SHELTER CHRONICLE_ERRATA HABITAT INFIRMARY CARE_FOLLOWUP DANXIA_MEDICINE DANXIA_REVIEW FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER COURIER_HANDOFF SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP CRAFT_TRAINING WORKSHOP_ESTATE WORKSHOP_RELEASE SCRIBE_COMMISSION FURNACE_RESERVATION FURNACE_SAFETY DAMAGE_ASSURANCE SPARRING EXPEDITION_RESCUE EXPEDITION_DUNGEON SHORT_SHIFT BOUNDARY_RELIEF MENTOR_TRANSFER APPRENTICE_COHORT SEASONAL_HOUSING HOUSEHOLD_NAME CARAVAN_RESTITUTION VILLAGE_GRANARY VILLAGE_SUPPLY ROUTE_WARNING PAVILION_LOAN WORKSHOP_CAPACITY CIVIC_MEMORIAL VILLAGE_FAIR SECT_STIPEND SEED_CULTURE WATER_VEIN NORTH_MINING_CHARTER NORTH_WELL_REVIEW UPPER_PASSAGE UPPER_ARRAY_FIELD UPPER_ARRAY_FIELD_LOCAL UPPER_ARRAY_FIELD_TRADE NORTH_GATE_RENEWAL FRONTIER FRONTIER_PRODUCTION FRONTIER_TRADE FRONTIER_PORT FRONTIER_PORT_TRADE FRONTIER_DRYLAND FRONTIER_DRYLAND_TRADE TOOL_LOAN RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY ALIGNED_WEATHER SEASON_REVIEW REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE ROGUELIKE_ENCOUNTER AWAKEN_DESTINY FORBIDDEN_ART GRAND_SIEGE_HERO AUDIENCE_PLEDGE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL HEAVENLY_ALCHEMY DAO_PATH USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT SALVAGE_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE CULTIVATION_CLAN SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER IMMORTAL_AUCTION RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE DOCTRINE_FOUNDING DOCTRINE_MATURITY RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT MARKET_FREIGHT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE WAYPOST_MEAL DISASTER_SHELTER CHRONICLE_ERRATA HABITAT INFIRMARY CARE_FOLLOWUP DANXIA_MEDICINE DANXIA_REVIEW FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER COURIER_HANDOFF SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP CRAFT_TRAINING WORKSHOP_ESTATE WORKSHOP_RELEASE SCRIBE_COMMISSION FURNACE_RESERVATION FURNACE_SAFETY DAMAGE_ASSURANCE SPARRING EXPEDITION_RESCUE EXPEDITION_DUNGEON SHORT_SHIFT BOUNDARY_RELIEF MENTOR_TRANSFER APPRENTICE_COHORT SEASONAL_HOUSING HOUSEHOLD_NAME CARAVAN_RESTITUTION VILLAGE_GRANARY VILLAGE_SUPPLY ROUTE_WARNING PAVILION_LOAN WORKSHOP_CAPACITY CIVIC_MEMORIAL VILLAGE_FAIR SECT_STIPEND SEED_CULTURE WATER_VEIN NORTH_MINING_CHARTER NORTH_WELL_REVIEW UPPER_PASSAGE UPPER_ARRAY_FIELD UPPER_ARRAY_FIELD_LOCAL UPPER_ARRAY_FIELD_TRADE NORTH_GATE_RENEWAL FRONTIER FRONTIER_PRODUCTION FRONTIER_TRADE FRONTIER_PORT FRONTIER_PORT_TRADE FRONTIER_DRYLAND FRONTIER_DRYLAND_TRADE TOOL_LOAN RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY ALIGNED_WEATHER SEASON_REVIEW REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const waypostPoint=structure({x:num(0,1000),y:num(0,600)});
 const waypostVisit=structure({journeyId:id,organizerId:id,companionId:id,spentByEach:one(PILGRIMAGE_LEG_COST,2*PILGRIMAGE_LEG_COST),
@@ -615,7 +618,23 @@ const gazetteEntry:Validator=(value,path)=>{
 const tianjiGazette=structure({issues:arr(TIANJI_GAZETTE_HISTORY,structure({
   id,tick,year:tick,month,trigger:one('year_turn','battle','finale'),entries:arr(TIANJI_GAZETTE_KINDS.length,gazetteEntry),
 }))});
+const clanTrait=one(...CLAN_INNATE_TRAITS);
+const clanHeritage=structure({childId:id,clanId:id,roots:arr(2,spirit),innateTrait:clanTrait});
+const cultivationClans=structure({nextId:num(1,Number.MAX_SAFE_INTEGER,true),
+  unions:arr(SAVE_COLLECTION_LIMIT,structure({
+    id,clanId:id,ancestorClanIds:optional(arr(2,id)),parents:arr(2,id),siteId:id,proposedTick:tick,
+    status:one('proposed','accepted','bonded','refused','expired'),acceptedTick:otick,closedTick:otick,
+    ceremonyOffer:optional(structure({actorId:id,tick})),ceremony:optional(structure({actorId:id,tick,qiPaidEach:one(CLAN_CEREMONY_QI)})),
+    plan:optional(structure({offeredBy:id,offeredTick:tick,status:one('offered','declined','expecting','born','lost'),
+      acceptedBy:oid,acceptedTick:otick,earnedTicks:arr(CLAN_BIRTH_EARNED_MONTHS,tick),closedTick:otick,childId:oid})),
+  })),
+  children:arr(SAVE_COLLECTION_LIMIT,structure({
+    id,clanId:id,unionId:id,parentIds:arr(2,id),siteId:id,birthTick:tick,maturesAtTick:tick,name:id,
+    gender:one('woman','man'),parentRoots:arr(2,spirit),roots:arr(2,spirit),innateTrait:clanTrait,maturedTick:otick,
+  })),
+});
 const shape = structure({
+  cultivationClans:optional(cultivationClans),
   tianjiGazette:optional(tianjiGazette),
   immortalAuction:optional(immortalAuction),
   tournamentWagers:optional(tournamentWagers),
@@ -636,7 +655,7 @@ const shape = structure({
     monthlyEconomy:optional(structure({tick,taxes:wealth,mining:wealth,upkeep:wealth,net:num(-1_000_000_000,1_000_000_000)}))})),
   locations:arr(1200,structure({id,name:id,x:num(0,1000),y:num(0,600),type:one('sect_hq','spirit_vein','secret_realm','market','abyss'),spiritRoot:spirit,
     spiritQi:num(0,150),ownerSectId:oid,expeditionOmenId:oid,inheritanceScrolls:arr(350,technique),herbs,herbCapacity:herbs,furnaceGrade:one(0,1,2,3),description:text})),
-  cultivators:arr(SAVE_COLLECTION_LIMIT,structure({id,name:id,gender:fictionalGender,title:text,sectId:strings(240),sectRank,contribution:wealth,transgressions:percentage,disciplineRevision:otick,realm,realmStage:num(1,9,true),
+  cultivators:arr(SAVE_COLLECTION_LIMIT,structure({id,name:id,gender:fictionalGender,clanHeritage:optional(clanHeritage),title:text,sectId:strings(240),sectRank,contribution:wealth,transgressions:percentage,disciplineRevision:otick,realm,realmStage:num(1,9,true),
     publicAlchemy:optional(arr(1200,structure({siteId:id,firstTick:tick,lastTick:tick,successes:num(1,100_000_000,true),bestGrade:one(1,2,3)}))),
     heavenlyAlchemy:optional(heavenlyAlchemy),
     daoPath:optional(daoPath),
@@ -3841,6 +3860,7 @@ function verifyWorld(value: unknown): WorldState {
   validateImmortalAuctionHistory(w,fail);
   validateTournamentArenaHistory(w,fail);
   validateTianjiGazetteHistory(w,fail);
+  validateCultivationClanHistory(w,fail);
   validateExpeditionDungeonHistory(w,fail);
   validateEraHistory(w,fail);
   validateAuthoredEraHistory(w,fail);
@@ -3937,9 +3957,9 @@ function serializeWorldSave(world: WorldState): string {
   try {
     // A native turn may first attach either optional ledger after a hot-world clone.
     // Normalize that bounded extension order, leaving every pre-extension byte intact.
-    if (world.eraHeritage !== undefined || world.mortalAgeTrackingSinceTick !== undefined || world.coldWaterVein !== undefined || world.northMiningCharters !== undefined || world.northWellRevisitLaw !== undefined || world.northWellRevisitReviews !== undefined || world.upperPassage !== undefined || world.northGateRenewal !== undefined || world.frontier !== undefined || world.upperArrayField !== undefined || world.scribeCommissions !== undefined || world.waypostMeals !== undefined || world.craftTraining !== undefined || world.disasterShelter !== undefined || world.roguelikeEncounters !== undefined || world.forbiddenDuels !== undefined || world.dramaticBonds !== undefined || world.builtinScenarioOrigin !== undefined || world.tournamentWagers !== undefined || world.immortalAuction !== undefined || world.tianjiGazette !== undefined) {
-      const {eraHeritage,mortalAgeTrackingSinceTick,coldWaterVein,northMiningCharters,northWellRevisitLaw,northWellRevisitReviews,upperPassage,northGateRenewal,frontier,upperArrayField,scribeCommissions,waypostMeals,craftTraining,disasterShelter,roguelikeEncounters,forbiddenDuels,dramaticBonds,builtinScenarioOrigin,tournamentWagers,immortalAuction,tianjiGazette,...legacy}=world;
-      return JSON.stringify({format:FORMAT,version:VERSION,world:{...legacy,eraHeritage,mortalAgeTrackingSinceTick,coldWaterVein,northMiningCharters,northWellRevisitLaw,northWellRevisitReviews,upperPassage,northGateRenewal,frontier,upperArrayField,scribeCommissions,waypostMeals,craftTraining,disasterShelter,roguelikeEncounters,forbiddenDuels,dramaticBonds,builtinScenarioOrigin,tournamentWagers,immortalAuction,tianjiGazette}});
+    if (world.eraHeritage !== undefined || world.mortalAgeTrackingSinceTick !== undefined || world.coldWaterVein !== undefined || world.northMiningCharters !== undefined || world.northWellRevisitLaw !== undefined || world.northWellRevisitReviews !== undefined || world.upperPassage !== undefined || world.northGateRenewal !== undefined || world.frontier !== undefined || world.upperArrayField !== undefined || world.scribeCommissions !== undefined || world.waypostMeals !== undefined || world.craftTraining !== undefined || world.disasterShelter !== undefined || world.roguelikeEncounters !== undefined || world.forbiddenDuels !== undefined || world.dramaticBonds !== undefined || world.builtinScenarioOrigin !== undefined || world.tournamentWagers !== undefined || world.immortalAuction !== undefined || world.tianjiGazette !== undefined || world.cultivationClans !== undefined) {
+      const {eraHeritage,mortalAgeTrackingSinceTick,coldWaterVein,northMiningCharters,northWellRevisitLaw,northWellRevisitReviews,upperPassage,northGateRenewal,frontier,upperArrayField,scribeCommissions,waypostMeals,craftTraining,disasterShelter,roguelikeEncounters,forbiddenDuels,dramaticBonds,builtinScenarioOrigin,tournamentWagers,immortalAuction,tianjiGazette,cultivationClans,...legacy}=world;
+      return JSON.stringify({format:FORMAT,version:VERSION,world:{...legacy,eraHeritage,mortalAgeTrackingSinceTick,coldWaterVein,northMiningCharters,northWellRevisitLaw,northWellRevisitReviews,upperPassage,northGateRenewal,frontier,upperArrayField,scribeCommissions,waypostMeals,craftTraining,disasterShelter,roguelikeEncounters,forbiddenDuels,dramaticBonds,builtinScenarioOrigin,tournamentWagers,immortalAuction,tianjiGazette,cultivationClans}});
     }
     return JSON.stringify({ format: FORMAT, version: VERSION, world });
   } catch { throw new WorldSaveError('json', '当前世界不能序列化为 JSON。'); }
