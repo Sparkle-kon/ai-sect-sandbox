@@ -1,5 +1,6 @@
 import { deriveChapterOpening } from './chapterContinuity';
 import { deriveChapterEndHook } from './chapterEndHooks';
+import { writeMundaneLifeProse } from './mundaneLifeProse';
 import { compactColdHistory } from './coldHistoryEngine';
 import { isChronicleStoryFact, projectChronicleLead } from './chronicleLead';
 import type { ChronicleLead } from './chronicleLead';
@@ -208,7 +209,7 @@ export function projectChronicleReading(chapter: ChronicleChapter, lead?: Chroni
   const scenes=readScenes(anchors,publicAttributionOnly);
   // Manuscript prose and raw attributed dialogue never supply a paced paragraph, even for legacy chapters.
   const sourced=anchors.filter(anchor=>Boolean(publicChronicleExcerpt(anchor.description).trim()||publicChronicleExcerpt(anchor.title).trim()))
-    .map(anchor=>({anchor,section:writePublicChronicleScene(anchor)}));
+    .map(anchor=>({anchor,section:writePublicChronicleScene(anchor),quietParagraph:writeMundaneLifeProse(anchor)}));
   const chapterScope = { ...chapter, anchors };
   const opening = world && anchors.length ? deriveChapterOpening(world, chapterScope, deriveChapterEndHook) : undefined;
   const closing = world && anchors.length ? deriveChapterEndHook(world, chapterScope) : undefined;

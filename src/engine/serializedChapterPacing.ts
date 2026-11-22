@@ -11,6 +11,7 @@ export interface ChronicleReadingBeat {
 export interface PacedChronicleScene {
   readonly anchor:ChronicleAnchor;
   readonly section:{readonly title:string;readonly paragraph:string};
+  readonly quietParagraph?:string;
 }
 
 const CONTEXT_PERCENT=70;
@@ -41,12 +42,24 @@ function focalCopy(value:string,budget:number):string {
   return codepoints(firstAndLast)<=budget?firstAndLast:last;
 }
 const seasons=['春','夏','秋','冬'] as const;
+function calendarMonth(anchor:ChronicleAnchor):number|undefined {
+  const {year,month}=anchor;
+  return Number.isSafeInteger(year)&&year>=1&&year<1_000_000&&Number.isSafeInteger(month)&&month>=1&&month<=12
+    ? year*12+month-1 : undefined;
+}
+function changedSeason(previous:ChronicleAnchor,current:ChronicleAnchor,paragraph:string):string {
+  const before=calendarMonth(previous),now=calendarMonth(current);
+  if(before===undefined||now===undefined||now<=before||now-before!==current.tick-previous.tick)return '';
+  const oldSeason=seasons[Math.floor((previous.month-1)/3)],season=seasons[Math.floor((current.month-1)/3)];
+  if(oldSeason===season||!recordedSeason(current,paragraph))return '';
+  return `时序入${season}。`;
+}
 function recordedSeason(anchor:ChronicleAnchor,firstParagraph:string):string {
   // Uses only the published source month (same season cycle as the world, not today's weather).
   const index=Number.isSafeInteger(anchor.month)&&anchor.month>=1&&anchor.month<=12?Math.floor((anchor.month-1)/3):-1;
   if(index<0)return '';
   const season=seasons[index];
-  const alreadyNamed=new RegExp(`^(?:那年|是年|当年|这年|时在|时值|时逢)?(?:初|暮|深|仲|孟|季)?${season}(?:天|日|月|间|季|初|末|已)`,'u');
+  const alreadyNamed=new RegExp(`^(?:(?:开|入|初|暮|深|仲|孟|季)${season}(?:[，。]|$)|(?:那年|是年|当年|这年|时在|时值|时逢)?(?:初|暮|深|仲|孟|季)?${season}(?:天|日|月|间|季|初|末|已))`,'u');
   return alreadyNamed.test(firstParagraph)?'':`时在${season}月。`;
 }
 function leadBacks(anchor:ChronicleAnchor,lead:ChronicleLead|undefined):boolean {
@@ -56,8 +69,8 @@ function leadBacks(anchor:ChronicleAnchor,lead:ChronicleLead|undefined):boolean 
 
 /** Editorial presentation only. Sources are already scoped; this never writes new facts or stored chapter fields. */
 export function buildSerializedChapterPacing(scenes:readonly PacedChronicleScene[],lead?:ChronicleLead):ChronicleReadingBeat[]{
-  const ordered=scenes.map(({anchor,section},original)=>({
-    anchor,section,original,quiet:contextCopy(section.paragraph||section.title),score:chapterFocalScore(anchor),
+  const ordered=scenes.map(({anchor,section,quietParagraph},original)=>({
+    anchor,section,original,quiet:contextCopy(quietParagraph||section.paragraph||section.title),score:chapterFocalScore(anchor),
   })).filter(row=>!!row.quiet).sort((a,b)=>a.anchor.tick-b.anchor.tick||a.original-b.original);
   if(!ordered.length)return [];
   const ranked=ordered.filter(row=>row.score>0).sort((a,b)=>b.score-a.score||
@@ -97,7 +110,8 @@ export function buildSerializedChapterPacing(scenes:readonly PacedChronicleScene
       beat={kind,paragraphs:[],eventIds:[]};
       beats.push(beat);
     }
-    const next=kind==='opening'&&index===0?opening+row.quiet:row.quiet;
+    const season=index===0?(kind==='opening'?opening:''):changedSeason(ordered[index-1].anchor,row.anchor,row.quiet);
+    const next=season+row.quiet;
     const previous=beat.paragraphs.at(-1);
     if(previous&&codepoints(previous+next)<=CONTEXT_PARAGRAPH_TARGET)beat.paragraphs[beat.paragraphs.length-1]=previous+next;
     else beat.paragraphs.push(next);
