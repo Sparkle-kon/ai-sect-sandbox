@@ -1,3 +1,5 @@
+import {HighDramaPresetPicker} from './components/HighDramaPresetPicker';
+import {useHighDramaOpening} from './components/useHighDramaOpening';
 import {useRingAudienceControls} from './components/useRingAudienceControls';
 import {useDramaticBondRead} from './components/useDramaticBondRead';
 import {GrandSiegeMapScene} from './components/GrandSiegeMapScene';
@@ -8,7 +10,7 @@ import { activeAvatar, canQueueAvatarSalvage, queueAvatarWaypostMeal } from './e
 import { StoryFirstHome } from './components/StoryFirstHome';
 import {useFeaturedStoryDecision} from './components/useFeaturedStoryDecision';
 import { PlayerStoryEntry } from './components/PlayerStoryEntry';
-import { enterStoryLead, orderStoryAvatar, projectStoryPlayerRole, storyOrderOutcome } from './components/storyPlayerController';
+import { enterStoryLead, enterStoryOpening, orderStoryAvatar, projectStoryPlayerRole, storyOrderOutcome } from './components/storyPlayerController';
 import { CockpitModeSwitch, PanoramicCockpitView } from './components/PanoramicCockpitView';
 import { projectStoryHomepage } from './engine/storyHomepage';
 import {ChronicleArchiveHub} from './components/hubs/ChronicleArchiveHub';
@@ -153,6 +155,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   });
 
   const getAudience=useRingAudienceControls(simulation);
+  const dramaticOpening=useHighDramaOpening(simulation,id=>{setSelectedCultivatorId(id);setStoryEntryOpen(false);});
 
   const {
     world,visibleWorld,authority,timeline,history,saveTimelineId,saveContextVersion,restoredReadingOrigin,
@@ -593,8 +596,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   };
   const enterCurrentLead=()=>{
     const lead=storyHome?.lead;
-    if(!storyEntryCurrent()||!lead)return false;
-    return updateWorld((current)=>enterStoryLead(current,lead))!==world;
+    return storyEntryCurrent()&&updateWorld(current=>lead?enterStoryLead(current,lead):enterStoryOpening(current))!==world;
   };
   const orderCurrentStoryAvatar=(action:'REST'|'CULTIVATE')=>{
     if(!storyEntryCurrent())return false;
@@ -682,9 +684,10 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
     <div className="mx-auto flex max-w-[76rem] justify-end px-4 empty:hidden">{cockpitSwitch}</div>
     {featuredStoryCard??(storyEntryOpen?<PlayerStoryEntry titleRef={storyEntryHeading} role={projectStoryPlayerRole(world,storyHome.lead)}
       revision={world} busy={isStepping||fastForwardLocked} onBack={()=>setStoryEntryOpen(false)} onTools={openDashboard}
+      openings={<HighDramaPresetPicker scopeKey={viewScopeKey} revision={world} disabled={dramaticOpening.disabled} onStart={dramaticOpening.start}/>}
       onFollow={storyHome.lead?followCurrentLead:undefined} onEnter={enterCurrentLead} onOrder={orderCurrentStoryAvatar} />:
       <StoryFirstHome scene={storyHome.scene} subplot={bonds.subplot} leadName={storyHome.lead?.name} playerName={activeAvatar(world)?.name}
-        busy={isStepping} moreRef={storyMoreRef} notice={storyNotice} calendar={storyHome.calendar}
+        busy={isStepping} moreRef={storyMoreRef} notice={storyNotice} calendar={storyHome.calendar} opening={dramaticOpening.opening}
         outcome={storyOutcome?.world===world?storyOutcome.text:undefined} onContinue={advanceStory} onMore={openStoryEntry} />)}
   </main>;
 

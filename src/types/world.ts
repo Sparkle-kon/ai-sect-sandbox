@@ -1954,6 +1954,14 @@ export interface EscortState {
   reports: EscortReport[];
 }
 
+export type BuiltinScenarioPresetId = 'storm-at-blood-moon' | 'tournament-eve' | 'cold-jade-disciple';
+/** Stable genesis established only after the chosen built-in native opening is proven. */
+export interface BuiltinScenarioOrigin {
+  readonly version: 1;
+  readonly id: BuiltinScenarioPresetId;
+  readonly openedTick: number;
+}
+
 export interface ScenarioOrigin {
   version: 1 | 2 | 3;
   ruleset: 1;
@@ -3640,6 +3648,7 @@ export interface WorldState {
   research: ResearchState;
   ceasefires: CeasefireState;
   annotations: AnnotationState;
+  builtinScenarioOrigin?: BuiltinScenarioOrigin;
   scenarioOrigin?: ScenarioOrigin;
   scenarioAudit?: ScenarioAudit;
   escorts: EscortState;

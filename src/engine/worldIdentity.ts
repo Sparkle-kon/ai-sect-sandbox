@@ -20,11 +20,14 @@ function sameAuthoredOrigin(a:WorldState['authoredEraOrigin'],b:WorldState['auth
     });
 }
 
-/** Seed, birth rules, and an optional portable scenario distinguish independent ancestries. */
+/** Natural, portable and built-in scenario origins all distinguish independent ancestries. */
 export function sameGeneratedWorld(a: WorldState, b: WorldState): boolean {
   return a.random.seed === b.random.seed &&
     (a.worldgen?.profileId ?? 'classic') === (b.worldgen?.profileId ?? 'classic') &&
     (a.worldgen?.algorithm ?? 1) === (b.worldgen?.algorithm ?? 1) &&
+    a.builtinScenarioOrigin?.id === b.builtinScenarioOrigin?.id &&
+    a.builtinScenarioOrigin?.version === b.builtinScenarioOrigin?.version &&
+    a.builtinScenarioOrigin?.openedTick === b.builtinScenarioOrigin?.openedTick &&
     a.scenarioOrigin?.id === b.scenarioOrigin?.id &&
     a.scenarioOrigin?.version === b.scenarioOrigin?.version &&
     a.scenarioOrigin?.ruleset === b.scenarioOrigin?.ruleset &&

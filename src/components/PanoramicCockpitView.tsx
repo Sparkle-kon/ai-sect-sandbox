@@ -1,3 +1,4 @@
+import {highDramaPreset} from '../engine/highDramaPresetTerms';
 import type {PublicBondArc} from './DramaticBondRead';
 import {useSyncExternalStore,type ReactNode,type Ref} from 'react';
 import type {WorldState} from '../types/world';
@@ -37,10 +38,14 @@ interface PanoramicCockpitViewProps extends Omit<PanoramicCockpitProps,'timeCont
 }
 
 export function PanoramicCockpitView({world,titleRef,time,exit,statusStrip,stageOverride,subplot,...slots}:PanoramicCockpitViewProps){
+  const opening=highDramaPreset(world.builtinScenarioOrigin?.id);
   return <main data-panoramic-cockpit data-cockpit-tick={world.tick}
     className="min-h-dvh bg-slate-950 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
     <header className="mx-auto flex max-w-[192rem] items-center justify-between gap-3 px-4 py-2 text-amber-100">
-      <h1 ref={titleRef} tabIndex={-1} className="font-serif text-lg font-semibold tracking-widest">天道沙盒</h1>
+      <div className="min-w-0">
+        <h1 ref={titleRef} tabIndex={-1} className="font-serif text-lg font-semibold tracking-widest">天道沙盒</h1>
+        {opening&&<p className="break-words text-xs text-amber-100/80">{opening.title}</p>}
+      </div>
       {exit}
     </header>
     {statusStrip&&<div className="mx-auto mb-2 w-full max-w-[192rem] px-2.5 sm:px-4">{statusStrip}</div>}

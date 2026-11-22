@@ -19,11 +19,12 @@ interface StoryFirstHomeProps {
   outcome?: string;
   calendar?: {year:number;month:number};
   moreRef?: Ref<HTMLButtonElement>;
+  opening?:{title:string;intent?:string};
   onContinue: () => void;
   onMore: () => void;
 }
 
-export function StoryFirstHome({ scene, subplot, leadName, playerName, busy = false, notice, outcome, calendar, moreRef, onContinue, onMore }: StoryFirstHomeProps) {
+export function StoryFirstHome({ scene, subplot, leadName, playerName, busy = false, notice, outcome, calendar, moreRef, opening, onContinue, onMore }: StoryFirstHomeProps) {
   const nextDescription = useId();
   const leadHeading=useId();
   return (
@@ -38,6 +39,10 @@ export function StoryFirstHome({ scene, subplot, leadName, playerName, busy = fa
           走进故事
         </button>
       </header>
+      {opening&&<div className="mt-3 border-l border-amber-400/55 pl-3 text-sm [overflow-wrap:anywhere]">
+        <p className="font-semibold text-amber-100">{opening.title}</p>
+        {opening.intent&&<p className="text-slate-300">{opening.intent}</p>}
+      </div>}
       <div aria-live="polite" aria-atomic="true" className="mt-4 space-y-4">
         <section aria-labelledby={leadHeading} className="min-w-0 [overflow-wrap:anywhere]">
           <h2 id={leadHeading} className="font-serif text-2xl font-semibold leading-tight text-amber-100">

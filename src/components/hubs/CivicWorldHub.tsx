@@ -201,7 +201,7 @@ export function CivicWorldHub({
             </select>
             <p id="one-hand-control-help" className="sr-only">仅将窄屏的推演、返回和地图工具移到同一侧。本机保存；不改变人物、分支或键盘顺序。</p>
             <button type="button" disabled={isStepping} onClick={handleReset} className={`${action} bg-slate-800 text-slate-200 hover:bg-slate-700`}>
-              <RotateCcw aria-hidden="true" className="h-4 w-4" />重置修仙纪元</button>
+              <RotateCcw aria-hidden="true" className="h-4 w-4" />{world.builtinScenarioOrigin?'退出剧本，重置为普通创世':'重置修仙纪元'}</button>
           </div>
           <React.Suspense fallback={null}><RegionalSimulationPanel {...regionalControls}/></React.Suspense>
           <React.Suspense fallback={<p role="status">载入存档管理…</p>}>

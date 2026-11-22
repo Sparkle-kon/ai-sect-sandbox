@@ -5,7 +5,7 @@ import {activeAvatar,availableAvatarHosts,AVATAR_ORDER_COST,AVATAR_POSSESSION_CO
 
 export type StoryPlayerRole =
   | {kind:'ensemble'}
-  | {kind:'observer';name:string;canEnter:boolean;unavailable?:string}
+  | {kind:'observer';name:string;opening?:true;canEnter:boolean;unavailable?:string}
   | {kind:'playing';name:string;isLead:boolean;queued?:AvatarOrder|'other';canOrder:boolean;unavailable?:string};
 
 type EarnedLead={id:string;name:string};
@@ -17,6 +17,18 @@ function mayEnter(world:WorldState,actorId:string):boolean {
     availableAvatarHosts(world).some(({id})=>id===actorId));
 }
 
+/** Optional native starting viewpoint, not an earned protagonist or a possession. */
+export function storyOpeningActor(world:WorldState):EarnedLead|undefined{
+  const origin=world.builtinScenarioOrigin;
+  if(origin?.id!=='cold-jade-disciple'||world.tick!==origin.openedTick)return undefined;
+  const matches=world.settlements.records.filter(row=>row.kind==='recruitment'&&row.tick===world.tick&&
+    row.settlementId==='village-loc-vein-north'&&row.people===1&&row.cultivatorId==='recruit-'+row.volunteerId);
+  if(matches.length!==1)return undefined;
+  const actors=world.cultivators.filter(actor=>actor.alive&&actor.hp>0&&actor.id===matches[0].cultivatorId&&
+    actor.locationId==='loc-vein-north'&&actor.positionPlane===undefined);
+  return actors.length===1?{id:actors[0].id,name:actors[0].name}:undefined;
+}
+
 export function projectStoryPlayerRole(world:WorldState,lead?:EarnedLead):StoryPlayerRole {
   const avatar=activeAvatar(world),state=world.playerAvatar;
   if(avatar){
@@ -26,9 +38,10 @@ export function projectStoryPlayerRole(world:WorldState,lead?:EarnedLead):StoryP
     return {kind:'playing',name:avatar.name,isLead:avatar.id===lead?.id,canOrder,
       ...(queued?{queued}:{}),...(!canOrder&&!queued?{unavailable:state.essence<AVATAR_ORDER_COST?'神识不足，暂时不能下令。':'这次入世将结束，赶不上安排下个月。'}:{})};
   }
-  if(!lead)return {kind:'ensemble'};
-  const canEnter=mayEnter(world,lead.id);
-  return {kind:'observer',name:lead.name,canEnter,...(!canEnter?{unavailable:
+  const candidate=lead??storyOpeningActor(world);
+  if(!candidate)return {kind:'ensemble'};
+  const canEnter=mayEnter(world,candidate.id);
+  return {kind:'observer',name:candidate.name,...(!lead?{opening:true as const}:{}),canEnter,...(!canEnter?{unavailable:
     state.essence<AVATAR_POSSESSION_COST+AVATAR_ORDER_COST?'神识不足，暂时只能看他的见闻。':
     '此刻无法入世，可以先看这位人物亲历的事。'}:{})};
 }
@@ -40,6 +53,13 @@ export function enterStoryLead(world:WorldState,lead:EarnedLead):WorldState {
       !mayEnter(world,lead.id))return world;
   const next=structuredClone(world);
   return possessAvatar(next,lead.id)?next:world;
+}
+
+export function enterStoryOpening(world:WorldState):WorldState {
+  const opening=storyOpeningActor(world);
+  if(!opening||!mayEnter(world,opening.id))return world;
+  const next=structuredClone(world);
+  return possessAvatar(next,opening.id)?next:world;
 }
 
 export function orderStoryAvatar(world:WorldState,action:AvatarOrder):WorldState {
