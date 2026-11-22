@@ -1,3 +1,5 @@
+import {DungeonExpeditionRead,type DungeonExpeditionControls} from './DungeonExpeditionRead';
+import {projectExpeditionDungeon} from '../engine/expeditionDungeonEngine';
 import {TournamentArenaRead,type TournamentArenaControls} from './TournamentArenaRead';
 import {projectTournamentArena} from '../engine/tournamentArenaEngine';
 import type { Cultivator, WorldState } from '../types/world';
@@ -37,7 +39,7 @@ function OmenReceipts({ rows }: { rows: readonly ExpeditionOmenView[] }) {
 }
 
 
-export function WorldOccasionsPanel({ world, cultivator, arenaControls }: { world: WorldState; cultivator: Cultivator; arenaControls?:TournamentArenaControls }) {
+export function WorldOccasionsPanel({ world, cultivator, arenaControls, dungeonControls }: { world: WorldState; cultivator: Cultivator; arenaControls?:TournamentArenaControls; dungeonControls?:DungeonExpeditionControls }) {
   const names = new Map(world.cultivators.map(({ id, name }) => [id, name]));
   const places = new Map(world.locations.map(({ id, name }) => [id, name]));
   const named = (id: string) => names.get(id) ?? '修士未详';
@@ -59,6 +61,7 @@ export function WorldOccasionsPanel({ world, cultivator, arenaControls }: { worl
               const arena=occasion.kind==='tournament'?projectTournamentArena(world,occasion.id):undefined;
               if(arena)return <li key={occasion.id}><TournamentArenaRead arena={arena} named={named}
                 siteName={places.get(arena.siteId)} championName={occasion.championId?named(occasion.championId):undefined} controls={arenaControls}/></li>;
+              const dungeon=viewer&&occasion.kind==='expedition'?projectExpeditionDungeon(world,viewer,occasion.id):undefined;
               const linkedOmen = occasion.omenId !== undefined;
               const expeditionResults = linkedOmen
                 ? occasion.expeditions.filter(({ cultivatorId }) => cultivatorId === viewer?.id)
@@ -91,7 +94,8 @@ export function WorldOccasionsPanel({ world, cultivator, arenaControls }: { worl
                     ))}
                   </ol>
                 )}
-                {expeditionResults.length > 0 && (
+                {dungeon&&viewer&&<DungeonExpeditionRead view={dungeon} viewerId={viewer.id} tick={world.tick} named={named} controls={dungeonControls}/>}
+                {!dungeon&&expeditionResults.length > 0 && (
                   <ul className="max-h-40 overflow-y-auto space-y-1" aria-label="秘境远征结果">
                     {expeditionResults.map((result, index) => (
                       <li key={`${result.cultivatorId}-${result.tick}-${index}`}>

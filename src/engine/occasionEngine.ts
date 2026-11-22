@@ -1,3 +1,4 @@
+import {closeExpeditionDungeon,dungeonEnrollmentHeld,reconcileExpeditionDungeon} from './expeditionDungeonEngine';
 import {finishTournamentArena,openTournamentArena,recordTournamentArenaRound,tournamentArenaRoster} from './tournamentArenaEngine';
 import {settleTournamentWagers} from './tournamentWagerSettlement';
 import type {TournamentArenaBout} from '../types/tournamentArena';
@@ -27,7 +28,8 @@ const cap = (n: number, min: number, max: number) => Math.min(max, Math.max(min,
 
 export function activeOccasionForActor(world: WorldState, actor: Cultivator): WorldOccasion | undefined {
   return world.occasions.find((occasion) => active(occasion) && occasion.participantIds.includes(actor.id) &&
-    (occasion.kind !== 'expedition' || !rescuedMemberOutOfOccasion(world, occasion.id, actor.id)));
+    (occasion.kind !== 'expedition' || !rescuedMemberOutOfOccasion(world, occasion.id, actor.id)&&
+      !occasion.dungeon?.members.some(row=>row.actorId===actor.id&&row.leftTick!==undefined)));
 }
 
 export function availableOccasionJoins(actor: Cultivator, world: WorldState, executionTick=world.tick): Array<{ action: 'JOIN_OCCASION'; targetOccasionId: string }> {
@@ -129,7 +131,13 @@ export function advanceOccasions(world: WorldState, rng: () => number): WorldEve
   // Actual route progression precedes the ordinary gate roll and any removal of its origin.
   const results: WorldEvent[] = advanceExpeditionRescues(world);
   const close = (occasion: WorldOccasion, cancelled = false, allAbsent = false) => {
-    if (occasion.kind === 'expedition') results.push(...expireOccasionRescues(world, occasion.id));
+    if (occasion.kind === 'expedition') {
+      results.push(...expireOccasionRescues(world, occasion.id));
+      if(cancelled){
+        const collapse=closeExpeditionDungeon(world,occasion);
+        if(collapse)results.push(collapse);
+      }
+    }
     const terminal=finish(world, occasion, cancelled);
     results.push(terminal);
     if(cancelled&&occasion.arena){
@@ -168,6 +176,7 @@ export function advanceOccasions(world: WorldState, rng: () => number): WorldEve
       results.push(commenced);
       continue;
     }
+    if(occasion.dungeon)reconcileExpeditionDungeon(world,occasion);
     const roster = occasion.arena?tournamentArenaRoster(world,occasion):playerList(world, occasion.remainingIds);
     if (occasion.kind === 'tournament') {
       occasion.round++;
@@ -224,7 +233,8 @@ export function advanceOccasions(world: WorldState, rng: () => number): WorldEve
       continue;
     }
     const stillInside = roster.filter(({ id }) => !rescuedMemberOutOfOccasion(world, occasion.id, id));
-    const explorer = stillInside.find(({ id }) => !rescueHoldsExpeditionRoll(world, occasion.id, id));
+    const explorer = stillInside.find(actor => !rescueHoldsExpeditionRoll(world, occasion.id, actor.id)&&
+      !dungeonEnrollmentHeld(world,occasion,actor)&&!occasion.dungeon?.members.some(row=>row.actorId===actor.id&&row.leftTick===undefined));
     occasion.remainingIds = stillInside.filter(({ id }) => id !== explorer?.id).map(({ id }) => id);
     if (!explorer) {
       if (!occasion.remainingIds.length && !hasOpenExpeditionRescue(world, occasion.id)) close(occasion);

@@ -1,3 +1,4 @@
+import {resolveGuidedDungeonTurn,type GuidedDungeonTurn} from './guidedDungeonTurn';
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {createInitialWorld} from '../data/initialWorld';
 import {useFastForwardCampaign} from '../components/useFastForwardCampaign';
@@ -129,12 +130,14 @@ export function useWorldSimulationController({
     setLlmConfig(config);
   };
 
-  const handleStepTick = useCallback(async () => {
+  const handleStepTick = useCallback(async (guide?:GuidedDungeonTurn) => {
     if (fastForwardRun.current || campaignGuard.current || !tryBeginInteraction()) return;
     let modelAbort: AbortController | undefined;
     try {
       const starting = authority.current;
       const branchId = history.current.activeBranchId;
+      const directed=guide&&resolveGuidedDungeonTurn(guide,starting,branchId,saveContextVersion.current);
+      if(guide&&!directed)return;
       if (llmConfig.enabled && llmConfig.apiKey.trim()) {
         const controller = new AbortController();
         modelAbort = controller;
@@ -148,7 +151,7 @@ export function useWorldSimulationController({
         const fairness = fairTurns.current.get(branchId)?.state ?? createFairModelTurnState();
         const admission = () => llmScheduler.decisionAdmission(requestedTick, endpoint);
         const turn = await runModelDecisionTurn({
-          state: fairness, eligible: modelDecisionCandidates(starting), signal: controller.signal,
+          state: fairness, eligible: modelDecisionCandidates(starting).filter(actor=>actor.id!==directed?.actorId), signal: controller.signal,
           admission: admission(), currentAdmission: admission,
           request: (actor, signal, onStart) => requestCultivatorLLMDecision(actor, starting, llmConfig, requestedTick, { signal, onStart }),
         });
@@ -159,6 +162,7 @@ export function useWorldSimulationController({
           return;
         }
         const decisions = Object.fromEntries(turn.orders);
+        if(directed)decisions[directed.actorId]=directed.decision;
         const applied = new Set<string>();
         const tape = createDecisionReplayTape(starting, 'deferred');
         let canonicalWatchBatch: readonly WorldEvent[] = [];
@@ -210,7 +214,7 @@ export function useWorldSimulationController({
         }
       } else {
         const tape = createDecisionReplayTape(starting, 'utility');
-        const next = updateWorld((prev) => advanceWorldTick(prev, undefined, undefined, 'utility', undefined, { tape }));
+        const next = updateWorld((prev) => advanceWorldTick(prev,directed?{[directed.actorId]:directed.decision}:undefined,undefined,'utility',undefined,{ tape }));
         retainReplay(branchId, tape, next);
       }
     } finally {

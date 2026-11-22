@@ -83,6 +83,8 @@ export default defineConfig({
           // Private theatre selection and its save proof are shared by UI, native and storage.
           'heart-demon-rules': ['./src/engine/heartDemonEngine.ts', './src/engine/interruptedStoryChoices.ts',
             './src/engine/storageHeartDemonValidation.ts', './src/types/heartDemon.ts', './src/engine/tribulationTerms.ts'],
+          'expedition-rooms-live': ['./src/engine/expeditionDungeonEngine.ts','./src/engine/siegeParticipants.ts'],
+          'expedition-rooms-proof': ['./src/types/expeditionDungeon.ts','./src/engine/storageExpeditionDungeonValidation.ts'],
           'tournament-state-rules': ['./src/engine/tournamentArenaEngine.ts','./src/engine/tournamentWagerSettlement.ts','./src/engine/tournamentWagerTerms.ts'],
           'tournament-proof': ['./src/engine/storageTournamentArenaValidation.ts'],
           'hall-public-proof': ['./src/engine/alchemyCatalog.ts','./src/engine/storagePublicAlchemyValidation.ts'],

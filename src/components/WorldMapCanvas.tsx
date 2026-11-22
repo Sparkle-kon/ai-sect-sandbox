@@ -1,3 +1,4 @@
+import {drawDungeonMapMark,DUNGEON_MAP_LABELS,expeditionDungeonMapMark} from './expeditionDungeonMapMark';
 import {drawTournamentArenaMark,tournamentArenaMapMarks} from './tournamentArenaMapMark';
 import {REGIONAL_SIMULATION_VERSION,regionForPoint,SIMULATION_REGION_NAMES} from '../engine/regionalSimulationEngine';
 import {projectWaterVein} from '../engine/waterVeinEngine';
@@ -305,6 +306,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   }, [world, selected]);
   const { seenLocations, isCurrentLocation } = mapView;
   const arenaMarks=useMemo(()=>tournamentArenaMapMarks(world,isCurrentLocation),[world,isCurrentLocation]);
+  const dungeonMark=useMemo(()=>expeditionDungeonMapMark(world,selected,isCurrentLocation),[world,selected,isCurrentLocation]);
   // Turning off terrain fog does not create a civic observation.
   const civicObservation = useMemo(() => selected && villageEvolutionLocalSettlement(world, selected), [world, selected]);
   const villageMapLabels = useMemo(() => projectVillageMapLabels(world, selected), [world, selected]);
@@ -707,6 +709,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
 
         const arenaRound=arenaMarks.get(loc.id);
         if(arenaRound!==undefined)drawTournamentArenaMark(ctx,loc.x,loc.y,arenaRound);
+        if(dungeonMark?.siteId===loc.id)drawDungeonMapMark(ctx,loc.x,loc.y,dungeonMark.room);
 
         if (besiegedLocationIds.has(loc.id)) {
           ctx.strokeStyle = '#fb7185';
@@ -1065,7 +1068,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener?.('change',stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, atlasDrawing, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, observedSalvageSites, localGranary, villageMapLabels, civicObservation, usedVillageSegments, furnaceShift, localPavilionDesk, localMemorial, localVillageFair, localStipend, localSeedCulture, localToolLoans, localAlignedWeather, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope, scenicRelief, qiFlow, inspectionEnabled, letters, travel, flightAlignments, combatVfx, actorBadgeFacts, hasBadgeQuote, domes, strategic, arenaMarks]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, atlasDrawing, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, observedSalvageSites, localGranary, villageMapLabels, civicObservation, usedVillageSegments, furnaceShift, localPavilionDesk, localMemorial, localVillageFair, localStipend, localSeedCulture, localToolLoans, localAlignedWeather, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope, scenicRelief, qiFlow, inspectionEnabled, letters, travel, flightAlignments, combatVfx, actorBadgeFacts, hasBadgeQuote, domes, strategic, arenaMarks, dungeonMark]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1664,6 +1667,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                 {tile && <span className="text-slate-400">· {tile.biome} · 地格灵气 {tile.spiritQi} · {world.sects.find(({ id }) => id === tile.ownerSectId)?.name ?? '无所属宗门'}</span>}
                 {fog && (visibleActorsAtSite.get(location.id) ?? 0) > 0 &&
                   <span className="text-slate-300">· 可见修士 {visibleActorsAtSite.get(location.id)} 位（山河索引可查）</span>}
+                {dungeonMark?.siteId===location.id&&<span className="text-cyan-200">· 本人秘境层：{DUNGEON_MAP_LABELS[dungeonMark.room]}</span>}
                 {arenaMarks.has(location.id)&&<span className="text-amber-200">· 演武擂台（已过 {arenaMarks.get(location.id)} 轮）</span>}
                 {location.furnaceGrade > 0 && <span className="text-emerald-300">· {location.furnaceGrade} 阶丹炉</span>}
                 {location.id===ownWorkshopCapacity?.siteId && isCurrentLocation(location.id) &&

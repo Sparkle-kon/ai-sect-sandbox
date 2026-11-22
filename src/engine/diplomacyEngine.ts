@@ -1,3 +1,5 @@
+import {activeSiegeForActor,isActiveSiege as active} from './siegeParticipants';
+export {activeSiegeForActor} from './siegeParticipants';
 import { finishGrandSiegeTheatre } from './grandSiegeProof';
 import type { GrandSiegeHeroResult, GrandSiegeRound } from '../types/grandSiege';
 import { applyGrandSiegeHero, beginGrandSiegeRound, finishGrandSiegeRound,
@@ -25,7 +27,6 @@ const belowRoster = (world:WorldState,ids:readonly string[]) => ids.filter(id=>{
   const actor=world.cultivators.find(row=>row.id===id);
   return actor===undefined||onLowerPlane(actor);
 });
-const active = (siege: SectSiege) => siege.status === 'marching' || siege.status === 'sieging';
 
 export function sectRelation(world: WorldState, a: string, b: string): SectDiplomaticRelation | undefined {
   return world.diplomacy.find((item) => (item.sectAId === a && item.sectBId === b) ||
@@ -45,10 +46,6 @@ export function adjustSectAffinity(world: WorldState, a: string, b: string, delt
   if (a === b || !Number.isFinite(delta) || !world.sects.some(({ id }) => id === a) || !world.sects.some(({ id }) => id === b)) return;
   const relation = ensureRelation(world, a, b);
   relation.affinity = clamp(relation.affinity + delta, -100, 100);
-}
-
-export function activeSiegeForActor(world: WorldState, actor: Cultivator): SectSiege | undefined {
-  return world.sieges.find((siege) => active(siege) && siege.participantIds.includes(actor.id));
 }
 
 const isAlly = (world: WorldState, a: string, b: string) => a === b || sectRelation(world, a, b)?.pact === 'alliance';

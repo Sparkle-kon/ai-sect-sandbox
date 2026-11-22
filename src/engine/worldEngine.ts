@@ -1,3 +1,4 @@
+import { activeDungeonForActor, availableDungeonMoves, resolveDungeonAction } from './expeditionDungeonEngine';
 import {RING_AUDIENCE_TABOO_TECHNIQUE,expireRingAudiences,finishRingAudienceExecution,pendingRingAudienceExecution} from './ringAudienceEngine';
 import { personaLine } from './wildPersonaEngine';
 import { captureDramaticBondFact } from './dramaticBondEngine';
@@ -51,7 +52,7 @@ import { advanceScribeCommissions, resolveScribeCommissionAction } from './scrib
 import { advanceWorkshopInstitutionClosures, advanceWorkshops, resolveWorkshopAction, resolveWorkshopCapacityAction, resolveWorkshopEstateAction, resolveWorkshopReleaseAction } from './workshopEngine';
 import { openFurnaceTurn, resolveFurnaceReservationAction, settleFurnaceTurn } from './furnaceReservationEngine';
 import { advanceSparring, resolveSparringAction, sparringLocksActor } from './sparringEngine';
-import { resolveExpeditionRescueAction } from './expeditionRescueEngine';
+import { availableExpeditionRescueActions, resolveExpeditionRescueAction } from './expeditionRescueEngine';
 import { advanceShortShifts, resolveShortShiftAction } from './shortShiftEngine';
 import { advanceBoundaryReliefs, resolveBoundaryReliefAction } from './boundaryReliefEngine';
 import { advanceApprenticeCohorts, recordCohortPractice, resolveApprenticeCohortAction } from './apprenticeCohortEngine';
@@ -133,7 +134,7 @@ import {
   WorldEvent,
   WorldState,
 } from '../types/world';
-import { computeHeuristicDecision, isProviderPersonaDecision, requiredBeforeOrdinaryDecision, utilityCeasefireDecision, utilityExpeditionRescueDecision } from './llmBrain';
+import { computeHeuristicDecision, dungeonDecisionOccasion, exactDungeonDecision, isProviderPersonaDecision, requiredBeforeOrdinaryDecision, utilityCeasefireDecision, utilityDungeonDecision, utilityExpeditionRescueDecision } from './llmBrain';
 import { maintainMemories, recordMemory } from './memoryEngine';
 import { synthesizeReflections } from './reflectionEngine';
 import { fabricateRumor, knownRumorLead, spreadRumors, witnessEvent } from './rumorEngine';
@@ -477,6 +478,18 @@ export function applyCultivatorBrainDecision(
       ? '沿已经核验的借泊关口行走或停等，不能在旧地址行事。' : '仍有借泊来回之约，未另行离开当前真实地点。';
     return null;
   }
+  if (decision.chosenAction === 'EXPEDITION_DUNGEON') {
+    if ((modelInput || isProviderPersonaDecision(decision)) && !dungeonDecisionOccasion(cultivator, world)) return null;
+    const exact = exactDungeonDecision(decision, availableDungeonMoves(world, cultivator), true);
+    if (!exact) return null;
+    const applied = resolveDungeonAction(world, cultivator, exact);
+    if (applied) {
+      cultivator.currentAction = 'EXPEDITION_DUNGEON';
+      cultivator.innerMonologue = exact.innerMonologue;
+    }
+    return applied;
+  }
+  if (decision.chosenAction !== 'EXPEDITION_RESCUE' && activeDungeonForActor(world, cultivator)) return null;
   if(isFrontierAction(decision.chosenAction))return applyFrontierDecision(world,cultivator,decision,rng,explicitAvatarDecision);
   if(decision.chosenAction==='UPPER_PASSAGE')return applyUpperPassageDecision(world,cultivator,decision,explicitAvatarDecision);
   if(isUpperArrayFieldAction(decision.chosenAction))return applyUpperArrayFieldDecision(world,cultivator,decision,explicitAvatarDecision);
@@ -1280,13 +1293,36 @@ export function advanceWorldTick(
 
     const occasion = activeOccasionForActor(nextState, cultivator);
     let expeditionOrder: LLMDecisionPayload | undefined;
+    let expeditionModelReplaced = false;
     if (occasion) {
-      const action = provided ?? (occasion.kind === 'expedition' ? utilityExpeditionRescueDecision(cultivator, nextState) : undefined);
-      if (occasion.kind === 'expedition' && action?.chosenAction === 'EXPEDITION_RESCUE') expeditionOrder = action;
-      else {
+      const dungeon = occasion.kind === 'expedition' ? dungeonDecisionOccasion(cultivator, nextState) : undefined;
+      const isModel = Boolean(modelProposal || provided && isProviderPersonaDecision(provided));
+      const explicitEntry = occasion.kind === 'expedition' && provided?.chosenAction === 'EXPEDITION_DUNGEON' && !isModel;
+      const rescue = occasion.kind === 'expedition' && (!provided || dungeon || explicitEntry)
+        ? utilityExpeditionRescueDecision(cultivator, nextState) : undefined;
+      const action = provided ?? rescue;
+      if (dungeon && provided?.chosenAction === 'REST' && !isModel && !rescue) {
+        // A deliberate trusted wait is not a cultivation/rest action or an invitation to substitute progression.
+        cultivator.currentAction = 'JOIN_OCCASION';
+        cultivator.innerMonologue = '在亲到的房间停等，本轮不另取机缘。';
+        if (traceOptions?.tape) rememberReplayDecision(traceOptions.tape, cultivator.id, provided);
+        continue;
+      }
+      if (dungeon || explicitEntry) {
+        const exactRescue = action?.chosenAction === 'EXPEDITION_RESCUE' &&
+          availableExpeditionRescueActions(cultivator, nextState).some(row => row.rescueMove === action.rescueMove &&
+            row.targetExpeditionRescueId === action.targetExpeditionRescueId && row.targetOccasionId === action.targetOccasionId);
+        const exact = action?.chosenAction === 'EXPEDITION_DUNGEON'
+          ? exactDungeonDecision(action, availableDungeonMoves(nextState, cultivator), true) : undefined;
+        expeditionOrder = exactRescue ? action : rescue ?? exact ?? (dungeon ? utilityDungeonDecision(cultivator, nextState) : undefined);
+        expeditionModelReplaced = Boolean(modelProposal && !(exactRescue && expeditionOrder === action) &&
+          !(exact && expeditionOrder === exact));
+      } else if (occasion.kind === 'expedition' && action?.chosenAction === 'EXPEDITION_RESCUE') expeditionOrder = action;
+      if (!expeditionOrder) {
         const extracting = Boolean(expeditionRescueCheckpoint(nextState, cultivator));
         cultivator.currentAction = extracting ? 'EXPEDITION_RESCUE' : 'JOIN_OCCASION';
         cultivator.innerMonologue = extracting ? '沿已经核实的关口撤离，不另取秘境机缘。' : '已入大会或秘境名册，眼下须静候下一轮。';
+        if (modelProposal?.chosenAction === 'EXPEDITION_DUNGEON') recordDecisionEffect?.(cultivator.id, false);
         continue;
       }
     }
@@ -1315,7 +1351,7 @@ export function advanceWorldTick(
         if (local) { provided = local; modelStoryChoiceReplaced = Boolean(modelProposal); }
       }
     }
-    if(!liveEncounter&&!liveDestiny&&deferRegionalActorTurn(nextState,regionalTurn,cultivator,expeditionOrder??provided??supplied??fieldNegotiation,
+    if(!liveEncounter&&!liveDestiny&&expeditionOrder?.chosenAction!=='EXPEDITION_DUNGEON'&&deferRegionalActorTurn(nextState,regionalTurn,cultivator,expeditionOrder??provided??supplied??fieldNegotiation,
       ()=>!!requiredBeforeOrdinaryDecision(cultivator,nextState)))continue;
 
     let decisionDraws = 0;
@@ -1327,8 +1363,9 @@ export function advanceWorldTick(
       computeHeuristicDecision(cultivator, nextState, () => { decisionDraws++; return rng(); });
 
     const captureTrace = traceOptions?.captureTrace !== false;
-    const candidates = captureTrace || traceOptions?.onActor ? legalTraceCandidates(nextState, cultivator) : [];
-    const chosenByModel = Boolean(modelProposal && !modelOrdinaryReplaced && !modelStoryChoiceReplaced);
+    const candidates = (captureTrace || traceOptions?.onActor) && decision.chosenAction !== 'EXPEDITION_DUNGEON' ?
+      legalTraceCandidates(nextState, cultivator) : [];
+    const chosenByModel = Boolean(modelProposal && !modelOrdinaryReplaced && !modelStoryChoiceReplaced && !expeditionModelReplaced);
     if (traceOptions?.tape) rememberReplayDecision(traceOptions.tape, cultivator.id, decision, decisionDraws, chosenByModel);
     const previousLocation = cultivator.locationId;
     const previousRealm = cultivator.realm;
@@ -1356,10 +1393,10 @@ export function advanceWorldTick(
       (decision.chosenAction === 'EXPLORE' && previousLocation !== cultivator.locationId));
     recordOrdinaryActionEvidence(cultivator,nextState.tick,decision,ordinaryBefore,
       {applied:validEffect,avatar:avatarOrder?.actorId===cultivator.id,event:evt});
-    if (recordDecisionEffect && supplied) recordDecisionEffect(cultivator.id, !avatarDecision && !modelOrdinaryReplaced && !modelStoryChoiceReplaced && validEffect);
+    if (recordDecisionEffect && supplied) recordDecisionEffect(cultivator.id, !avatarDecision && !modelOrdinaryReplaced && !modelStoryChoiceReplaced && !expeditionModelReplaced && validEffect);
     traceOptions?.onActor?.(cultivator.id, candidates, validEffect);
     if (captureTrace) recordDecisionTrace(nextState, cultivator.id, candidates, decision,
-      avatarDecision ? 'avatar' : modelProposal && !modelOrdinaryReplaced && !modelStoryChoiceReplaced ? 'model' : 'utility', validEffect);
+      avatarDecision ? 'avatar' : modelProposal && !modelOrdinaryReplaced && !modelStoryChoiceReplaced && !expeditionModelReplaced ? 'model' : 'utility', validEffect);
     creditSectService(nextState, cultivator, evt);
     if (evt) {
       renewRegionalProtectionAfterEvent(regionalTurn);

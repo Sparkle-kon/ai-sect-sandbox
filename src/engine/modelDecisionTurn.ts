@@ -1,5 +1,5 @@
 import { regionalModelPassiveActorIds } from './regionalSimulationEngine';
-import { availableUpperPassageProviderActions,availableFrontierProviderActions,grandSiegeHeroReservedForPlayer,requiredBeforeOrdinaryDecision } from './llmBrain';
+import { availableUpperPassageProviderActions,availableFrontierProviderActions,availableDungeonModelOptions,grandSiegeHeroReservedForPlayer,requiredBeforeOrdinaryDecision } from './llmBrain';
 import { availableGrandSiegeHeroActions, hasQueuedGrandSiegeHero } from './grandSiegeTheatreEngine';
 import { activeForbiddenDuel, availableForbiddenArtOptions, forbiddenDuelForParticipant } from './forbiddenArtEngine';
 import { activeHeartDemon, isHeartDemonGuided } from './heartDemonEngine';
@@ -86,11 +86,12 @@ export function modelDecisionCandidates(world: WorldState): Cultivator[] {
       if (sieges.length !== 1 || sieges[0].theatre?.queued || grandSiegeHeroReservedForPlayer(world, siegeId) ||
           hero.some(choice => choice.targetGrandSiegeId !== siegeId) || hero.length !== 2 || moves.size !== 2 || !moves.has('hold')) return false;
     }
+    const dungeon = availableDungeonModelOptions(actor, world, nextTick).length > 0;
     // Genuine autonomous offers wake only the normal admission guard below, never an invalid body or action lane.
-    return (!passive.has(actor.id) || !!heart || !!contact || !!encounter || !!destiny || hero.length > 0) &&
+    return (!passive.has(actor.id) || !!heart || !!contact || !!encounter || !!destiny || hero.length > 0 || dungeon) &&
     (!activeCourierForActor(world, actor) || availableCourierHandoffActions(actor, world, nextTick).some(({ courierHandoffMove }) => courierHandoffMove === 'offer')) &&
     !activeDanxiaMedicineEscort(world,actor)&&!activeEscortForActor(world, actor) && !activeRelocationForActor(world, actor) &&
-    !activeSiegeForActor(world, actor) && isEligibleForOccasionDecision(world, actor, nextTick) &&
+    !activeSiegeForActor(world, actor) && (dungeon || isEligibleForOccasionDecision(world, actor, nextTick)) &&
     (!boundaryReliefCheckpoint(world, actor) || availableBoundaryReliefActions(actor, world, nextTick).length > 0) &&
     (!pilgrimageCheckpoint(world, actor) || availablePilgrimageActions(actor, world, false, nextTick).length > 0);
   });

@@ -1,3 +1,4 @@
+import { activeDungeonForActor, availableDungeonMoves } from './expeditionDungeonEngine';
 import { DESTINY_TRAIT_CATALOG } from './destinyTraitCatalog';
 import { latestEarnedPersonaTrait, personaLine, privatePersonaText } from './wildPersonaEngine';
 import { availableGrandSiegeHeroActions, chooseGrandSiegeHeroDecision, hasQueuedGrandSiegeHero } from './grandSiegeTheatreEngine';
@@ -157,6 +158,61 @@ export function utilityExpeditionRescueDecision(actor: Cultivator, world: WorldS
   const thought = option.rescueMove === 'signal' ? '向确能收到的在场见证人发出求援。' : option.rescueMove === 'accept' ?
     '我自愿携实物补给接应，只沿已核实的撤离路。' : '已脱离伤势所致的求援条件；在尚未交付补给时撤信。';
   return { ...option, chosenAction: option.action, innerMonologue: thought };
+}
+
+type DungeonOption = ReturnType<typeof availableDungeonMoves>[number];
+const dungeonFields = ['chosenAction', 'targetOccasionId', 'targetDungeonRoomId', 'dungeonMove'] as const;
+const dungeonAction = (row: DungeonOption) => ({
+  chosenAction: 'EXPEDITION_DUNGEON' as const,
+  targetOccasionId: row.targetOccasionId, targetDungeonRoomId: row.targetDungeonRoomId, dungeonMove: row.dungeonMove,
+});
+const dungeonDecision = (row: DungeonOption): LLMDecisionPayload => ({
+  ...dungeonAction(row), innerMonologue: '只按实际所在的秘境房间行事。',
+});
+const sameDungeon = (a: Pick<LLMDecisionPayload, typeof dungeonFields[number]>, b: typeof a) =>
+  dungeonFields.every(field => a[field] === b[field]);
+
+/** Exactly the supplied native option, never a caller's prose or asserted effect. */
+export function exactDungeonDecision(input: unknown, native: readonly DungeonOption[], allowAuthoredThought = false): LLMDecisionPayload | undefined {
+  if (!input || typeof input !== 'object' || Array.isArray(input) ||
+      dungeonFields.some(field => !Object.hasOwn(input, field)) ||
+      Object.keys(input).some(field => !(dungeonFields as readonly string[]).includes(field) &&
+        !(allowAuthoredThought && field === 'innerMonologue'))) return undefined;
+  const compared = input as LLMDecisionPayload;
+  const matched = native.find(option => sameDungeon(dungeonAction(option), compared));
+  return matched ? dungeonDecision(matched) : undefined;
+}
+
+export function dungeonDecisionOccasion(actor: Cultivator, world: WorldState, executionTick = world.tick) {
+  const member = activeDungeonForActor(world, actor);
+  if (member) return world.occasions.filter(row => row.id === member.id).length === 1 ? member : undefined;
+  // Once a real explorer explicitly opens a chamber, an independently admitted peer may join.
+  // Without that existing native group, abstention preserves the old expedition path exactly.
+  const occasion = activeOccasionForActor(world, actor);
+  return occasion?.dungeon && occasion.dungeon.closedTick === undefined && occasion.dungeon.room === 'garden' &&
+    availableDungeonMoves(world, actor, executionTick).some(option => option.targetOccasionId === occasion.id &&
+      option.dungeonMove === 'enter') ? occasion : undefined;
+}
+
+export function availableDungeonModelOptions(actor: Cultivator, world: WorldState, executionTick: number): readonly DungeonOption[] {
+  if (executionTick !== world.tick + 1) return [];
+  const occasion = dungeonDecisionOccasion(actor, world, executionTick);
+  if (!occasion || activeAvatar(world) === actor || availableExpeditionRescueActions(actor, world, executionTick).length) return [];
+  return availableDungeonMoves(world, actor, executionTick).filter(option => option.targetOccasionId === occasion.id);
+}
+
+export function utilityDungeonDecision(actor: Cultivator, world: WorldState): LLMDecisionPayload | undefined {
+  const occasion = dungeonDecisionOccasion(actor, world);
+  if (!occasion) return undefined;
+  const native = availableDungeonMoves(world, actor).filter(option => option.targetOccasionId === occasion.id);
+  const dangerous = actor.hp < actor.maxHp * .45;
+  const urgent = occasion.expiresTick <= world.tick + 1;
+  const recovered = occasion.dungeon?.steps.some(row => row.move === 'claim');
+  const retreat = native.find(row => row.dungeonMove === 'retreat');
+  const claim = native.find(row => row.dungeonMove === 'claim');
+  const option = (dangerous ? retreat : undefined) ?? claim ?? (urgent || recovered ? retreat : undefined) ??
+    native.find(row => row.dungeonMove !== 'retreat');
+  return option && !(option.dungeonMove === 'enter' && (dangerous || urgent)) ? dungeonDecision(option) : undefined;
 }
 
 /** Exact last allowed turn of a funded, already accepted agreement, not an invitation. */
@@ -486,6 +542,9 @@ export function computeHeuristicDecision(
   const contact = forbiddenDuelForParticipant(world, cultivator);
   if (contact) return chooseForbiddenArtDecision(world, cultivator) ??
     { chosenAction: 'REST', innerMonologue: '且待眼前交手依实况分明。' };
+  const dungeon = dungeonDecisionOccasion(cultivator, world);
+  if (dungeon) return utilityExpeditionRescueDecision(cultivator, world) ?? utilityDungeonDecision(cultivator, world) ??
+    { chosenAction: 'REST', innerMonologue: '在实际到达之处停等，不另报进境。' };
   const roguelikeDecision = chooseRoguelikeEncounterDecision(world, cultivator);
   if (roguelikeDecision) return roguelikeDecision;
   const destinyDecision = chooseDestinyTraitDecision(world, cultivator);
@@ -2065,6 +2124,20 @@ export async function requestCultivatorLLMDecision(
   const boundaryReliefOnly = Boolean(boundaryReliefCheckpoint(world, cultivator));
   if (boundaryReliefOnly && !boundaryReliefOptions.length) return undefined;
   const rescueOptions = availableExpeditionRescueActions(cultivator, world, requestTick);
+  const dungeon = dungeonDecisionOccasion(cultivator, world, requestTick);
+  if (dungeon && !rescueOptions.length) {
+    const dungeonOptions = availableDungeonModelOptions(cultivator, world, requestTick);
+    if (!dungeonOptions.length) return undefined;
+    const menu = dungeonOptions.map(dungeonAction);
+    const prompt = '你已实际参与此秘境。只原样复制一个现地允许的 JSON 动作，不填独白、地点推断、伤势、消耗、道具或结果。许可：' +
+      JSON.stringify(menu);
+    return requestDecisionPrompt(config, requestTick, options, prompt, parsed => {
+      if (dungeonDecisionOccasion(cultivator, world, requestTick) !== dungeon) return undefined;
+      const current = availableDungeonModelOptions(cultivator, world, requestTick);
+      if (current.length !== menu.length || current.some((row, i) => !sameDungeon(dungeonAction(row), menu[i]))) return undefined;
+      return exactDungeonDecision(parsed, current);
+    }, 180);
+  }
   const rescueOnly = activeOccasionForActor(world, cultivator)?.kind === 'expedition' || world.expeditionRescues.requests.some((row) =>
     row.status === 'extracting' && (row.explorerId === cultivator.id || row.rescuerId === cultivator.id));
   if (rescueOnly && !rescueOptions.length) return undefined;
@@ -2359,7 +2432,8 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
           if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) ||
               Object.hasOwn(parsed, 'targetHeartTrialId') || Object.hasOwn(parsed, 'heartDemonChoice') ||
               Object.hasOwn(parsed, 'targetForbiddenDuelId') || Object.hasOwn(parsed, 'forbiddenArtChoice') ||
-              Object.hasOwn(parsed, 'targetGrandSiegeId') || Object.hasOwn(parsed, 'grandSiegeHeroMove')) return undefined;
+              Object.hasOwn(parsed, 'targetGrandSiegeId') || Object.hasOwn(parsed, 'grandSiegeHeroMove') ||
+              Object.hasOwn(parsed, 'targetDungeonRoomId') || Object.hasOwn(parsed, 'dungeonMove')) return undefined;
           const validActions: ActionType[] = [
             'CULTIVATE',
             'BREAKTHROUGH',

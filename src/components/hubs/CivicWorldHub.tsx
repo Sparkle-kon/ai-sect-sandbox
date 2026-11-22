@@ -1,3 +1,4 @@
+import {useDungeonControls} from '../useDungeonControls';
 import {useTournamentArenaControls} from '../useTournamentArenaControls';
 import type {RingAudiencePanelProps} from '../RingAudiencePanel';
 import React, {useMemo,type ReactNode} from 'react';
@@ -74,6 +75,7 @@ export function CivicWorldHub({
     fairModelCoverage,fastForwardRun,campaignGuard,fastForwardLocked,
   }=simulation;
   const arenaControls=useTournamentArenaControls(simulation,active,selectedCultivator);
+  const dungeonControls=useDungeonControls(simulation,active,selectedCultivator);
   const activeActorId=selectedCultivator?.id??null;
   const selectedSettlementId=visibleWorld.settlements.villages.find(village=>village.locationId===selectedCultivator?.locationId)?.id;
   const regionalReadActive=active&&!preview;
@@ -172,7 +174,7 @@ export function CivicWorldHub({
           </>}
       </div> },
       { id: 'occasions', label: '比武与秘境盛会', content: selectedCultivator
-        ? <React.Suspense fallback={<p role="status">载入盛会记录…</p>}><WorldOccasionsPanel world={visibleWorld} cultivator={selectedCultivator} arenaControls={arenaControls} /></React.Suspense>
+        ? <React.Suspense fallback={<p role="status">载入盛会记录…</p>}><WorldOccasionsPanel world={visibleWorld} cultivator={selectedCultivator} arenaControls={arenaControls} dungeonControls={dungeonControls} /></React.Suspense>
         : <p className="text-xs text-slate-300">从人物名册选择实际修士后查看盛会。</p> },
       { id: 'bounties', label: '天机悬赏榜', content: <React.Suspense fallback={<p role="status">载入悬赏榜…</p>}><BountyBoard world={visibleWorld} /></React.Suspense> },
       { id: 'analytics', label: '天道观测与演化统计', content: <button type="button" onClick={() => onAnalytics()}

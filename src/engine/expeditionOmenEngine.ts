@@ -7,7 +7,7 @@ import { activeSiegeForActor } from './diplomacyEngine';
 import { isTribulationActive } from './tribulationEngine';
 import { localQiWeather } from './weatherEngine';
 import { terrainTileAt } from './terrainEngine';
-import { isScopedExpeditionGate } from './expeditionOmenTerms';
+import { isScopedExpeditionGate, expeditionOmenNativeRun as nativeRun, expeditionOmenLearnedAt as learnedAt, expeditionOmenAt as rowAt } from './expeditionOmenTerms';
 
 export const EXPEDITION_OMEN_QI = 70;
 export const EXPEDITION_OMEN_MEASURE_INTENSITY = .35;
@@ -42,20 +42,7 @@ export function canInvestigateExpeditionOmen(world:WorldState,actor:Cultivator):
     !world.expeditionOmens.rows.some(row=>row.siteId===site.id&&liveRegistrationClue(row,world.tick));
 }
 export const expeditionOmenId = (operatorId: string, openedTick: number) => `expedition-omen-${operatorId}-${openedTick}`;
-const nativeRun = (world: WorldState, row: ExpeditionOmen) => {
-  const byActor = world.fieldObservatories.byActor;
-  const run = Object.hasOwn(byActor, row.operatorId) ? byActor[row.operatorId].runs.find(r => r.openedTick === row.openedTick) : undefined;
-  return run?.status === 'measured' && !run.station && run.locationId === row.siteId && run.targetTick === row.measuredTick &&
-    run.reading.kind === row.reading.kind && run.reading.intensity === row.reading.intensity ? run : undefined;
-};
 const liveRegistrationClue = (row: ExpeditionOmen, tick: number) => row.opening ? tick < row.opening.tick + 3 : tick <= row.windowEndsTick;
-const learnedAt = (row: ExpeditionOmen, actorId: string, tick: number): number | undefined =>
-  row.operatorId === actorId && row.measuredTick <= tick ? row.measuredTick :
-  row.relay?.recipientId === actorId && row.relay.tick <= tick ? row.relay.tick : undefined;
-const rowAt = (world: WorldState, occasion: WorldOccasion) => world.expeditionOmens.rows.find(row =>
-  row.id === occasion.omenId && row.siteId === occasion.anchorSiteId && row.opening?.occasionId === occasion.id &&
-  row.opening.tick === occasion.startedTick);
-
 /** Cabin/courier/pilgrimage use actual movement state, never their stale nominal location. */
 export function presentAtExpeditionAnchor(world: WorldState, actor: Cultivator, siteId: string, executionTick = world.tick): boolean {
   return world.cultivators.includes(actor) && alive(actor) && actor.locationId === siteId &&

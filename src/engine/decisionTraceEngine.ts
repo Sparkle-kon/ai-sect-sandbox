@@ -1,3 +1,4 @@
+import { availableDungeonMoves } from './expeditionDungeonEngine';
 import { activeAvatar } from './avatarEngine';
 import { availableGrandSiegeHeroActions } from './grandSiegeTheatreEngine';
 import { activeForbiddenDuel, availableForbiddenArtOptions, forbiddenDuelForParticipant } from './forbiddenArtEngine';
@@ -89,7 +90,8 @@ export function recordDecisionTrace(world: WorldState, actorId: string, candidat
   };
   const privateDecision = isPrivateHeartTurn(world, actorId, decision) || decision.chosenAction === 'FORBIDDEN_ART' ||
     decision.targetForbiddenDuelId !== undefined || decision.forbiddenArtChoice !== undefined ||
-    decision.chosenAction === 'GRAND_SIEGE_HERO' || decision.targetGrandSiegeId !== undefined || decision.grandSiegeHeroMove !== undefined;
+    decision.chosenAction === 'GRAND_SIEGE_HERO' || decision.targetGrandSiegeId !== undefined || decision.grandSiegeHeroMove !== undefined ||
+    decision.chosenAction === 'EXPEDITION_DUNGEON' || decision.targetDungeonRoomId !== undefined || decision.dungeonMove !== undefined;
   const picks: DecisionTraceCandidate[] = [];
   for (const item of privateDecision ? [] : candidates) {
     if (!isSafeAction(item.action) || !Number.isFinite(item.score)) continue;
@@ -184,8 +186,16 @@ export function rememberReplayDecision(tape: DecisionReplayTape, actorId: string
       option.grandSiegeHeroMove === decision.grandSiegeHeroMove);
   const personalHeroChoice = exactHero ? { targetGrandSiegeId: exactHero.targetGrandSiegeId,
     grandSiegeHeroMove: exactHero.grandSiegeHeroMove } : undefined;
-  state.decisions.set(actorId, { ...(forbiddenAction || grandSiegeAction ? {} : details), chosenAction: decision.chosenAction, innerMonologue: '',
-    ...(cohortInviteeIds ? { cohortInviteeIds } : {}), ...personalHeartChoice, ...personalForbiddenChoice, ...personalHeroChoice });
+  const dungeonAction = decision.chosenAction === 'EXPEDITION_DUNGEON';
+  const dungeonActor = dungeonAction && state.base.cultivators.find(({ id }) => id === actorId);
+  const dungeonChoice = dungeonActor && availableDungeonMoves(state.base, dungeonActor, state.base.tick + 1).find(row =>
+    row.targetOccasionId === decision.targetOccasionId && row.targetDungeonRoomId === decision.targetDungeonRoomId &&
+    row.dungeonMove === decision.dungeonMove);
+  const dungeonFields = dungeonChoice ? { targetOccasionId: dungeonChoice.targetOccasionId,
+    targetDungeonRoomId: dungeonChoice.targetDungeonRoomId, dungeonMove: dungeonChoice.dungeonMove } : undefined;
+  state.decisions.set(actorId, { ...(forbiddenAction || grandSiegeAction || dungeonAction ? {} : details),
+    chosenAction: decision.chosenAction, innerMonologue: '', ...(cohortInviteeIds ? { cohortInviteeIds } : {}),
+    ...personalHeartChoice, ...personalForbiddenChoice, ...personalHeroChoice, ...dungeonFields });
   if (personalHeartChoice && heartModel) state.heartModelActors.add(actorId);
   else state.heartModelActors.delete(actorId);
   if (personalForbiddenChoice && forbiddenModel) state.forbiddenModelActors.add(actorId);

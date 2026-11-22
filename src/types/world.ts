@@ -1,3 +1,4 @@
+import type {DungeonMove, DungeonRoom, ExpeditionDungeon} from './expeditionDungeon';
 import type {TournamentWagerState} from './tournamentWager';
 import type {TournamentArena} from './tournamentArena';
 import type {RingAudienceState} from './ringAudience';
@@ -195,6 +196,7 @@ export type ActionType =
   | 'DAMAGE_ASSURANCE'
   | 'SPARRING'
   | 'EXPEDITION_RESCUE'
+  | 'EXPEDITION_DUNGEON'
   | 'SHORT_SHIFT'
   | 'BOUNDARY_RELIEF'
   | 'MENTOR_TRANSFER'
@@ -714,6 +716,8 @@ export interface LLMDecisionPayload {
   targetSparringId?: string;
   rescueMove?: ExpeditionRescueMove;
   targetExpeditionRescueId?: string;
+  targetDungeonRoomId?: DungeonRoom;
+  dungeonMove?: DungeonMove;
   shortShiftMove?: ShortShiftMove;
   targetShortShiftId?: string;
   boundaryReliefMove?: BoundaryReliefMove;
@@ -815,6 +819,7 @@ export interface ExpeditionResult {
 
 export interface WorldOccasion {
   arena?: TournamentArena;
+  dungeon?: ExpeditionDungeon;
   omenId?: string;
   anchorSiteId?: string;
   id: string;
