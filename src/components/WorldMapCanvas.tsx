@@ -44,6 +44,9 @@ import {drawMapTrajectoryVfx} from './trajectoryVfxDraw';
 import {drawFlights} from './mapPresentationDraw';
 import {buildMapCombatVfxPlan} from './mapCombatVfxView';
 import {drawMapCombatVfx} from './mapCombatVfxDraw';
+import {buildMapActorBadgeView,type MapActorBadgeKind} from './mapActorBadgeView';
+import {planMapActorBadgeLayout} from './mapActorBadgeLayout';
+import {drawMapActorBadges,MAP_ACTOR_BUBBLE_FONT} from './mapActorBadgeDraw';
 import { projectMapTerritories } from './mapTerritorySemantics';
 import {MapEntityPopover} from './MapEntityPopover';
 import {resolveMapEntityHit,type MapEntityPaintedFrame} from './mapEntityHit';
@@ -92,6 +95,10 @@ import type { ChronicleFocusRequest } from '../engine/chronicleFocusEngine';
 const TerrainSuccessionPanel = React.lazy(async () => ({ default: (await import('./TerrainSuccessionPanel')).TerrainSuccessionPanel }));
 const MapKeyboardExplorer = React.lazy(async () => ({ default: (await import('./MapKeyboardExplorer')).MapKeyboardExplorer }));
 
+const ACTOR_BADGE_LABELS:Record<MapActorBadgeKind,string>={
+  critical:'气血告急',ready:'灵气近满，可尝试破境','heart-demon':'正渡心魔劫',
+};
+
 const WEATHER_MARK = {
   平息: { symbol: '', color: '#94a3b8' },
   灵潮: { symbol: '潮', color: '#6ee7b7' },
@@ -107,6 +114,7 @@ interface MapInspection extends MapEntityPopoverBinding {
 
 interface WorldMapCanvasProps {
   world: WorldState;
+  historical?:boolean;
   previousWorld?:WorldState;
   selectedCultivatorId: string | null;
   onSelectCultivator: (id: string) => void;
@@ -130,7 +138,7 @@ interface WorldMapCanvasProps {
 }
 
 export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
-  world,previousWorld,
+  world,previousWorld,historical=false,
   selectedCultivatorId,
   onSelectCultivator,
   onSelectLocation,
@@ -383,6 +391,9 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   }, [followsSelection, followedActorId, followedX, followedY]);
   const motionSnapshot=useMemo(()=>buildMapPresentation(world,mapView,actorPositions),[world,mapView,actorPositions]);
   const combatVfx=useMemo(()=>buildMapCombatVfxPlan(world,mapView,motionSnapshot),[world,mapView,motionSnapshot]);
+  const actorBadgeFacts=useMemo(()=>buildMapActorBadgeView(world,mapView,combatVfx,!historical),[world,mapView,combatVfx,historical]);
+  const hasBadgeQuote=useMemo(()=>[...actorBadgeFacts.values()].some(fact=>!!fact.quote),[actorBadgeFacts]);
+  const selectedBadgeFact=selectedCultivatorId?actorBadgeFacts.get(selectedCultivatorId):undefined;
   // The canvas, keyboard index, and text summary all use the same authorized combat evidence.
   const presentation=useMemo(()=>({routes:motionSnapshot.routes,effects:combatVfx.effects}),[motionSnapshot,combatVfx]);
   const routeWarningMarks=useMemo(()=>world.routeWarnings.notices.length ? paintedRouteWarningGeometry(world,
@@ -532,8 +543,9 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     }
     let markerSize: MarkerViewport = canvas.getBoundingClientRect();
     let staticMarkers: ReturnType<typeof planActorMarkers> | undefined;
+    let badgeLayoutCache:{markers:ReturnType<typeof planActorMarkers>;layout:ReturnType<typeof planMapActorBadgeLayout>}|undefined;
 
-    const hasMotion=presentation.routes.size>0||combatVfx.hasTransient||letters.length>0||travel.hasMotion;
+    const hasMotion=presentation.routes.size>0||combatVfx.hasTransient||letters.length>0||travel.hasMotion||hasBadgeQuote;
     if (playback.current?.source !== world.mapPresentation) {
       playback.current = { source: world.mapPresentation, start: performance.now() };
     }
@@ -854,7 +866,9 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           ctx.clip();
           drawMapCombatVfx(ctx,combatVfx,elapsed,animate,logicalPerCssPixel,scenicPhase,camera);
           if(letters.length||travel.markers.length)drawMapTrajectoryVfx(ctx,letters,travel.markers,elapsed,animate,logicalPerCssPixel);
-          return drawFlights(ctx,actorPositions,presentation.routes,elapsed,animate,actor=>flightAlignments.get(actor.sectId));
+          return presentation.routes.size
+            ?drawFlights(ctx,actorPositions,presentation.routes,elapsed,animate,actor=>flightAlignments.get(actor.sectId))
+            :actorPositions;
         } finally {ctx.restore();}
       })();
       const markers = frameActors === actorPositions
@@ -943,6 +957,22 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
             cy + 36
           );
       }
+      if(actorBadgeFacts.size&&qiFlow.clip.length&&markerSize.width>0&&markerSize.height>0){
+        // Layout uses the same rendered CSS centers as hit testing. Glyphs never become hit targets.
+        ctx.save();
+        try {
+          ctx.beginPath();
+          for(const {x,y,width:spanWidth,height:spanHeight} of qiFlow.clip)ctx.rect(x,y,spanWidth,spanHeight);
+          ctx.clip();
+          ctx.setTransform(width/markerSize.width,0,0,height/markerSize.height,0,0);
+          if(badgeLayoutCache?.markers!==markers){
+            ctx.font=MAP_ACTOR_BUBBLE_FONT;
+            badgeLayoutCache={markers,layout:planMapActorBadgeLayout(markers,actorBadgeFacts,markerSize,selectedCultivatorId,
+              text=>ctx.measureText(text).width)};
+          }
+          drawMapActorBadges(ctx,badgeLayoutCache.layout,elapsed,animate,scenicPhase);
+        } finally {ctx.restore();}
+      }
       if (armedBrush && preview.length > 0) {
         ctx.strokeStyle = '#fef08a';
         ctx.fillStyle = '#fef08a';
@@ -1004,7 +1034,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener?.('change',stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, atlasDrawing, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, observedSalvageSites, localGranary, villageMapLabels, civicObservation, usedVillageSegments, furnaceShift, localPavilionDesk, localMemorial, localVillageFair, localStipend, localSeedCulture, localToolLoans, localAlignedWeather, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope, scenicRelief, qiFlow, inspectionEnabled, letters, travel, flightAlignments, combatVfx]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, atlasDrawing, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, observedSalvageSites, localGranary, villageMapLabels, civicObservation, usedVillageSegments, furnaceShift, localPavilionDesk, localMemorial, localVillageFair, localStipend, localSeedCulture, localToolLoans, localAlignedWeather, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope, scenicRelief, qiFlow, inspectionEnabled, letters, travel, flightAlignments, combatVfx, actorBadgeFacts, hasBadgeQuote]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1292,6 +1322,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           </svg>
         </button>
       </div>
+      {Boolean(selectedBadgeFact?.statuses.length)&&<p className="sr-only">所选修士状态：{selectedBadgeFact?.statuses.map(kind=>ACTOR_BADGE_LABELS[kind]).join('、')}。</p>}
+      {selectedBadgeFact?.quote&&<p className="sr-only">所选修士本月公开斗法对白：{selectedBadgeFact.quote}</p>}
       {letters.length>0&&<p className="sr-only">所选修士本月确收飞剑传书，舆图只示两地，不公开内容。</p>}
       {travel.markers.some(mark=>mark.kind==='caravan')&&<p className="sr-only">舆图标出已观测商队关口；行进动效只显示实际走过的路段。</p>}
       {pilgrimageMark && <p className="sr-only">所选修士的巡礼关口：第 {pilgrimageMark.row} 行，第 {pilgrimageMark.col} 列。</p>}

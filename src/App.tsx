@@ -648,7 +648,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
       }}}
     map={immersive??
       <React.Suspense fallback={<p role="status">载入舆图…</p>}>
-        <WorldMapCanvas compact scopeKey={viewScopeKey} world={visibleWorld} selectedCultivatorId={activeActorId} previousWorld={previousMapWorld}
+        <WorldMapCanvas compact scopeKey={viewScopeKey} world={visibleWorld} selectedCultivatorId={activeActorId} previousWorld={previousMapWorld} historical={Boolean(preview)}
           inspectionEnabled={canInspectMap} inspectionRevision={inspectionRevision} onEntityIntervention={canMapWrite?handleMapEntityIntervention:undefined}
           fogEnabled={mapFog} onFogChange={setMapFog} pulseFocus={pulseFocus} pulseFocusActive={canInspectMap}
           onPulseFocusHandled={clearWorldPulse}
@@ -723,7 +723,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
         </div>} views={{
         map: immersive??<div className="grid min-w-0 items-start gap-2.5 lg:grid-cols-[minmax(0,1fr)_17rem] lg:gap-4">
           <div className="min-w-0"><React.Suspense fallback={<div role="status" className="grid min-h-64 place-items-center rounded-xl border border-slate-800 text-sm text-slate-300">载入舆图…</div>}>
-            <WorldMapCanvas compact scopeKey={viewScopeKey} world={visibleWorld} selectedCultivatorId={activeActorId} previousWorld={previousMapWorld}
+            <WorldMapCanvas compact scopeKey={viewScopeKey} world={visibleWorld} selectedCultivatorId={activeActorId} previousWorld={previousMapWorld} historical={Boolean(preview)}
           inspectionEnabled={canInspectMap} inspectionRevision={inspectionRevision} onEntityIntervention={canMapWrite?handleMapEntityIntervention:undefined}
           fogEnabled={mapFog} onFogChange={setMapFog} pulseFocus={pulseFocus} pulseFocusActive={canInspectMap}
           onPulseFocusHandled={clearWorldPulse}
