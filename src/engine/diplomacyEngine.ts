@@ -1,4 +1,5 @@
 import {isSectActive} from './sectActivity';
+import {onLowerPlane} from './upperPassageIsolation';
 import { activeCourierForActor } from './sealedCourierEngine';
 import { activeCeasefireBetween } from './ceasefireEngine';
 import { recordCausalChronicleNode } from './chronicleCausalityEngine';
@@ -15,6 +16,11 @@ const MAX_FORCE = 8;
 const MAX_ROUNDS = 7;
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
 const live = (actor: Cultivator) => actor.alive && actor.hp > 0;
+const isPresentBelow = (actor:Cultivator) => live(actor) && onLowerPlane(actor);
+const belowRoster = (world:WorldState,ids:readonly string[]) => ids.filter(id=>{
+  const actor=world.cultivators.find(row=>row.id===id);
+  return actor===undefined||onLowerPlane(actor);
+});
 const active = (siege: SectSiege) => siege.status === 'marching' || siege.status === 'sieging';
 
 export function sectRelation(world: WorldState, a: string, b: string): SectDiplomaticRelation | undefined {
@@ -44,7 +50,7 @@ export function activeSiegeForActor(world: WorldState, actor: Cultivator): SectS
 const isAlly = (world: WorldState, a: string, b: string) => a === b || sectRelation(world, a, b)?.pact === 'alliance';
 
 function forceCandidates(world: WorldState, attacker: Sect, defender: Sect, actor: Cultivator): Cultivator[] {
-  const candidates = world.cultivators.filter((person) => live(person) && isAlly(world, attacker.id, person.sectId) &&
+  const candidates = world.cultivators.filter((person) => isPresentBelow(person) && isAlly(world, attacker.id, person.sectId) &&
     person.sectId !== defender.id && !isAlly(world, defender.id, person.sectId) && !activeRelocationForActor(world, person) && !activeEscortForActor(world, person) && !activeCourierForActor(world, person) && !activeSiegeForActor(world, person) &&
     !world.occasions.some((item) => (item.status === 'registration' || item.status === 'running') && item.participantIds.includes(person.id)) &&
     person.tribulation?.stage !== 'lightning' && person.tribulation?.stage !== 'heart_demon')
@@ -55,7 +61,7 @@ function forceCandidates(world: WorldState, attacker: Sect, defender: Sect, acto
 
 export function availableDiplomacyActions(actor: Cultivator, world: WorldState): DiplomaticOption[] {
   const own = world.sects.find(({ id }) => id === actor.sectId);
-  if (!isSectActive(own) || !live(actor) || own.leaderId !== actor.id || actor.locationId !== own.headquartersId || activeRelocationForSect(world, own.id) || activeSiegeForActor(world, actor)) return [];
+  if (!isSectActive(own) || !isPresentBelow(actor) || own.leaderId !== actor.id || actor.locationId !== own.headquartersId || activeRelocationForSect(world, own.id) || activeSiegeForActor(world, actor)) return [];
   if (!world.locations.some((site) => site.id === own.headquartersId && (!site.ownerSectId || site.ownerSectId === own.id))) return [];
   const result: DiplomaticOption[] = [];
   for (const target of world.sects) {
@@ -67,7 +73,7 @@ export function availableDiplomacyActions(actor: Cultivator, world: WorldState):
     if (!targetLeader) continue;
     const cooldown = world.tick - (relation?.lastActionTick ?? -1000) >= 3;
     const add = (action: DiplomaticAction) => result.push({ action, targetSectId: target.id });
-    if (cooldown && (!relation || relation.pact === 'neutral') && affinity >= 45 && targetLeader.locationId === target.headquartersId) add('OFFER_ALLIANCE');
+    if (cooldown && (!relation || relation.pact === 'neutral') && affinity >= 45 && onLowerPlane(targetLeader) && targetLeader.locationId === target.headquartersId) add('OFFER_ALLIANCE');
     if (!protectedByTruce && cooldown && relation?.pact !== 'war' && affinity <= -45) add('DECLARE_WAR');
     if (!protectedByTruce && cooldown && relation?.pact !== 'alliance' && affinity <= -25 &&
         !world.tributeDemands.some((demand) => demand.status === 'pending' &&
@@ -150,7 +156,7 @@ function settleSiege(world: WorldState, siege: SectSiege, attacker: Sect, defend
   }
   siege.outcome = won ? `${attacker.name}攻破${defender.name}防线，夺得${indemnity}灵石战赔后撤离。` :
     `${attacker.name}未能攻破${defender.name}防线，联军撤退。`;
-  return makeEvent(world, siege.id, won ? '攻山告捷' : '攻山退兵', siege.outcome, [...siege.participantIds, ...defenders.map(({ id }) => id)], siege.destinationId);
+  return makeEvent(world, siege.id, won ? '攻山告捷' : '攻山退兵', siege.outcome, [...belowRoster(world,siege.participantIds),...defenders.map(({id})=>id)], siege.destinationId);
 }
 
 export function advanceDiplomacy(world: WorldState, rng: () => number): WorldEvent[] {
@@ -161,7 +167,7 @@ export function advanceDiplomacy(world: WorldState, rng: () => number): WorldEve
     const target = world.sects.find(({ id }) => id === demand.targetSectId);
     demand.resolvedTick = world.tick;
     if (activeCeasefireBetween(world, demand.demanderSectId, demand.targetSectId)) { demand.status = 'rejected'; continue; }
-    const force = (id: string) => livedPower(world.cultivators.filter((actor) => actor.sectId === id && live(actor)));
+    const force = (id: string) => livedPower(world.cultivators.filter((actor) => actor.sectId === id && isPresentBelow(actor)));
     if (demander && target && demander.id !== target.id && Number.isFinite(demand.amount) && demand.amount > 0 &&
         target.spiritStones >= demand.amount && force(demander.id) > 0 && force(demander.id) >= force(target.id) * 1.25 &&
         sectRelation(world, demander.id, target.id)?.pact !== 'alliance') {
@@ -183,8 +189,8 @@ export function advanceDiplomacy(world: WorldState, rng: () => number): WorldEve
       siege.status = 'repelled'; siege.outcome = '出征目的地或宗门不复存在。'; continue;
     }
     const raiders = [...new Set(siege.participantIds)].map((id) => world.cultivators.find((person) => person.id === id))
-      .filter((person): person is Cultivator => Boolean(person && live(person) && isAlly(world, person.sectId, attacker.id)));
-    const defenders = world.cultivators.filter((person) => live(person) && !siege.participantIds.includes(person.id) &&
+      .filter((person): person is Cultivator => Boolean(person && isPresentBelow(person) && isAlly(world, person.sectId, attacker.id)));
+    const defenders = world.cultivators.filter((person) => isPresentBelow(person) && !siege.participantIds.includes(person.id) &&
       person.locationId === siege.destinationId && !activeCourierForActor(world, person) && isAlly(world, defender.id, person.sectId));
     if (raiders.length < MIN_FORCE || sectRelation(world, attacker.id, defender.id)?.pact !== 'war') {
       events.push(settleSiege(world, siege, attacker, defender, raiders, defenders, false)); continue;
@@ -192,11 +198,11 @@ export function advanceDiplomacy(world: WorldState, rng: () => number): WorldEve
     if (siege.status === 'marching') {
       if (world.tick === siege.startedTick + 1) {
         for (const person of raiders) person.locationId = attacker.headquartersId;
-        events.push(makeEvent(world, siege.id, '联军完成集结', `${raiders.length}名修士会师，次轮抵达${defender.name}山门。`, siege.participantIds, attacker.headquartersId));
+        events.push(makeEvent(world, siege.id, '联军完成集结', `${raiders.length}名修士会师，次轮抵达${defender.name}山门。`, belowRoster(world,siege.participantIds), attacker.headquartersId));
       } else {
         for (const person of raiders) person.locationId = siege.destinationId;
         siege.status = 'sieging';
-        events.push(makeEvent(world, siege.id, '联军抵达山门', `${attacker.name}联军抵达${defender.name}山门，准备破阵。`, siege.participantIds, siege.destinationId));
+        events.push(makeEvent(world, siege.id, '联军抵达山门', `${attacker.name}联军抵达${defender.name}山门，准备破阵。`, belowRoster(world,siege.participantIds), siege.destinationId));
       }
       continue;
     }
@@ -210,7 +216,7 @@ export function advanceDiplomacy(world: WorldState, rng: () => number): WorldEve
       injure(raiders, .045 + .055 * effectiveDefense / Math.max(1, effectiveAttack + effectiveDefense));
       injure(defenders, .035);
       if (siege.rounds < MAX_ROUNDS) {
-        events.push(makeEvent(world, siege.id, '护山阵接战', `护山阵受损${wall - defender.arrayHp}，尚余${defender.arrayHp}阵力。`, siege.participantIds, siege.destinationId));
+        events.push(makeEvent(world, siege.id, '护山阵接战', `护山阵受损${wall - defender.arrayHp}，尚余${defender.arrayHp}阵力。`, belowRoster(world,siege.participantIds), siege.destinationId));
         continue;
       }
     }

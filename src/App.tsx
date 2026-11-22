@@ -100,6 +100,7 @@ import {projectFrontierMovement} from './engine/frontierMovementEngine';
 import {projectFrontierProduction} from './engine/frontierProductionEngine';
 import {projectFrontierTrade} from './engine/frontierTradeEngine';
 import {availableFrontierActions,isFrontierDrylandOption,isFrontierLandOption,isFrontierSeaOption,type FrontierOption} from './engine/frontierActions';
+import {projectFrontierSupplyLinks} from './engine/frontierSupplyLinks';
 import type {NorthGateRenewalControls} from './components/NorthGateRenewalPanel';
 import {availableNorthGateRenewalActions,projectNorthGateRenewal} from './engine/northGateRenewalEngine';
 import {northWellPanelEvidence} from './components/northWellRevisitView';
@@ -144,6 +145,7 @@ const BountyBoard = React.lazy(async () => ({ default: (await import('./componen
 const ChronicleNotebookPanel = React.lazy(async () => ({ default: (await import('./components/ChronicleNotebookPanel')).ChronicleNotebookPanel }));
 const RankSeasonPanel = React.lazy(async () => ({ default: (await import('./components/RankSeasonPanel')).RankSeasonPanel }));
 const ChronicleFeed = React.lazy(async () => ({ default: (await import('./components/ChronicleFeed')).ChronicleFeed }));
+const CrossRegionConsequenceRead=React.lazy(async()=>({default:(await import('./components/CrossRegionConsequenceRead')).CrossRegionConsequenceRead}));
 const ChronicleLibraryPanel = React.lazy(async () => ({ default: (await import('./components/ChronicleLibraryPanel')).ChronicleLibraryPanel }));
 const WorldOccasionsPanel = React.lazy(async () => ({ default: (await import('./components/WorldOccasionsPanel')).WorldOccasionsPanel }));
 const ExpeditionRescuePanel = React.lazy(async () => ({ default: (await import('./components/ExpeditionRescuePanel')).ExpeditionRescuePanel }));
@@ -894,6 +896,9 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
       actorHeading.current?.focus();
     setRosterFocus(undefined);
   }, [activeActorId, rosterFocus, viewScopeKey, workspace]);
+  const scopedSupplyLinks=useMemo(()=>readingChronicle&&!chronicleReturn&&selectedCultivator?
+    projectFrontierSupplyLinks(visibleWorld,selectedCultivator,{limit:3}):[],
+  [readingChronicle,chronicleReturn,visibleWorld,selectedCultivator]);
   const chronicleCauses = useMemo(() => workspace === 'chronicle'
     ? new Map(visibleCausalChronicle(visibleWorld, activeActorId, 120).map((row) => [row.entry.eventId, row]))
     : undefined, [visibleWorld, activeActorId, workspace]);
@@ -1642,6 +1647,8 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
           {...fold('chronicle')} forcedOpen={chronicleReturn && ordinaryChronicleFold !== 'feed' ? 'feed' : undefined} sections={[
           { id: 'feed', label: '山河见闻', content: <React.Suspense fallback={<p role="status">载入山河见闻…</p>}>
             <AuthoredEraChronicle world={visibleWorld} visible={chronicleScenes} />
+            {scopedSupplyLinks.length>0&&<CrossRegionConsequenceRead key={viewScopeKey} consequences={scopedSupplyLinks}
+              viewerName={selectedCultivator?.name} frame={visibleWorld.authoredEraOrigin?undefined:visibleWorld}/>}
             {selectedCultivator && mayReadPersonal && !chronicleReturn && <WitnessedStoryScopeToggle selectedName={selectedCultivator.name}
               active={personalStoryActive}
               onToggle={() => setPersonalStoryChoice(personalStoryActive ? undefined : {actorId:selectedCultivator.id,scope:viewScopeKey})} />}

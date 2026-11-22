@@ -1,3 +1,4 @@
+import {projectFrontierSupplyLinks} from '../src/engine/frontierSupplyLinks';
 import {describe,expect,it} from 'vitest';
 import {createInitialWorld} from '../src/data/initialWorld';
 import {advanceWorldTick,applyCultivatorBrainDecision} from '../src/engine/worldEngine';
@@ -189,6 +190,11 @@ describe('actual West–Ridge consignments',()=>{
     expect(fed?.spent).toEqual([{batchId:saltBatch,amount:1}]);
     expect(drylandStock(f.world(),ridge,'rift_salt')).toBe(1);
     expect(f.world().frontier?.drylands?.herd?.work).toBe(2);
+    const fedLinks=projectFrontierSupplyLinks(f.world(),actor(f.world(),ridgeId));
+    expect(fedLinks).toEqual([expect.objectContaining({kind:'ridge_feeding',good:'rift_salt',quantity:1,
+      result:{kind:'herd_fed'},deliveredTick:f.agreement().closedTick,usedTick:fed?.tick})]);
+    expect(projectFrontierSupplyLinks(f.world(),actor(f.world(),westId))).toEqual([]);
+
     f.month();f.move(westId,'travel','frontier-west-trail');
     f.month();f.move(westId,'travel','frontier-west-trial');
     const source=f.world(),before=actor(source,westId),water=source.frontier!.drylands!.well!.water;
@@ -206,7 +212,21 @@ describe('actual West–Ridge consignments',()=>{
       if(outcome==='backlash')expect(person.hp).toBeLessThan(before.hp);
       expect(result.frontier?.drylands?.well?.water).toBe(water-2);
       expect(drylandStock(result,west,'stormstone')).toBe(1);
-      expect(codec.encode(codec.decode(codec.encode(result)))).toBe(codec.encode(result));
+      const links=projectFrontierSupplyLinks(result,person);
+      const cargo=f.agreement().ridge!,batch=result.frontier!.drylands!.batches.find(row=>row.id===oreBatch)!;
+      expect(links).toEqual([expect.objectContaining({kind:'west_layer',good:'stormstone',quantity:1,
+        harvestedTick:batch.tick,loadedTick:cargo.loadedTick,arrivedTick:cargo.arrivedTick,deliveredTick:f.agreement().closedTick,
+        usedTick:layer.tick,result:{kind:outcome==='advanced'?'layer_advanced':'layer_backlash',realm:before.realm,
+          fromStage:before.realmStage,toStage:person.realmStage}})]);
+      expect(projectFrontierSupplyLinks(result,person,{asOfTick:f.agreement().closedTick})).toEqual([]);
+      expect(projectFrontierSupplyLinks(result,actor(result,ridgeId))).toEqual(fedLinks); // same world, distinct witness
+      const strict=codec.decode(codec.encode(result));
+      expect(codec.encode(strict)).toBe(codec.encode(result));
+      expect(projectFrontierSupplyLinks(strict,actor(strict,westId))).toEqual(links);
+      const forged=structuredClone(result);
+      forged.frontier!.drylands!.trade!.agreements[0].ridge!.status='returned';
+      expect(projectFrontierSupplyLinks(forged,actor(forged,westId))).toEqual([]);
+
     }
     expect(drylandStock(source,west,'stormstone')).toBe(2);
     expect(source.frontier?.drylands?.well?.water).toBe(water);

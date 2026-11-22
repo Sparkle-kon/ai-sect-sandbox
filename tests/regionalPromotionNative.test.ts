@@ -62,8 +62,10 @@ describe('actual native E3-2 coverage',()=>{
     expect([seller.spiritStones,buyer.spiritStones,guide.spiritStones,buyer.herbs.jade_leaf]).toEqual(cash);
 
   });
-  it('gets a real distant war arrival and no early ghost destination event',()=>{
-    const w=createInitialWorld(2031),[own,target,ally,other]=w.sects;
+  it.each([false,true])('checks actual lower war arrival, scope forbidden at abyss=%s',(abyss)=>{
+    const w=createInitialWorld(2031),own=w.sects[0];
+    const target=abyss?w.sects.find(row=>row.headquartersId==='loc-blood')!:w.sects.find(row=>row.headquartersId==='loc-tianji')!;
+    const [ally,other]=w.sects.filter(row=>row.id!==own.id&&row.id!==target.id);
     const leader=w.cultivators.find(a=>a.id===own.leaderId)!;
     w.diplomacy=[];w.sieges=[];
     expect(configureRegionalSimulation(w,'loc-taixu')).toBe(true);
@@ -88,7 +90,8 @@ describe('actual native E3-2 coverage',()=>{
     const beforeArrival=structuredClone(w);
     month(w);const arrival=advanceDiplomacy(w,()=>.5);expect(arrival.map(row=>row.title)).toEqual(['联军抵达山门']);
     recordRegionalLatePromotions(w,beforeArrival,arrival);
-    expect(w.regionalSimulation?.promotions).toMatchObject([{kind:'siege_arrived',observedTick:w.tick,startsTick:w.tick+1}]);
+    if(abyss)expect(w.regionalSimulation?.promotions).toBeUndefined();
+    else expect(w.regionalSimulation?.promotions).toMatchObject([{kind:'siege_arrived',observedTick:w.tick,startsTick:w.tick+1}]);
     expect([...activeRegionalPromotionRegions(w)]).toEqual([]);
     expect(siege.status).toBe('sieging');expect(leader.locationId).toBe(target.headquartersId);
     expect(advanceDiplomacy(w,()=>.5)).toEqual([]);

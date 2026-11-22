@@ -123,6 +123,23 @@ function activeParties(world:WorldState):Set<string> {
       add(row.discipleId,row.patientId,row.escortId);
   for(const row of world.danxiaReviews.reviews)if(row.status==='open'||row.status==='proposed')
     add(row.patientId,row.discipleId,row.proposal?.representativeId);
+  // The charts and cargo keep their own monthly systems. Protect just the actual contracting people
+  // while they may need to act, including an unpaid claim after a voyage's terminal date.
+  for(const row of world.frontier?.trade?.agreements??[])
+    if(row.status==='offered'||row.status==='accepted'||row.status==='returning')add(row.northActorId,row.southActorId);
+  for(const row of world.frontier?.drylands?.trade?.agreements??[])
+    if(row.status==='offered'||row.status==='accepted'||row.status==='returning')add(row.westActorId,row.ridgeActorId);
+  for(const row of world.frontier?.port?.trade?.agreements??[]){
+    if(row.status==='offered'||row.status==='signed'){add(row.sellerId,row.buyerId);continue;}
+    if(row.status==='shipping'){
+      add(row.sellerId); // The hull, original salt, or paid roots are still in the seller's custody chain.
+      if(row.voyage?.status==='outbound'||row.voyage?.status==='awaiting_buyer')add(row.buyerId);
+    }
+    if(row.roots==='refundable_inland')add(row.buyerId);
+    if(row.roots==='landed_at_port')add(row.sellerId);
+  }
+  for(const row of world.upperArrayField?.trade?.agreements??[])
+    if(row.status==='offered'||row.status==='accepted'||row.status==='carrying')add(row.sellerId,row.buyerId);
   for(const row of world.oaths.contracts)if(open(row.status)||row.escrow.payment>0||row.escrow.collateral>0)add(row.requesterId,row.providerId);
   for(const row of world.markets.orders)if(row.status==='open')add(row.actorId);
   for(const row of world.markets.shipments)if(row.status==='in_transit')add(row.sellerId,row.buyerId);
@@ -169,7 +186,7 @@ function regionalCandidates(world:WorldState,focus:SimulationRegionId,protectedA
   const settlements=new Set(world.settlements.villages.map(row=>row.locationId));
   const hazardous=new Set(world.mapHazards.filter(row=>routeWarningHazardValid(world,row,world.tick)).map(row=>row.tileId));
   for(const actor of world.cultivators){
-    if(!alive(actor)||protectedActors.has(actor.id)||isTribulationActive(actor)||
+    if(!onLowerPlane(actor)||!alive(actor)||protectedActors.has(actor.id)||isTribulationActive(actor)||
       actor.guardAssignment&&actor.guardAssignment.expiresTick>world.tick||
       (actor.age+2>=actor.lifespan)||actor.qiProgress>=80||actor.pillToxicity>0||
       actor.hp/Math.max(1,actor.maxHp)<.82)continue;
@@ -234,7 +251,7 @@ export function deferRegionalActorTurn(world:WorldState,turn:RegionalTurn|undefi
   if(!turn||!state||turn.version!==state.version||turn.tick!==world.tick)return false;
   if(turn.concludedActors.has(actor.id))return true;
   const candidate=turn.candidateActors.get(actor.id);
-  if(provided||!candidate||!alive(actor)||actor.locationId!==candidate.siteId||
+  if(provided||!candidate||!onLowerPlane(actor)||!alive(actor)||actor.locationId!==candidate.siteId||
     isTribulationActive(actor)||actor.qiProgress>=80||actor.pillToxicity>0||
     actor.hp/Math.max(1,actor.maxHp)<.82||!!actor.guardAssignment&&actor.guardAssignment.expiresTick>world.tick||
     courierActedThisTick(world,actor)||pilgrimageActedThisTick(world,actor)||danxiaMedicineActedThisTick(world,actor))return false;
@@ -272,7 +289,7 @@ export function finishRegionalSimulationTurn(world:WorldState,turn:RegionalTurn|
       state.annual.push(report);
     }
     const actor=identities.get(row.actorId),candidate=turn.candidateActors.get(row.actorId);
-    if(!actor||!alive(actor)||!candidate||candidate.regionId!==row.regionId||actor.locationId!==candidate.siteId||
+    if(!actor||!onLowerPlane(actor)||!alive(actor)||!candidate||candidate.regionId!==row.regionId||actor.locationId!==candidate.siteId||
       !turn.concludedActors.has(actor.id)||turn.protectedActors.has(actor.id)||turn.exactRegions.has(row.regionId)||
       isTribulationActive(actor)||actor.qiProgress>=80||actor.pillToxicity>0||actor.hp/Math.max(1,actor.maxHp)<.82||
       !!actor.guardAssignment&&actor.guardAssignment.expiresTick>world.tick){

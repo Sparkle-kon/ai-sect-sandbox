@@ -31,12 +31,11 @@ describe('opt-in focused native cadence',()=>{
     expect(regional.events.every(row=>!row.id.startsWith('regional-'))).toBe(true);
     expect(exact.cultivators.find(row=>row.id==='npc-1')?.age).toBe(regional.cultivators.find(row=>row.id==='npc-1')?.age);
     expect(initial.cultivators.every(actor=>regional.cultivators.some(real=>real.id===actor.id))).toBe(true);
-    expect(REGIONAL_BENCHMARK.seed).toBe(2031);
-    expect(REGIONAL_BENCHMARK.months).toBe(24);
-    expect(REGIONAL_BENCHMARK.metrics.map(row=>row.monthly)).toEqual(Object.values(counts(exact)));
-    expect(REGIONAL_BENCHMARK.metrics.map(row=>row.regional)).toEqual(Object.values(counts(regional)));
+    // Separate 24-month regression under corrected scope; not the measured T6→18 UI comparison.
+    expect(Object.values(counts(exact))).toEqual([22,204,37052,50,3]);
+    expect(Object.values(counts(regional))).toEqual([22,205,38386,56,2]);
     expect(report.annual.map(({regionId,actorMonths,waivedActorMonths,qiAdded})=>({regionId,actorMonths,waivedActorMonths,qiAdded}))).toEqual([
-      {regionId:'east',actorMonths:33,waivedActorMonths:0,qiAdded:33},{regionId:'east',actorMonths:0,waivedActorMonths:15,qiAdded:0},
+      {regionId:'east',actorMonths:33,waivedActorMonths:0,qiAdded:33},{regionId:'east',actorMonths:36,waivedActorMonths:0,qiAdded:36},
     ]);
   });
   it('waives previously deferred east months when it becomes the actual focus in December, and preflight never writes',()=>{
@@ -73,5 +72,29 @@ describe('opt-in focused native cadence',()=>{
     expect(read(anchor)?.status).toBe('measured');expect(read(branch)?.status).toBe('measured');
     expect(read(branch)?.baseline).toEqual(original?.baseline);
     expect(branch.regionalSimulation?.actors.some(row=>row.actorId==='npc-2')).toBe(false);
+  });
+  it('shows the measured T6 to T18 rates, not the unrelated historic 24-month sample',()=>{
+    const go=(world:WorldState)=>advanceWorldTick(world,undefined,undefined,'utility',undefined,
+      {captureTrace:false,capturePresentation:false});
+    let start=createInitialWorld(70,'spirit-bloom');
+    while(start.tick<6)start=go(start);
+    const mixed=structuredClone(start);
+    expect(configureRegionalSimulation(mixed,'loc-taixu')).toBe(true);
+    const run=(lane:WorldState)=>{
+      let actualDeferrals=0;
+      while(lane.tick<18){
+        lane=go(lane);
+        actualDeferrals+=lane.regionalSimulation?.actors.filter(row=>row.lastDeferredTick===lane.tick).length??0;
+      }
+      return [lane.cultivators.filter(row=>row.alive&&row.hp>0).length,
+        lane.settlements.villages.reduce((sum,row)=>sum+row.population,0),
+        lane.sects.reduce((sum,row)=>sum+row.spiritStones,0),
+        lane.locations.reduce((sum,row)=>sum+row.herbs.jade_leaf,0),
+        actualDeferrals];
+    };
+    expect(REGIONAL_BENCHMARK.seed).toBe(70);
+    expect(REGIONAL_BENCHMARK.months).toBe(12);
+    expect(REGIONAL_BENCHMARK.metrics.map(row=>row.monthly)).toEqual(run(start));
+    expect(REGIONAL_BENCHMARK.metrics.map(row=>row.regional)).toEqual(run(mixed));
   });
 });

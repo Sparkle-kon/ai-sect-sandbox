@@ -121,4 +121,23 @@ describe('diplomatic pacts, tribute and bounded sieges', () => {
     expect(siege.status).toBe('repelled');
     expect(f.own.spiritStones).toBe(cash);
   });
+  it('does not pull someone from an independent plane into a lower siege or a stale marching roster',()=>{
+    const f=fixture();
+    const frontier=f.world.cultivators.find(row=>row.id!==f.actor.id&&row.sectId===f.own.id)!;
+    const upper=f.world.cultivators.find(row=>row.sectId===f.ally.id&&row.id!==f.ally.leaderId)!;
+    // Deliberate stale-roster boundary. The real archived E43 overlap supplies the normal-world positive.
+    frontier.positionPlane='frontier';frontier.locationId='frontier-north-home';
+    upper.positionPlane='upper';upper.locationId='array-field-home';
+    expect(initializeSiege(f)).not.toBeNull();
+    const siege=f.world.sieges[0], before=f.own.spiritStones;
+    expect(siege.participantIds).not.toContain(frontier.id);
+    expect(siege.participantIds).not.toContain(upper.id);
+    const stale=f.world.cultivators.find(row=>row.id!==f.actor.id&&siege.participantIds.includes(row.id))!;
+    stale.positionPlane='threshold';stale.locationId='realm-passage-upper-step';
+    f.world.tick++;
+    const events=advanceDiplomacy(f.world,()=>.5);
+    expect(events.every(row=>![frontier,upper,stale].some(actor=>row.actorIds.includes(actor.id)))).toBe(true);
+    expect([frontier.locationId,upper.locationId,stale.locationId]).toEqual(['frontier-north-home','array-field-home','realm-passage-upper-step']);
+    expect(f.own.spiritStones).toBe(before);
+  });
 });

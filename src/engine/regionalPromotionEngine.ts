@@ -1,5 +1,6 @@
 import type { RegionalTurn } from './regionalSimulationEngine';
 import { regionForColumn, regionForPoint } from './simulationRegionGeometry';
+import {isScopedExpeditionGate} from './expeditionOmenTerms';
 import { doctrineFoundingPhysicallyAt } from './doctrineFoundingEngine';
 import { terrainTileAt } from './terrainEngine';
 import type { Cultivator, MapPoint, RegionalPromotion, SimulationRegionId, WorldEvent, WorldState } from '../types/world';
@@ -9,7 +10,7 @@ export const REGIONAL_PROMOTION_HISTORY=36;
 const realTick=(world:WorldState,before:WorldState)=>before.tick+1===world.tick;
 const pointEquals=(a:MapPoint,b:MapPoint)=>a.x===b.x&&a.y===b.y;
 const site=(world:WorldState,id:string)=>world.locations.find(item=>item.id===id);
-const ordinarySite=(item:ReturnType<typeof site>)=>!!item&&item.type!=='secret_realm'&&item.type!=='abyss';
+const ordinarySite=(item:ReturnType<typeof site>)=>!!item&&item.type!=='secret_realm'&&item.type!=='abyss'&&!isScopedExpeditionGate(item);
 const same=(a:readonly string[],b:readonly string[])=>a.length===b.length&&a.every((id,i)=>id===b[i]);
 const live=(actor:Cultivator|undefined):actor is Cultivator=>!!actor?.alive&&actor.hp>0;
 
@@ -103,7 +104,7 @@ export function recordRegionalLatePromotions(world:WorldState,before:WorldState,
     const source=attacker&&site(world,attacker.headquartersId),target=site(world,row.destinationId);
     if(!old||old.status!=='marching'||old.destinationId!==row.destinationId||old.attackerSectId!==row.attackerSectId||
       old.defenderSectId!==row.defenderSectId||!same(old.participantIds,row.participantIds)||!source||!target||
-      source.type==='secret_realm'||target.type==='secret_realm')continue;
+      !ordinarySite(source)||!ordinarySite(target))continue;
     const fromRegionId=regionForPoint(world,source),toRegionId=regionForPoint(world,target);
     if(!fromRegionId||!toRegionId||fromRegionId===toRegionId)continue;
     const found=events.filter(item=>item.id===`evt-${world.tick}-dip-${row.id}`&&item.tick===world.tick&&item.category==='diplomacy'&&
