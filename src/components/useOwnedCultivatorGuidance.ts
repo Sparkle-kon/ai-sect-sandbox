@@ -12,6 +12,7 @@ export function useOwnedCultivatorGuidance<Option,Request extends Input>(
   sim:Simulation,viewer:Cultivator|undefined,
   command:(frame:Frame,option:Option)=>Request,
   declaredLegal:(request:Request,world:WorldState,branchId:string,revision:number)=>unknown,
+  applied?:(request:Request,world:WorldState)=>boolean,
 ):{busy:boolean;guide:(option:Option)=>Promise<boolean>}|undefined{
   const pending=useRef(false);
   if(sim.preview||!viewer||activeAvatar(sim.world)!==viewer)return undefined;
@@ -25,7 +26,9 @@ export function useOwnedCultivatorGuidance<Option,Request extends Input>(
     pending.current=true;
     try{
       await sim.handleStepTick(request);
-      return sim.history.current.activeBranchId===branchId&&sim.saveContextVersion.current===revision&&sim.authority.current.tick===world.tick+1;
+      const resulting=sim.authority.current;
+      return sim.history.current.activeBranchId===branchId&&sim.saveContextVersion.current===revision&&resulting.tick===world.tick+1&&
+        (applied?.(request,resulting)??true);
     }finally{pending.current=false;}
   }};
 }

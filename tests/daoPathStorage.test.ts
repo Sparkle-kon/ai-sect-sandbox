@@ -1,5 +1,6 @@
 import {describe,expect,it} from 'vitest';
 import {decodeEraWorldSave,decodeWorldSave,encodeEraWorldSave,encodeWorldSave} from '../src/engine/storageEngine';
+import {buildConfirmedShareSave,prepareShareSavePrivacy,SHARE_SAVE_REDACTED_TEXT} from '../src/engine/shareSavePrivacy';
 import type {WorldState} from '../src/types/world';
 import {actualAwakenedSwordIntent,authenticSwordStart,bindOtherArtifact,intentActor,intentTurn,nativeSwordDuel,swordOwner}
   from './swordIntentNativeFixture';
@@ -29,6 +30,16 @@ describe('strict native dao path and intent proof',()=>{
   it('preserves only actually dated paid sword practices, their exact weapon, and later readiness',()=>{
     const {choice,first,learned,ready}=actualAwakenedSwordIntent();
     for(const world of [choice,first,learned,ready])expect(dao(reopen(world))).toEqual(dao(world));
+    const review=prepareShareSavePrivacy(ready);
+    expect(review.status).toBe('ready');
+    const shared=decodeWorldSave(buildConfirmedShareSave(ready,review)!.json);
+    expect(dao(shared)).toEqual(dao(ready));
+    expect(shared.events.find(event=>event.id.endsWith('-dao-ready')))
+      .toMatchObject({title:SHARE_SAVE_REDACTED_TEXT,description:SHARE_SAVE_REDACTED_TEXT});
+    reject(ready,w=>{
+      const source=w.events.find(event=>event.id.endsWith('-dao-ready'))!;
+      source.title=SHARE_SAVE_REDACTED_TEXT;
+    },/daoPath.source/);
     reject(learned,w=>{dao(w).practices[1].tick=dao(w).practices[0].tick;},/daoPath.practice/);
     reject(learned,w=>{dao(w).practices[0].qiPaid=0;},/daoPath.practice/);
     reject(learned,w=>{dao(w).practices[0].herbPaid='jade_leaf';},/daoPath.practice/);

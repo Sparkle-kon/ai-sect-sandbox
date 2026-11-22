@@ -1,3 +1,4 @@
+import {useImmortalAuctionControls} from '../useImmortalAuctionControls';
 import {useDungeonControls} from '../useDungeonControls';
 import {useTournamentArenaControls} from '../useTournamentArenaControls';
 import type {RingAudiencePanelProps} from '../RingAudiencePanel';
@@ -76,6 +77,7 @@ export function CivicWorldHub({
   }=simulation;
   const arenaControls=useTournamentArenaControls(simulation,active,selectedCultivator);
   const dungeonControls=useDungeonControls(simulation,active,selectedCultivator);
+  const auctionControls=useImmortalAuctionControls(simulation,active?selectedCultivator:undefined);
   const activeActorId=selectedCultivator?.id??null;
   const selectedSettlementId=visibleWorld.settlements.villages.find(village=>village.locationId===selectedCultivator?.locationId)?.id;
   const regionalReadActive=active&&!preview;
@@ -160,7 +162,7 @@ export function CivicWorldHub({
       </div> },
       { id: 'markets', label: '坊市与商队', content: selectedCultivator
         ? <div className="space-y-2.5">
-          <React.Suspense fallback={<p role="status">载入世界记录…</p>}><MarketCaravansPanel world={visibleWorld} cultivator={selectedCultivator} freightControls={marketFreightControls} /></React.Suspense>
+          <React.Suspense fallback={<p role="status">载入世界记录…</p>}><MarketCaravansPanel world={visibleWorld} cultivator={selectedCultivator} freightControls={marketFreightControls} auctionControls={auctionControls} /></React.Suspense>
           {visibleWorld.caravanRestitution.lots.length > 0 &&
             <React.Suspense fallback={null}><CaravanRestitutionPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense>}
         </div>

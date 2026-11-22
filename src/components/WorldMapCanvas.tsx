@@ -1,3 +1,4 @@
+import {drawImmortalAuctionMapMark,immortalAuctionMapMark} from './immortalAuctionMapMark';
 import {buildDaoIntentMapVfx,drawDaoIntentMapVfx} from './daoIntentMapVfx';
 import {DAO_PATHS} from '../engine/daoPathTerms';
 import {buildHeavenlyAlchemyMapVfx,drawHeavenlyAlchemyMapVfx} from './heavenlyAlchemyMapVfx';
@@ -308,6 +309,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       .map(({ siteId }) => siteId));
   }, [world, selected]);
   const { seenLocations, isCurrentLocation } = mapView;
+  const auctionMark=useMemo(()=>immortalAuctionMapMark(world,isCurrentLocation,!!preview),[world,isCurrentLocation,preview]);
   const arenaMarks=useMemo(()=>tournamentArenaMapMarks(world,isCurrentLocation),[world,isCurrentLocation]);
   const daoMarks=useMemo(()=>buildDaoIntentMapVfx(world,isCurrentLocation,!!preview),[world,isCurrentLocation,preview]);
   const alchemyMarks=useMemo(()=>buildHeavenlyAlchemyMapVfx(world,isCurrentLocation,!!preview),[world,isCurrentLocation,preview]);
@@ -714,6 +716,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
 
         const arenaRound=arenaMarks.get(loc.id);
         if(arenaRound!==undefined)drawTournamentArenaMark(ctx,loc.x,loc.y,arenaRound);
+        if(auctionMark?.siteId===loc.id)drawImmortalAuctionMapMark(ctx,loc.x,loc.y,auctionMark.count);
         if(dungeonMark?.siteId===loc.id)drawDungeonMapMark(ctx,loc.x,loc.y,dungeonMark.room);
 
         if (besiegedLocationIds.has(loc.id)) {
@@ -1075,7 +1078,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener?.('change',stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, atlasDrawing, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, observedSalvageSites, localGranary, villageMapLabels, civicObservation, usedVillageSegments, furnaceShift, localPavilionDesk, localMemorial, localVillageFair, localStipend, localSeedCulture, localToolLoans, localAlignedWeather, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope, scenicRelief, qiFlow, inspectionEnabled, letters, travel, flightAlignments, combatVfx, actorBadgeFacts, hasBadgeQuote, domes, strategic, arenaMarks, dungeonMark, alchemyMarks, daoMarks]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, atlasDrawing, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, localLeaseSites, localCommons, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, observedCohortSites, observedSalvageSites, localGranary, villageMapLabels, civicObservation, usedVillageSegments, furnaceShift, localPavilionDesk, localMemorial, localVillageFair, localStipend, localSeedCulture, localToolLoans, localAlignedWeather, annotationView, annotationPins, beastsByLocation, weatherAtVisibleSites, sanctuaryMarks, armedBrush, preview, compact, clusterScope, scenicRelief, qiFlow, inspectionEnabled, letters, travel, flightAlignments, combatVfx, actorBadgeFacts, hasBadgeQuote, domes, strategic, arenaMarks, dungeonMark, alchemyMarks, daoMarks, auctionMark]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1674,6 +1677,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                 {tile && <span className="text-slate-400">· {tile.biome} · 地格灵气 {tile.spiritQi} · {world.sects.find(({ id }) => id === tile.ownerSectId)?.name ?? '无所属宗门'}</span>}
                 {fog && (visibleActorsAtSite.get(location.id) ?? 0) > 0 &&
                   <span className="text-slate-300">· 可见修士 {visibleActorsAtSite.get(location.id)} 位（山河索引可查）</span>}
+                {auctionMark?.siteId===location.id&&<span className="text-amber-200">· 万宝会 · 实有拍品 {auctionMark.count} 件</span>}
                 {daoMarks.filter(mark=>mark.siteId===location.id).map((mark,index)=><span key={index} className="text-cyan-200">· 本月实见{DAO_PATHS[mark.pathId].name}招式</span>)}
                 {alchemyMarks.some(mark=>mark.siteId===location.id)&&<span className="text-amber-200">· 本月实有丹雷</span>}
                 {dungeonMark?.siteId===location.id&&<span className="text-cyan-200">· 本人秘境层：{DUNGEON_MAP_LABELS[dungeonMark.room]}</span>}

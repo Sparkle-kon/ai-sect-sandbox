@@ -1,3 +1,5 @@
+import type { ImmortalAuctionMove, ImmortalAuctionPillId } from './immortalAuction';
+import type { ImmortalAuctionState } from './immortalAuction';
 import type { DaoIntentActivation, DaoPathState } from './daoPath';
 import type { DaoPathId, DaoPathMove } from './daoPath';
 import type { HeavenlyAlchemyMove, HeavenlyHeat, HeavenlyQuality, HeavenlyRecipeId } from './heavenlyAlchemy';
@@ -182,6 +184,7 @@ export type ActionType =
   | 'BREW_PILL'
   | 'HEAVENLY_ALCHEMY'
   | 'DAO_PATH'
+  | 'IMMORTAL_AUCTION'
   | 'USE_PILL'
   | 'VILLAGE_CENSUS'
   | 'FIELD_OBSERVATORY'
@@ -693,6 +696,13 @@ export interface LLMDecisionPayload {
   targetTechniqueId?: string;
   targetHerbId?: HerbId;
   targetPillId?: PillId;
+  auctionMove?: ImmortalAuctionMove;
+  targetAuctionLotId?: string;
+  targetAuctionArtifactId?: string;
+  targetAuctionPillId?: ImmortalAuctionPillId;
+  auctionBidStones?: number;
+  auctionQuoteBidCount?: number;
+  targetAuctionAmbushLotId?: string;
   daoPathMove?: DaoPathMove;
   targetDaoPathId?: DaoPathId;
   heavenlyAlchemyMove?: HeavenlyAlchemyMove;
@@ -3691,6 +3701,7 @@ export interface WorldState {
   settlements: SettlementState;
   villageEvolution:VillageEvolutionState;
   markets: MarketState;
+  immortalAuction?: ImmortalAuctionState;
   oaths: OathState;
   oathArbitrations: OathArbitrationState;
   mentorship: MentorshipState;

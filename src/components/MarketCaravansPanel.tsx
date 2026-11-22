@@ -1,3 +1,6 @@
+import {ImmortalAuctionRead,type ImmortalAuctionControls} from './ImmortalAuctionRead';
+import {IMMORTAL_AUCTION_SITE,immortalAuctionMinimum} from '../engine/immortalAuctionTerms';
+import {projectImmortalAuctions} from '../engine/immortalAuctionEngine';
 import {MarketFreightRead,type MarketFreightControls} from './MarketFreightRead';
 import {projectMarketFreight} from '../engine/escortEngine';
 import { useState } from 'react';
@@ -49,7 +52,7 @@ function BookSide({ orders, side, actorName }: { orders: Order[]; side: Order['s
   );
 }
 
-export function MarketCaravansPanel({ world, cultivator, freightControls }: { world: WorldState; cultivator: Cultivator | undefined; freightControls?:MarketFreightControls }) {
+export function MarketCaravansPanel({ world, cultivator, freightControls,auctionControls }: { world: WorldState; cultivator: Cultivator | undefined; freightControls?:MarketFreightControls;auctionControls?:ImmortalAuctionControls }) {
   const [requestedMarketId, setRequestedMarketId] = useState<string>();
   const [requestedGood, setRequestedGood] = useState<Good>();
   const publicMarkets = world.locations.filter(({ type }) => type === 'market');
@@ -76,6 +79,13 @@ export function MarketCaravansPanel({ world, cultivator, freightControls }: { wo
   const selectedInvolved = (buyer: string, seller: string) => cultivator?.id === buyer || cultivator?.id === seller;
   const terrain = createTerrainMapView(world, cultivator, true);
   const freightViewer=cultivator&&world.cultivators.includes(cultivator)?cultivator:undefined;
+  const auction=marketId===IMMORTAL_AUCTION_SITE&&freightViewer?projectImmortalAuctions(world,freightViewer):undefined;
+  const ownedAuctionArtifact=(id:string)=>{
+    const item=freightViewer?.artifacts.find(entry=>entry.id===id);
+    if(!item?.id||!item.tier||item.tier==='法器'||item.durability===undefined||item.maxDurability===undefined)return undefined;
+    return {name:item.name,minimum:immortalAuctionMinimum({kind:'artifact',artifactId:item.id,name:item.name,tier:item.tier,
+      durability:item.durability,maxDurability:item.maxDurability,spiritRoot:item.spiritRoot})};
+  };
   const freight=freightViewer?projectMarketFreight(world,freightViewer):[];
 
   const escortsByShipment = new Map((world.escorts ? visibleEscorts(world, cultivator) : []).map((view) => {
@@ -87,7 +97,7 @@ export function MarketCaravansPanel({ world, cultivator, freightControls }: { wo
   return (
     <section aria-label="坊市与跨境商队" className="min-w-0 space-y-2 rounded-xl border border-amber-400/25 bg-slate-900/70 p-3 text-slate-100 sm:p-4">
       <h3 className="text-sm font-semibold text-amber-100">坊市与跨境商队</h3>
-      <p className="text-xs text-slate-400">公开坊市仅供查阅；修士自行挂单，不代替其交易。</p>
+      <p className="text-xs text-slate-400">公开订单簿仅供查阅；普通挂单由修士自己处理，订单簿不代替其交易。</p>
       {freightViewer&&<MarketFreightRead key={freightControls?.scopeKey??freightViewer.id} world={world}
         viewer={freightViewer} rows={freight} controls={freightControls}/>}
       {!market ? <p className="text-xs text-slate-400">当前世界无公开坊市。</p> : (
@@ -100,6 +110,7 @@ export function MarketCaravansPanel({ world, cultivator, freightControls }: { wo
           <p className={`break-words text-xs ${closure ? 'text-rose-200' : 'text-emerald-200'}`}>
             {market.name} · {closure ? `休市：${closure}` : '正常开市'}
           </p>
+          {auction&&<ImmortalAuctionRead view={auction} key={auction.actorId} tick={world.tick} named={actorName} artifactQuote={ownedAuctionArtifact} controls={auctionControls}/>}
           <details className="min-w-0 rounded border border-slate-800 bg-slate-950/60 p-2">
             <summary className="cursor-pointer text-xs font-semibold text-amber-100">价时优先订单簿 · 在簿 {localOrders.length} 单</summary>
             <div className="mt-2 space-y-2">

@@ -1,3 +1,5 @@
+import { advanceImmortalAuctions, availableImmortalAuctionActions, recordImmortalAuctionDeparture, resolveImmortalAuctionAction } from './immortalAuctionEngine';
+import { exactAuctionAmbushDecision, exactImmortalAuctionDecision } from './immortalAuctionCognition';
 import {consumeDaoDuelIntents,previewDaoDuelIntents,recordDaoDuelIntents} from './daoPathEngine';
 import { availableDaoPathActions, resolveDaoPathAction } from './daoPathEngine';
 import { availableHeavenlyAlchemyActions, resolveHeavenlyAlchemyAction } from './heavenlyAlchemyEngine';
@@ -137,7 +139,7 @@ import {
   WorldEvent,
   WorldState,
 } from '../types/world';
-import { availableAutonomousDaoPathActions, availableAutonomousHeavenlyAlchemyActions, computeHeuristicDecision, daoPathTurnLocked, dungeonDecisionOccasion, exactDaoPathDecision, exactDungeonDecision, exactHeavenlyAlchemyDecision, isProviderPersonaDecision, requiredBeforeOrdinaryDecision, utilityCeasefireDecision, utilityDungeonDecision, utilityExpeditionRescueDecision } from './llmBrain';
+import { availableAutonomousDaoPathActions, availableAutonomousHeavenlyAlchemyActions, availableAutonomousImmortalAuctionActions, computeHeuristicDecision, currentAuctionAmbushOffer, daoPathTurnLocked, dungeonDecisionOccasion, exactDaoPathDecision, exactDungeonDecision, exactHeavenlyAlchemyDecision, isProviderPersonaDecision, requiredBeforeOrdinaryDecision, utilityCeasefireDecision, utilityDungeonDecision, utilityExpeditionRescueDecision } from './llmBrain';
 import { maintainMemories, recordMemory } from './memoryEngine';
 import { synthesizeReflections } from './reflectionEngine';
 import { fabricateRumor, knownRumorLead, spreadRumors, witnessEvent } from './rumorEngine';
@@ -495,6 +497,22 @@ export function applyCultivatorBrainDecision(
     return applied;
   }
   if (decision.chosenAction !== 'EXPEDITION_RESCUE' && activeDungeonForActor(world, cultivator)) return null;
+  if (decision.targetAuctionAmbushLotId !== undefined &&
+      !exactAuctionAmbushDecision(decision, currentAuctionAmbushOffer(cultivator, world), true)) return null;
+  if (decision.chosenAction === 'IMMORTAL_AUCTION') {
+    if (daoPathTurnLocked(cultivator, world)) return null;
+    const autonomous = modelInput || isProviderPersonaDecision(decision);
+    const options = autonomous ? availableAutonomousImmortalAuctionActions(cultivator, world) :
+      availableImmortalAuctionActions(cultivator, world);
+    const exact = exactImmortalAuctionDecision(decision, options, true);
+    if (!exact) return null;
+    const auction = resolveImmortalAuctionAction(world, cultivator, exact);
+    if (auction) {
+      cultivator.currentAction = 'IMMORTAL_AUCTION';
+      cultivator.innerMonologue = exact.innerMonologue;
+    }
+    return auction;
+  }
   if (decision.chosenAction === 'DAO_PATH') {
     if (daoPathTurnLocked(cultivator, world)) return null;
     const autonomous = modelInput || isProviderPersonaDecision(decision);
@@ -886,8 +904,11 @@ export function applyCultivatorBrainDecision(
           if (spent >= 3) recordMemory(cultivator, world.tick,
             `灵潮扰动御剑行路，抵至【${dest.name}】时额外消耗${spent}点灵气。`, 4, 'cultivation', -1);
         }
+        const departedSiteId = cultivator.locationId;
         cultivator.locationId = dest.id;
         noteTerrainVisit(world, cultivator);
+        // This only records a real departure by the exact buyer; failed and non-world travel cannot open a pursuit.
+        if (world.immortalAuction) recordImmortalAuctionDeparture(world, cultivator, departedSiteId);
         // Random chance of finding spirit stones or herbs while exploring
         if (rng() < 0.35) {
           const foundStones = Math.round(40 + rng() * 120);
@@ -1292,6 +1313,24 @@ export function advanceWorldTick(
     const modelProposal = supplied && traceOptions?.modelActors?.has(cultivator.id) ? supplied : undefined;
     let provided = avatarDecision ?? supplied;
     let modelOrdinaryReplaced=false;
+    if (provided?.chosenAction === 'IMMORTAL_AUCTION' || provided?.targetAuctionAmbushLotId !== undefined) {
+      const fromProvider = !avatarDecision && Boolean(modelProposal || isProviderPersonaDecision(provided));
+      const isAuction = provided.chosenAction === 'IMMORTAL_AUCTION';
+      const required = requiredBeforeOrdinaryDecision(cultivator, nextState);
+      const startingActor = fromProvider ? prevState.cultivators.find(row => row.id === cultivator.id) : undefined;
+      const startingOffer = !fromProvider || startingActor && (isAuction
+        ? exactImmortalAuctionDecision(provided, availableAutonomousImmortalAuctionActions(startingActor, prevState, nextState.tick), true)
+        : exactAuctionAmbushDecision(provided, currentAuctionAmbushOffer(startingActor, prevState), true));
+      const legal = startingOffer && !daoPathTurnLocked(cultivator, nextState) && (isAuction
+        ? exactImmortalAuctionDecision(provided, fromProvider ? availableAutonomousImmortalAuctionActions(cultivator, nextState)
+          : availableImmortalAuctionActions(cultivator, nextState), true)
+        : exactAuctionAmbushDecision(provided, currentAuctionAmbushOffer(cultivator, nextState), true));
+      if (!legal && (fromProvider || required)) {
+        // Do not silently turn a refused provider quote into an autonomous higher payment this month.
+        provided = required ?? (isAuction ? { chosenAction: 'REST', innerMonologue: '报价已变，这一口不再出价。' } : undefined);
+        modelOrdinaryReplaced = fromProvider;
+      }
+    }
     if (provided?.chosenAction === 'DAO_PATH') {
       const fromProvider = !avatarDecision && Boolean(modelProposal || isProviderPersonaDecision(provided));
       const required = requiredBeforeOrdinaryDecision(cultivator, nextState);
@@ -1416,10 +1455,11 @@ export function advanceWorldTick(
 
     const captureTrace = traceOptions?.captureTrace !== false;
     const candidates = (captureTrace || traceOptions?.onActor) && decision.chosenAction !== 'EXPEDITION_DUNGEON' &&
-      decision.chosenAction !== 'HEAVENLY_ALCHEMY' && decision.chosenAction !== 'DAO_PATH' ?
+      decision.chosenAction !== 'HEAVENLY_ALCHEMY' && decision.chosenAction !== 'DAO_PATH' &&
+      decision.chosenAction !== 'IMMORTAL_AUCTION' && decision.targetAuctionAmbushLotId === undefined ?
       legalTraceCandidates(nextState, cultivator) : [];
     const chosenByModel = Boolean(modelProposal && !modelOrdinaryReplaced && !modelStoryChoiceReplaced && !expeditionModelReplaced);
-    if (traceOptions?.tape) rememberReplayDecision(traceOptions.tape, cultivator.id, decision, decisionDraws, chosenByModel);
+    if (traceOptions?.tape) rememberReplayDecision(traceOptions.tape, cultivator.id, decision, decisionDraws, chosenByModel, false, false, nextState);
     const previousLocation = cultivator.locationId;
     const previousRealm = cultivator.realm;
     const previousRealmStage = cultivator.realmStage;
@@ -1527,7 +1567,7 @@ export function advanceWorldTick(
         result.origin==='player'?'avatar':result.origin,true);
     },
   }), ...advanceOccasions(nextState, rng), ...advanceOaths(nextState), ...advanceMarkets(nextState), ...advanceWitnesses(nextState), ...advanceSeasonReviews(nextState, (state, seasonId) =>
-    publicCompetitionStandings(state, seasonId).find(({ rank }) => rank === 1)), ...maintainSectPolitics(nextState), ...advanceDoctrineFoundings(nextState), ...advanceDoctrineMaturity(nextState,prevState), ...advanceBounties(nextState), ...advanceResearch(nextState), ...advanceWorkshops(nextState), ...advanceCraftTraining(nextState), ...advanceScribeCommissions(nextState), ...advanceDamageAssurance(nextState), ...advanceRelicExhibits(nextState), ...advanceProbation(nextState), ...advanceToolLoans(nextState), ...advanceWaypostMeals(nextState), ...advanceEstates(nextState), ...advanceDoctrines(nextState), ...advanceSectCredit(nextState), ...advanceSanctuaries(nextState), ...advancePilgrimages(nextState), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceCareFollowups(nextState), ...advanceDanxiaShortages(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...reconcileCourierDeaths(nextState), ...advanceHouseholds(nextState), ...advanceHouseholdNames(nextState)]) {
+    publicCompetitionStandings(state, seasonId).find(({ rank }) => rank === 1)), ...maintainSectPolitics(nextState), ...advanceDoctrineFoundings(nextState), ...advanceDoctrineMaturity(nextState,prevState), ...advanceBounties(nextState), ...advanceResearch(nextState), ...advanceWorkshops(nextState), ...advanceCraftTraining(nextState), ...advanceScribeCommissions(nextState), ...advanceDamageAssurance(nextState), ...advanceRelicExhibits(nextState), ...advanceProbation(nextState), ...advanceToolLoans(nextState), ...advanceWaypostMeals(nextState), ...advanceImmortalAuctions(nextState), ...advanceEstates(nextState), ...advanceDoctrines(nextState), ...advanceSectCredit(nextState), ...advanceSanctuaries(nextState), ...advancePilgrimages(nextState), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceCareFollowups(nextState), ...advanceDanxiaShortages(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...reconcileCourierDeaths(nextState), ...advanceHouseholds(nextState), ...advanceHouseholdNames(nextState)]) {
     newEvents.push(event);
     witnessEvent(nextState, event);
   }

@@ -1,5 +1,6 @@
 import type { DaoIntentActivation, DaoPathMove, DaoPathState } from '../types/daoPath';
 import type { WorldEvent, WorldState } from '../types/world';
+import { SHARE_SAVE_REDACTED_TEXT } from './shareSaveRedactionText';
 import { isScopedExpeditionGate } from './expeditionOmenTerms';
 import { DAO_INTENT_HISTORY, DAO_INTENT_QI, DAO_INTENT_READY_TICKS, DAO_PATHS, daoPathEventId, daoPathRank } from './daoPathTerms';
 
@@ -55,7 +56,8 @@ export function validateDaoPathHistory(world:WorldState,fail:Fail):void{
     const practiceIndex=state.practices.findIndex(work=>work.tick===tick);
     const expectedTitle=move==='choose'?`初问${rule.name}`:move==='ready'?`蓄势：${rule.intent}`:move==='cancel'?'散去蓄势':
       daoPathRank(practiceIndex+1)>daoPathRank(practiceIndex)?`初见${rule.intent}`:`实修${rule.name}`;
-    if(event.title!==expectedTitle||rows.length!==1||event.tick!==tick||event.actorIds.length!==1||event.actorIds[0]!==actorId||
+    const titleHidden=event.title===SHARE_SAVE_REDACTED_TEXT,detailsHidden=event.description===SHARE_SAVE_REDACTED_TEXT;
+    if(titleHidden!==detailsHidden||!titleHidden&&event.title!==expectedTitle||rows.length!==1||event.tick!==tick||event.actorIds.length!==1||event.actorIds[0]!==actorId||
       event.category!=='breakthrough'||!event.locationId||!sites.has(event.locationId)||
       event.locationId!==siteId||event.witnessScope!=='participants'||
       event.dialogue!==undefined||event.duelWinnerId!==undefined||event.damage!==undefined||

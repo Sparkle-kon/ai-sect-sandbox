@@ -1,3 +1,4 @@
+import { IMMORTAL_AUCTION_SITE } from './immortalAuctionTerms';
 import { daoPathEventId } from './daoPathTerms';
 import {isUpperPassageEvent,onLowerPlane} from './upperPassageIsolation';
 import { captureHeritageRelay } from './eraHeritageCapture';
@@ -30,6 +31,9 @@ export function witnessEvent(world: WorldState, event: WorldEvent): void {
   if (event.witnessScope === 'participants' && event.category === 'breakthrough' && event.actorIds.length === 1 &&
       (['choose', 'practice', 'ready', 'cancel'] as const).some(move =>
         event.id === daoPathEventId(event.actorIds[0], event.tick, move))) return;
+  // Scoped auction receipts have their own actual on-site reader. No generic witness or flying-sword copy.
+  if (event.witnessScope === 'participants' && event.category === 'diplomacy' && event.locationId === IMMORTAL_AUCTION_SITE &&
+      /^evt-[1-9]\d*-auction-lot-[1-9]\d*-(?:consign-.+|bid-.+|sold|withdrawn|no_bid|unavailable)$/.test(event.id)) return;
   capturePublicWitnessFact(world, event);
   if (event.duelWinnerId || event.id.startsWith('evt-settlement-')) captureChronicleErrataSource(world, event);
   const involved = new Set(event.actorIds);

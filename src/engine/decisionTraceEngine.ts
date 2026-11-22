@@ -1,3 +1,5 @@
+import { availableImmortalAuctionActions, eligibleAuctionAmbush } from './immortalAuctionEngine';
+import { AUCTION_PRIVATE_COMMAND_KEYS, exactAuctionAmbushDecision, exactImmortalAuctionDecision } from './immortalAuctionCognition';
 import { availableDaoPathActions } from './daoPathEngine';
 import { availableHeavenlyAlchemyActions } from './heavenlyAlchemyEngine';
 import { availableDungeonMoves } from './expeditionDungeonEngine';
@@ -95,6 +97,7 @@ export function recordDecisionTrace(world: WorldState, actorId: string, candidat
     decision.chosenAction === 'GRAND_SIEGE_HERO' || decision.targetGrandSiegeId !== undefined || decision.grandSiegeHeroMove !== undefined ||
     decision.chosenAction === 'EXPEDITION_DUNGEON' || decision.targetDungeonRoomId !== undefined || decision.dungeonMove !== undefined ||
     decision.chosenAction === 'DAO_PATH' || decision.targetDaoPathId !== undefined || decision.daoPathMove !== undefined ||
+    decision.chosenAction === 'IMMORTAL_AUCTION' || AUCTION_PRIVATE_COMMAND_KEYS.some(key => decision[key] !== undefined) ||
     decision.chosenAction === 'HEAVENLY_ALCHEMY' || decision.heavenlyAlchemyMove !== undefined ||
     decision.targetHeavenlyRecipeId !== undefined || decision.heavenlyAlchemyHeat !== undefined || decision.heavenlyAlchemyQuality !== undefined;
   const picks: DecisionTraceCandidate[] = [];
@@ -149,7 +152,7 @@ const MECHANICAL_FIELDS = [
 ] as const satisfies readonly (keyof LLMDecisionPayload)[];
 
 export function rememberReplayDecision(tape: DecisionReplayTape, actorId: string, decision: LLMDecisionPayload,
-  rngDraws = 0, heartModel = false, forbiddenModel = false, grandSiegeModel = false): void {
+  rngDraws = 0, heartModel = false, forbiddenModel = false, grandSiegeModel = false, live?: WorldState): void {
   const state = runtimeTapes.get(tape);
   if (!state) return;
   const details = Object.fromEntries(MECHANICAL_FIELDS.flatMap((key) => {
@@ -211,9 +214,22 @@ export function rememberReplayDecision(tape: DecisionReplayTape, actorId: string
   const pathOption = pathActor && availableDaoPathActions(pathActor, state.base, state.base.tick + 1).find(option =>
     option.daoPathMove === decision.daoPathMove && option.targetDaoPathId === decision.targetDaoPathId);
   const pathFields = pathOption ? { daoPathMove: pathOption.daoPathMove, targetDaoPathId: pathOption.targetDaoPathId } : undefined;
-  state.decisions.set(actorId, { ...(forbiddenAction || grandSiegeAction || dungeonAction || heavenlyAction || daoPathAction ? {} : details),
+  const auctionAction = decision.chosenAction === 'IMMORTAL_AUCTION';
+  const auctionAmbush = decision.targetAuctionAmbushLotId !== undefined;
+  const current = live ?? state.base;
+  const auctionActor = (auctionAction || auctionAmbush) && current.cultivators.find(row => row.id === actorId);
+  const exactAuction = auctionActor && auctionAction ? exactImmortalAuctionDecision(decision,
+    availableImmortalAuctionActions(auctionActor, current, live?.tick ?? state.base.tick + 1), true) : undefined;
+  const exactAmbush = auctionActor && auctionAmbush ? exactAuctionAmbushDecision(decision, eligibleAuctionAmbush(current, auctionActor), true) : undefined;
+  // The live quote may be new after an earlier actor. Preserve only freshly legal mechanical fields on the cold tape.
+  const auctionFields = exactAuction ? Object.fromEntries(AUCTION_PRIVATE_COMMAND_KEYS.flatMap(key =>
+    exactAuction[key] === undefined ? [] : [[key, exactAuction[key]]])) : undefined;
+  const ambushFields = exactAmbush ? { targetCultivatorId: exactAmbush.targetCultivatorId,
+    targetAuctionAmbushLotId: exactAmbush.targetAuctionAmbushLotId } : auctionAmbush ? { targetAuctionAmbushLotId: 'unavailable' } : undefined;
+  state.decisions.set(actorId, { ...(forbiddenAction || grandSiegeAction || dungeonAction || heavenlyAction || daoPathAction ||
+      auctionAction || auctionAmbush ? {} : details),
     chosenAction: decision.chosenAction, innerMonologue: '', ...(cohortInviteeIds ? { cohortInviteeIds } : {}),
-    ...personalHeartChoice, ...personalForbiddenChoice, ...personalHeroChoice, ...dungeonFields, ...chosenAlchemy, ...pathFields });
+    ...personalHeartChoice, ...personalForbiddenChoice, ...personalHeroChoice, ...dungeonFields, ...chosenAlchemy, ...pathFields, ...auctionFields, ...ambushFields });
   if (personalHeartChoice && heartModel) state.heartModelActors.add(actorId);
   else state.heartModelActors.delete(actorId);
   if (personalForbiddenChoice && forbiddenModel) state.forbiddenModelActors.add(actorId);

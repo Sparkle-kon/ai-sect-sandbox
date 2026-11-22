@@ -1,3 +1,7 @@
+import { availableImmortalAuctionActions, eligibleAuctionAmbush, type ImmortalAuctionOption } from './immortalAuctionEngine';
+import { IMMORTAL_AUCTION_SITE, immortalAuctionOpening } from './immortalAuctionTerms';
+import { auctionAmbushCommand, AUCTION_PRIVATE_COMMAND_KEYS, exactAuctionAmbushDecision, exactImmortalAuctionDecision,
+  immortalAuctionCommand } from './immortalAuctionCognition';
 import { availableDaoPathActions } from './daoPathEngine';
 import { expeditionRescueCheckpoint } from './expeditionRescueCheckpoint';
 import { availableHeavenlyAlchemyActions } from './heavenlyAlchemyEngine';
@@ -163,6 +167,55 @@ export function utilityExpeditionRescueDecision(actor: Cultivator, world: WorldS
   const thought = option.rescueMove === 'signal' ? '向确能收到的在场见证人发出求援。' : option.rescueMove === 'accept' ?
     '我自愿携实物补给接应，只沿已核实的撤离路。' : '已脱离伤势所致的求援条件；在尚未交付补给时撤信。';
   return { ...option, chosenAction: option.action, innerMonologue: thought };
+}
+
+export function availableAutonomousImmortalAuctionActions(actor: Cultivator, world: WorldState,
+  executionTick = world.tick): readonly ImmortalAuctionOption[] {
+  if (actor.locationId !== IMMORTAL_AUCTION_SITE ||
+      !immortalAuctionOpening(executionTick) && !world.immortalAuction?.lots.some(lot => !lot.terminal) ||
+      activeAvatar(world) === actor || actor.guardAssignment ||
+      actor.hp < actor.maxHp * .75 || actor.qiProgress >= 85 || daoPathTurnLocked(actor, world)) return [];
+  const native = availableImmortalAuctionActions(actor, world, executionTick);
+  if (!native.length) return [];
+  const equipped = equippedArtifact(actor);
+  return native.filter(option => {
+    if (option.auctionMove === 'withdraw') return false; // Existing consignors may take the explicit player option.
+    if (option.auctionMove === 'consign_artifact') {
+      const item = actor.artifacts.find(row => row.id === option.targetAuctionArtifactId);
+      return actor.artifacts.length >= 3 && item !== undefined && item !== equipped &&
+        item.spiritRoot !== actor.spiritRoot && item.spiritRoot !== '天灵根';
+    }
+    if (option.auctionMove === 'consign_pill') return actor.pills[option.targetAuctionPillId] >= 2;
+    if (option.auctionBidStones * 2 > actor.spiritStones) return false;
+    const lot = world.immortalAuction?.lots.find(row => row.id === option.targetAuctionLotId);
+    if (!lot) return false;
+    if (lot.asset.kind === 'pill') {
+      const pill = lot.asset.pillId;
+      return actor.pills[pill] === 0 && (pill !== 'foundation' || actor.realm === '练气' || actor.realm === '筑基');
+    }
+    const tiers = ['法器', '灵器', '法宝', '通天灵宝'];
+    const compatible = lot.asset.spiritRoot === actor.spiritRoot || lot.asset.spiritRoot === '天灵根';
+    return (compatible || option.auctionBidStones * 3 <= actor.spiritStones) &&
+      (!equipped || tiers.indexOf(lot.asset.tier) > tiers.indexOf(equipped.tier ?? '法器'));
+  });
+}
+
+function utilityImmortalAuctionDecision(actor: Cultivator, world: WorldState): LLMDecisionPayload | undefined {
+  const menu = availableAutonomousImmortalAuctionActions(actor, world);
+  const choice = menu.filter(row => row.auctionMove === 'bid').sort((a, b) => a.auctionBidStones - b.auctionBidStones)[0] ?? menu[0];
+  return choice ? exactImmortalAuctionDecision(immortalAuctionCommand(choice), menu) : undefined;
+}
+
+/** A preference is not a new combat action or permission to travel; native DUEL still resolves everything. */
+export function currentAuctionAmbushOffer(actor: Cultivator, world: WorldState) {
+  const offer = eligibleAuctionAmbush(world, actor);
+  if (!offer || activeAvatar(world) === actor || actor.guardAssignment || actor.hp < actor.maxHp * .75 ||
+      daoPathTurnLocked(actor, world)) return undefined;
+  const buyer = world.cultivators.find(row => row.id === offer.targetCultivatorId);
+  if (!buyer || activeCeasefireBetween(world, actor.sectId, buyer.sectId) || sanctuaryCanShield(world, actor, buyer) ||
+      actor.combatPower * strikeMultiplier(actor, buyer) * petCombatBonus(world, actor) <
+      buyer.combatPower * strikeMultiplier(buyer, actor) * petCombatBonus(world, buyer) * .85) return undefined;
+  return offer;
 }
 
 type DaoPathOption = ReturnType<typeof availableDaoPathActions>[number];
@@ -1400,6 +1453,9 @@ export function computeHeuristicDecision(
     }
   }
 
+  const auction = utilityImmortalAuctionDecision(cultivator, world);
+  if (auction) return auction;
+
   const mayOfferOath = world.tick >= 6 && world.tick % 9 === 4;
   const oaths = availableOathActions(cultivator, world, mayOfferOath);
   const obligation = oaths.find(({ action }) => action === 'FULFILL_OATH') ??
@@ -1534,6 +1590,12 @@ export function computeHeuristicDecision(
       alchemy.find((item) => item.action === 'BREW_PILL') ??
       alchemy.find((item) => item.action === 'GATHER_HERBS');
     if (option) return { ...option, chosenAction: option.action, innerMonologue: '借灵材与丹火补我道途。' };
+  }
+
+  const auctionAmbush = currentAuctionAmbushOffer(cultivator, world);
+  if (auctionAmbush) {
+    const landing = exactAuctionAmbushDecision(auctionAmbushCommand(auctionAmbush), auctionAmbush);
+    if (landing) return landing;
   }
 
   // 3. Check if an enemy is at the same location
@@ -2286,6 +2348,33 @@ export async function requestCultivatorLLMDecision(
     row.status === 'extracting' && (row.explorerId === cultivator.id || row.rescuerId === cultivator.id));
   if (rescueOnly && !rescueOptions.length) return undefined;
   if (!activeVow && !boundaryReliefOnly && !rescueOnly && requestTick === world.tick + 1) {
+    const auction = availableAutonomousImmortalAuctionActions(cultivator, world, requestTick);
+    if (auction.length) {
+      const originalSite = cultivator.locationId;
+      const menu = auction.map(immortalAuctionCommand);
+      const prompt = '只准原样复制眼前许可的一项万宝会动作；出价必须保留给定的报价轮次和精确额。' +
+        '不填其他人物、身份、钱袋、托管、预报、独白或结果。许可：' + JSON.stringify(menu);
+      return requestDecisionPrompt(config, requestTick, options, prompt, parsed => {
+        if (requestTick !== world.tick + 1 || cultivator.locationId !== originalSite ||
+            !exactImmortalAuctionDecision(parsed, auction)) return undefined;
+        return exactImmortalAuctionDecision(parsed, availableAutonomousImmortalAuctionActions(cultivator, world, requestTick));
+      }, 160);
+    }
+    const ambush = currentAuctionAmbushOffer(cultivator, world);
+    if (ambush) {
+      const pursuit = auctionAmbushCommand(ambush);
+      const still = { chosenAction: 'REST' as const };
+      const prompt = '若愿意在实到之处对眼前已有确证的对方交手，原样复制斗法；否则选 REST。' +
+        '不要写战果、位置推断、战利品、独白或其他字段。许可：' + JSON.stringify([pursuit, still]);
+      return requestDecisionPrompt(config, requestTick, options, prompt, parsed => {
+        if (requestTick !== world.tick + 1) return undefined;
+        if (parsed?.chosenAction === 'REST' && Object.keys(parsed).length === 1) return {
+          chosenAction: 'REST', innerMonologue: '不在此时起争。',
+        };
+        if (!exactAuctionAmbushDecision(parsed, ambush)) return undefined;
+        return exactAuctionAmbushDecision(parsed, currentAuctionAmbushOffer(cultivator, world));
+      }, 140);
+    }
     const paths = availableAutonomousDaoPathActions(cultivator, world, requestTick);
     if (paths.length) {
       const originalSite = cultivator.locationId;
@@ -2607,6 +2696,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
               Object.hasOwn(parsed, 'targetGrandSiegeId') || Object.hasOwn(parsed, 'grandSiegeHeroMove') ||
               Object.hasOwn(parsed, 'targetDungeonRoomId') || Object.hasOwn(parsed, 'dungeonMove') ||
               Object.hasOwn(parsed, 'targetDaoPathId') || Object.hasOwn(parsed, 'daoPathMove') ||
+              AUCTION_PRIVATE_COMMAND_KEYS.some(key => Object.hasOwn(parsed, key)) ||
               ['heavenlyAlchemyMove', 'targetHeavenlyRecipeId', 'heavenlyAlchemyHeat', 'heavenlyAlchemyQuality']
                 .some(key => Object.hasOwn(parsed, key))) return undefined;
           const validActions: ActionType[] = [
