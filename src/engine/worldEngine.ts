@@ -1,4 +1,6 @@
 import {onLowerPlane} from './upperPassageIsolation';
+import {isUpperArrayFieldAction,resolveUpperArrayFieldAction} from './upperArrayFieldActions';
+import {advanceUpperArrayFieldTrade} from './upperArrayFieldTradeEngine';
 import {resolveOrdinaryBreakthrough} from './ordinaryBreakthroughEngine';
 import {isFrontierAction,resolveFrontierAction} from './frontierActions';
 import {recordFrontierDeath,settleFrontierMortality} from './frontierMovementEngine';
@@ -209,6 +211,14 @@ function applyUpperPassageDecision(world:WorldState,cultivator:Cultivator,decisi
   return event;
 }
 
+function applyUpperArrayFieldDecision(world:WorldState,actor:Cultivator,payload:LLMDecisionPayload,
+  explicit?:LLMDecisionPayload):WorldEvent|null{
+  if(activeAvatar(world)?.id===actor.id&&payload!==explicit)return null;
+  const event=resolveUpperArrayFieldAction(world,actor,payload);
+  if(event){actor.innerMonologue=payload.innerMonologue;actor.currentAction=payload.chosenAction;}
+  return event;
+}
+
 function applyFrontierDecision(world:WorldState,actor:Cultivator,payload:LLMDecisionPayload,rng:()=>number,explicit?:LLMDecisionPayload):WorldEvent|null {
   if(activeAvatar(world)?.id===actor.id&&payload!==explicit)return null;
   const event=resolveFrontierAction(world,actor,payload,rng);
@@ -237,6 +247,7 @@ export function applyCultivatorBrainDecision(
   // A separate plane cannot spend lower supplies, heal at a lower site or act from a former address.
   if(cultivator.positionPlane!==undefined){
     if(decision.chosenAction==='UPPER_PASSAGE')return applyUpperPassageDecision(world,cultivator,decision,explicitAvatarDecision);
+    if(isUpperArrayFieldAction(decision.chosenAction))return applyUpperArrayFieldDecision(world,cultivator,decision,explicitAvatarDecision);
     if(decision.chosenAction==='REST'){
       cultivator.currentAction='REST';
       cultivator.innerMonologue='在实到的界路停步，不在旧址另作事务。';
@@ -296,6 +307,7 @@ export function applyCultivatorBrainDecision(
   }
   if(isFrontierAction(decision.chosenAction))return applyFrontierDecision(world,cultivator,decision,rng,explicitAvatarDecision);
   if(decision.chosenAction==='UPPER_PASSAGE')return applyUpperPassageDecision(world,cultivator,decision,explicitAvatarDecision);
+  if(isUpperArrayFieldAction(decision.chosenAction))return applyUpperArrayFieldDecision(world,cultivator,decision,explicitAvatarDecision);
   if(decision.chosenAction==='NORTH_GATE_RENEWAL'){
     if(activeAvatar(world)?.id===cultivator.id&&decision!==explicitAvatarDecision)return null;
     const applied=resolveNorthGateRenewalAction(world,cultivator,decision);
@@ -936,7 +948,7 @@ export function advanceWorldTick(
       const result=applyCultivatorBrainDecision(nextState,cultivator,decision,rng,undefined,event=>{
         newEvents.push(event);witnessEvent(nextState,event);
       },explicit);
-      const applied=(decision.chosenAction==='UPPER_PASSAGE'||isFrontierAction(decision.chosenAction))&&result!==null;
+      const applied=(decision.chosenAction==='UPPER_PASSAGE'||isFrontierAction(decision.chosenAction)||isUpperArrayFieldAction(decision.chosenAction))&&result!==null;
       if(supplied)recordDecisionEffect?.(cultivator.id,!explicit&&applied);
       traceOptions?.onActor?.(cultivator.id,candidates,applied);
       if(capture)recordDecisionTrace(nextState,cultivator.id,candidates,decision,explicit?'avatar':
@@ -1108,6 +1120,7 @@ export function advanceWorldTick(
     if (yearly) cultivator.reflections = synthesizeReflections(cultivator, nextState.tick);
   }
 
+  advanceUpperArrayFieldTrade(nextState);
   for(const event of [...advanceFrontierTrade(nextState),...advanceFrontierPortTrade(nextState),...advanceFrontierDrylandTrade(nextState)]){
     newEvents.push(event);
     witnessEvent(nextState,event);

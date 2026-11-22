@@ -118,7 +118,7 @@ export function UpperPassagePanel({view,controls,host}:{view:UpperPassageView;co
 }
 
 
-function UpperPassageHost({revisionKey,actorName,essenceCost,disabled,onConfirm}:UpperPassageHostControls) {
+export function UpperPassageHost({revisionKey,actorName,essenceCost,disabled,onConfirm}:UpperPassageHostControls) {
   const [staged,setStaged]=useState<object>(),[notice,setNotice]=useState('');
   const label=useId(),valid=staged===revisionKey;
   return <div className="space-y-1 border-t border-violet-900/70 pt-2">

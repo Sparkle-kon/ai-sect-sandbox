@@ -1,3 +1,4 @@
+import {isUpperArrayFieldCouncilEvent,UPPER_ARRAY_FIELD_COUNCIL,upperArrayFieldCouncilOffset} from './upperArrayFieldTerms';
 import {onUpperPassagePlane} from './upperPassageIsolation';
 import type {WorldState} from '../types/world';
 import { northGateRenewalApertureAuthorized } from './northGateRenewalTerms';
@@ -13,7 +14,7 @@ export function validateUpperPassage(world:WorldState,fail:(path:string)=>never)
     ('from' in entry&&entry.from.kind==='upper_passage')||('to' in entry&&entry.to.kind==='upper_passage')));
   const graphLocations=new Set<string>(UPPER_PASSAGE_PATH.slice(1));
   const rawEvents=world.events.filter(event=>event.id.startsWith('evt-upper-passage-')||
-    event.locationId!==undefined&&graphLocations.has(event.locationId));
+    event.locationId!==undefined&&graphLocations.has(event.locationId)&&!isUpperArrayFieldCouncilEvent(event.id));
   if(world.locations.some(site=>graphLocations.has(site.id)))fail('upperPassage.separateAddresses');
   if(!passage){
     if(world.cultivators.some(actor=>onUpperPassagePlane(actor)||graphLocations.has(actor.locationId))||rawFlows.length||rawEvents.length)
@@ -104,7 +105,9 @@ export function validateUpperPassage(world:WorldState,fail:(path:string)=>never)
   for(const body of world.cultivators){
     const recent=latest.get(body.id),last=recent?.steps.at(-1);
     if(onUpperPassagePlane(body)){
-      if(!recent||!last||recent.returnedTick!==undefined||body.locationId!==last.nodeId||
+      const offset=recent&&last?.nodeId===UPPER_ARRAY_FIELD_COUNCIL?
+        upperArrayFieldCouncilOffset(world.upperArrayField,body.id,recent.id,body.locationId):undefined;
+      if(!recent||!last||recent.returnedTick!==undefined||body.locationId!==last.nodeId&&!offset||
         body.positionPlane!==upperPassagePlane(last.nodeId)||(!body.alive||body.hp<=0)!==(recent.deceasedTick!==undefined))
         fail('upperPassage.actor.position');
     }else if(graphLocations.has(body.locationId)||recent&&recent.returnedTick===undefined)fail('upperPassage.actor.lower');

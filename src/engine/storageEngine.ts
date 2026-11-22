@@ -15,6 +15,13 @@ import {validateUpperPassage} from './storageUpperPassageValidation';
 import {validateNorthGateRenewal} from './storageNorthGateRenewalValidation';
 import {findNorthGateRenewalSource,NORTH_GATE_RENEWAL_MOVES,northGateRenewalForSource} from './northGateRenewalTerms';
 import {UPPER_PASSAGE_PATH} from './upperPassageTerms';
+import {UPPER_ARRAY_FIELD_COUNCIL,UPPER_ARRAY_FIELD_HOME,UPPER_ARRAY_FIELD_MOVES,UPPER_ARRAY_FIELD_SITE_IDS} from './upperArrayFieldTerms';
+import {UPPER_ARRAY_FIELD_LOCAL_MOVES} from './upperArrayFieldLocalTerms';
+import {validateUpperArrayFieldMovement} from './storageUpperArrayFieldMovementValidation';
+import {validateUpperArrayFieldLocal,validateUpperArrayFieldLocalShape} from './upperArrayFieldLocalValidation';
+import {validateUpperArrayFieldTradeShape} from './upperArrayFieldTradeTerms';
+import {upperArrayFieldTradeCustody,verifyUpperArrayFieldTradeAgreement,verifyUpperArrayFieldTradeJournal} from './upperArrayFieldTradeEngine';
+import {availableUpperArrayFieldActions,upperArrayFieldOptionKey} from './upperArrayFieldActions';
 import {onUpperPassagePlane} from './upperPassageIsolation';
 import {FRONTIER_ANCHOR_IDS,FRONTIER_FARM_REGIONS,FRONTIER_REGIONS,FRONTIER_SITE_IDS} from './frontierTerms';
 import {FRONTIER_DRYLAND_MOVES} from './frontierDrylandTerms';
@@ -218,13 +225,13 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT SALVAGE_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE DOCTRINE_FOUNDING DOCTRINE_MATURITY RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY CARE_FOLLOWUP DANXIA_MEDICINE DANXIA_REVIEW FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER COURIER_HANDOFF SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP FURNACE_RESERVATION FURNACE_SAFETY DAMAGE_ASSURANCE SPARRING EXPEDITION_RESCUE SHORT_SHIFT BOUNDARY_RELIEF MENTOR_TRANSFER APPRENTICE_COHORT SEASONAL_HOUSING HOUSEHOLD_NAME CARAVAN_RESTITUTION VILLAGE_GRANARY VILLAGE_SUPPLY ROUTE_WARNING PAVILION_LOAN WORKSHOP_CAPACITY CIVIC_MEMORIAL VILLAGE_FAIR SECT_STIPEND SEED_CULTURE WATER_VEIN NORTH_MINING_CHARTER NORTH_WELL_REVIEW UPPER_PASSAGE NORTH_GATE_RENEWAL FRONTIER FRONTIER_PRODUCTION FRONTIER_TRADE FRONTIER_PORT FRONTIER_PORT_TRADE FRONTIER_DRYLAND FRONTIER_DRYLAND_TRADE TOOL_LOAN RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY ALIGNED_WEATHER SEASON_REVIEW REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT SALVAGE_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE DOCTRINE_FOUNDING DOCTRINE_MATURITY RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY CARE_FOLLOWUP DANXIA_MEDICINE DANXIA_REVIEW FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER COURIER_HANDOFF SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP FURNACE_RESERVATION FURNACE_SAFETY DAMAGE_ASSURANCE SPARRING EXPEDITION_RESCUE SHORT_SHIFT BOUNDARY_RELIEF MENTOR_TRANSFER APPRENTICE_COHORT SEASONAL_HOUSING HOUSEHOLD_NAME CARAVAN_RESTITUTION VILLAGE_GRANARY VILLAGE_SUPPLY ROUTE_WARNING PAVILION_LOAN WORKSHOP_CAPACITY CIVIC_MEMORIAL VILLAGE_FAIR SECT_STIPEND SEED_CULTURE WATER_VEIN NORTH_MINING_CHARTER NORTH_WELL_REVIEW UPPER_PASSAGE UPPER_ARRAY_FIELD UPPER_ARRAY_FIELD_LOCAL UPPER_ARRAY_FIELD_TRADE NORTH_GATE_RENEWAL FRONTIER FRONTIER_PRODUCTION FRONTIER_TRADE FRONTIER_PORT FRONTIER_PORT_TRADE FRONTIER_DRYLAND FRONTIER_DRYLAND_TRADE TOOL_LOAN RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY ALIGNED_WEATHER SEASON_REVIEW REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
-const flowGood = one('stone','jade_seed','frost_dose','ward_reed','frontier_water','reef_salt','port_rigging','rift_salt','stormstone','jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
+const flowGood = one('stone','jade_seed','frost_dose','ward_reed','frontier_water','reef_salt','port_rigging','rift_salt','stormstone','upper_lattice','jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const flowMeasure = num(0,Number.MAX_SAFE_INTEGER);
 const flowSerial = num(1,Number.MAX_SAFE_INTEGER,true);
-const flowAccount = structure({kind:one('actor','site','sect','order','shipment','oath','relocation','workshop','salvage','granary','village_supply','village_fair','seed_lot','seed_plot','danxia_medicine','upper_passage','frontier_store'),id,
+const flowAccount = structure({kind:one('actor','site','sect','order','shipment','oath','relocation','workshop','salvage','granary','village_supply','village_fair','seed_lot','seed_plot','danxia_medicine','upper_passage','frontier_store','upper_array_store'),id,
   pocket:optional(one('payment','collateral'))});
 const granaryReceipt: Validator = (value, path) => {
   const kind = (value as { kind?: unknown } | null)?.kind;
@@ -723,9 +730,9 @@ const shape = structure({
   }))}),
   resourceFlow:structure({nextId:flowSerial,months:arr(RESOURCE_FLOW_MONTH_LIMIT,structure({
     tick,year:tick,month,totalEntries:num(0,Number.MAX_SAFE_INTEGER,true),
-    totals:arr(15,structure({good:flowGood,transfer:flowMeasure,production:flowMeasure,consumption:flowMeasure,loss:flowMeasure})),
+    totals:arr(18,structure({good:flowGood,transfer:flowMeasure,production:flowMeasure,consumption:flowMeasure,loss:flowMeasure})),
     entries:arr(RESOURCE_FLOW_DETAIL_LIMIT,structure({
-      id:flowSerial,tick,mechanism:one('alchemy','market','sect_economy','oath','commons','relocation','terrain','workshop','road','observatory','pilgrimage','granary','furnace_safety','artifact_salvage','village_supply','civic_memorial','village_fair','sect_stipend', 'seed_culture','care_followup','danxia_medicine','water_vein','north_mining_charter','north_well_review','upper_passage','frontier'),
+      id:flowSerial,tick,mechanism:one('alchemy','market','sect_economy','oath','commons','relocation','terrain','workshop','road','observatory','pilgrimage','granary','furnace_safety','artifact_salvage','village_supply','civic_memorial','village_fair','sect_stipend', 'seed_culture','care_followup','danxia_medicine','water_vein','north_mining_charter','north_well_review','upper_passage','upper_array_field','frontier'),
       refId:id,reason:strings(40,1),good:flowGood,amount:flowMeasure,visibility:flowScope,
       kind:one('transfer','production','consumption','loss'),from:optional(flowAccount),to:optional(flowAccount)
     }))
@@ -1003,6 +1010,14 @@ const shape = structure({
         loss:optional(structure({plotId:id,sampleTick:tick,fieldDeficit:num(1,3,true),harvestedTick:tick,yield:one(0,1)}))})),
       petition:optional(structure({tick,paidStones:one(4,10),outcome:one('lower_relief','ordinary'),readingTick:tick})),
     }))})),
+  upperArrayField:optional(structure({version:one(1),
+    visits:arr(SAVE_COLLECTION_LIMIT,structure({id,actorId:id,journeyId:id,enteredTick:tick,paidStones:one(4),
+      steps:arr(SAVE_COLLECTION_LIMIT,structure({tick,siteId:one(...UPPER_ARRAY_FIELD_SITE_IDS)})),exitedTick:otick,deceasedTick:otick})),
+    residences:arr(SAVE_COLLECTION_LIMIT,structure({id,actorId:id,visitId:id,homeSiteId:one(UPPER_ARRAY_FIELD_HOME),settledTick:tick,
+      paidStones:one(4),paidRoots:one(1)})),
+    production:optional((value,path)=>validateUpperArrayFieldLocalShape(value,path,fail)),
+    trade:optional((value,path)=>validateUpperArrayFieldTradeShape(value,path,fail)),
+  })),
   northWellRevisitLaw:optional(structure({version:one(1),kind:one('authored_old_village_restriction'),id,
     declaredTick:tick,year:tick,month,nativeFrameDigest:authoredHash,sourceCharterId:id,freightClosedTick:tick,
     siteId:one('loc-vein-north'),wellProjectId:id,retainedPopulation:censusNumber})),
@@ -1193,6 +1208,21 @@ const shape = structure({
       }
       if(order?.action==='NORTH_GATE_RENEWAL')return structure({...fixed,action:one('NORTH_GATE_RENEWAL'),
         northGateRenewalMove:one(...NORTH_GATE_RENEWAL_MOVES),targetNorthGateRenewalId:id})(value,path);
+      if(order?.action==='UPPER_ARRAY_FIELD'){
+        const fields={...fixed,action:one('UPPER_ARRAY_FIELD')};
+        return 'upperArrayFieldMove' in order&&order.upperArrayFieldMove==='exit'?
+          structure({...fields,upperArrayFieldMove:one('exit'),targetUpperArrayFieldSiteId:one(UPPER_ARRAY_FIELD_COUNCIL)})(value,path):
+          structure({...fields,upperArrayFieldMove:one(...UPPER_ARRAY_FIELD_MOVES.filter(move=>move!=='exit')),
+            targetUpperArrayFieldSiteId:one(...UPPER_ARRAY_FIELD_SITE_IDS)})(value,path);
+      }
+      if(order?.action==='UPPER_ARRAY_FIELD_LOCAL')return structure({...fixed,action:one('UPPER_ARRAY_FIELD_LOCAL'),
+        upperArrayFieldLocalMove:one(...UPPER_ARRAY_FIELD_LOCAL_MOVES),targetUpperArrayFieldSiteId:one('array-field-source','array-field-practice')})(value,path);
+      if(order?.action==='UPPER_ARRAY_FIELD_TRADE'){
+        const fields={...fixed,action:one('UPPER_ARRAY_FIELD_TRADE')};
+        return 'upperArrayFieldTradeMove' in order&&order.upperArrayFieldTradeMove==='propose'?
+          structure({...fields,upperArrayFieldTradeMove:one('propose'),targetCultivatorId:id})(value,path):
+          structure({...fields,upperArrayFieldTradeMove:one('accept','load','settle','unload'),targetUpperArrayFieldTradeId:id})(value,path);
+      }
       if(order?.action==='UPPER_PASSAGE')return structure({...fixed,action:one('UPPER_PASSAGE'),
         upperPassageMove:one('enter','advance','turnback','read','petition'),targetUpperPassageNodeId:one(...UPPER_PASSAGE_PATH)})(value,path);
       if(order?.action==='NORTH_WELL_REVIEW')return structure({...fixed,action:one('NORTH_WELL_REVIEW'),
@@ -2598,6 +2628,12 @@ function verifyWorld(value: unknown): WorldState {
       hearing.id!==localWaterOrder.targetNorthGateRenewalId||w.tick+1<hearing.openedTick||w.tick+1>=hearing.expiresTick)
       fail('playerAvatar.northGateRenewalOrder');
   }
+  if(localWaterOrder?.action==='UPPER_ARRAY_FIELD'||localWaterOrder?.action==='UPPER_ARRAY_FIELD_LOCAL'||localWaterOrder?.action==='UPPER_ARRAY_FIELD_TRADE'){
+    const current=w.cultivators.find(row=>row.id===localWaterOrder.actorId);
+    if(localWaterOrder.queuedTick!==w.tick||(w.playerAvatar.possessionUntilTick??0)<=w.tick+1||!current||
+      !availableUpperArrayFieldActions(current,w,w.tick+1).some(option=>upperArrayFieldOptionKey(option)===upperArrayFieldOptionKey(localWaterOrder)))
+      fail('playerAvatar.upperArrayFieldOrder');
+  }
   if(localWaterOrder?.action==='UPPER_PASSAGE'){
     const moved=w.cultivators.find(row=>row.id===localWaterOrder.actorId);
     if(localWaterOrder.queuedTick!==w.tick||(w.playerAvatar.possessionUntilTick??0)<=w.tick+1||!moved||
@@ -3296,6 +3332,25 @@ function verifyWorld(value: unknown): WorldState {
   validateNorthWellRevisit(w,fail);
   validateNorthGateRenewal(w,fail);
   validateUpperPassage(w,fail);
+  validateUpperArrayFieldMovement(w,fail);
+  const fieldTrade=w.upperArrayField?.trade;
+  if(fieldTrade){
+    if(!fieldTrade.agreements.length||(fieldTrade.lastAdvancedTick??0)>w.tick||
+      fieldTrade.nextId!==fieldTrade.agreements.length+1)fail('upperArrayField.trade.lifecycle');
+    const lastByParty=new Map<string,number>();
+    let previousOffered=0;
+    for(const [index,row] of fieldTrade.agreements.entries()){
+      if(row.id!==`upper-array-trade-${index+1}`||row.offeredTick<previousOffered||
+        !verifyUpperArrayFieldTradeAgreement(w,row))fail('upperArrayField.trade.evidence');
+      previousOffered=row.offeredTick;
+      for(const actorId of [row.sellerId,row.buyerId]){
+        if((lastByParty.get(actorId)??0)>=row.offeredTick)fail('upperArrayField.trade.doubleParty');
+        lastByParty.set(actorId,row.closedTick??Infinity);
+      }
+    }
+  }
+  if(!verifyUpperArrayFieldTradeJournal(w))fail('upperArrayField.trade.journal');
+  validateUpperArrayFieldLocal(w,upperArrayFieldTradeCustody(w),fail);
   validateFrontierMovement(w,fail);
   const frontierTrade=w.frontier?.trade;
   if(frontierTrade){
@@ -3361,9 +3416,9 @@ function serializeWorldSave(world: WorldState): string {
   try {
     // A native turn may first attach either optional ledger after a hot-world clone.
     // Normalize that bounded extension order, leaving every pre-extension byte intact.
-    if (world.eraHeritage !== undefined || world.mortalAgeTrackingSinceTick !== undefined || world.coldWaterVein !== undefined || world.northMiningCharters !== undefined || world.northWellRevisitLaw !== undefined || world.northWellRevisitReviews !== undefined || world.upperPassage !== undefined || world.northGateRenewal !== undefined || world.frontier !== undefined) {
-      const {eraHeritage,mortalAgeTrackingSinceTick,coldWaterVein,northMiningCharters,northWellRevisitLaw,northWellRevisitReviews,upperPassage,northGateRenewal,frontier,...legacy}=world;
-      return JSON.stringify({format:FORMAT,version:VERSION,world:{...legacy,eraHeritage,mortalAgeTrackingSinceTick,coldWaterVein,northMiningCharters,northWellRevisitLaw,northWellRevisitReviews,upperPassage,northGateRenewal,frontier}});
+    if (world.eraHeritage !== undefined || world.mortalAgeTrackingSinceTick !== undefined || world.coldWaterVein !== undefined || world.northMiningCharters !== undefined || world.northWellRevisitLaw !== undefined || world.northWellRevisitReviews !== undefined || world.upperPassage !== undefined || world.northGateRenewal !== undefined || world.frontier !== undefined || world.upperArrayField !== undefined) {
+      const {eraHeritage,mortalAgeTrackingSinceTick,coldWaterVein,northMiningCharters,northWellRevisitLaw,northWellRevisitReviews,upperPassage,northGateRenewal,frontier,upperArrayField,...legacy}=world;
+      return JSON.stringify({format:FORMAT,version:VERSION,world:{...legacy,eraHeritage,mortalAgeTrackingSinceTick,coldWaterVein,northMiningCharters,northWellRevisitLaw,northWellRevisitReviews,upperPassage,northGateRenewal,frontier,upperArrayField}});
     }
     return JSON.stringify({ format: FORMAT, version: VERSION, world });
   } catch { throw new WorldSaveError('json', '当前世界不能序列化为 JSON。'); }

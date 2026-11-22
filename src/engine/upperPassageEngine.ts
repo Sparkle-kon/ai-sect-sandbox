@@ -1,3 +1,4 @@
+import {latestUpperArrayFieldVisit,upperArrayFieldActedOutsideGeography,upperArrayFieldCouncilOffset} from './upperArrayFieldTerms';
 import {onLowerPlane,onUpperPassagePlane} from './upperPassageIsolation';
 import type { Cultivator, LLMDecisionPayload, WorldEvent, WorldState } from '../types/world';
 import { northGateRenewalApertureAuthorized } from './northGateRenewalTerms';
@@ -70,6 +71,7 @@ export function availableUpperPassageActions(actor:Cultivator,world:WorldState,e
   if((executionTick!==world.tick&&executionTick!==world.tick+1)||!world.cultivators.includes(actor)||!alive(actor)||
     !onLowerPlane(actor)&&!onUpperPassagePlane(actor))return [];
   const journey=activeUpperPassage(world,actor.id);
+  if(latestUpperArrayFieldVisit(world.upperArrayField,actor.id)?.exitedTick===executionTick||upperArrayFieldActedOutsideGeography(world,actor.id,executionTick))return [];
   if(!actor.positionPlane){
     if(journey||!locallyQualified(actor,world,executionTick)||!wallet(actor,UPPER_PASSAGE_FEE)||!usableUpperPassageOpening(world,executionTick)||
       world.upperPassage?.journeys.some(row=>row.actorId===actor.id&&row.returnedTick===executionTick))return [];
@@ -160,7 +162,11 @@ export function resolveUpperPassageAction(world:WorldState,actor:Cultivator,payl
 export function recordUpperPassageDeath(world:WorldState,actor:Cultivator):void{
   if(!world.cultivators.includes(actor)||alive(actor)||!onUpperPassagePlane(actor))return;
   const journey=activeUpperPassage(world,actor.id);
-  if(journey)journey.deceasedTick=world.tick;
+  if(journey){
+    journey.deceasedTick=world.tick;
+    const offset=upperArrayFieldCouncilOffset(world.upperArrayField,actor.id,journey.id,actor.locationId);
+    if(offset&&offset.deceasedTick===undefined)offset.deceasedTick=world.tick;
+  }
 }
 export function settleUpperPassageMortality(world:WorldState):void{
   if(!world.upperPassage)return;

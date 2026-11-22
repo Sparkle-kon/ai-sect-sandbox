@@ -1,6 +1,9 @@
 import type {FrontierAnchorId,FrontierMovementMove,FrontierPositionPlane,FrontierSiteId,FrontierState} from '../engine/frontierTerms';
 import type {FrontierProductionMove} from '../engine/frontierProductionTerms';
 import type {FrontierTradeMove} from '../engine/frontierTradeTerms';
+import type {UpperArrayFieldMovementOption,UpperArrayFieldMove,UpperArrayFieldSiteId,UpperArrayFieldState} from '../engine/upperArrayFieldTerms';
+import type {UpperArrayFieldLocalOption,UpperArrayFieldLocalMove} from '../engine/upperArrayFieldLocalTerms';
+import type {UpperArrayFieldTradeMove} from '../engine/upperArrayFieldTradeTerms';
 import type {FrontierDrylandMove,FrontierDrylandLocalOption} from '../engine/frontierDrylandTerms';
 import type {FrontierDrylandTradeMove} from '../engine/frontierDrylandTradeTerms';
 import type {FrontierPortLocalMove} from '../engine/frontierPortTerms';
@@ -178,6 +181,9 @@ export type ActionType =
   | 'NORTH_MINING_CHARTER'
   | 'NORTH_WELL_REVIEW'
   | 'UPPER_PASSAGE'
+  | 'UPPER_ARRAY_FIELD'
+  | 'UPPER_ARRAY_FIELD_LOCAL'
+  | 'UPPER_ARRAY_FIELD_TRADE'
   | 'NORTH_GATE_RENEWAL'
   | 'FRONTIER'
   | 'FRONTIER_PRODUCTION'
@@ -507,6 +513,11 @@ export interface LLMDecisionPayload {
   northGateRenewalMove?: NorthGateRenewalMove;
   targetNorthGateRenewalId?: string;
   upperPassageMove?: UpperPassageMove;
+  upperArrayFieldMove?: UpperArrayFieldMove;
+  upperArrayFieldLocalMove?: UpperArrayFieldLocalMove;
+  upperArrayFieldTradeMove?: UpperArrayFieldTradeMove;
+  targetUpperArrayFieldSiteId?: UpperArrayFieldSiteId|'realm-upper-council';
+  targetUpperArrayFieldTradeId?: string;
   targetUpperPassageNodeId?: UpperPassageNodeId;
   northWellReviewMove?: NorthWellReviewMove;
   northMiningMove?: NorthMiningCharterMove;
@@ -1055,6 +1066,10 @@ export type AvatarPendingOrder = { actorId: string; queuedTick: number } & (
   | { action:'NORTH_MINING_CHARTER'; northMiningMove:'sign'; targetNorthMiningCharterId:string; northMiningStance?:never }
   | { action:'NORTH_WELL_REVIEW'; northWellReviewMove:NorthWellReviewMove;targetNorthMiningCharterId:string }
   | { action:'UPPER_PASSAGE';upperPassageMove:UpperPassageMove;targetUpperPassageNodeId:UpperPassageNodeId }
+  | UpperArrayFieldMovementOption
+  | UpperArrayFieldLocalOption
+  | {action:'UPPER_ARRAY_FIELD_TRADE';upperArrayFieldTradeMove:'propose';targetCultivatorId:string}
+  | {action:'UPPER_ARRAY_FIELD_TRADE';upperArrayFieldTradeMove:Exclude<UpperArrayFieldTradeMove,'propose'>;targetUpperArrayFieldTradeId:string}
   | { action:'FRONTIER';frontierMove:Exclude<FrontierMovementMove,'exit'>;targetFrontierSiteId:FrontierSiteId }
   | { action:'FRONTIER';frontierMove:'exit';targetFrontierSiteId:FrontierAnchorId }
   | { action:'FRONTIER_PRODUCTION';frontierProductionMove:FrontierProductionMove;targetFrontierSiteId:FrontierSiteId }
@@ -2618,10 +2633,10 @@ export interface SharedCommonsPact {
 }
 export interface SharedCommonsState { pacts: SharedCommonsPact[]; nextId: number }
 
-export type ResourceFlowGood = 'stone' | 'jade_seed' | 'frost_dose' | 'ward_reed' | 'frontier_water' | 'reef_salt' | 'port_rigging' | 'rift_salt' | 'stormstone' | MarketGood;
-export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation' | 'terrain' | 'workshop' | 'road' | 'observatory' | 'pilgrimage' | 'granary' | 'furnace_safety' | 'artifact_salvage' | 'village_supply' | 'civic_memorial' | 'village_fair' | 'sect_stipend' | 'seed_culture' | 'care_followup' | 'danxia_medicine' | 'water_vein' | 'north_mining_charter' | 'north_well_review' | 'upper_passage' | 'frontier';
+export type ResourceFlowGood = 'stone' | 'jade_seed' | 'frost_dose' | 'ward_reed' | 'frontier_water' | 'reef_salt' | 'port_rigging' | 'rift_salt' | 'stormstone' | 'upper_lattice' | MarketGood;
+export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation' | 'terrain' | 'workshop' | 'road' | 'observatory' | 'pilgrimage' | 'granary' | 'furnace_safety' | 'artifact_salvage' | 'village_supply' | 'civic_memorial' | 'village_fair' | 'sect_stipend' | 'seed_culture' | 'care_followup' | 'danxia_medicine' | 'water_vein' | 'north_mining_charter' | 'north_well_review' | 'upper_passage' | 'upper_array_field' | 'frontier';
 export type ResourceFlowAccount =
-  | { kind: 'actor' | 'site' | 'sect' | 'order' | 'shipment' | 'relocation' | 'workshop' | 'salvage' | 'granary' | 'village_supply' | 'village_fair' | 'seed_lot' | 'seed_plot' | 'danxia_medicine' | 'upper_passage' | 'frontier_store'; id: string }
+  | { kind: 'actor' | 'site' | 'sect' | 'order' | 'shipment' | 'relocation' | 'workshop' | 'salvage' | 'granary' | 'village_supply' | 'village_fair' | 'seed_lot' | 'seed_plot' | 'danxia_medicine' | 'upper_passage' | 'frontier_store' | 'upper_array_store'; id: string }
   | { kind: 'oath'; id: string; pocket: 'payment' | 'collateral' };
 export type ResourceFlowVisibility =
   | { kind: 'observer' }
@@ -3438,6 +3453,7 @@ export interface NorthWellRevisitReviewState {
 
 export interface WorldState {
   upperPassage?:UpperPassageState;
+  upperArrayField?:UpperArrayFieldState;
   northGateRenewal?:NorthGateRenewalState;
   frontier?:FrontierState;
   northWellRevisitLaw?:NorthWellRevisitLaw;

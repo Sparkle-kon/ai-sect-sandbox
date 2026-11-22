@@ -1,4 +1,6 @@
 import {onLowerPlane,onUpperPassagePlane} from './upperPassageIsolation';
+import {upperArrayFieldPhysicalSite} from './upperArrayFieldMovementEngine';
+import {availableUpperArrayFieldActions,upperArrayFieldCommand,upperArrayFieldOptionKey,type UpperArrayFieldOption} from './upperArrayFieldActions';
 import {availableFrontierActions,frontierCommand,frontierOptionKey,type FrontierOption} from './frontierActions';
 import {frontierPhysicalSite} from './frontierMovementEngine';
 import {availableDoctrineMaturityActions,type DoctrineMaturityOption} from './doctrineMaturityEngine';
@@ -81,8 +83,8 @@ export function canPossessUpperPassageAvatar(world:WorldState,actorId:string):bo
     activeAvatar(world)?.id===actorId)return false;
   const actor=world.cultivators.find(row=>row.id===actorId);
   return !!actor&&onUpperPassagePlane(actor)&&availableBody(world,actor)&&
-    !!world.upperPassage?.journeys.some(row=>row.actorId===actorId&&row.returnedTick===undefined&&row.deceasedTick===undefined&&
-      row.steps.at(-1)?.nodeId===actor.locationId);
+    (!!upperArrayFieldPhysicalSite(world,actor)||!!world.upperPassage?.journeys.some(row=>row.actorId===actorId&&
+      row.returnedTick===undefined&&row.deceasedTick===undefined&&row.steps.at(-1)?.nodeId===actor.locationId));
 }
 export function possessUpperPassageAvatar(world:WorldState,actorId:string):boolean{
   return canPossessUpperPassageAvatar(world,actorId) && attachAvatar(world,actorId);
@@ -260,6 +262,16 @@ export function queueAvatarFrontier(world:WorldState,actorId:string,choice:Front
   return true;
 }
 
+export function queueAvatarUpperArrayField(world:WorldState,actorId:string,choice:UpperArrayFieldOption):boolean{
+  const host=activeAvatar(world);
+  if(!host||!canQueueAvatarSalvage(world,actorId))return false;
+  const exact=availableUpperArrayFieldActions(host,world,world.tick+1).find(option=>upperArrayFieldOptionKey(option)===upperArrayFieldOptionKey(choice));
+  if(!exact)return false;
+  world.playerAvatar.essence-=AVATAR_ORDER_COST;
+  world.playerAvatar.pendingOrder={actorId,queuedTick:world.tick,...exact};
+  return true;
+}
+
 export function consumeAvatarOrder(world: WorldState): { actorId: string; decision: LLMDecisionPayload } | undefined {
   const state = world.playerAvatar;
   const order = state?.pendingOrder;
@@ -269,6 +281,8 @@ export function consumeAvatarOrder(world: WorldState): { actorId: string; decisi
   if(order.action==='FRONTIER'||order.action==='FRONTIER_PRODUCTION'||order.action==='FRONTIER_TRADE'||
     order.action==='FRONTIER_PORT'||order.action==='FRONTIER_PORT_TRADE'||order.action==='FRONTIER_DRYLAND'||order.action==='FRONTIER_DRYLAND_TRADE')
     return {actorId:order.actorId,decision:{...frontierCommand(order),innerMonologue:'按确切的另图安排前行。'}};
+  if(order.action==='UPPER_ARRAY_FIELD'||order.action==='UPPER_ARRAY_FIELD_LOCAL'||order.action==='UPPER_ARRAY_FIELD_TRADE')
+    return {actorId:order.actorId,decision:{...upperArrayFieldCommand(order),innerMonologue:'按脚下实地和本人原约办理。'}};
   const targets = order.action === 'NORTH_GATE_RENEWAL' ?
     {northGateRenewalMove:order.northGateRenewalMove,targetNorthGateRenewalId:order.targetNorthGateRenewalId} :
     order.action === 'UPPER_PASSAGE' ?

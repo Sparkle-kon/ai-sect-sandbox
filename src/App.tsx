@@ -73,9 +73,15 @@ import {projectRegionalPromotions} from './engine/regionalPromotionEngine';
 import {isScopedExpeditionGate} from './engine/expeditionOmenTerms';
 import {REGIONAL_BENCHMARK} from './components/regionalBenchmark';
 import type {RegionalFocusOption,RegionalSimulationControls} from './components/RegionalSimulationPanel';
-import { possessAvatar, queueAvatarOrder, queueAvatarSalvage, queueAvatarWaterVein, queueAvatarNorthMiningCharter, queueAvatarNorthWellReview, queueAvatarUpperPassage, queueAvatarNorthGateRenewal,
+import { possessAvatar, queueAvatarOrder, queueAvatarSalvage, queueAvatarWaterVein, queueAvatarNorthMiningCharter, queueAvatarNorthWellReview, queueAvatarUpperPassage, queueAvatarUpperArrayField, queueAvatarNorthGateRenewal,
   AVATAR_POSSESSION_COST, canPossessUpperPassageAvatar, possessUpperPassageAvatar, queueAvatarFrontier, canPossessFrontierAvatar, possessFrontierAvatar } from './engine/avatarEngine';
-import { availableWaterVeinActions, projectWaterVein } from './engine/waterVeinEngine';
+import { availableWaterVeinActions, completedNorthWaterWell, northWaterAddress, projectWaterVein } from './engine/waterVeinEngine';
+import {doctrineFoundingPhysicallyAt} from './engine/doctrineFoundingEngine';
+import type {UpperArrayFieldControls} from './components/UpperArrayFieldPanel';
+import {availableUpperArrayFieldActions,type UpperArrayFieldOption} from './engine/upperArrayFieldActions';
+import {projectUpperArrayFieldMovement} from './engine/upperArrayFieldMovementEngine';
+import {projectUpperArrayFieldLocal} from './engine/upperArrayFieldLocalEngine';
+import {projectUpperArrayFieldTrade} from './engine/upperArrayFieldTradeEngine';
 import type { ColdWaterControls } from './components/ColdWaterVeinPanel';
 import type { MiningCharterControls } from './components/NorthMiningCharterPanel';
 import type {NorthWellRevisitControls} from './components/NorthWellRevisitPanel';
@@ -146,6 +152,9 @@ const NorthGateRenewalPanel = React.lazy(async()=>({default:(await import('./com
 const FrontierPortPanel=React.lazy(async()=>({default:(await import('./components/FrontierPortPanel')).FrontierPortPanel}));
 const FrontierDrylandPanel=React.lazy(async()=>({default:(await import('./components/FrontierDrylandPanel')).FrontierDrylandPanel}));
 const FrontierPanel=React.lazy(async()=>({default:(await import('./components/FrontierPanel')).FrontierPanel}));
+const UpperArrayFieldPanel=React.lazy(async()=>({default:(await import('./components/UpperArrayFieldPanel')).UpperArrayFieldPanel}));
+const UpperArrayFieldWellPanel=React.lazy(async()=>({default:(await import('./components/UpperArrayFieldPanel')).UpperArrayFieldWellPanel}));
+const UpperArrayFieldCarrierRead=React.lazy(async()=>({default:(await import('./components/UpperArrayFieldPanel')).UpperArrayFieldCarrierRead}));
 const UpperPassagePanel = React.lazy(async () => ({default:(await import('./components/UpperPassagePanel')).UpperPassagePanel}));
 const NorthWellRevisitPanel = React.lazy(async () => ({default:(await import('./components/NorthWellRevisitPanel')).NorthWellRevisitPanel}));
 const NorthMiningCharterPanel = React.lazy(async () => ({ default: (await import('./components/NorthMiningCharterPanel')).NorthMiningCharterPanel }));
@@ -1055,6 +1064,62 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
       return next!==world;
     },
   }:undefined;
+  const arrayFieldView=upperPassageActive?projectUpperArrayFieldMovement(visibleWorld,selectedCultivator):undefined;
+  const arrayFieldAway=arrayFieldView?.scope==='field';
+  const arrayWell=upperPassageActive&&workspace==='world'&&selectedCultivator?.positionPlane===undefined?
+    northWaterAddress(visibleWorld):undefined;
+  const atArrayWell=Boolean(arrayWell&&selectedCultivator&&selectedCultivator.alive&&selectedCultivator.hp>0&&
+    doctrineFoundingPhysicallyAt(visibleWorld,selectedCultivator,arrayWell.site.id,visibleWorld.tick)&&
+    completedNorthWaterWell(visibleWorld,arrayWell.village.id,visibleWorld.tick));
+  const arrayFieldLocal=arrayFieldAway&&selectedCultivator?projectUpperArrayFieldLocal(visibleWorld,selectedCultivator):undefined;
+  const arrayFieldTrades=arrayFieldView||upperPassageAway||atArrayWell?
+    projectUpperArrayFieldTrade(visibleWorld,selectedCultivator):[];
+  const arrayFieldActor=(arrayFieldView||atArrayWell)&&!preview&&selectedCultivator&&
+    activeAvatar(world)?.id===selectedCultivator.id?selectedCultivator:undefined;
+  const arrayFieldDisabled=isRunning||isStepping||fastForwardLocked;
+  const arrayFieldCurrent=(revision:object)=>revision===world&&!arrayFieldDisabled&&!browsing.current&&!stepInFlight.current&&
+    !fastForwardRun.current&&!campaignGuard.current&&history.current===timeline&&authority.current===world&&
+    saveContextVersion.current===waterVeinContextVersion;
+  const arrayFieldChoices=arrayFieldActor&&canQueueAvatarSalvage(world,arrayFieldActor.id)?
+    availableUpperArrayFieldActions(arrayFieldActor,world,world.tick+1):[];
+  const arrayFieldPending=arrayFieldActor&&waterVeinPending?.actorId===arrayFieldActor.id&&(
+    waterVeinPending.action==='UPPER_ARRAY_FIELD'||waterVeinPending.action==='UPPER_ARRAY_FIELD_LOCAL'||
+    waterVeinPending.action==='UPPER_ARRAY_FIELD_TRADE')?waterVeinPending:undefined;
+  const arrayFieldControls:UpperArrayFieldControls|undefined=arrayFieldActor?{
+    scopeKey:`${viewScopeKey}:${arrayFieldActor.id}:${arrayFieldActor.locationId}`,revisionKey:visibleWorld,
+    choices:arrayFieldChoices,pending:arrayFieldPending,disabled:arrayFieldDisabled,
+    onQueue:(choice:UpperArrayFieldOption,revision:object)=>{
+      if(!arrayFieldCurrent(revision))return false;
+      return updateWorld(current=>{
+        if(current!==world)return current;
+        const next=structuredClone(current);
+        return queueAvatarUpperArrayField(next,arrayFieldActor.id,choice)?next:current;
+      })!==world;
+    },
+  }:undefined;
+  const arrayFieldCandidates=Object.fromEntries(arrayFieldChoices.flatMap(option=>{
+    if(option.action!=='UPPER_ARRAY_FIELD_TRADE'||option.upperArrayFieldTradeMove!=='propose')return [];
+    const actor=visibleWorld.cultivators.find(row=>row.id===option.targetCultivatorId);
+    return actor?[[actor.id,actor.name]]:[];
+  }));
+  const arrayFieldHostActor=arrayFieldAway&&!preview&&selectedCultivator&&
+    canPossessUpperPassageAvatar(world,selectedCultivator.id)?selectedCultivator:undefined;
+  const arrayFieldHost:UpperPassageHostControls|undefined=arrayFieldHostActor&&arrayFieldView?.site?{
+    scopeKey:`${viewScopeKey}:${arrayFieldHostActor.id}:${arrayFieldView.site.id}`,revisionKey:visibleWorld,
+    actorName:arrayFieldHostActor.name,essenceCost:AVATAR_POSSESSION_COST,disabled:arrayFieldDisabled,
+    onConfirm:revision=>{
+      if(!arrayFieldCurrent(revision))return false;
+      const next=updateWorld(current=>{
+        if(current!==world)return current;
+        const candidate=structuredClone(current),actor=candidate.cultivators.find(row=>row.id===arrayFieldHostActor.id);
+        if(projectUpperArrayFieldMovement(candidate,actor)?.site?.id!==arrayFieldView.site?.id)return current;
+        return possessUpperPassageAvatar(candidate,arrayFieldHostActor.id)?candidate:current;
+      });
+      if(next!==world)setAvatarNotice(undefined);
+      return next!==world;
+    },
+  }:undefined;
+  const arrayFieldAtWell=atArrayWell&&(arrayFieldChoices.length>0||arrayFieldTrades.length>0);
   const northGateRenewalView=upperPassageActive?projectNorthGateRenewal(visibleWorld,selectedCultivator):undefined;
   const northGateRenewalAtWell=workspace==='world'&&northGateRenewalView?.scope==='lower'?northGateRenewalView:undefined;
   const northGateRenewalAvatar=northGateRenewalAtWell&&!preview&&selectedCultivator&&
@@ -1165,9 +1230,14 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
         <FrontierDrylandPanel movement={frontierView} local={drylandLocal} trades={drylandTrades}
           controls={drylandControls} tradeCandidates={drylandCandidates} nowTick={visibleWorld.tick}/>:undefined}/>
   </React.Suspense>;
-  const realmView=upperPassageView&&<React.Suspense fallback={<p role="status">查验脚下界路…</p>}>
-    <UpperPassagePanel view={upperPassageView} controls={upperPassageControls} host={upperPassageHost}/>
-    {northGateRenewalView?.scope==='upper'&&<NorthGateRenewalPanel view={northGateRenewalView} nowTick={visibleWorld.tick} now={visibleWorld}/>}
+  const realmView=(upperPassageView||arrayFieldView)&&<React.Suspense fallback={<p role="status">查验脚下界路…</p>}>
+    {!arrayFieldAway&&upperPassageView&&<UpperPassagePanel view={upperPassageView} controls={upperPassageControls} host={upperPassageHost}/>}
+    {arrayFieldView&&<UpperArrayFieldPanel movement={arrayFieldView} local={arrayFieldLocal} trades={arrayFieldTrades}
+      controls={arrayFieldControls} host={arrayFieldHost} tradeCandidates={arrayFieldCandidates} nowTick={visibleWorld.tick}/>}
+    {!arrayFieldAway&&upperPassageAway&&arrayFieldTrades.length>0&&
+      <UpperArrayFieldCarrierRead atOldPassage={true} trades={arrayFieldTrades}/>}
+    {!arrayFieldAway&&northGateRenewalView?.scope==='upper'&&
+      <NorthGateRenewalPanel view={northGateRenewalView} nowTick={visibleWorld.tick} now={visibleWorld}/>}
   </React.Suspense>;
   const medicineContextVersion=saveContextVersion.current;
   const medicineAvatar=!preview&&selectedCultivator&&activeAvatar(world)?.id===selectedCultivator.id&&
@@ -1504,7 +1574,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
           <button type="button" data-control-dock="back" ref={backRef} onClick={returnToChronicle} className={`${action} bg-slate-800 text-amber-100`}>返回原纪事</button>
           {!focusTarget && <p role="status" className="break-words text-xs text-amber-200">{CHRONICLE_FOCUS_UNAVAILABLE}</p>}
         </div>} views={{
-        map: frontierView?.scope==='frontier'?frontierRealmView:upperPassageAway?realmView:<div className="grid min-w-0 items-start gap-2.5 lg:grid-cols-[minmax(0,1fr)_17rem] lg:gap-4">
+        map: frontierView?.scope==='frontier'?frontierRealmView:arrayFieldAway||upperPassageAway?realmView:<div className="grid min-w-0 items-start gap-2.5 lg:grid-cols-[minmax(0,1fr)_17rem] lg:gap-4">
           <div className="min-w-0"><React.Suspense fallback={<div role="status" className="grid min-h-64 place-items-center rounded-xl border border-slate-800 text-sm text-slate-300">载入舆图…</div>}>
             <WorldMapCanvas compact scopeKey={viewScopeKey} world={visibleWorld} selectedCultivatorId={activeActorId}
             toolsOpen={workspace === 'map' && (foldPreferences.mapTools ?? false)} onToolsOpenChange={(mapTools) =>
@@ -1654,14 +1724,16 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
           ...(preview ? [] : [{ id: 'council', label: '长老议事厅', content: <button type="button" disabled={isStepping} onClick={() => { setCouncilOpenedBefore(true); setCouncilOpen(true); }}
             className={`${action} bg-violet-900/60 text-violet-100 hover:bg-violet-800`}>打开长老议事厅</button> }]),
         ]} />,
-        world: frontierView?.scope==='frontier'?frontierRealmView:upperPassageAway?realmView:<WorkspaceSections label="世界与设置" initialOpen={opened('world', 'weather')} {...fold('world')} sections={[
+        world: frontierView?.scope==='frontier'?frontierRealmView:arrayFieldAway||upperPassageAway?realmView:<WorkspaceSections label="世界与设置" initialOpen={opened('world', 'weather')} {...fold('world')} sections={[
           { id: 'weather', label: '灵候图与观测', content: <div className="space-y-2.5">
             <React.Suspense fallback={<p role="status">载入世界记录…</p>}><WeatherAtlasPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense>
-            {(waterVeinView||showMiningCharter||northWellView||upperPassageAtWell||northGateRenewalAtWell)&&<React.Suspense fallback={null}><ColdWaterVeinPanel view={waterVeinView} controls={waterVeinControls}>
+            {(waterVeinView||showMiningCharter||northWellView||upperPassageAtWell||northGateRenewalAtWell||arrayFieldAtWell)&&<React.Suspense fallback={null}><ColdWaterVeinPanel view={waterVeinView} controls={waterVeinControls}>
               {showMiningCharter&&miningCharterView&&<NorthMiningCharterPanel view={miningCharterView} controls={miningCharterControls}/>}
               {northWellView&&<NorthWellRevisitPanel view={northWellView} controls={northWellControls} author={northWellRevisitAuthor}/>}
               {northGateRenewalAtWell&&<NorthGateRenewalPanel view={northGateRenewalAtWell} nowTick={visibleWorld.tick} now={visibleWorld} controls={northGateRenewalControls}/>}
               {upperPassageAtWell&&realmView}
+              {arrayFieldAtWell&&<UpperArrayFieldWellPanel atWell={atArrayWell} trades={arrayFieldTrades}
+                controls={arrayFieldControls} tradeCandidates={arrayFieldCandidates} nowTick={visibleWorld.tick}/>}
             </ColdWaterVeinPanel></React.Suspense>}
             {frontierView?.scope==='anchor'&&frontierRealmView}
             {activeActorId && visibleWorld.shortShifts.shifts.some(({ hostId, workerId }) => activeActorId === hostId || activeActorId === workerId) &&

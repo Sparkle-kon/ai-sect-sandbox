@@ -17,6 +17,7 @@ import { availableVillageGranaryActions, projectVillageGranary } from './village
 import { availableVillageFairActions } from './villageFairEngine';
 import { availableUpperPassageActions,utilityUpperPassageDecision,type UpperPassageOption } from './upperPassageEngine';
 import { UPPER_PASSAGE_PATH } from './upperPassageTerms';
+import {availableUpperArrayFieldActions,exactUpperArrayFieldDecision,isUpperArrayFieldAction,upperArrayFieldCommand} from './upperArrayFieldActions';
 import { availableNorthGateRenewalActions,type NorthGateRenewalOption } from './northGateRenewalEngine';
 import { availableNorthWellReviewActions, utilityNorthWellReviewDecision } from './northWellRevisitEngine';
 import { availableNorthMiningCharterActions, utilityNorthMiningDecision } from './northMiningCharterEngine';
@@ -382,6 +383,10 @@ function decodeNorthGateRenewal(parsed:Partial<LLMDecisionPayload>,choices:reado
   return northGateRenewalDecision(selected,line);
 }
 
+export function availableUpperArrayFieldProviderActions(actor:Cultivator,world:WorldState,tick=world.tick){
+  return holdsUpperPassageBody(world,actor)?[]:availableUpperArrayFieldActions(actor,world,tick);
+}
+
 export function availableFrontierProviderActions(actor:Cultivator,world:WorldState,tick=world.tick){
   return holdsUpperPassageBody(world,actor)?[]:availableFrontierActions(actor,world,tick);
 }
@@ -401,6 +406,10 @@ export function computeHeuristicDecision(
       {chosenAction:'REST',innerMonologue:'且在眼前地界歇脚，不替旁人签契。'};
   }
   if(cultivator.positionPlane!==undefined){
+    const tangible=availableUpperArrayFieldProviderActions(cultivator,world).find(row=>
+      row.action==='UPPER_ARRAY_FIELD_LOCAL'&&row.upperArrayFieldLocalMove==='condense'&&
+      cultivator.herbs.earth_root>=2&&cultivator.spiritStones>=8&&cultivator.hp>cultivator.maxHp/2);
+    if(tangible)return {...upperArrayFieldCommand(tangible),innerMonologue:'趁尚有地根和气力，在亲到的凝纹墩收实阵材。'};
     const option=holdsUpperPassageBody(world,cultivator)?undefined:utilityUpperPassageDecision(cultivator,world);
     return option?upperPassageDecision(option,'按实到的阶与本人所见行事，不代报进境。'):upperPassageRest();
   }
@@ -1723,12 +1732,14 @@ export async function requestCultivatorLLMDecision(
   }
   if(cultivator.positionPlane!==undefined){
     const exact=availableUpperPassageProviderActions(cultivator,world,requestTick);
-    if(!exact.length)return undefined;
+    const arrayField=availableUpperArrayFieldProviderActions(cultivator,world,requestTick);
+    if(!exact.length&&!arrayField.length)return undefined;
     const choices=exact.map(({action,upperPassageMove,targetUpperPassageNodeId})=>
       ({chosenAction:action,upperPassageMove,targetUpperPassageNodeId}));
     const prompt=`本人实到独立界路节点 ${cultivator.locationId}。只有这些界路选项，或原地 REST。
-    原样复制动作和同一节点；不填钱、物、其他身份、下界旧址或结果；只返回 JSON。当前许可：${JSON.stringify(choices)}`;
-    return requestDecisionPrompt(config,requestTick,options,prompt,parsed=>decodeUpperPassage(parsed,exact,true),160);
+    原样复制动作和同一节点；不填钱、物、其他身份、下界旧址或结果；只返回 JSON。当前许可：${JSON.stringify(choices)}${arrayField.length?`。阵原仅可原样复制本人在场的这些动作：${JSON.stringify(arrayField.map(upperArrayFieldCommand))}。`:''}`;
+    return requestDecisionPrompt(config,requestTick,options,prompt,parsed=>isUpperArrayFieldAction(parsed.chosenAction)?
+      exactUpperArrayFieldDecision(parsed,arrayField):decodeUpperPassage(parsed,exact,true),arrayField.length?240:160);
   }
   if(activeDanxiaMedicineEscort(world,cultivator)||activeRelocationForActor(world,cultivator)||
     activeEscortForActor(world,cultivator))return undefined;
@@ -1800,6 +1811,7 @@ export async function requestCultivatorLLMDecision(
     ({chosenAction:action,northGateRenewalMove,targetNorthGateRenewalId}));
   const pendingUpperEntry=availableUpperPassageProviderActions(cultivator,world,requestTick)
     .filter(row=>row.upperPassageMove==='enter');
+  const arrayFieldWellOptions=availableUpperArrayFieldProviderActions(cultivator,world,requestTick);
   const oldWellOptions=world.playerAvatar.possessedId===cultivator.id&&(world.playerAvatar.possessionUntilTick??0)>requestTick ?
     [] : availableNorthWellReviewActions(cultivator,world,requestTick);
   const charterOptions=world.playerAvatar.possessedId===cultivator.id&&(world.playerAvatar.possessionUntilTick??0)>requestTick ?
@@ -1939,7 +1951,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 ${renewalMoves.length?`- 三千年重开会，只能复制本人当轮许可，或不参与。续旧阵 reuse、由本宗扶阵 sect、只由当世乡席署名 endorse、已取得当世真签方能合议 accord。只采用当前列出的动作：${JSON.stringify(renewalMoves)}。不得代签、填写资粮、日期或开门结果。`:''}
 ${pendingUpperEntry.length?`- 只有本人现场的界路准入，只复制当前准入与确切门槛节点，不报已登入界：${JSON.stringify(
   pendingUpperEntry.map(({action,upperPassageMove,targetUpperPassageNodeId})=>({chosenAction:action,upperPassageMove,targetUpperPassageNodeId}))) }`:''}
-${oldWellOptions.length?`- 旧井复核只复制本人的现场许可、动作与原采契编号；不得补填写水尺、缴款、开门、律令或矿量：${JSON.stringify(oldWellOptions.map(({action,northWellReviewMove,targetNorthMiningCharterId})=>
+${arrayFieldWellOptions.length?`- 阵原来往只复制本人此刻在旧井且可办的货约，不填写水债、费用、货数或他人确认：${JSON.stringify(arrayFieldWellOptions.map(upperArrayFieldCommand))}。\n`:''}${oldWellOptions.length?`- 旧井复核只复制本人的现场许可、动作与原采契编号；不得补填写水尺、缴款、开门、律令或矿量：${JSON.stringify(oldWellOptions.map(({action,northWellReviewMove,targetNorthMiningCharterId})=>
   ({chosenAction:action,northWellReviewMove,targetNorthMiningCharterId})))}`:''}
 ${charterOptions.length?`- 北脉采契只复制本人的现场许可；不代签，不填写角色、收据、款额或路线：${JSON.stringify(charterOptions.map(({action,northMiningMove,northMiningStance,targetNorthMiningCharterId})=>
   ({chosenAction:action,northMiningMove,northMiningStance,targetNorthMiningCharterId})))}`:''}
@@ -2043,6 +2055,9 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'NORTH_MINING_CHARTER',
             'NORTH_WELL_REVIEW',
             'UPPER_PASSAGE',
+            'UPPER_ARRAY_FIELD',
+            'UPPER_ARRAY_FIELD_LOCAL',
+            'UPPER_ARRAY_FIELD_TRADE',
             'NORTH_GATE_RENEWAL',
             'FRONTIER',
             'FRONTIER_PRODUCTION',
@@ -2176,6 +2191,9 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
           if((parsed.upperPassageMove!==undefined||parsed.targetUpperPassageNodeId!==undefined)&&
             chosenAction!=='UPPER_PASSAGE')return undefined;
           if(chosenAction==='UPPER_PASSAGE')return decodeUpperPassage(parsed,pendingUpperEntry,false);
+          if(isUpperArrayFieldAction(chosenAction))return exactUpperArrayFieldDecision(parsed,arrayFieldWellOptions);
+          if(parsed.upperArrayFieldMove!==undefined||parsed.upperArrayFieldLocalMove!==undefined||parsed.upperArrayFieldTradeMove!==undefined||
+            parsed.targetUpperArrayFieldSiteId!==undefined||parsed.targetUpperArrayFieldTradeId!==undefined)return undefined;
           if(parsed.northWellReviewMove!==undefined&&chosenAction!=='NORTH_WELL_REVIEW')return undefined;
           if(chosenAction==='NORTH_WELL_REVIEW'){
             const exact=oldWellOptions.find(row=>row.northWellReviewMove===parsed.northWellReviewMove&&

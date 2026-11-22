@@ -10,6 +10,15 @@ type FlowGood = FlowRow['good'];
 
 const KIND: Record<FlowRow['kind'], string> = { transfer: '转移', production: '产出', consumption: '消耗', loss: '损失' };
 const REASONS: Readonly<Record<string, string>> = {
+  upper_array_field_entry_paid: '阵原入关实费',
+  upper_array_field_home_paid: '阵原亲建住处实费',
+  upper_lattice_material: '凝纹时亲付资材',
+  upper_lattice_produced: '阵原实收原批阵材',
+  upper_array_practice: '晨修实际耗用阵材或灵石',
+  upper_array_field_trade_load: '实封原批阵材随本人携行',
+  upper_array_field_trade_lattice_delivery: '双方于旧井实际交割原批',
+  upper_array_field_trade_restock: '原批实回阵原',
+  upper_array_field_trade_roots_payment: '旧井当事人实付地根',
   frontier_dryland_stones: '在地开井或养群实付灵石',
   frontier_dryland_roots: '在地作业实耗玄土根',
   frontier_dryland_water: '持秤井实际收水或支水',
@@ -72,10 +81,10 @@ const MONTHS = 6;
 const goodName = (good: FlowGood) => good === 'stone' ? '灵石' : good === 'jade_seed' ? '青玉叶种子' :
   good === 'frost_dose' ? '霜药' : good === 'ward_reed' ? '御寒芦' : good === 'frontier_water' ? '在地水' :
   good === 'reef_salt' ? '潮晶' : good === 'port_rigging' ? '船具' :
-  good === 'rift_salt' ? '旱盐' : good === 'stormstone' ? '雷石' : MARKET_GOODS[good]?.label ?? '物资未详';
+  good === 'rift_salt' ? '旱盐' : good === 'stormstone' ? '雷石' : good === 'upper_lattice' ? '阵纹片' : MARKET_GOODS[good]?.label ?? '物资未详';
 const units = (good: FlowGood) => good === 'stone' ? '灵石' : good === 'jade_seed' ? '粒'
   : good === 'frost_dose' || good === 'ward_reed' || good === 'frontier_water' || good === 'reef_salt' || good === 'port_rigging' ? '份'
-  : good === 'rift_salt' || good === 'stormstone' ? '块'
+  : good === 'rift_salt' || good === 'stormstone' ? '块' : good === 'upper_lattice' ? '片'
   : good === 'jade_leaf' || good === 'earth_root' || good === 'star_bloom' || good === 'shadow_moss' ? '株' : '枚';
 
 export function ResourceFlowMonth({ ledger, world, scope, visibleSiteIds }: {
@@ -108,6 +117,7 @@ export function ResourceFlowMonth({ ledger, world, scope, visibleSiteIds }: {
       case 'salvage': return '货损幸存物封存';
       case 'relocation': return '迁址在途公库';
       case 'workshop': return '工坊备料托管';
+      case 'upper_array_store': return '阵原在地仓';
       case 'frontier_store': return row.id==='east-offshore'?'外港在地仓':
         row.id==='western-saltwell'?'西漠在地仓':row.id==='plateau-thunderridge'?'雷脊在地仓':'另图在地仓';
     }

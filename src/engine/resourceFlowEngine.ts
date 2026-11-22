@@ -122,12 +122,16 @@ export function projectResourceFlowMonth(world: WorldState, tick: number,
   if (!month || month.tick > world.tick) return undefined;
   const { year, month: calendarMonth } = month;
   const closed = tick < world.tick;
-  if(scope.kind==='observer'&&world.frontier&&(
+  const hideFrontier=world.frontier&&(
     world.frontier.visits.some(visit=>visit.enteredTick<=tick)||world.frontier.trade?.agreements.some(row=>row.offeredTick<=tick)||
     world.frontier.port?.trade?.agreements.some(row=>row.offeredTick<=tick)||
-    world.frontier.drylands?.trade?.agreements.some(row=>row.offeredTick<=tick))){
-    // Do not infer private frontier stocks or movements from all-world totals, omitted rows, or ID gaps.
-    const rows=month.entries.filter(row=>row.mechanism!=='frontier'&&row.mechanism!=='care_followup')
+    world.frontier.drylands?.trade?.agreements.some(row=>row.offeredTick<=tick));
+  const hideField=world.upperArrayField&&(world.upperArrayField.visits.some(visit=>visit.enteredTick<=tick)||
+    world.upperArrayField.trade?.agreements.some(row=>row.offeredTick<=tick));
+  if(scope.kind==='observer'&&(hideFrontier||hideField)){
+    // Scoped stocks are not inferable from totals, omitted rows, or global receipt ID gaps.
+    const rows=month.entries.filter(row=>!(hideFrontier&&row.mechanism==='frontier')&&
+      !(hideField&&row.mechanism==='upper_array_field')&&row.mechanism!=='care_followup')
       .map((row,index)=>({...row,id:index+1}));
     const totals:ResourceFlowTotal[]=[];
     for(const row of rows)addTotal(totals,row);

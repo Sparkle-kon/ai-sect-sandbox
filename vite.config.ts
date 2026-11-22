@@ -47,7 +47,8 @@ export default defineConfig({
           'formation-local': ['./src/engine/formationNetworkEngine.ts'],
           'north-charter-terms': ['./src/engine/northMiningCharterTerms.ts'],
           'old-well-source': ['./src/engine/northWellRevisitTerms.ts','./src/engine/northWellRevisitEvidence.ts'],
-          'upper-positions': ['./src/engine/upperPassageTerms.ts','./src/engine/upperPassageIsolation.ts'],
+          'upper-positions': ['./src/engine/upperPassageTerms.ts','./src/engine/upperPassageIsolation.ts',
+            './src/engine/upperArrayFieldTerms.ts','./src/engine/upperArrayFieldLocalTerms.ts','./src/engine/upperArrayFieldTradeTerms.ts'],
           // Geography and economic terms are shared leaves, not the live engine/ledger graph.
           'frontier-region-terms': ['./src/engine/frontierTerms.ts','./src/engine/frontierProductionTerms.ts',
             './src/engine/frontierTradeTerms.ts','./src/engine/frontierPortTerms.ts','./src/engine/frontierPortTradeTerms.ts',
@@ -64,6 +65,7 @@ export default defineConfig({
             './src/engine/danxiaShortageTerms.ts','./src/engine/settlementReliefTerms.ts'],
           'chronicle-evidence': ['./src/engine/eraHistoryIndex.ts','./src/engine/campaignStopCondition.ts',
             './src/engine/chronicleCausalityEngine.ts','./src/engine/chronicleFocusEngine.ts','./src/engine/witnessedPersonalStory.ts'],
+          'market-settlement': ['./src/engine/marketEngine.ts','./src/engine/caravanRestitutionEngine.ts'],
           'village-ecology': ['./src/engine/villageEvolutionEngine.ts','./src/engine/villageEvolutionTerms.ts'],
           'archive-rules': ['./src/engine/coldHistoryEngine.ts', './src/engine/memoryEngine.ts', './src/engine/scenarioObjectiveEngine.ts', './src/engine/chronicleScene.ts',
             './src/engine/chronicleLead.ts', './src/engine/protagonistSuccession.ts', './src/engine/novelGenerator.ts',

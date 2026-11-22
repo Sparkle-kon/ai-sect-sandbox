@@ -14,8 +14,12 @@ const live = (actor: Cultivator) => actor.alive && actor.hp > 0;
 const key = (proposal: CouncilProposal) => proposal.kind === 'war' ? `war:${proposal.targetSectId}` :
   proposal.kind === 'expel' ? `expel:${proposal.targetCultivatorId}` : `pill:${proposal.donorId}:${proposal.targetCultivatorId}`;
 
+/** A witnessed array resident still away on another plane cannot vote, trade pills, or use a lower seat remotely. */
+function presentForLowerCouncil(world:WorldState,actor:Cultivator):boolean{
+  return live(actor)&&!(actor.positionPlane!==undefined&&world.upperArrayField?.visits.some(row=>row.actorId===actor.id));
+}
 function members(world: WorldState, sect: Sect): Cultivator[] {
-  return world.cultivators.filter((actor) => actor.sectId === sect.id && live(actor));
+  return world.cultivators.filter((actor) => actor.sectId === sect.id && presentForLowerCouncil(world,actor));
 }
 function votersFor(world: WorldState, sect: Sect, proposal: CouncilProposal): Cultivator[] {
   return members(world, sect).filter((actor) =>
@@ -87,8 +91,8 @@ function utilityBallot(world: WorldState, plan: CouncilPlan, voter: Cultivator):
   let reason: string;
   if (proposal.kind === 'war') {
     const relation = sectRelation(world, plan.sectId, proposal.targetSectId);
-    const friendly = world.cultivators.filter((actor) => live(actor) && actor.sectId === plan.sectId).reduce((sum, actor) => sum + actor.combatPower, 0);
-    const rival = world.cultivators.filter((actor) => live(actor) && actor.sectId === proposal.targetSectId).reduce((sum, actor) => sum + actor.combatPower, 0);
+    const friendly = world.cultivators.filter((actor) => presentForLowerCouncil(world,actor) && actor.sectId === plan.sectId).reduce((sum, actor) => sum + actor.combatPower, 0);
+    const rival = world.cultivators.filter((actor) => presentForLowerCouncil(world,actor) && actor.sectId === proposal.targetSectId).reduce((sum, actor) => sum + actor.combatPower, 0);
     score = -(relation?.affinity ?? 0) / 3 - 24 + (friendly >= rival ? 15 : -22) +
       (voter.personality === '嗜血' || voter.personality === '狂傲' ? 12 : voter.personality === '苟道' ? -12 : 0);
     reason = friendly >= rival ? '本宗战力尚可，但宣战后须承担持续消耗。' : '敌宗战力更强，现时开战恐伤弟子与公库。';
