@@ -1,3 +1,4 @@
+import {createSceneFrameLease,type SceneFrame} from '../src/controllers/sceneFrameLease';
 import { resolveGuidedWorldTurn } from '../src/controllers/guidedWorldTurn';
 import {afterEach,describe,expect,it,vi} from 'vitest';
 import {createInitialWorld} from '../src/data/initialWorld';
@@ -175,4 +176,77 @@ describe('actual direct sword lesson and independent cultivation receipt',()=>{
     expect(projectSchoolFormStrokes(chosenStop)).toEqual([]);
   });
 
+});
+
+describe('single gesture authority at the actual native school-form contact',()=>{
+  const openedFrame=():SceneFrame=>{
+    const world=month(practiced(),{[learnerId]:command('DUEL',{targetCultivatorId:mentorId})});
+    return {world,branchId:'main',revision:3,viewerId:learnerId,sceneId:schoolFormDuelView(world,actor(world,learnerId))!.contactId,
+      scopeEpoch:1,live:true,focused:true};
+  };
+
+  it('reserves synchronously once across duplicate touch/keyboard callbacks and advances the same actual frame only once',()=>{
+    const frame=openedFrame(),lease=createSceneFrameLease();
+    const firstQuote=lease.quote(frame),parallelQuote=lease.quote(frame);
+    expect(firstQuote).toBeDefined();
+    let commits=0,current=frame.world;
+    const invoke=(quote=firstQuote)=>{
+      const token=lease.reserve(quote,frame);
+      if(!token)return;
+      return ()=>{
+        const directed=resolveGuidedWorldTurn({kind:'school-form-duel',world:frame.world,branchId:frame.branchId,
+          revision:frame.revision,actorId:frame.viewerId,contactId:frame.sceneId,choice:'counter'},current,frame.branchId,frame.revision)!;
+        current=month(current,{[directed.actorId]:directed.decision});
+        commits++;
+        expect(schoolFormStoryReceipt(current,frame.viewerId,frame.sceneId,'counter')).toBeDefined();
+        expect(lease.finish(token,frame)).toBe(true);
+      };
+    };
+    const complete=invoke()!;
+    expect(invoke()).toBeUndefined();
+    expect(invoke(parallelQuote)).toBeUndefined();
+    complete();
+    expect(invoke()).toBeUndefined();
+    expect(invoke(parallelQuote)).toBeUndefined();
+    expect(lease.quote({...frame,scopeEpoch:2})).toBeUndefined();
+    expect(commits).toBe(1);
+    expect(current.tick).toBe(frame.world.tick+1);
+    expect(actor(current,learnerId).qiProgress).toBe(actor(frame.world,learnerId).qiProgress-10);
+  });
+
+  it('rejects same-calendar siblings, wrong branch/revision/actor, nonlive history, and faded view quotes',()=>{
+    const frame=openedFrame(),lease=createSceneFrameLease();
+    const old=lease.quote(frame)!;
+    for(const mismatch of [
+      {world:structuredClone(frame.world)}, {branchId:'sibling'}, {revision:frame.revision+1},
+      {viewerId:mentorId},{sceneId:`${frame.sceneId}-stale`},{scopeEpoch:2},{live:false},{focused:false},
+    ])expect(lease.reserve(old,{...frame,...mismatch})).toBeUndefined();
+    expect(lease.quote({...frame,live:false})).toBeUndefined();
+    expect(lease.quote({...frame,focused:false})).toBeUndefined();
+    expect(createSceneFrameLease().reserve(old,frame)).toBeUndefined();
+    lease.invalidate();
+    expect(lease.reserve(old,frame)).toBeUndefined();
+    const reentered={...frame,scopeEpoch:2};
+    const fresh=lease.quote(reentered)!;
+    expect(lease.reserve(fresh,reentered)).toBeDefined();
+  });
+
+  it('blur revokes stale focus without reopening a source already used, and a new native frame may then run',()=>{
+    const frame=openedFrame(),lease=createSceneFrameLease();
+    expect(possessAvatar(frame.world,learnerId)).toBe(true);
+    const token=lease.reserve(lease.quote(frame),frame)!;
+    expect(token).toBeDefined();
+    const next={...frame,world:month(frame.world),scopeEpoch:2};
+    expect(schoolFormDuelView(next.world,actor(next.world,learnerId))?.contactId).toBe(frame.sceneId);
+    lease.invalidate();
+    const nextQuote=lease.quote(next);
+    expect(nextQuote).toBeDefined();
+    expect(lease.reserve(nextQuote,next)).toBeUndefined(); // old in-flight lock still belongs only to its first token
+    expect(lease.finish(token,{...frame,focused:false})).toBe(false);
+    expect(lease.quote({...frame,scopeEpoch:2})).toBeUndefined();
+    const nextToken=lease.reserve(nextQuote,next)!;
+    expect(nextToken).toBeDefined();
+    expect(lease.finish(token,next)).toBe(false);
+    expect(lease.finish(nextToken,next)).toBe(true);
+  });
 });

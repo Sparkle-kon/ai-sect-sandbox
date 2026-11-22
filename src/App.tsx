@@ -312,7 +312,8 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   const campaignAssembly=useCampaignAssemblyStory(simulation,!dashboardOpen&&!storyEntryOpen,selectedCultivator);
   const witnessInquiry=useWitnessInquiryStory(simulation,!dashboardOpen&&!cockpitOpen&&!storyEntryOpen,selectedCultivator);
   const nightHunt=useFrontierNightHuntStory(simulation,!dashboardOpen&&!cockpitOpen&&!storyEntryOpen,selectedCultivator);
-  const schoolFormDuel=useSchoolFormDuelStory(simulation,!dashboardOpen&&!cockpitOpen&&!storyEntryOpen,selectedCultivator);
+  const schoolFormDuel=useSchoolFormDuelStory(simulation,(!dashboardOpen||cockpitOpen)&&!storyEntryOpen,selectedCultivator,
+    preview?'history':cockpitOpen?'cockpit':'story',cockpitOpen?cockpitHeading:storyMoreRef);
   const calamityArray=useCalamityArrayStory(simulation,!dashboardOpen&&!cockpitOpen&&!storyEntryOpen,selectedCultivator);
   const battlefieldRevisit=useBattlefieldRevisitStory(simulation,!dashboardOpen&&!cockpitOpen&&!storyEntryOpen,selectedCultivator);
   const flight=useProtagonistFlightScene(simulation,
@@ -643,7 +644,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   const clearWorldPulse=(token:number)=>setPulseFocus(current=>current?.token===token?undefined:current);
   const pulseStrip=worldPulse&&<WorldPulseBar view={worldPulse} historical={Boolean(preview)}
     canFocus={!immersive} onFocusAlert={focusWorldPulse}/>;
-  if(cockpitOpen)return <PanoramicCockpitView world={visibleWorld} titleRef={cockpitHeading} exit={cockpitSwitch} statusStrip={pulseStrip} stageOverride={featuredStoryCard} subplot={guidance.subplot} branchScene={flightCard??passageScene??banquetStory??campaignAssembly}
+  if(cockpitOpen)return <PanoramicCockpitView world={visibleWorld} titleRef={cockpitHeading} exit={cockpitSwitch} statusStrip={pulseStrip} stageOverride={featuredStoryCard} subplot={guidance.subplot} branchScene={schoolFormDuel??flightCard??passageScene??banquetStory??campaignAssembly}
     time={{historical:Boolean(preview),running:isRunning,busy:cockpitBusy||storyDecisionPending,onStep:()=>void handleStepTick(),
       onToggleAutoplay:toggleStoryAutoplay,onReturnLive:()=>handleTimelinePreview(null),onOpenTimeline:()=>{
         openWorkspace('chronicle');rememberFold('chronicle','timeline');setStoryEntryOpen(false);
@@ -725,7 +726,8 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
       </header>
       {pulseStrip&&<div className="mx-auto w-full max-w-[76rem] px-2.5 pt-2 sm:px-4">{pulseStrip}</div>}
 
-      {(featuredStoryCard??flightCard??passageScene)&&<div className="mx-auto w-full max-w-2xl px-3 pt-3">{featuredStoryCard??flightCard??passageScene}</div>}
+      {(featuredStoryCard??flightCard??passageScene??(preview?schoolFormDuel:undefined))&&
+        <div className="mx-auto w-full max-w-2xl px-3 pt-3">{featuredStoryCard??flightCard??passageScene??schoolFormDuel}</div>}
       <SandboxWorkspace active={workspace} onChange={openWorkspace} autoFocusTab={!(trail || chronicleReturn)}
         hideActiveContent={Boolean(trail && !focusTarget)} panelLead={trail && <div className="mb-2 flex min-w-0 flex-wrap items-center gap-2">
           <button type="button" data-control-dock="back" ref={backRef} onClick={returnToChronicle} className={`${action} bg-slate-800 text-amber-100`}>返回原纪事</button>
