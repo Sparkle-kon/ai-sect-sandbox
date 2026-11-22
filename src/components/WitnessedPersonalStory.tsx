@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import type { WitnessedPersonalStoryView } from '../engine/witnessedPersonalStory';
 
 interface WitnessedStoryScopeToggleProps {
@@ -20,7 +21,12 @@ export function WitnessedStoryScopeToggle({ selectedName, active, onToggle }: Wi
   );
 }
 
-export function WitnessedPersonalStory({ story }: { story: WitnessedPersonalStoryView }) {
+export function WitnessedPersonalStory({ story, focusEventId }: { story: WitnessedPersonalStoryView; focusEventId?: string }) {
+  const sceneHeading = useRef<HTMLHeadingElement>(null);
+  const present = focusEventId !== undefined && story.scenes.some(({ eventId }) => eventId === focusEventId);
+  useEffect(() => {
+    if (present) sceneHeading.current?.focus();
+  }, [focusEventId, present]);
   if (!story.scenes.length) {
     return (
       <p className="p-2 text-sm leading-relaxed text-slate-300">
@@ -33,7 +39,8 @@ export function WitnessedPersonalStory({ story }: { story: WitnessedPersonalStor
       {story.scenes.map((scene) => (
         <li key={scene.eventId} className="min-w-0">
           <article className="space-y-1 rounded-lg border border-slate-800/80 bg-slate-950/80 p-2.5 [overflow-wrap:anywhere]">
-            <h4 className="font-serif text-sm font-semibold leading-snug text-slate-100">{scene.title}</h4>
+            <h4 ref={scene.eventId === focusEventId ? sceneHeading : undefined}
+              tabIndex={scene.eventId === focusEventId ? -1 : undefined} className="font-serif text-sm font-semibold leading-snug text-slate-100">{scene.title}</h4>
             <p className="font-serif text-sm leading-relaxed text-slate-200">{scene.paragraph}</p>
             <p className="text-xs leading-relaxed text-slate-400">
               <span>{scene.siteName}</span> · <span>仙历 {scene.year}年{scene.month}月</span>

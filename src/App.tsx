@@ -23,6 +23,8 @@ import { FAST_FORWARD_CAMPAIGN_MAX_TICKS, planFastForwardCampaign } from './engi
 import { useFastForwardCampaign } from './components/useFastForwardCampaign';
 import { CampaignResumeNotice } from './components/CampaignResumeNotice';
 import {findVisibleCampaignStopOption,visibleCampaignStopOptions} from './components/campaignStopOptions';
+import { projectRosterFocalId, projectRosterStoryRead, readSelectedRosterScene, resolveRosterStoryRead, sameRosterScene,
+  type ActorRosterScene } from './components/rosterStoryRead';
 import { projectWitnessedPersonalStory } from './engine/witnessedPersonalStory';
 import { WitnessedPersonalStory, WitnessedStoryScopeToggle } from './components/WitnessedPersonalStory';
 import { createPublicDialogueResolver } from './engine/publicDialogueProvenance';
@@ -233,7 +235,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
   const actorHeading = useRef<HTMLHeadingElement>(null);
   useEffect(() => writeWorkspaceFoldPreferences(foldPreferences), [foldPreferences]);
   const [chronicleFilter, setChronicleFilter] = useState<ChronicleCategoryFilter>('all');
-  const [personalStoryChoice, setPersonalStoryChoice] = useState<{actorId:string;scope:string}>();
+  const [personalStoryChoice, setPersonalStoryChoice] = useState<{actorId:string;scope:string;eventId?:string}>();
   const [focusTrail, setFocusTrail] = useState<ChronicleTrail>();
   const [chronicleReturn, setChronicleReturn] = useState<ChronicleFeedReturn>();
   const [focusNotice, setFocusNotice] = useState<string>();
@@ -870,11 +872,21 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
   const aliveCount = visibleWorld.cultivators.filter((c) => c.alive).length;
   const activeActorId = selectedCultivator?.id ?? null;
   const mayReadPersonal = Boolean(selectedCultivator?.alive && selectedCultivator.hp > 0);
+  const readingRoster = dashboardOpen && workspace === 'people';
+  const rosterFocalId = useMemo(() => readingRoster ? projectRosterFocalId(visibleWorld) : undefined,
+    [readingRoster, visibleWorld]);
+  const rosterStoryStamp = useMemo(() => readingRoster ?
+    projectRosterStoryRead(visibleWorld, viewScopeKey, activeActorId) ??
+    (rosterFocalId !== activeActorId ? projectRosterStoryRead(visibleWorld, viewScopeKey, rosterFocalId) : undefined) :
+    undefined, [readingRoster, visibleWorld, viewScopeKey, activeActorId, rosterFocalId]);
+  const rosterRevision = saveContextVersion.current;
   const personalStoryActive = mayReadPersonal && personalStoryChoice?.actorId === activeActorId &&
     personalStoryChoice?.scope === viewScopeKey;
+  const selectedRosterEvent = personalStoryActive ? personalStoryChoice?.eventId : undefined;
   const personalStory = React.useMemo(() => readingChronicle && personalStoryActive && activeActorId ?
-    projectWitnessedPersonalStory(visibleWorld,activeActorId) : undefined,
-    [readingChronicle,personalStoryActive,activeActorId,visibleWorld]);
+    (selectedRosterEvent ? readSelectedRosterScene(visibleWorld, activeActorId, selectedRosterEvent) :
+      projectWitnessedPersonalStory(visibleWorld,activeActorId)) : undefined,
+    [readingChronicle,personalStoryActive,activeActorId,selectedRosterEvent,visibleWorld]);
   useEffect(() => {
     setPersonalStoryChoice((previous) => previous && mayReadPersonal && previous.actorId === activeActorId &&
       previous.scope === viewScopeKey ? previous : undefined);
@@ -1487,12 +1499,29 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
     onOpenChange: (id: string | null) => rememberFold(view, id),
   });
   const selectRosterActor = (id: string) => {
-    if (workspace !== 'people' || history.current.activeBranchId !== timeline.activeBranchId ||
-        (browsing.current ? preview?.world : authority.current) !== visibleWorld ||
-        !visibleWorld.cultivators.some((person) => person.id === id)) return;
+    if (!readingRoster || history.current !== timeline || saveContextVersion.current !== rosterRevision ||
+        browsing.current !== Boolean(preview) || (browsing.current ? preview?.world : authority.current) !== visibleWorld ||
+        visibleWorld.cultivators.filter((person) => person.id === id).length !== 1) return;
     setSelectedCultivatorId(id);
     rememberFold('people', 'profile');
     setRosterFocus({ id, scope: viewScopeKey });
+  };
+  const openRosterStoryScene = (scene: ActorRosterScene) => {
+    const current = browsing.current ? preview?.world : authority.current;
+    if (!readingRoster || browsing.current !== Boolean(preview) || current !== visibleWorld ||
+        history.current !== timeline || saveContextVersion.current !== rosterRevision ||
+        stepInFlight.current || fastForwardRun.current || campaignGuard.current ||
+        !rosterStoryStamp || !sameRosterScene(scene, rosterStoryStamp.scene) ||
+        !resolveRosterStoryRead(visibleWorld, viewScopeKey, rosterStoryStamp)) return;
+    setIsRunning(false);
+    setFocusTrail(undefined);
+    setFocusNotice(undefined);
+    setChronicleReturn(undefined);
+    setSelectedCultivatorId(scene.actorId);
+    setPersonalStoryChoice({actorId:scene.actorId,scope:viewScopeKey,eventId:scene.eventId});
+    rememberFold('chronicle','feed');
+    setWorkspace('chronicle');
+    window.scrollTo({ top: 0, behavior: 'instant' });
   };
   const toggleAutoplay = () => { if (!fastForwardRun.current && !campaignGuard.current) setIsRunning((current) => !current); };
   const changeHandedness = (value: string) => {
@@ -1644,7 +1673,8 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
           </aside>
         </div>,
         people: <div className="grid min-w-0 items-start gap-3 md:grid-cols-[17rem_minmax(0,1fr)]">
-          <React.Suspense fallback={<p role="status">载入修士名册…</p>}><ActorRoster world={visibleWorld} selected={selectedCultivator} dismissOnSelect onSelect={selectRosterActor} /></React.Suspense>
+          <React.Suspense fallback={<p role="status">载入修士名册…</p>}><ActorRoster world={visibleWorld} selected={selectedCultivator} dismissOnSelect onSelect={selectRosterActor}
+            scopeKey={viewScopeKey} focalId={rosterFocalId} scene={rosterStoryStamp?.scene} onReadScene={openRosterStoryScene} /></React.Suspense>
           <WorkspaceSections label={`${selectedCultivator?.name ?? '修士'} · 人物档案`} initialOpen={opened('people', 'profile')}
             {...fold('people')} moreAfterContent headingRef={actorHeading} forcedOpen={focusProfile ? 'profile' : undefined} sections={[
             { id: 'profile', label: '人物概况', content: <>
@@ -1691,7 +1721,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
             {selectedCultivator && mayReadPersonal && !chronicleReturn && <WitnessedStoryScopeToggle selectedName={selectedCultivator.name}
               active={personalStoryActive}
               onToggle={() => setPersonalStoryChoice(personalStoryActive ? undefined : {actorId:selectedCultivator.id,scope:viewScopeKey})} />}
-            {personalStory && !chronicleReturn ? <WitnessedPersonalStory story={personalStory} /> : <ChronicleFeed
+            {personalStory && !chronicleReturn ? <WitnessedPersonalStory story={personalStory} focusEventId={selectedRosterEvent} /> : <ChronicleFeed
               events={chronicleScenes} lead={chronicleLead} succession={succession} resolvePublicDialogue={publicDialogue?.event}
               category={chronicleFilter} onCategoryChange={setChronicleFilter} focusOptions={resolver?.build}
               causality={(eventId) => chronicleCauses?.get(eventId)}
