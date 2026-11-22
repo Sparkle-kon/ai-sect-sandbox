@@ -238,14 +238,55 @@ export async function prepareEraCheckpoint(world: WorldState, source: SaveBranch
   };
 }
 
+async function verifiedManifestFile(manifestFile:EraInput,signal?:AbortSignal):Promise<EraManifest> {
+  const manifest=readManifest(decodeUTF8(await readFile(manifestFile,ERA_CHECKPOINT_MANIFEST_BYTES,signal),'format'));
+  if(await manifestId(manifest,signal)!==manifest.id)return fail('integrity','年代清单的内容校验值不符。');
+  return manifest;
+}
+async function verifiedNativePayload(manifest:EraManifest,payload:Uint8Array,codec:EraCheckpointCodec,
+  signal?:AbortSignal):Promise<VerifiedEraCheckpoint> {
+  if (await sha256(payload, signal) !== manifest.payloadSha256) return fail('integrity', '年代检查点的整档校验值不符。');
+  abort(signal);
+  const text = decodeUTF8(payload, 'invalid_world');
+  let world: WorldState;
+  try { world = codec.decode(text); }
+  catch { abort(signal); return fail('invalid_world', '原生世界未通过完整存档校验。'); }
+  abort(signal);
+  if (world.tick !== manifest.tick || world.year !== manifest.year || world.month !== manifest.month) {
+    return fail('integrity', '年代清单与原生世界的实际日期不符。');
+  }
+  return {manifest, world};
+}
+
+/**
+ * Detached history may retain the exact native payload separately from its original .era
+ * manifest. Recheck every original payload slice, full SHA, and actual native date without
+ * fabricating transport headers that were never packaged as part of that detached archive.
+ */
+export async function verifyEraCheckpointPayload(manifestFile:EraInput,payload:Uint8Array,codec:EraCheckpointCodec,
+  {signal}:EraVerifyOptions={}):Promise<VerifiedEraCheckpoint> {
+  abort(signal);
+  if(!(payload instanceof Uint8Array)||!int(payload.byteLength,1,ERA_CHECKPOINT_MAX_BYTES))
+    return fail('size','年代检查点原始载荷超出限额。');
+  const manifest=await verifiedManifestFile(manifestFile,signal);
+  if(payload.byteLength!==manifest.payloadBytes)return fail('integrity','年代检查点的原始载荷长度不符。');
+  // Native decoding and all asynchronous digests must observe the same private bytes.
+  const original=Uint8Array.from(payload);
+  for(const part of manifest.parts){
+    const offset=part.index*ERA_CHECKPOINT_PART_BYTES;
+    if(await sha256(original.subarray(offset,offset+part.byteLength),signal)!==part.sha256)
+      return fail('integrity','年代分块字节数或内容校验值不符。');
+  }
+  return verifiedNativePayload(manifest,original,codec,signal);
+}
+
 export async function verifyEraCheckpoint(manifestFile: EraInput, partFiles: readonly EraInput[], codec: EraCheckpointCodec,
   {signal}: EraVerifyOptions = {}): Promise<VerifiedEraCheckpoint> {
   abort(signal);
   // Bound the picker before reading the manifest/body, and copy the list before an await.
   if (!Array.isArray(partFiles) || partFiles.length > MAX_PARTS) return fail('size', '选择的年代分块超过数量上限。');
   const files = [...partFiles];
-  const manifest = readManifest(decodeUTF8(await readFile(manifestFile, ERA_CHECKPOINT_MANIFEST_BYTES, signal), 'format'));
-  if (await manifestId(manifest, signal) !== manifest.id) return fail('integrity', '年代清单的内容校验值不符。');
+  const manifest = await verifiedManifestFile(manifestFile, signal);
   if (files.length < manifest.parts.length) return fail('missing_part', '年代检查点缺少分块。');
   const nativeJSON = usesNativeJSON(manifest.payloadBytes);
   const fileLimit = nativeJSON ? ERA_CHECKPOINT_NATIVE_JSON_BYTES : ERA_CHECKPOINT_PART_BYTES + HEADER_BYTES;
@@ -265,15 +306,5 @@ export async function verifyEraCheckpoint(manifestFile: EraInput, partFiles: rea
     seen.add(index);
   }
   if (seen.size !== manifest.parts.length) return fail('missing_part', '年代检查点缺少分块。');
-  if (await sha256(payload, signal) !== manifest.payloadSha256) return fail('integrity', '年代检查点的整档校验值不符。');
-  abort(signal);
-  const text = decodeUTF8(payload, 'invalid_world');
-  let world: WorldState;
-  try { world = codec.decode(text); }
-  catch { abort(signal); return fail('invalid_world', '原生世界未通过完整存档校验。'); }
-  abort(signal);
-  if (world.tick !== manifest.tick || world.year !== manifest.year || world.month !== manifest.month) {
-    return fail('integrity', '年代清单与原生世界的实际日期不符。');
-  }
-  return {manifest, world};
+  return verifiedNativePayload(manifest,payload,codec,signal);
 }
