@@ -1,6 +1,7 @@
 import type { Cultivator, LLMDecisionPayload, LocationNode, MapPoint, MapTile, MortalSettlement, VillageSupplyAgreement,
   VillageSupplyHazardProof, VillageSupplyLeg, VillageSupplyMove, VillageSupplySigner, WorldEvent, WorldState } from '../types/world';
 import { findMapPath } from './mapMotionEngine';
+import { paidNorthMiningRoute, retainNorthMiningPassage } from './northMiningCharterTerms';
 import { flowActor, flowGranary, flowVillageSupplyLeg, recordResourceFlow } from './resourceFlowEngine';
 import { currentVisibleTileIds, knownMapLocations, terrainTileAt } from './terrainEngine';
 import { granaryAt, presentAtVillageGranary, VILLAGE_GRANARY_CAPACITY } from './villageGranaryEngine';
@@ -76,18 +77,28 @@ function weather(world:WorldState,tileId:string,tick:number) {
 }
 const passable=(tile:MapTile)=>tile.biome!=='魔渊';
 
-function acceptedPath(world:WorldState,from:LocationNode,to:LocationNode,first:Cultivator,second:Cultivator,tick:number) {
+function acceptedPath(world:WorldState,from:LocationNode,to:LocationNode,first:Cultivator,second:Cultivator,tick:number,fromSettlementId:string,toSettlementId:string) {
   const firstKnown=new Set([...first.exploredTileIds,...currentVisibleTileIds(world,first)]);
   const secondKnown=new Set([...second.exploredTileIds,...currentVisibleTileIds(world,second)]);
-  const route=findMapPath(world,from,to,tile=>passable(tile)&&firstKnown.has(tile.id)&&secondKnown.has(tile.id) &&
-    !weather(world,tile.id,tick).unsafe);
+  const safe=(tile:MapTile)=>passable(tile)&&firstKnown.has(tile.id)&&secondKnown.has(tile.id)&&!weather(world,tile.id,tick).unsafe;
+  const paid=paidNorthMiningRoute(world,fromSettlementId,toSettlementId,tick);
+  if(paid){
+    const tileById=new Map(world.terrain.tiles.map(tile=>[tile.id,tile]));
+    if(paid.path[0]!==terrainTileAt(world,from.x,from.y)?.id||paid.path.at(-1)!==terrainTileAt(world,to.x,to.y)?.id||
+      paid.path.length<2||paid.path.length>VILLAGE_SUPPLY_MAX_ROUTE_TILES||!paid.path.every((id,index)=>{
+        const tile=tileById.get(id), prior=index>0&&tileById.get(paid.path[index-1]);
+        return !!tile&&safe(tile)&&(index===0||!!prior&&Math.abs(prior.col-tile.col)+Math.abs(prior.row-tile.row)===1);
+      }))return undefined;
+    return paid;
+  }
+  const route=findMapPath(world,from,to,safe);
   const ids:string[]=[];
   for(const point of route) {
     const tile=terrainTileAt(world,point.x,point.y);
     if(!tile)return undefined;
     if(ids.at(-1)!==tile.id)ids.push(tile.id);
   }
-  return ids.length>1&&ids.length<=VILLAGE_SUPPLY_MAX_ROUTE_TILES?ids:undefined;
+  return ids.length>1&&ids.length<=VILLAGE_SUPPLY_MAX_ROUTE_TILES?{path:ids,charterId:undefined}:undefined;
 }
 function presentAdult(world:WorldState,actor:Cultivator,tick:number) {
   return world.cultivators.includes(actor)&&Number.isFinite(actor.age)&&actor.age>=18 ?
@@ -103,8 +114,8 @@ function acceptance(world:WorldState,actor:Cultivator,here:MortalSettlement,row:
   const a=stock(world,remote.id),b=stock(world,here.id);
   const acceptor=donor(world,actor,here,tick);
   if(!acceptor||!rootRich(a)||!stoneRich(b)||!supportedSpace(a,b))return undefined;
-  const path=acceptedPath(world,from,to,signer,actor,tick);
-  return path?{signer,acceptor,path}:undefined;
+  const routing=acceptedPath(world,from,to,signer,actor,tick,row.fromSettlementId,row.toSettlementId);
+  return routing?{signer,acceptor,...routing}:undefined;
 }
 export function availableVillageSupplyActions(actor:Cultivator,world:WorldState,executionTick=world.tick):VillageSupplyOption[]{
   if(executionTick!==world.tick&&executionTick!==world.tick+1)return [];
@@ -174,6 +185,7 @@ export function resolveVillageSupplyAction(world:WorldState,actor:Cultivator,pay
   fromBook.roots-=VILLAGE_SUPPLY_QUANTITY.earth_root;
   toBook.stones-=VILLAGE_SUPPLY_QUANTITY.stone;
   row.acceptor=ready.acceptor;row.acceptedTick=world.tick;row.status='active';row.path=ready.path;row.legs=[make('earth_root'),make('stone')];
+  if(ready.charterId)row.northMiningCharterId=ready.charterId;
   for(const member of [ready.signer,actor]){
     member.spiritStones-=VILLAGE_SUPPLY_FEE;
     recordResourceFlow(world,{kind:'consumption',mechanism:'village_supply',from:flowActor(member.id),good:'stone',
@@ -240,6 +252,7 @@ function advanceLeg(world:WorldState,row:VillageSupplyAgreement,leg:VillageSuppl
       return diverted;
     }
     leg.checkpoint=next;
+    retainNorthMiningPassage(world,row,leg,actual);
   }
   if(leg.checkpoint!==end)return undefined;
   if(leg.phase==='outbound'){

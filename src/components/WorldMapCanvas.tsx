@@ -1,5 +1,7 @@
 import {REGIONAL_SIMULATION_VERSION,regionForPoint,SIMULATION_REGION_NAMES} from '../engine/regionalSimulationEngine';
 import {projectWaterVein} from '../engine/waterVeinEngine';
+import {WATER_VEIN_SITE} from '../engine/waterVeinTerms';
+import {projectNorthMiningCharters} from '../engine/northMiningCharterEngine';
 import {projectEraHeritage} from '../engine/eraHeritageEngine';
 import {localDoctrineFoundingNotice} from '../engine/doctrineFoundingEngine';
 import {localDanxiaSeasonReviewSite} from '../engine/danxiaSeasonReviewEngine';
@@ -368,6 +370,13 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     if (!toolsExpanded || !selected || !selectedLocation) return false;
     const observation=projectWaterVein(world,selected);
     if(observation?.scope!=='local'||!observation.symptom||observation.siteId!==selectedLocation.id)return false;
+    const tile=terrainTileAt(world,selectedLocation.x,selectedLocation.y);
+    return !!tile&&currentVisibleTileIds(world,selected).has(tile.id);
+  }, [toolsExpanded,world,selected,selectedLocation]);
+  const localMiningCharterNotice = useMemo(() => {
+    if (!toolsExpanded || !selected || selectedLocation?.id!==WATER_VEIN_SITE)return false;
+    const view=projectNorthMiningCharters(world,selected);
+    if(view?.scope!=='local'||!view.rows.some(row=>row.status==='ratified'&&row.active))return false;
     const tile=terrainTileAt(world,selectedLocation.x,selectedLocation.y);
     return !!tile&&currentVisibleTileIds(world,selected).has(tile.id);
   }, [toolsExpanded,world,selected,selectedLocation]);
@@ -1239,6 +1248,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         </span>
         {heat && <span className="text-[11px] text-slate-400">蓝色至橙红色表示灵气由低到高。</span>}
         {localWaterVeinNotice&&<span className="text-[11px] text-sky-200">此人正在寒玉井边，可核看水势。</span>}
+        {localMiningCharterNotice&&<span className="text-[11px] text-amber-200">此处仍有在行的采契。</span>}
         {toolsExpanded && selectedKnownRegion && <span className="text-[11px] text-emerald-200">
           所选已知地点所属地域：{SIMULATION_REGION_NAMES[selectedKnownRegion]}
         </span>}

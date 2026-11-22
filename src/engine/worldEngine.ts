@@ -1,6 +1,7 @@
 import { recordRegionalActorReturn, recordRegionalEarlyPromotions, recordRegionalLatePromotions } from './regionalPromotionEngine';
 import { beginRegionalSimulationTurn, deferRegionalActorTurn, finishRegionalSimulationTurn, recordRegionalTurnRegistry, renewRegionalProtectionAfterEvent } from './regionalSimulationEngine';
 import {advanceDoctrineMaturity,resolveDoctrineMaturityAction} from './doctrineMaturityEngine';
+import { resolveNorthMiningCharterAction } from './northMiningCharterEngine';
 import { resolveWaterVeinAction } from './waterVeinEngine';
 import { advanceDanxiaMedicine, resolveDanxiaMedicineAction } from './danxiaMedicineEngine';
 import { advanceDanxiaSeasonReviews, resolveDanxiaReviewAction } from './danxiaSeasonReviewEngine';
@@ -53,6 +54,7 @@ import { activeCourierForActor, advanceCouriers, courierActedThisTick, courierCh
 import { captureWatchDigests } from './watchlistEngine';
 import { advanceVillageWorks, resolveVillageWorksAction } from './villageWorksEngine';
 import { advanceWaterVein } from './waterVeinEngine';
+import { advanceNorthMiningCharters } from './northMiningCharterEngine';
 import { advanceHouseholds, resolveGuardianAction } from './householdEngine';
 import { advanceTerritorialLeases, resolveTerritorialLeaseAction } from './territorialLeaseEngine';
 import { advanceFormations, resolveFormationAction } from './formationNetworkEngine';
@@ -84,7 +86,7 @@ import { weatherTravelFriction } from './weatherEngine';
 import { advanceOaths, resolveOathAction } from './oathEngine';
 import { maintainMentorship, mentorshipTechniqueMultiplier, resolveMentorshipAction } from './mentorshipEngine';
 import { worldRandom } from './worldRandom';
-import { consumeAvatarOrder, maintainPlayerAvatar } from './avatarEngine';
+import { activeAvatar, consumeAvatarOrder, maintainPlayerAvatar } from './avatarEngine';
 import { archiveChronicleEvents } from './novelGenerator';
 import { advanceWitnessedPersonalStory, captureWitnessedPersonalScene } from './witnessedPersonalStory';
 import { advanceProtagonistSuccession } from './protagonistSuccession';
@@ -199,6 +201,7 @@ export function applyCultivatorBrainDecision(
   rng: () => number = worldRandom(world),
   authorizedBountyTargetId?: string,
   emit?: (event: WorldEvent) => void,
+  explicitAvatarDecision?: LLMDecisionPayload,
 ): WorldEvent | null {
   if (!cultivator.alive) return null;
   if (isTribulationActive(cultivator)) {
@@ -251,6 +254,15 @@ export function applyCultivatorBrainDecision(
     cultivator.currentAction = 'BOUNDARY_RELIEF';
     cultivator.innerMonologue = '按已核实的换防关口行进，未到岗前不计驻守。';
     return null;
+  }
+  if(decision.chosenAction==='NORTH_MINING_CHARTER'){
+    if(activeAvatar(world)?.id===cultivator.id&&decision!==explicitAvatarDecision)return null;
+    const applied=resolveNorthMiningCharterAction(world,cultivator,decision);
+    if(applied){
+      cultivator.innerMonologue=decision.innerMonologue;
+      cultivator.currentAction='NORTH_MINING_CHARTER';
+    }
+    return applied;
   }
   if(decision.chosenAction==='WATER_VEIN'){
     const applied=resolveWaterVeinAction(world,cultivator,decision);
@@ -869,6 +881,7 @@ export function advanceWorldTick(
 
   advanceProtagonistSuccession(nextState, prevState);
   openResourceFlowMonth(nextState);
+  advanceNorthMiningCharters(nextState);
   advanceRouteWarnings(nextState);
   maintainPlayerAvatar(nextState);
   maintainMentorship(nextState);
@@ -1025,7 +1038,7 @@ export function advanceWorldTick(
     const evt = applyCultivatorBrainDecision(nextState, cultivator, decision, rng, undefined, (event) => {
       newEvents.push(event);
       witnessEvent(nextState, event);
-    });
+    }, avatarDecision);
     if (decision.chosenAction === 'EXPLORE' && cultivator.currentAction === 'EXPLORE' && previousLocation !== cultivator.locationId) {
       recordRegionalActorReturn(nextState,regionalTurn,cultivator,previousLocation,decision.chosenAction,evt);
       renewRegionalProtectionAfterEvent(regionalTurn);

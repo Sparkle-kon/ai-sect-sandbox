@@ -165,6 +165,7 @@ export type ActionType =
   | 'SECT_STIPEND'
   | 'SEED_CULTURE'
   | 'WATER_VEIN'
+  | 'NORTH_MINING_CHARTER'
   | 'TOOL_LOAN'
   | 'FORGE_ARTIFACT'
   | 'BIND_ARTIFACT'
@@ -470,6 +471,9 @@ export interface LLMDecisionPayload {
   innerMonologue: string;
   chosenAction: ActionType;
   waterVeinMove?: WaterVeinMove;
+  northMiningMove?: NorthMiningCharterMove;
+  northMiningStance?: NorthMiningStance;
+  targetNorthMiningCharterId?: string;
   danxiaMedicineMove?: DanxiaMedicineMove;
   danxiaReviewMove?: DanxiaReviewMove;
   targetDanxiaReviewId?: string;
@@ -1009,6 +1013,8 @@ export type AvatarOrder = 'REST' | 'CULTIVATE';
 export type AvatarPendingOrder = { actorId: string; queuedTick: number } & (
   | { action: AvatarOrder }
   | { action: 'WATER_VEIN'; waterVeinMove: WaterVeinMove; targetLocationId: 'loc-vein-north' }
+  | { action:'NORTH_MINING_CHARTER'; northMiningMove:'propose'; northMiningStance:NorthMiningStance; targetNorthMiningCharterId?:never }
+  | { action:'NORTH_MINING_CHARTER'; northMiningMove:'sign'; targetNorthMiningCharterId:string; northMiningStance?:never }
   | { action: 'SALVAGE_ARTIFACT'; targetArtifactId: string; targetLocationId: string }
   | { action:'DOCTRINE_MATURITY';doctrineMaturityMove:DoctrineMaturityMove;targetDoctrineFoundingId:string }
   | { action:'DOCTRINE_FOUNDING'; doctrineFoundingMove:DoctrineFoundingMove; targetDoctrineFoundingId?:string;
@@ -2561,7 +2567,7 @@ export interface SharedCommonsPact {
 export interface SharedCommonsState { pacts: SharedCommonsPact[]; nextId: number }
 
 export type ResourceFlowGood = 'stone' | 'jade_seed' | MarketGood;
-export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation' | 'terrain' | 'workshop' | 'road' | 'observatory' | 'pilgrimage' | 'granary' | 'furnace_safety' | 'artifact_salvage' | 'village_supply' | 'civic_memorial' | 'village_fair' | 'sect_stipend' | 'seed_culture' | 'care_followup' | 'danxia_medicine' | 'water_vein';
+export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation' | 'terrain' | 'workshop' | 'road' | 'observatory' | 'pilgrimage' | 'granary' | 'furnace_safety' | 'artifact_salvage' | 'village_supply' | 'civic_memorial' | 'village_fair' | 'sect_stipend' | 'seed_culture' | 'care_followup' | 'danxia_medicine' | 'water_vein' | 'north_mining_charter';
 export type ResourceFlowAccount =
   | { kind: 'actor' | 'site' | 'sect' | 'order' | 'shipment' | 'relocation' | 'workshop' | 'salvage' | 'granary' | 'village_supply' | 'village_fair' | 'seed_lot' | 'seed_plot' | 'danxia_medicine'; id: string }
   | { kind: 'oath'; id: string; pocket: 'payment' | 'collateral' };
@@ -3032,6 +3038,7 @@ export interface VillageSupplyLeg {
   loss?:VillageSupplyHazardProof;
 }
 export interface VillageSupplyAgreement {
+  northMiningCharterId?:string;
   id:string;
   fromSettlementId:string;
   toSettlementId:string;
@@ -3333,7 +3340,31 @@ export interface ColdWaterVeinState {
   lastAdvancedTick?: number;
 }
 
+export type NorthMiningStance = 'seal'|'continue'|'detour';
+export type NorthMiningCharterMove = 'propose'|'sign';
+export type NorthMiningCharterSignature =
+  | {role:'household';actorId:string;tick:number;householdId:string;volunteerId:string;recruitedTick:number}
+  | {role:'miner';actorId:string;tick:number;miningReceiptId:string}
+  | {role:'sect';actorId:string;tick:number;sectId:string};
+export interface NorthMiningDetour {
+  fromSettlementId:string;toSettlementId:string;
+  originalTiles:string[];detourTiles:string[];
+}
+export interface NorthMiningPassage {
+  agreementId:string;tick:number;good:'stone'|'earth_root';checkpoint:number;tileId:string;
+}
+export interface NorthMiningCharter {
+  id:string;proposedTick:number;year:number;month:number;expiresTick:number;
+  proposerId:string;stance:NorthMiningStance;status:'proposed'|'ratified'|'expired';
+  siteId:'loc-vein-north';settlementId:string;wellProjectId:string;openingId:string;
+  plotId:string;fieldObservedTick:number;fieldDeficit:number;miningReceiptId:string;sponsorSectId:string;
+  signatures:NorthMiningCharterSignature[];ratifiedTick?:number;paidStones?:number;
+  route?:NorthMiningDetour;firstPassage?:NorthMiningPassage;
+}
+export interface NorthMiningCharterState {version:1;charters:NorthMiningCharter[]}
+
 export interface WorldState {
+  northMiningCharters?:NorthMiningCharterState;
   coldWaterVein?:ColdWaterVeinState;
   mortalAgeTrackingSinceTick?: number;
   eraHeritage?: EraHeritageState;

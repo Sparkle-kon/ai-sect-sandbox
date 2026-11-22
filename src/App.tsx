@@ -73,9 +73,11 @@ import {projectRegionalPromotions} from './engine/regionalPromotionEngine';
 import {isScopedExpeditionGate} from './engine/expeditionOmenTerms';
 import {REGIONAL_BENCHMARK} from './components/regionalBenchmark';
 import type {RegionalFocusOption,RegionalSimulationControls} from './components/RegionalSimulationPanel';
-import { possessAvatar, queueAvatarOrder, queueAvatarSalvage, queueAvatarWaterVein } from './engine/avatarEngine';
+import { possessAvatar, queueAvatarOrder, queueAvatarSalvage, queueAvatarWaterVein, queueAvatarNorthMiningCharter } from './engine/avatarEngine';
 import { availableWaterVeinActions, projectWaterVein } from './engine/waterVeinEngine';
 import type { ColdWaterControls } from './components/ColdWaterVeinPanel';
+import type { MiningCharterControls } from './components/NorthMiningCharterPanel';
+import {availableNorthMiningCharterActions,projectNorthMiningCharters} from './engine/northMiningCharterEngine';
 import type { ArtifactSalvageControls } from './components/ArtifactPanel';
 import { resolveAvatarSnapshot } from './engine/avatarRuntime';
 import { CHRONICLE_FOCUS_UNAVAILABLE, createChronicleFocusResolver } from './engine/chronicleFocusEngine';
@@ -118,6 +120,7 @@ const ChronicleLibraryPanel = React.lazy(async () => ({ default: (await import('
 const WorldOccasionsPanel = React.lazy(async () => ({ default: (await import('./components/WorldOccasionsPanel')).WorldOccasionsPanel }));
 const ExpeditionRescuePanel = React.lazy(async () => ({ default: (await import('./components/ExpeditionRescuePanel')).ExpeditionRescuePanel }));
 const BoundaryReliefPanel = React.lazy(async () => ({ default: (await import('./components/BoundaryReliefPanel')).BoundaryReliefPanel }));
+const NorthMiningCharterPanel = React.lazy(async () => ({ default: (await import('./components/NorthMiningCharterPanel')).NorthMiningCharterPanel }));
 const ColdWaterVeinPanel = React.lazy(async () => ({ default: (await import('./components/ColdWaterVeinPanel')).ColdWaterVeinPanel }));
 const WeatherAtlasPanel = React.lazy(async () => ({ default: (await import('./components/WeatherAtlasPanel')).WeatherAtlasPanel }));
 const ShortShiftPanel = React.lazy(async () => ({ default: (await import('./components/ShortShiftPanel')).ShortShiftPanel }));
@@ -914,6 +917,28 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
       return updated!==world;
     },
   }:undefined;
+  const miningCharterView=waterVeinActive?projectNorthMiningCharters(visibleWorld,selectedCultivator):undefined;
+  const miningCharterAvatar=miningCharterView?.scope==='local'&&!preview&&selectedCultivator&&
+    activeAvatar(world)?.id===selectedCultivator.id?selectedCultivator:undefined;
+  const miningCharterControls:MiningCharterControls|undefined=miningCharterAvatar?{
+    scopeKey:`${viewScopeKey}:${miningCharterAvatar.id}`,revisionKey:visibleWorld,
+    choices:canQueueAvatarSalvage(world,miningCharterAvatar.id)?availableNorthMiningCharterActions(miningCharterAvatar,world,world.tick+1):[],
+    pending:waterVeinPending?.actorId===miningCharterAvatar.id&&waterVeinPending.action==='NORTH_MINING_CHARTER',
+    disabled:isRunning||isStepping||fastForwardLocked,
+    onQueue:(choice,revision)=>{
+      if(revision!==world||isRunning||isStepping||fastForwardLocked||browsing.current||stepInFlight.current||
+        fastForwardRun.current||campaignGuard.current||history.current!==timeline||authority.current!==world||
+        saveContextVersion.current!==waterVeinContextVersion)return false;
+      const updated=updateWorld(current=>{
+        if(current!==world)return current;
+        const next=structuredClone(current);
+        return queueAvatarNorthMiningCharter(next,miningCharterAvatar.id,choice)?next:current;
+      });
+      return updated!==world;
+    },
+  }:undefined;
+  const showMiningCharter=Boolean(miningCharterView&&(miningCharterView.rows.length||
+    miningCharterControls?.pending||miningCharterControls?.choices.length));
   const medicineContextVersion=saveContextVersion.current;
   const medicineAvatar=!preview&&selectedCultivator&&activeAvatar(world)?.id===selectedCultivator.id&&
     canQueueAvatarSalvage(world,selectedCultivator.id)?selectedCultivator:undefined;
@@ -1402,7 +1427,9 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
         world: <WorkspaceSections label="世界与设置" initialOpen={opened('world', 'weather')} {...fold('world')} sections={[
           { id: 'weather', label: '灵候图与观测', content: <div className="space-y-2.5">
             <React.Suspense fallback={<p role="status">载入世界记录…</p>}><WeatherAtlasPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense>
-            {waterVeinView&&<React.Suspense fallback={null}><ColdWaterVeinPanel view={waterVeinView} controls={waterVeinControls}/></React.Suspense>}
+            {(waterVeinView||showMiningCharter)&&<React.Suspense fallback={null}><ColdWaterVeinPanel view={waterVeinView} controls={waterVeinControls}>
+              {showMiningCharter&&miningCharterView&&<NorthMiningCharterPanel view={miningCharterView} controls={miningCharterControls}/>}
+            </ColdWaterVeinPanel></React.Suspense>}
             {activeActorId && visibleWorld.shortShifts.shifts.some(({ hostId, workerId }) => activeActorId === hostId || activeActorId === workerId) &&
               <React.Suspense fallback={<p role="status">载入短聘凭证…</p>}><ShortShiftPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense>}
           </div> },

@@ -15,6 +15,7 @@ import { availableShortShiftActions } from './shortShiftEngine';
 import { availableCaravanRestitutionActions } from './caravanRestitutionEngine';
 import { availableVillageGranaryActions, projectVillageGranary } from './villageGranaryEngine';
 import { availableVillageFairActions } from './villageFairEngine';
+import { availableNorthMiningCharterActions, utilityNorthMiningDecision } from './northMiningCharterEngine';
 import { availableWaterVeinActions, utilityWaterVeinDecision } from './waterVeinEngine';
 import { availableSeedCultureActions } from './seedCultureEngine';
 import { availableCivicMemorialActions } from './civicMemorialEngine';
@@ -911,6 +912,14 @@ export function computeHeuristicDecision(
     if (choice) return { ...choice, chosenAction: 'SCRIPTURE', innerMonologue: '经义须以原本核证，异读不可混同。' };
   }
 
+  // A possessed body signs only via its own explicit next-month order.
+  const charter=world.playerAvatar.possessedId===cultivator.id&&(world.playerAvatar.possessionUntilTick??0)>world.tick ?
+    undefined : utilityNorthMiningDecision(cultivator,world);
+  if(charter)return charter.northMiningMove==='propose' ?
+    {chosenAction:charter.action,northMiningMove:'propose',northMiningStance:charter.northMiningStance,
+      innerMonologue:'到原井以现存实据和自己的职分提出采契，不替他人落笔。'} :
+    {chosenAction:charter.action,northMiningMove:'sign',targetNorthMiningCharterId:charter.targetNorthMiningCharterId,
+      innerMonologue:'只对这份原件以自己的实际职分落笔，不预报生效或行过新路。'};
   // Known local water work is weighed after actual harvest/planting, before elective relic hunting.
   const waterVein=utilityWaterVeinDecision(cultivator,world);
   if(waterVein)return {chosenAction:waterVein.action,waterVeinMove:waterVein.waterVeinMove,targetLocationId:waterVein.targetLocationId,
@@ -1670,6 +1679,8 @@ export async function requestCultivatorLLMDecision(
   const arbitrationOptions = availableOathArbitrationActions(cultivator, world);
   const oathOptions = availableOathActions(cultivator, world);
   const marketOptions = availableMarketActions(cultivator, world);
+  const charterOptions=world.playerAvatar.possessedId===cultivator.id&&(world.playerAvatar.possessionUntilTick??0)>requestTick ?
+    [] : availableNorthMiningCharterActions(cultivator,world,requestTick);
   const waterVeinOptions = availableWaterVeinActions(cultivator,world,requestTick);
   const seedOptions = availableSeedCultureActions(cultivator, world, requestTick);
   const seedPromptOptions = seedOptions.map(({ seedMove, targetLocationId, targetSeedLotId, targetSeedPlotId }) =>
@@ -1802,6 +1813,8 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 本宗邦交：${JSON.stringify(world.diplomacy.filter((relation) => relation.sectAId === cultivator.sectId || relation.sectBId === cultivator.sectId))}；公示的外事权限：${JSON.stringify(availableDiplomacyActions(cultivator, world))}
 - 赛季复核只选真实可核验收据；提交不会改写原榜：${JSON.stringify(honorReviewOptions)}
 - 临时观象只复制实际地点的 fund、到期 measure 或带原日期 relay。仅 fund 任选列表中的观测位（现地中心省略、边位用 observatoryStation:'edge'）；不填写读数或强度：${JSON.stringify(observatoryOptions)}
+${charterOptions.length?`- 北脉采契只复制本人的现场许可；不代签，不填写角色、收据、款额或路线：${JSON.stringify(charterOptions.map(({action,northMiningMove,northMiningStance,targetNorthMiningCharterId})=>
+  ({chosenAction:action,northMiningMove,northMiningStance,targetNorthMiningCharterId})))}`:''}
 ${waterVeinOptions.length ? `- 本人在场的水线许可，只抄 waterVeinMove 与 targetLocationId；不得代报水尺、费用、产量或原因：${JSON.stringify(waterVeinOptions.map(({action,waterVeinMove,targetLocationId})=>({chosenAction:action,waterVeinMove,targetLocationId})))}` : ''}
 - 同刻异读只复制本人实际许可：offer 用自身原本的 targetLocationId、现场同行人 targetCultivatorId、本人 targetObservatoryTick；compare 用 targetAlignedWeatherId 及本人 targetObservatoryTick；decline 或 withdraw 只填 targetAlignedWeatherId。没见过的读数、强度、方位或结论不得填写：${JSON.stringify(alignedWeatherPromptOptions)}
 - 巡界换防只复制当前获准选项；offer 必须用已列真实哨位和候任修士，accept、decline、withdraw 只用换防编号。不可填写路线、灵气、地权、岗哨覆盖或其他守卫：${JSON.stringify(boundaryReliefOptions)}
@@ -1899,6 +1912,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'GATHER_HERBS',
             'SEED_CULTURE',
             'WATER_VEIN',
+            'NORTH_MINING_CHARTER',
             'BREW_PILL',
             'USE_PILL',
             'FORGE_ARTIFACT',
@@ -2014,6 +2028,19 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
           if (rescueOnly && chosenAction !== 'EXPEDITION_RESCUE') return undefined;
           if (activeVow && chosenAction !== 'PILGRIMAGE' &&
               (onPilgrimagePath || (chosenAction !== 'REST' && chosenAction !== 'ROUTE_WARNING'))) return undefined;
+          if(chosenAction!=='NORTH_MINING_CHARTER'&&
+            (parsed.northMiningMove!==undefined||parsed.northMiningStance!==undefined||parsed.targetNorthMiningCharterId!==undefined))return undefined;
+          if(chosenAction==='NORTH_MINING_CHARTER'){
+            const exact=charterOptions.find(row=>row.northMiningMove===parsed.northMiningMove&&row.northMiningStance===parsed.northMiningStance&&
+              row.targetNorthMiningCharterId===parsed.targetNorthMiningCharterId);
+            if(!exact||Object.keys(parsed).some(field=>!['chosenAction','innerMonologue','northMiningMove',
+                exact.northMiningMove==='propose'?'northMiningStance':'targetNorthMiningCharterId'].includes(field)))return undefined;
+            const innerMonologue=(typeof parsed.innerMonologue==='string'&&parsed.innerMonologue.trim().slice(0,160))||
+              '在实址按本人已经核准的采契选项办理。';
+            return exact.northMiningMove==='propose' ?
+              {chosenAction:'NORTH_MINING_CHARTER',northMiningMove:'propose',northMiningStance:exact.northMiningStance,innerMonologue} :
+              {chosenAction:'NORTH_MINING_CHARTER',northMiningMove:'sign',targetNorthMiningCharterId:exact.targetNorthMiningCharterId,innerMonologue};
+          }
           if(parsed.waterVeinMove!==undefined&&chosenAction!=='WATER_VEIN')return undefined;
           if(chosenAction==='WATER_VEIN'){
             const exact=waterVeinOptions.find(row=>row.waterVeinMove===parsed.waterVeinMove&&row.targetLocationId===parsed.targetLocationId);

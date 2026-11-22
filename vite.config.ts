@@ -42,6 +42,7 @@ export default defineConfig({
           // Shared leaf callbacks never put historical custody into the native action chunks.
           'heritage-capture': ['./src/engine/eraHeritageCapture.ts'],
           'cold-water-rules': ['./src/engine/waterVeinTerms.ts'],
+          'north-charter-terms': ['./src/engine/northMiningCharterTerms.ts'],
           'household-register': ['./src/engine/householdNameEngine.ts','./src/engine/mortalAgeCohorts.ts'],
           'institution-terms': ['./src/engine/sectActivity.ts','./src/engine/sectCreditTerms.ts'],
           'institution-rules': ['./src/engine/estateEngine.ts', './src/engine/sectCreditEngine.ts', './src/engine/serviceRetirementEngine.ts', './src/engine/relicExhibitEngine.ts'],
@@ -55,7 +56,7 @@ export default defineConfig({
           'world-identity': ['./src/engine/worldRandom.ts', './src/engine/worldIdentity.ts', './src/engine/worldgenProfiles.ts'],
           'travel-checkpoints': ['./src/engine/expeditionRescueCheckpoint.ts', './src/engine/boundaryReliefCheckpoint.ts'],
           'journey-rules': ['./src/engine/terrainEngine.ts', './src/engine/mapMotionEngine.ts', './src/engine/roadEngine.ts',
-            './src/engine/sealedCourierEngine.ts', './src/engine/pilgrimageEngine.ts', './src/engine/expeditionRescueEngine.ts',
+            './src/engine/sealedCourierEngine.ts', './src/engine/escortEngine.ts', './src/engine/pilgrimageEngine.ts', './src/engine/expeditionRescueEngine.ts',
             './src/engine/boundaryReliefEngine.ts','./src/engine/routeWarningProof.ts','./src/engine/routeWarningEngine.ts'],
           'workspace-shell': ['./src/components/SandboxWorkspace.tsx', './src/components/workspacePreferences.ts'],
           'map-controls': ['./src/components/mapCamera.ts', './src/components/mapKeyboard.ts', './src/components/mapActorClusters.ts',

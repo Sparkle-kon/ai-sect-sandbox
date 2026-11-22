@@ -4,6 +4,7 @@ import { doctrineFoundingPhysicallyAt } from './doctrineFoundingEngine';
 import { flowActor,flowSect,recordResourceFlow } from './resourceFlowEngine';
 import { routeWarningHazardValid } from './routeWarningProof';
 import { terrainTileAt } from './terrainEngine';
+import { northMiningIsSealed } from './northMiningCharterTerms';
 import { WATER_VEIN_BASELINE,WATER_VEIN_BORROW_UNITS,WATER_VEIN_COOLDOWN_TICKS,WATER_VEIN_ID,
   WATER_VEIN_OPEN_STONES,WATER_VEIN_ORE_CAPACITY,WATER_VEIN_RECOVERY_TICKS,WATER_VEIN_SIGNAL_OFFSETS,
   WATER_VEIN_SITE,WATER_VEIN_SURVEY_STONES,WATER_VEIN_TILES,latestWaterRow,waterVeinOpeningAt,waterVeinPhase,waterVeinSymptomEventId } from './waterVeinTerms';
@@ -66,14 +67,15 @@ export function availableWaterVeinActions(actor:Cultivator,world:WorldState,exec
       state.mining.some(row=>row.actorId===actor.id&&row.tick===executionTick)||
       state.openings.some(row=>row.openerId===actor.id&&row.openedTick===executionTick)))return [];
   const options:WaterVeinMove[]=[];
+  const sealed=northMiningIsSealed(world,executionTick);
   const well=completedNorthWaterWell(world,address.village.id);
   if(well&&actor.spiritStones>=WATER_VEIN_SURVEY_STONES)options.push('observe');
   const sect=world.sects.find(row=>row.id===actor.sectId);
   const previous=waterVeinOpeningAt(state,executionTick);
-  if(well&&address.village.population>0&&steward(actor)&&sect&&sect.spiritStones>=WATER_VEIN_OPEN_STONES&&
+  if(!sealed&&well&&address.village.population>0&&steward(actor)&&sect&&sect.spiritStones>=WATER_VEIN_OPEN_STONES&&
       (!previous||previous.completedTick!==undefined&&executionTick>=previous.openedTick+WATER_VEIN_COOLDOWN_TICKS))options.push('open');
   const mineUnits=Math.min(state?.oreRemaining??WATER_VEIN_ORE_CAPACITY,waterVeinPhase(previous,executionTick).mineYield);
-  if(mineUnits>0&&actor.spiritStones<=9999-mineUnits)options.push('mine');
+  if(!sealed&&mineUnits>0&&actor.spiritStones<=9999-mineUnits)options.push('mine');
   return options.map(waterVeinMove=>({action:'WATER_VEIN',waterVeinMove,targetLocationId:WATER_VEIN_SITE}));
 }
 function steward(actor:Cultivator){return stewards.has(actor.sectRank);}

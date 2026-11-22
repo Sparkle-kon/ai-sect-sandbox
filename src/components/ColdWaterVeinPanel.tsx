@@ -1,4 +1,4 @@
-import {useId,useState} from 'react';
+import {useId,useState,type ReactNode} from 'react';
 import type {WaterVeinOption,WaterVeinView} from '../engine/waterVeinEngine';
 import {WATER_VEIN_OPEN_STONES,WATER_VEIN_SURVEY_STONES} from '../engine/waterVeinTerms';
 
@@ -36,8 +36,8 @@ export function ColdWaterSymptom({reading}:{reading:ColdWaterReading}) {
   </div>;
 }
 
-export function ColdWaterDisclosurePanel({disclosure,controls}:{disclosure:ColdWaterDisclosure;controls?:ColdWaterControls}) {
-  if(!disclosure.reading&&!disclosure.ownOpening&&!controls?.pending)return null;
+export function ColdWaterDisclosurePanel({disclosure,controls,children}:{disclosure:ColdWaterDisclosure;controls?:ColdWaterControls;children?:ReactNode}) {
+  if(!disclosure.reading&&!disclosure.ownOpening&&!controls?.pending&&!children)return null;
   return <details className="min-w-0 rounded border border-sky-500/30 bg-slate-950 p-2 text-xs text-slate-100 [overflow-wrap:anywhere]">
     <summary className="flex min-h-11 cursor-pointer items-center font-semibold text-sky-100">寒玉井边</summary>
     <div className="space-y-2">
@@ -45,17 +45,19 @@ export function ColdWaterDisclosurePanel({disclosure,controls}:{disclosure:ColdW
       {disclosure.ownOpening&&<p>{when(disclosure.ownOpening.date)}本人核到门账：实付 {disclosure.ownOpening.cost} 灵石，借水脉灵压 {disclosure.ownOpening.borrowed} 份。不是水尺寸数。</p>}
       {disclosure.reading?.kind==='local'&&!disclosure.ownOpening&&disclosure.reading.depthLossInches!==undefined&&disclosure.reading.depthLossInches>0&&<p>水尺看得见，因何下落还不能断。</p>}
       {controls&&disclosure.reading?.kind==='local'&&<ColdWaterVeinOrders key={controls.scopeKey} {...controls}/>}
+      {children}
     </div>
   </details>;
 }
 
 const symptoms={well:'井水比往常浅了',field:'井畔灵田发干',mine:'矿口取石渐难',recovered:'井水有回升的迹象'} as const;
-export function ColdWaterVeinPanel({view,controls}:{view:WaterVeinView;controls?:ColdWaterControls}) {
+export function ColdWaterVeinPanel({view,controls,children}:{view?:WaterVeinView;controls?:ColdWaterControls;children?:ReactNode}) {
+  if(!view)return <ColdWaterDisclosurePanel disclosure={{}}>{children}</ColdWaterDisclosurePanel>;
   const date={year:view.year,month:view.month};
   const ownOpening=view.scope!=='rumor'&&view.ownOpening?
     {date:{year:view.ownOpening.year,month:view.ownOpening.month},cost:view.ownOpening.paidStones,borrowed:view.ownOpening.borrowedUnits}:undefined;
   if(view.scope==='rumor'){
-    return view.symptom?<ColdWaterDisclosurePanel disclosure={{reading:{kind:'reported',date,symptom:symptoms[view.symptom]}}}/>:null;
+    return view.symptom?<ColdWaterDisclosurePanel disclosure={{reading:{kind:'reported',date,symptom:symptoms[view.symptom]}}}>{children}</ColdWaterDisclosurePanel>:<ColdWaterDisclosurePanel disclosure={{}}>{children}</ColdWaterDisclosurePanel>;
   }
   const depthLossInches=view.wellDepth===undefined||view.wellBaseline===undefined?undefined:
     Math.max(0,view.wellBaseline-view.wellDepth);
@@ -63,7 +65,7 @@ export function ColdWaterVeinPanel({view,controls}:{view:WaterVeinView;controls?
   const reading:ColdWaterReading=view.scope==='local'?
     {kind:'local',hasCompletedWell:view.wellDepth!==undefined,depthLossInches,...common}:
     {kind:'own_observation',date,depthLossInches,...common};
-  return <ColdWaterDisclosurePanel disclosure={{reading,ownOpening}} controls={view.scope==='local'?controls:undefined}/>;
+  return <ColdWaterDisclosurePanel disclosure={{reading,ownOpening}} controls={view.scope==='local'?controls:undefined}>{children}</ColdWaterDisclosurePanel>;
 }
 
 type ProposedWaterOrder={choice:WaterVeinChoice;revision:object};

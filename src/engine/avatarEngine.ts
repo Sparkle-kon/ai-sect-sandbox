@@ -1,5 +1,6 @@
 import {availableDoctrineMaturityActions,type DoctrineMaturityOption} from './doctrineMaturityEngine';
 import {availableDoctrineFoundingActions,type DoctrineFoundingOption} from './doctrineFoundingEngine';
+import { availableNorthMiningCharterActions,type NorthMiningOption } from './northMiningCharterEngine';
 import { availableWaterVeinActions,type WaterVeinOption } from './waterVeinEngine';
 import { availableDanxiaMedicineActions } from './danxiaMedicineEngine';
 import {availableDanxiaReviewActions,type DanxiaReviewOption} from './danxiaSeasonReviewEngine';
@@ -116,6 +117,18 @@ export function queueAvatarWaterVein(world:WorldState,actorId:string,option:Wate
   return true;
 }
 
+/** Queue the holder's explicit native charter choice; do not open the register, sign or reserve money yet. */
+export function queueAvatarNorthMiningCharter(world:WorldState,actorId:string,option:NorthMiningOption):boolean {
+  const host=activeAvatar(world);
+  if(!host||!canQueueAvatarSalvage(world,actorId)||option.action!=='NORTH_MINING_CHARTER')return false;
+  const exact=availableNorthMiningCharterActions(host,world,world.tick+1).find(row=>row.northMiningMove===option.northMiningMove&&
+    row.northMiningStance===option.northMiningStance&&row.targetNorthMiningCharterId===option.targetNorthMiningCharterId);
+  if(!exact)return false;
+  world.playerAvatar.essence-=AVATAR_ORDER_COST;
+  world.playerAvatar.pendingOrder={actorId,queuedTick:world.tick,...exact};
+  return true;
+}
+
 export type AvatarDanxiaMedicineOption=ReturnType<typeof availableDanxiaMedicineActions>[number];
 
 /** Queue an eligible exact medicinal choice without reserving any stock before the native turn. */
@@ -174,7 +187,10 @@ export function consumeAvatarOrder(world: WorldState): { actorId: string; decisi
   if (!order || world.tick <= order.queuedTick) return undefined;
   delete state.pendingOrder;
   if (world.tick !== order.queuedTick + 1 || activeAvatar(world)?.id !== order.actorId) return undefined;
-  const targets = order.action === 'WATER_VEIN' ?
+  const targets = order.action === 'NORTH_MINING_CHARTER' ?
+    (order.northMiningMove==='propose'?{northMiningMove:order.northMiningMove,northMiningStance:order.northMiningStance}:
+      {northMiningMove:order.northMiningMove,targetNorthMiningCharterId:order.targetNorthMiningCharterId}) :
+    order.action === 'WATER_VEIN' ?
     { waterVeinMove:order.waterVeinMove,targetLocationId:order.targetLocationId } :
     order.action === 'SALVAGE_ARTIFACT' ?
     { targetArtifactId: order.targetArtifactId, targetLocationId: order.targetLocationId } :
