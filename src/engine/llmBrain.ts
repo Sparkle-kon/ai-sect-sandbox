@@ -93,6 +93,8 @@ import { availableChronicleErrataActions, pickChronicleReading } from './chronic
 import { decodeWaypostMealDecision, utilityWaypostMealDecision, waypostMealProviderOptions,
   waypostMealTargets } from './waypostMealCognition';
 import { activePilgrimageForActor, availablePilgrimageActions, pilgrimageCheckpoint } from './pilgrimageEngine';
+import {activeProtagonistFlight,availableProtagonistFlightActions} from './protagonistFlightEngine';
+import {exactProtagonistFlightDecision,protagonistFlightCommand,utilityProtagonistFlightDecision} from './protagonistFlightCognition';
 import { availableRouteWarningActions } from './routeWarningEngine';
 import { availableSectCreditActions } from './sectCreditEngine';
 import { activeSanctuaryPass, availableSanctuaryActions, sanctuaryCanShield } from './sanctuaryEngine';
@@ -862,6 +864,13 @@ export function computeHeuristicDecision(
   }
   const rescue = utilityExpeditionRescueDecision(cultivator, world);
   if (rescue) return rescue;
+  if(activeProtagonistFlight(world,cultivator)){
+    const flightChoices=availableProtagonistFlightActions(cultivator,world,world.tick);
+    if(activeAvatar(world)===cultivator)
+      return {chosenAction:'REST',innerMonologue:'等本人择定眼下哪一步，不代走这段山路。'};
+    const flightChoice=utilityProtagonistFlightDecision(cultivator,flightChoices);
+    return flightChoice??{chosenAction:'REST',innerMonologue:'眼下没有可以实走的一步，先守住所在之处。'};
+  }
   const pilgrim = activePilgrimageForActor(world, cultivator);
   const pendingVow = world.pilgrimages.journeys.some((journey) => journey.status === 'proposed' && journey.companionId === cultivator.id);
   if (pilgrim || pendingVow) {
@@ -2437,6 +2446,20 @@ export async function requestCultivatorLLMDecision(
     }, 160);
   }
 
+  const flight=activeProtagonistFlight(world,cultivator);
+  if(flight){
+    if(requestTick!==world.tick+1||activeAvatar(world)===cultivator)return undefined;
+    const flightMenu=availableProtagonistFlightActions(cultivator,world,requestTick);
+    if(!flightMenu.length)return undefined;
+    const prompt=`你只决定这一次真实逃亡的下一步。若同行人已确认，仍只按实际许可行动。
+逐字复制一个 JSON 命令：${JSON.stringify(flightMenu.map(protagonistFlightCommand))}
+不要编写地名、坐标、行程、伤势结果或替同路人应允。只返回 JSON。`;
+    return requestDecisionPrompt(config,requestTick,options,prompt,parsed=>{
+      if(requestTick!==world.tick+1||activeAvatar(world)===cultivator||
+         activeProtagonistFlight(world,cultivator)!==flight||!exactProtagonistFlightDecision(parsed,flightMenu))return undefined;
+      return exactProtagonistFlightDecision(parsed,availableProtagonistFlightActions(cultivator,world,requestTick));
+    },160);
+  }
   const activeVow = activePilgrimageForActor(world, cultivator);
   const onPilgrimagePath = activeVow && Boolean(pilgrimageCheckpoint(world, cultivator));
   const mealOptions = onPilgrimagePath ? waypostMealProviderOptions(cultivator, world, requestTick) : [];

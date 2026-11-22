@@ -18,6 +18,7 @@ import { availableBoundaryReliefActions } from './boundaryReliefEngine';
 import { boundaryReliefCheckpoint } from './boundaryReliefCheckpoint';
 import { activeRelocationForActor } from './relocationEngine';
 import { availablePilgrimageActions, pilgrimageCheckpoint } from './pilgrimageEngine';
+import { activeProtagonistFlight, availableProtagonistFlightActions } from './protagonistFlightEngine';
 import { activeCourierForActor, availableCourierHandoffActions } from './sealedCourierEngine';
 import { planFairModelTurn } from './fairModelTurnEngine';
 import type { FairModelTurnState } from './fairModelTurnEngine';
@@ -92,8 +93,10 @@ export function modelDecisionCandidates(world: WorldState): Cultivator[] {
           hero.some(choice => choice.targetGrandSiegeId !== siegeId) || hero.length !== 2 || moves.size !== 2 || !moves.has('hold')) return false;
     }
     const dungeon = availableDungeonModelOptions(actor, world, nextTick).length > 0;
+    const flight=!priorScene&&!hero.length&&activeProtagonistFlight(world,actor);
+    if(flight&&(avatar===actor||!availableProtagonistFlightActions(actor,world,nextTick).length))return false;
     // Genuine autonomous offers wake only the normal admission guard below, never an invalid body or action lane.
-    return (!passive.has(actor.id) || !!heart || !!contact || !!encounter || !!destiny || hero.length > 0 || dungeon) &&
+    return (!passive.has(actor.id) || !!heart || !!contact || !!encounter || !!destiny || hero.length > 0 || dungeon || flight) &&
     (!activeCourierForActor(world, actor) || availableCourierHandoffActions(actor, world, nextTick).some(({ courierHandoffMove }) => courierHandoffMove === 'offer')) &&
     !activeDanxiaMedicineEscort(world,actor)&&!activeEscortForActor(world, actor) && !activeRelocationForActor(world, actor) &&
     !activeSiegeForActor(world, actor) && (dungeon || isEligibleForOccasionDecision(world, actor, nextTick)) &&

@@ -93,6 +93,7 @@ export default defineConfig({
           'immortal-auction-proof': ['./src/types/immortalAuction.ts','./src/engine/immortalAuctionTerms.ts','./src/engine/storageImmortalAuctionValidation.ts'],
           'dao-path-proof': ['./src/types/daoPath.ts','./src/engine/daoPathTerms.ts','./src/engine/storageDaoPathValidation.ts'],
           'character-records-proof': ['./src/engine/storageWitnessedPersonalStoryValidation.ts','./src/engine/storageProtagonistValidation.ts'],
+          'protagonist-flight-proof': ['./src/types/protagonistFlight.ts','./src/engine/storageProtagonistFlightValidation.ts'],
           'heavenly-alchemy-proof': ['./src/types/heavenlyAlchemy.ts','./src/engine/heavenlyAlchemyTerms.ts','./src/engine/storageHeavenlyAlchemyValidation.ts'],
           'regional-care': ['./src/engine/disasterShelterEngine.ts','./src/engine/danxiaSeasonReviewEngine.ts'],
           'expedition-rooms-proof': ['./src/types/expeditionDungeon.ts','./src/engine/storageExpeditionDungeonValidation.ts'],

@@ -1,3 +1,4 @@
+import { recordFlightStride } from './protagonistFlightTape';
 import type {WaypostMealVisit} from '../types/waypostMeal';
 import {waypostMealServedThisTick} from './waypostMealTerms';
 import {onLowerPlane} from './upperPassageIsolation';
@@ -235,6 +236,18 @@ function canDepart(world: WorldState, journey: PilgrimageJourney, leader: Cultiv
   return pathBetween(world, origin, next, leader, companion);
 }
 
+/** Exact already-accepted departure: this does not disclose or reserve a future path. */
+export function hasReachablePilgrimageDeparture(world:WorldState,journey:PilgrimageJourney,rounds:number):boolean {
+  const pair=occupants(world,journey);
+  if(!pair||!liveJourney(world,journey)||journey.path.length||!Number.isSafeInteger(rounds)||rounds<=0)return false;
+  const path=canDepart(world,journey,pair.leader,pair.companion);
+  if(path.length<=1||path.length-1>rounds*PILGRIMAGE_TILE_STRIDE)return false;
+  const visible=new Set([...currentVisibleTileIds(world,pair.leader),...currentVisibleTileIds(world,pair.companion)]);
+  const unsafe=new Set(world.mapHazards.filter(row=>visible.has(row.tileId)&&row.createdTick<=world.tick&&
+    world.tick<row.expiresTick&&row.intensity>=2).map(row=>row.tileId));
+  return !path.some(point=>{const tile=terrainTileAt(world,point.x,point.y);return !tile||unsafe.has(tile.id);});
+}
+
 /** Optional proposal enumeration override for schedulers; pending and active options are always evaluated. */
 export function availablePilgrimageActions(actor: Cultivator, world: WorldState, includeProposals = true,
   executionTick = world.tick): PilgrimageOption[] {
@@ -439,9 +452,15 @@ export function resolvePilgrimageAction(world: WorldState, actor: Cultivator, de
   journey.pathIndex = next;
   journey.lastMovedTick = world.tick;
   recordPilgrimageRouteObservations(world,journey,fromPathIndex);
-  if (next < journey.path.length - 1) return resumed
+  const traversed=()=>journey.path.slice(fromPathIndex,next+1);
+  const record=(receipt:WorldEvent,points:MapPoint[])=>{
+    recordFlightStride(world,journey.id,receipt,points);
+    return receipt;
+  };
+  if (next < journey.path.length - 1) return record(resumed
     ? event(world,journey,'resumed','由原关口收营续行','已核对实到关口并沿原路行过本回合路段，尚未抵达下一站。')
-    : event(world, journey, 'stride', '沿已勘路线结伴前行', '实际行过本回合路段，尚未抵达下一站。');
+    : event(world, journey, 'stride', '沿已勘路线结伴前行', '实际行过本回合路段，尚未抵达下一站。'),traversed());
+  const arrivedPoints=traversed();
   journey.legIndex++;
   const arrived = journey.stopIds[journey.legIndex];
   for (const person of [members.leader, members.companion]) {
@@ -453,9 +472,9 @@ export function resolvePilgrimageAction(world: WorldState, actor: Cultivator, de
   journey.pathIndex = 0;
   if (journey.legIndex === journey.stopIds.length - 1) {
     settle(world, journey, 'completed');
-    return event(world, journey, 'completed', '两人如约完成巡礼', '双方确实途经全部停靠点，记录实际花费与互助，不另行发奖。', arrived);
+    return record(event(world, journey, 'completed', '两人如约完成巡礼', '双方确实途经全部停靠点，记录实际花费与互助，不另行发奖。', arrived),arrivedPoints);
   }
-  return event(world, journey, 'arrival', '同行巡礼抵达中站', '可待下回合再行、救助同伴或退出。', arrived);
+  return record(event(world, journey, 'arrival', '同行巡礼抵达中站', '可待下回合再行、救助同伴或退出。', arrived),arrivedPoints);
 }
 
 export function advancePilgrimages(world: WorldState): WorldEvent[] {

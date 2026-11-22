@@ -1,5 +1,5 @@
 import {PublicBondAside,type PublicBondArc} from './DramaticBondRead';
-import {useId, useMemo} from 'react';
+import {useId, useMemo,type ReactNode} from 'react';
 import {publicChronicleSceneEvents} from '../engine/chronicleLead';
 import {writePublicChronicleScene} from '../engine/chroniclePublicProse';
 import {projectStoryHomepage} from '../engine/storyHomepage';
@@ -41,9 +41,10 @@ export function projectCockpitStoryStage(world:WorldState) {
   return {...home,...(currentScene?{currentLabel:highlights[currentScene.category].label}:{}),focus};
 }
 
-export function CockpitStoryStage({world,onFocus,subplot}:{
+export function CockpitStoryStage({world,onFocus,subplot,branchScene}:{
   world:WorldState;
   subplot?:PublicBondArc;
+  branchScene?:ReactNode;
   /** The parent rechecks the current frame and opens this exact public event if still authorized. */
   onFocus?:(eventId:string)=>void;
 }){
@@ -77,6 +78,7 @@ export function CockpitStoryStage({world,onFocus,subplot}:{
         {view.lead&&scene?.followsLead===false&&<p className="text-xs leading-relaxed text-slate-400">这一幕另有人登场，主线并未换人。</p>}
       </div>
     </article>
+    {branchScene}
     <PublicBondAside arc={subplot}/>
     <section aria-labelledby={focus} className="space-y-2">
       <h3 id={focus} className="font-serif text-base font-semibold text-amber-50">本月波澜</h3>

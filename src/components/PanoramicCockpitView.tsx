@@ -43,9 +43,10 @@ interface PanoramicCockpitViewProps extends Omit<PanoramicCockpitProps,'timeCont
   statusStrip?:ReactNode;
   stageOverride?:ReactNode;
   subplot?:PublicBondArc;
+  branchScene?:ReactNode;
 }
 
-export function PanoramicCockpitView({world,titleRef,time,exit,statusStrip,stageOverride,subplot,...slots}:PanoramicCockpitViewProps){
+export function PanoramicCockpitView({world,titleRef,time,exit,statusStrip,stageOverride,subplot,branchScene,...slots}:PanoramicCockpitViewProps){
   const opening=highDramaPreset(world.builtinScenarioOrigin?.id);
   return <main data-panoramic-cockpit data-cockpit-tick={world.tick}
     className="min-h-dvh bg-slate-950 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
@@ -57,7 +58,7 @@ export function PanoramicCockpitView({world,titleRef,time,exit,statusStrip,stage
       {exit}
     </header>
     {statusStrip&&<div className="mx-auto mb-2 w-full max-w-[192rem] px-2.5 sm:px-4">{statusStrip}</div>}
-    <PanoramicCockpit {...slots} stage={stageOverride??<CockpitStoryStage world={world} subplot={subplot}/>}
+    <PanoramicCockpit {...slots} stage={stageOverride??<CockpitStoryStage world={world} subplot={subplot} branchScene={branchScene}/>}
       timeControls={<CockpitTimeControls {...time} date={world}/>}/>
   </main>;
 }

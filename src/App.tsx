@@ -9,6 +9,8 @@ import {useRingAudienceControls} from './components/useRingAudienceControls';
 import {DeferredGrandSiegeMapScene} from './components/DeferredGrandSiegeMapScene';
 import {useAuthoredEraLaunch} from './components/useAuthoredEraLaunch';
 import { activeAvatar } from './engine/avatarEngine';
+import {ProtagonistFlightScene} from './components/ProtagonistFlightScene';
+import {resolveProtagonistFlightViewer,useProtagonistFlightScene} from './components/useProtagonistFlightScene';
 import { StoryFirstHome } from './components/StoryFirstHome';
 import {useFeaturedStoryDecision} from './components/useFeaturedStoryDecision';
 import { PlayerStoryEntry } from './components/PlayerStoryEntry';
@@ -310,6 +312,17 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
     onClearAvatarNotice:()=>setAvatarNotice(undefined),
   });
   const {card:featuredStoryCard,pending:storyDecisionPending}=useFeaturedStoryDecision(simulation);
+  const flight=useProtagonistFlightScene(simulation,
+    resolveProtagonistFlightViewer(visibleWorld,cockpitOpen||dashboardOpen,selectedCultivator));
+  const flightPlace=(id:string)=>visibleWorld.locations.find(site=>site.id===id)?.name;
+  const flightRoad=(id:string)=>{
+    const road=visibleWorld.roads.links.find(row=>row.id===id);
+    if(!road)return undefined;
+    const left=flightPlace(road.anchorSiteId),right=flightPlace(road.otherSiteId);
+    return left&&right?`${left}至${right}`:undefined;
+  };
+  const flightCard=flight.view&&<ProtagonistFlightScene key={`${viewScopeKey}:${flight.view.id}`} view={flight.view}
+    controls={flight.controls} options={flight.options} placeName={flightPlace} roadName={flightRoad}/>;
   const toggleStoryAutoplay=()=>{if(!storyDecisionPending||isRunning)toggleAutoplay();};
   const worldPulse=useMemo(()=>dashboardOpen||cockpitOpen?projectWorldPulse(visibleWorld,activeActorId,mapFog):undefined,
     [dashboardOpen,cockpitOpen,visibleWorld,activeActorId,mapFog]);
@@ -627,7 +640,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   const clearWorldPulse=(token:number)=>setPulseFocus(current=>current?.token===token?undefined:current);
   const pulseStrip=worldPulse&&<WorldPulseBar view={worldPulse} historical={Boolean(preview)}
     canFocus={!immersive} onFocusAlert={focusWorldPulse}/>;
-  if(cockpitOpen)return <PanoramicCockpitView world={visibleWorld} titleRef={cockpitHeading} exit={cockpitSwitch} statusStrip={pulseStrip} stageOverride={featuredStoryCard} subplot={guidance.subplot}
+  if(cockpitOpen)return <PanoramicCockpitView world={visibleWorld} titleRef={cockpitHeading} exit={cockpitSwitch} statusStrip={pulseStrip} stageOverride={featuredStoryCard} subplot={guidance.subplot} branchScene={flightCard}
     time={{historical:Boolean(preview),running:isRunning,busy:cockpitBusy||storyDecisionPending,onStep:()=>void handleStepTick(),
       onToggleAutoplay:toggleStoryAutoplay,onReturnLive:()=>handleTimelinePreview(null),onOpenTimeline:()=>{
         openWorkspace('chronicle');rememberFold('chronicle','timeline');setStoryEntryOpen(false);
@@ -661,7 +674,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
       revision={world} busy={isStepping||fastForwardLocked} onBack={()=>setStoryEntryOpen(false)} onTools={openDashboard}
       openings={<HighDramaPresetPicker scopeKey={viewScopeKey} revision={world} disabled={dramaticOpening.disabled} onStart={dramaticOpening.start}/>}
       onFollow={storyHome.lead?followCurrentLead:undefined} onEnter={enterCurrentLead} onOrder={orderCurrentStoryAvatar} />:
-      <StoryFirstHome scene={storyHome.scene} subplot={guidance.subplot} leadName={storyHome.lead?.name} playerName={activeAvatar(world)?.name}
+      <StoryFirstHome scene={storyHome.scene} subplot={guidance.subplot} branchScene={flightCard} leadName={storyHome.lead?.name} playerName={activeAvatar(world)?.name}
         busy={isStepping} moreRef={storyMoreRef} notice={storyNotice} calendar={storyHome.calendar} opening={dramaticOpening.opening}
         outcome={storyOutcome?.world===world?storyOutcome.text:undefined} onContinue={advanceStory} onMore={openStoryEntry} />)}
   </main>;
@@ -708,7 +721,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
       </header>
       {pulseStrip&&<div className="mx-auto w-full max-w-[76rem] px-2.5 pt-2 sm:px-4">{pulseStrip}</div>}
 
-      {featuredStoryCard&&<div className="mx-auto w-full max-w-2xl px-3 pt-3">{featuredStoryCard}</div>}
+      {(featuredStoryCard??flightCard)&&<div className="mx-auto w-full max-w-2xl px-3 pt-3">{featuredStoryCard??flightCard}</div>}
       <SandboxWorkspace active={workspace} onChange={openWorkspace} autoFocusTab={!(trail || chronicleReturn)}
         hideActiveContent={Boolean(trail && !focusTarget)} panelLead={trail && <div className="mb-2 flex min-w-0 flex-wrap items-center gap-2">
           <button type="button" data-control-dock="back" ref={backRef} onClick={returnToChronicle} className={`${action} bg-slate-800 text-amber-100`}>返回原纪事</button>

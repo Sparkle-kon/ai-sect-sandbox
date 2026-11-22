@@ -1,3 +1,4 @@
+import type { ProtagonistFlight } from './protagonistFlight';
 import type { AscensionMove, AscensionState } from './ascension';
 import type { ClanMove } from './cultivationClan';
 import type { CultivationClanHeritage, CultivationClanState } from './cultivationClan';
@@ -3729,6 +3730,7 @@ export interface WorldState {
   playerAvatar: PlayerAvatarState;
   chronicleArchive: ChronicleArchive;
   protagonistSuccession: ProtagonistSuccessionState;
+  protagonistFlights?: ProtagonistFlight[];
   witnessedPersonalStory: WitnessedPersonalStoryState;
   dramaticBonds?: DramaticBondState;
   councils: CouncilRecord[];

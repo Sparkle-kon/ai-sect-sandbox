@@ -1,3 +1,5 @@
+import {buildProtagonistFlightEdges,drawProtagonistFlightEdges,withoutReplacedProtagonistFlightTrajectory} from './protagonistFlightMap';
+import {projectProtagonistFlight} from '../engine/protagonistFlightEngine';
 import {resolveMapDossierFocus,type MapDossierFocusRequest} from './mapDossierFocus';
 import {drawMapCultivatorToken} from './mapCultivatorTokens';
 import {drawMapLandmarkGlyph} from './mapLandmarkGlyphs';
@@ -365,7 +367,20 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const scenicRelief=useMemo(()=>buildCanvasBiomeRelief(world,mapView),[world,mapView]);
   const qiFlow=useMemo(()=>buildQiFlowPlan(world,mapView,formationLines),[world,mapView,formationLines]);
   const letters=useMemo(()=>visibleMapFlyingSwords(world,mapView,selected),[world,mapView,selected]);
-  const travel=useMemo(()=>buildMapTravelTrajectory(world,mapView,selected,previousWorld),[world,mapView,selected,previousWorld]);
+  const flightMap=useMemo(()=>{
+    // Only this frame's actual embodied owner may see a private flight tape, even on read-only replay.
+    if(!selected||activeAvatar(world)!==selected)return {edges:[]};
+    const scene=projectProtagonistFlight(world,selected);
+    if(!scene)return {edges:[]};
+    const rows=(world.protagonistFlights??[]).filter(row=>row.id===scene.id&&row.actorId===selected.id);
+    if(rows.length!==1)return {edges:[]};
+    const edges=buildProtagonistFlightEdges(world,mapView,scene.rounds.filter(row=>
+      row.outcome==='moved'||row.outcome==='reached'||row.outcome==='retreated'));
+    return {edges,journeyId:rows[0].journeyId};
+  },[world,mapView,selected]);
+  const travel=useMemo(()=>withoutReplacedProtagonistFlightTrajectory(
+    buildMapTravelTrajectory(world,mapView,selected,previousWorld),flightMap.journeyId,flightMap.edges,world.tick),
+    [world,mapView,selected,previousWorld,flightMap]);
   const flightAlignments=useMemo(()=>new Map(world.sects.map(sect=>[sect.id,sect.alignment])),[world.sects]);
   const localClinic = useMemo(() => {
     const clinic = visibleInfirmaries(world, selected);
@@ -748,6 +763,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           if(daoMarks.length)drawDaoIntentMapVfx(ctx,daoMarks,elapsed,animate,logicalPerCssPixel);
           if(alchemyMarks.length)drawHeavenlyAlchemyMapVfx(ctx,alchemyMarks,elapsed,animate,logicalPerCssPixel);
           if(letters.length||travel.markers.length)drawMapTrajectoryVfx(ctx,letters,travel.markers,elapsed,animate,logicalPerCssPixel);
+          if(flightMap.edges.length)drawProtagonistFlightEdges(ctx,flightMap.edges,logicalPerCssPixel);
           return canvasFlights.draw(ctx,elapsed,animate);
         } finally {ctx.restore();}
       })();
@@ -911,7 +927,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener?.('change',stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, atlasDrawing, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, civicObservation, usedVillageSegments, annotationView, annotationPins, armedBrush, preview, compact, clusterScope, scenicRelief, qiFlow, inspectionEnabled, letters, travel, canvasFlights, combatVfx, actorBadgeFacts, hasBadgeQuote, domes, strategic, arenaMarks, dungeonMark, alchemyMarks, daoMarks, auctionMark, realmHalos, clanCeremonies, ascensionMarks]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, atlasDrawing, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, civicObservation, usedVillageSegments, annotationView, annotationPins, armedBrush, preview, compact, clusterScope, scenicRelief, qiFlow, inspectionEnabled, letters, travel, flightMap, canvasFlights, combatVfx, actorBadgeFacts, hasBadgeQuote, domes, strategic, arenaMarks, dungeonMark, alchemyMarks, daoMarks, auctionMark, realmHalos, clanCeremonies, ascensionMarks]);
 
   useEffect(() => {
     const canvas = canvasRef.current;

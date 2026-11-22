@@ -1,3 +1,5 @@
+import { FLIGHT_HISTORY, FLIGHT_MAX_POINTS, FLIGHT_OUTCOMES, FLIGHT_REASONS, FLIGHT_ROUNDS } from '../types/protagonistFlight';
+import { validateProtagonistFlightHistory } from './storageProtagonistFlightValidation';
 import { validateExpeditionDungeonHistory } from './storageExpeditionDungeonValidation';
 import { validateTournamentArenaHistory } from './storageTournamentArenaValidation';
 import { isBuiltinScenarioOrigin } from './highDramaPresetTerms';
@@ -743,6 +745,11 @@ const shape = structure({
     id,actorId:id,openedTick:tick,predecessorArcId:oid,opening:arr(3,protagonistEvidence),support:arr(8,protagonistEvidence),
     endedTick:otick,closeReason:optional(one('public_death','receded','evidence_lost')),death:optional(protagonistEvidence),
   }))}),
+  protagonistFlights:optional(arr(FLIGHT_HISTORY,structure({
+    id,arcId:id,actorId:id,guideId:id,pursuerId:id,bountyId:id,journeyId:id,contactEventId:id,originId:id,destinationId:id,
+    openedTick:tick,rounds:arr(FLIGHT_ROUNDS,structure({tick,round:one(1,2,3),outcome:one(...FLIGHT_OUTCOMES),
+      reason:optional(one(...FLIGHT_REASONS)),locationId:oid,sourceEventId:oid,points:arr(FLIGHT_MAX_POINTS,waypostPoint)})),
+  }))),
   coldHistory:structure({chapters:arr(SAVE_COLLECTION_LIMIT,chronicleChapter),droppedChapters:tick}),
   decisionTrace:structure({records:arr(100,structure({id,actorId:id,tick,source:one('model','utility','avatar'),applied:bool,
     chosenAction:one('REST','CULTIVATE','BREAKTHROUGH','SOCIALIZE','EXPLORE','FACE_TRIBULATION','redacted'),chosenCandidateId:oid,
@@ -3864,6 +3871,7 @@ function verifyWorld(value: unknown): WorldState {
         chapter.biographies.some((entry) => entry.anchorIds.some((id) => !anchors.has(id)))) fail('coldHistory.chapters.references');
   }
   validateProtagonistHistory(w,chapters,actor,fail);
+  validateProtagonistFlightHistory(w,fail);
   validateWitnessedPersonalStory(w,actor,fail);
   validateDramaticBondHistory(w,fail);
   validateRingAudienceHistory(w,fail);

@@ -1,3 +1,5 @@
+import {activeProtagonistFlight,availableProtagonistFlightActions} from './protagonistFlightEngine';
+import {matchesProtagonistFlightOption} from './protagonistFlightCognition';
 import { availableAscensionActions, reconcileAscensionInterruptions, resolveAscensionAction } from './ascensionEngine';
 import { ascensionQuietWait, exactAscensionDecision } from './ascensionCognition';
 import { ascensionDutyActive } from './ascensionPresence';
@@ -135,6 +137,8 @@ import { activeDestinyTraitOffer, chooseDestinyTraitDecision, destinyCultivation
   finalizeDestinyTraitOffers, maybeOpenDestinyTrait, settleDestinyTrait } from './destinyTraitEngine';
 import { archiveChronicleEvents } from './novelGenerator';
 import { advanceWitnessedPersonalStory, captureWitnessedPersonalScene } from './witnessedPersonalStory';
+import { finalizeProtagonistFlightTurn } from './protagonistFlightEngine';
+import { recordFlightPursuit, trackFlightTurn } from './protagonistFlightTape';
 import { advanceProtagonistSuccession } from './protagonistSuccession';
 import { settleChronicleOffline } from './chronicleRuntime';
 import { settleAnnualCouncilOffline } from './councilRuntime';
@@ -667,10 +671,16 @@ export function applyCultivatorBrainDecision(
       return tameSpiritBeast(world, cultivator, decision, rng);
     case 'PURSUE_BOUNTY': {
       return pursueBounty(world, cultivator, decision, (target) => {
+        const siteId=cultivator.locationId;
+        const actualCoPresence=siteId===target.locationId&&cultivator.positionPlane===undefined&&target.positionPlane===undefined&&
+          !pilgrimageCheckpoint(world,cultivator)&&!pilgrimageCheckpoint(world,target);
         const result = applyCultivatorBrainDecision(world, cultivator, {
           chosenAction: 'DUEL', innerMonologue: decision.innerMonologue, targetCultivatorId: target.id,
         }, rng, target.id, emit, undefined, false, false);
         cultivator.currentAction = 'PURSUE_BOUNTY';
+        if(actualCoPresence&&decision.targetBountyId&&result?.duelWinnerId===target.id&&
+          result.category==='combat'&&result.damage?.some(hit=>hit.cultivatorId===target.id&&hit.amount>0))
+          recordFlightPursuit(world,{hunterId:cultivator.id,targetId:target.id,bountyId:decision.targetBountyId,siteId,event:result});
         return result?.duelWinnerId ? { event: result, winnerId: result.duelWinnerId } : result;
       });
     }
@@ -829,8 +839,15 @@ export function applyCultivatorBrainDecision(
       return resolveVillageCensusAction(world, cultivator, decision);
     case 'ROAD':
       return resolveRoadAction(world, cultivator, decision);
-    case 'PILGRIMAGE':
+    case 'PILGRIMAGE': {
+      const flight=activeProtagonistFlight(world,cultivator);
+      if(flight&&decision.targetPilgrimageId===flight.journeyId){
+        const exact=availableProtagonistFlightActions(cultivator,world,world.tick);
+        if(!exact.some(option=>matchesProtagonistFlightOption(option,decision))||
+          activeAvatar(world)===cultivator&&(modelInput||isProviderPersonaDecision(decision)))return null;
+      }
       return resolvePilgrimageAction(world, cultivator, decision);
+    }
     case 'SECT_CREDIT':
       return resolveSectCreditAction(world, cultivator, decision);
     case 'SANCTUARY':
@@ -1151,6 +1168,7 @@ export function advanceWorldTick(
   }
 
   advanceProtagonistSuccession(nextState, prevState);
+  trackFlightTurn(nextState);
   openResourceFlowMonth(nextState);
   advanceNorthMiningCharters(nextState);
   advanceNorthGateRenewal(nextState);
@@ -1554,7 +1572,8 @@ export function advanceWorldTick(
     const candidates = (captureTrace || traceOptions?.onActor) && decision.chosenAction !== 'EXPEDITION_DUNGEON' &&
       decision.chosenAction !== 'HEAVENLY_ALCHEMY' && decision.chosenAction !== 'DAO_PATH' &&
       decision.chosenAction !== 'IMMORTAL_AUCTION' && decision.targetAuctionAmbushLotId === undefined &&
-      decision.chosenAction !== 'CULTIVATION_CLAN' && decision.chosenAction !== 'ASCENSION' ?
+      decision.chosenAction !== 'CULTIVATION_CLAN' && decision.chosenAction !== 'ASCENSION' &&
+      !activeProtagonistFlight(nextState,cultivator) ?
       legalTraceCandidates(nextState, cultivator) : [];
     const chosenByModel = Boolean(modelProposal && !modelOrdinaryReplaced && !modelStoryChoiceReplaced && !expeditionModelReplaced);
     if (traceOptions?.tape) rememberReplayDecision(traceOptions.tape, cultivator.id, decision, decisionDraws, chosenByModel, false, false, nextState);
@@ -1717,6 +1736,7 @@ export function advanceWorldTick(
   expireRingAudiences(nextState);
   finalizeDestinyTraitOffers(nextState);
   pruneInvalidForbiddenDuelContacts(nextState);
+  finalizeProtagonistFlightTurn(prevState,nextState,completedEvents);
   recordEraHistoryTurn(prevState,nextState,completedEvents);
   publishTianjiGazette(prevState,nextState,completedEvents);
   recordRegionalTurnRegistry(nextState);

@@ -1,3 +1,4 @@
+import {FLIGHT_ROUNDS} from '../types/protagonistFlight';
 import { availableAscensionActions } from './ascensionEngine';
 import { ASCENSION_PRIVATE_COMMAND_KEYS, exactAscensionDecision } from './ascensionCognition';
 import { ascensionDutyActive } from './ascensionPresence';
@@ -106,6 +107,8 @@ export function recordDecisionTrace(world: WorldState, actorId: string, candidat
     decision.chosenAction === 'CULTIVATION_CLAN' || CLAN_PRIVATE_COMMAND_KEYS.some(key => decision[key] !== undefined) ||
     decision.chosenAction === 'ASCENSION' || ASCENSION_PRIVATE_COMMAND_KEYS.some(key => decision[key] !== undefined) ||
     ascensionDutyActive(world,{id:actorId}) ||
+    world.protagonistFlights?.some(scene=>scene.actorId===actorId&&world.tick>scene.openedTick&&
+      world.tick<=scene.openedTick+FLIGHT_ROUNDS&&scene.rounds.length<FLIGHT_ROUNDS) ||
     decision.chosenAction === 'HEAVENLY_ALCHEMY' || decision.heavenlyAlchemyMove !== undefined ||
     decision.targetHeavenlyRecipeId !== undefined || decision.heavenlyAlchemyHeat !== undefined || decision.heavenlyAlchemyQuality !== undefined;
   const picks: DecisionTraceCandidate[] = [];
