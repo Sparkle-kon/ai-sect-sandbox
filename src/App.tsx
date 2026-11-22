@@ -653,7 +653,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
           fogEnabled={mapFog} onFogChange={setMapFog} pulseFocus={pulseFocus} pulseFocusActive={canInspectMap}
           onPulseFocusHandled={clearWorldPulse}
           onSelectCultivator={setSelectedCultivatorId} onBrushStroke={preview?undefined:handleBrushStroke}/>
-        <DeferredGrandSiegeMapScene world={visibleWorld} viewer={selectedCultivator} fog={mapFog} visible={!featuredStoryCard}/>
+        <DeferredGrandSiegeMapScene world={visibleWorld} viewer={selectedCultivator} fog={mapFog} witnessScopeKey={viewScopeKey} visible={!featuredStoryCard}/>
       </React.Suspense>}
     inspector={<>{inspect('profile')}{inspect('mind')}</>}
     relationships={<React.Suspense fallback={<p role="status">载入关系图…</p>}>
@@ -674,7 +674,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
       revision={world} busy={isStepping||fastForwardLocked} onBack={()=>setStoryEntryOpen(false)} onTools={openDashboard}
       openings={<HighDramaPresetPicker scopeKey={viewScopeKey} revision={world} disabled={dramaticOpening.disabled} onStart={dramaticOpening.start}/>}
       onFollow={storyHome.lead?followCurrentLead:undefined} onEnter={enterCurrentLead} onOrder={orderCurrentStoryAvatar} />:
-      <StoryFirstHome scene={storyHome.scene} subplot={guidance.subplot} branchScene={flightCard} leadName={storyHome.lead?.name} playerName={activeAvatar(world)?.name}
+      <StoryFirstHome scene={storyHome.scene} subplot={guidance.subplot} branchScene={flightCard??<DeferredGrandSiegeMapScene world={world} viewer={activeAvatar(world)} fog personalOnly visible witnessScopeKey={viewScopeKey}/>} leadName={storyHome.lead?.name} playerName={activeAvatar(world)?.name}
         busy={isStepping} moreRef={storyMoreRef} notice={storyNotice} calendar={storyHome.calendar} opening={dramaticOpening.opening}
         outcome={storyOutcome?.world===world?storyOutcome.text:undefined} onContinue={advanceStory} onMore={openStoryEntry} />)}
   </main>;
@@ -739,7 +739,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
               className={`${action} bg-slate-800 text-emerald-100 sm:hidden`}><Play aria-hidden="true" className="h-4 w-4" />自动推演</button> : undefined}
             chronicleFocus={trail?.request.kind === 'site' && focusTarget ? trail : undefined} onChronicleFocusUnavailable={reportMapFocusFailure}
             onSelectCultivator={setSelectedCultivatorId} onBrushStroke={preview ? undefined : handleBrushStroke} />
-            <DeferredGrandSiegeMapScene world={visibleWorld} viewer={selectedCultivator} fog={mapFog}
+            <DeferredGrandSiegeMapScene world={visibleWorld} viewer={selectedCultivator} fog={mapFog} witnessScopeKey={viewScopeKey}
               visible={workspace==='map'&&!featuredStoryCard}/>
           </React.Suspense></div>
           {mapDossier&&<MapSidebarDossier key={`${viewScopeKey}:${inspectionRevision}:${activeActorId}:${visibleWorld.tick}:${visibleWorld.interventionSequence}:${mapFog}`}

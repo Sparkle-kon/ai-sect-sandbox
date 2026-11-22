@@ -1,5 +1,6 @@
 import { ascensionDutyActive } from './ascensionPresence';
 import { currentPublic, roundEventId, theatreOf } from './grandSiegeProof';
+import { projectPublicSiegeRound, projectSiegeWitness, type SiegeWitnessView } from './grandSiegeWitnessView';
 import type {createTerrainMapView} from '../components/terrainMapView';
 import type {GrandSiegeFighter,GrandSiegeHeroMove,GrandSiegeHeroOrder,GrandSiegeHeroOrigin,GrandSiegeRound,GrandSiegeTheatre} from '../types/grandSiege';
 import type {Cultivator,LLMDecisionPayload,Sect,SectSiege,WorldEvent,WorldState} from '../types/world';
@@ -36,6 +37,8 @@ export interface GrandSiegeTheatreView{
   status:SectSiege['status'];
   arrivedTick?:number;
   round?:GrandSiegeRound;
+  witness?:SiegeWitnessView;
+  noPublicRound?:true;
   terminal?:GrandSiegeTheatre['terminal'];
   options:GrandSiegeHeroOption[];
   queued?:GrandSiegeHeroOrder;
@@ -226,9 +229,11 @@ export function projectGrandSiegeTheatres(world:WorldState,view:View,viewerId?:s
     if(!theatre||!site||!view.seenLocations.includes(site)||!view.isCurrentLocation(site.id))return [];
     const attacker=uniqueById(world.sects,siege.attackerSectId),defender=uniqueById(world.sects,siege.defenderSectId);
     if(!attacker||!defender)return [];
-    const round=theatre.rounds.at(-1),ownsGuide=viewer&&guided(world,viewer.id);
+    const latest=theatre.rounds.at(-1),ownsGuide=viewer&&guided(world,viewer.id);
+    const round=latest&&projectPublicSiegeRound(world,siege,latest);
     return [{siegeId:siege.id,siteId:site.id,status:siege.status,attackerName:attacker.name,defenderName:defender.name,
-      arrivedTick:theatre.arrivedTick,round:round&&structuredClone(round),terminal:theatre.terminal&&{...theatre.terminal},
+      arrivedTick:theatre.arrivedTick,round,noPublicRound:latest&&!round?true as const:undefined,terminal:theatre.terminal&&{...theatre.terminal},
+      witness:viewer?projectSiegeWitness(world,siege,viewer):undefined,
       options:ownsGuide?optionsFor(viewer,world,siege):[],
       queued:ownsGuide&&theatre.queued?.actorId===viewer.id?{...theatre.queued}:undefined}];
   });

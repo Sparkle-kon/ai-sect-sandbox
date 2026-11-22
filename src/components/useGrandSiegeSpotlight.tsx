@@ -44,7 +44,7 @@ export function useGrandSiegeSpotlight(simulation:Simulation,blocked:boolean){
     return true;
   };
   const card=!blocked&&current&&site?<GrandSiegeTheatreCard world={world} view={current} siteName={site.name}
-    key={`${viewScopeKey}:${current.siegeId}`}
+    key={`${viewScopeKey}:${actor?.id}:${current.siegeId}`} witnessScopeKey={viewScopeKey}
     controls={!receipt&&offered?{busy:isStepping||fastForwardLocked,onChoose,onAdvance}:undefined}
     onContinue={receipt?()=>setFollowed(undefined):undefined}/>:undefined;
   return {card,pending:!!offered};

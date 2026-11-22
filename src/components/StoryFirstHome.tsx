@@ -62,7 +62,7 @@ export function StoryFirstHome({ scene, subplot, branchScene, leadName, playerNa
           {leadName && scene?.followsLead === false && <p className="text-xs leading-relaxed text-slate-400">这一幕说的是别人，主线尚未换人。</p>}
         </article>
       </div>
-      {branchScene&&<div className="mt-3">{branchScene}</div>}
+      {branchScene&&<div className="mt-3 empty:hidden">{branchScene}</div>}
       {subplot&&<div className="mt-3"><PublicBondAside arc={subplot}/></div>}
       {outcome&&<p role="status" className="mt-3 rounded-lg border border-emerald-400/30 px-3 py-2 text-sm text-emerald-100 [overflow-wrap:anywhere]">{outcome}</p>}
       <div data-story-next className="fixed inset-x-0 bottom-0 z-10 border-t border-slate-800 bg-slate-950 px-[max(1rem,env(safe-area-inset-left))] pb-[calc(.75rem+env(safe-area-inset-bottom))] pt-2.5 sm:static sm:mt-5 sm:border-0 sm:bg-transparent sm:p-0">
