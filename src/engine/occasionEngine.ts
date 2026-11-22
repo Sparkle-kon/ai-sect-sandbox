@@ -36,7 +36,9 @@ export function availableOccasionJoins(actor: Cultivator, world: WorldState, exe
 function event(world: WorldState, occasion: WorldOccasion, token: string, title: string, description: string,
   actors: string[] = occasion.participantIds, category: WorldEvent['category'] = 'heavenly', locationId = occasion.locationId): WorldEvent {
   return { id: `evt-${world.tick}-${occasion.id}-${token}`, tick: world.tick, year: world.year, month: world.month,
-    title, description, category, actorIds: actors, locationId, ...(occasion.omenId ? { witnessScope: 'participants' } : {}) };
+    // The registrar mutates participantIds on later turns. A dated event is a snapshot,
+    // not an alias into that live registry (JSON persistence otherwise changes history).
+    title, description, category, actorIds: [...actors], locationId, ...(occasion.omenId ? { witnessScope: 'participants' } : {}) };
 }
 
 export function joinOccasion(world: WorldState, actor: Cultivator, decision: LLMDecisionPayload): WorldEvent | null {
