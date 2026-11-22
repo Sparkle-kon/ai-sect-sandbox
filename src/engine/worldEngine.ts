@@ -1,3 +1,4 @@
+import { publishTianjiGazette } from './tianjiGazetteEngine';
 import { advanceImmortalAuctions, availableImmortalAuctionActions, recordImmortalAuctionDeparture, resolveImmortalAuctionAction } from './immortalAuctionEngine';
 import { exactAuctionAmbushDecision, exactImmortalAuctionDecision } from './immortalAuctionCognition';
 import {consumeDaoDuelIntents,previewDaoDuelIntents,recordDaoDuelIntents} from './daoPathEngine';
@@ -1615,6 +1616,7 @@ export function advanceWorldTick(
   finalizeDestinyTraitOffers(nextState);
   pruneInvalidForbiddenDuelContacts(nextState);
   recordEraHistoryTurn(prevState,nextState,completedEvents);
+  publishTianjiGazette(prevState,nextState,completedEvents);
   recordRegionalTurnRegistry(nextState);
   traceOptions?.onCompletedEvents?.(completedEvents);
   nextState.mapPresentation = traceOptions?.capturePresentation === false

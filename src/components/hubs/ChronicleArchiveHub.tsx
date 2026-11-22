@@ -1,3 +1,4 @@
+import {TianjiGazetteLauncher} from '../TianjiGazetteLauncher';
 import {lazy,Suspense,type ComponentProps} from 'react';
 import {HallOfImmortalsLauncher} from '../HallOfImmortalsLauncher';
 import type {useWorldSimulationController} from '../../controllers/useWorldSimulationController';
@@ -109,6 +110,8 @@ export function ChronicleArchiveHub({simulation,selectedCultivator,active,initia
     forcedOpen={forced} onOpenChange={onOpenChange} groups={groups} sections={[
       {id:'feed',label:'山河见闻',content:<Suspense fallback={<p role="status">载入山河见闻…</p>}>
         <AuthoredEraChronicle world={visibleWorld} visible={feed.events}/>
+        {!isReturning&&!personal?.active&&!personal?.story&&<TianjiGazetteLauncher world={visibleWorld} viewer={selectedCultivator}
+          scopeKey={`${viewScopeKey}:${actorId??''}`} historical={!!preview}/>}
         {!isReturning&&scopedSupplyLinks.length>0&&<CrossRegionConsequenceRead key={viewScopeKey} consequences={scopedSupplyLinks}
           viewerName={selectedCultivator?.name} frame={visibleWorld.authoredEraOrigin?undefined:visibleWorld}/>}
         {selectedCultivator&&personal?.available&&!isReturning&&<WitnessedStoryScopeToggle selectedName={selectedCultivator.name}

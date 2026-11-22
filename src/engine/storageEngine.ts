@@ -6,6 +6,8 @@ import { validatePublicAlchemyPractice } from './storagePublicAlchemyValidation'
 import { validateHeavenlyAlchemyHistory } from './storageHeavenlyAlchemyValidation';
 import { validateDaoPathHistory } from './storageDaoPathValidation';
 import { validateImmortalAuctionHistory } from './storageImmortalAuctionValidation';
+import { validateTianjiGazetteHistory } from './storageTianjiGazetteValidation';
+import { TIANJI_GAZETTE_HISTORY, TIANJI_GAZETTE_KINDS } from './tianjiGazetteTerms';
 import { IMMORTAL_AUCTION_HISTORY, IMMORTAL_AUCTION_MAX_BID, IMMORTAL_AUCTION_MAX_BIDS } from './immortalAuctionTerms';
 import { IMMORTAL_AUCTION_PILLS } from '../types/immortalAuction';
 import { DAO_INTENT_HISTORY, DAO_INTENT_QI, DAO_PATH_MAX_PRACTICES } from './daoPathTerms';
@@ -597,7 +599,24 @@ const immortalAuction=structure({nextId:num(1,Number.MAX_SAFE_INTEGER,true),lots
     stones:optional(num(1,IMMORTAL_AUCTION_MAX_BID,true))})),
   witnessIds:optional(ids),departure:optional(structure({tick,siteId:id})),
 }))});
+const gazetteSource={sourceEventId:id,tick,year:tick,month,siteId:id};
+const gazetteEntry:Validator=(value,path)=>{
+  const row=value as {kind?:unknown;story?:unknown}|null;
+  if(row?.kind==='headline'&&row.story==='siege')return structure({...gazetteSource,kind:one('headline'),story:one('siege'),
+    siegeId:id,attackerSectId:id,defenderSectId:id,outcome:one('victory','repelled')})(value,path);
+  if(row?.kind==='headline'&&row.story==='tournament')return structure({...gazetteSource,kind:one('headline'),story:one('tournament'),
+    occasionId:id,winnerId:id})(value,path);
+  if(row?.kind==='dark_horse')return structure({...gazetteSource,kind:one('dark_horse'),occasionId:id,winnerId:id,opponentId:id,
+    winnerSeed:num(1,16,true),opponentSeed:num(1,16,true),round:num(1,4,true)})(value,path);
+  if(row?.kind==='rivalry')return structure({...gazetteSource,kind:one('rivalry'),actorIds:arr(2,id),earlier:structure(gazetteSource)})(value,path);
+  if(row?.kind==='bounty')return structure({...gazetteSource,kind:one('bounty'),bountyId:id,targetActorId:id,sponsorSectId:id,reward:wealth})(value,path);
+  return fail(path);
+};
+const tianjiGazette=structure({issues:arr(TIANJI_GAZETTE_HISTORY,structure({
+  id,tick,year:tick,month,trigger:one('year_turn','battle','finale'),entries:arr(TIANJI_GAZETTE_KINDS.length,gazetteEntry),
+}))});
 const shape = structure({
+  tianjiGazette:optional(tianjiGazette),
   immortalAuction:optional(immortalAuction),
   tournamentWagers:optional(tournamentWagers),
   dramaticBonds:optional(structure({facts:arr(DRAMATIC_BOND_FACTS_MAX,structure({
@@ -3821,6 +3840,7 @@ function verifyWorld(value: unknown): WorldState {
   validateDaoPathHistory(w,fail);
   validateImmortalAuctionHistory(w,fail);
   validateTournamentArenaHistory(w,fail);
+  validateTianjiGazetteHistory(w,fail);
   validateExpeditionDungeonHistory(w,fail);
   validateEraHistory(w,fail);
   validateAuthoredEraHistory(w,fail);
@@ -3917,9 +3937,9 @@ function serializeWorldSave(world: WorldState): string {
   try {
     // A native turn may first attach either optional ledger after a hot-world clone.
     // Normalize that bounded extension order, leaving every pre-extension byte intact.
-    if (world.eraHeritage !== undefined || world.mortalAgeTrackingSinceTick !== undefined || world.coldWaterVein !== undefined || world.northMiningCharters !== undefined || world.northWellRevisitLaw !== undefined || world.northWellRevisitReviews !== undefined || world.upperPassage !== undefined || world.northGateRenewal !== undefined || world.frontier !== undefined || world.upperArrayField !== undefined || world.scribeCommissions !== undefined || world.waypostMeals !== undefined || world.craftTraining !== undefined || world.disasterShelter !== undefined || world.roguelikeEncounters !== undefined || world.forbiddenDuels !== undefined || world.dramaticBonds !== undefined || world.builtinScenarioOrigin !== undefined || world.tournamentWagers !== undefined || world.immortalAuction !== undefined) {
-      const {eraHeritage,mortalAgeTrackingSinceTick,coldWaterVein,northMiningCharters,northWellRevisitLaw,northWellRevisitReviews,upperPassage,northGateRenewal,frontier,upperArrayField,scribeCommissions,waypostMeals,craftTraining,disasterShelter,roguelikeEncounters,forbiddenDuels,dramaticBonds,builtinScenarioOrigin,tournamentWagers,immortalAuction,...legacy}=world;
-      return JSON.stringify({format:FORMAT,version:VERSION,world:{...legacy,eraHeritage,mortalAgeTrackingSinceTick,coldWaterVein,northMiningCharters,northWellRevisitLaw,northWellRevisitReviews,upperPassage,northGateRenewal,frontier,upperArrayField,scribeCommissions,waypostMeals,craftTraining,disasterShelter,roguelikeEncounters,forbiddenDuels,dramaticBonds,builtinScenarioOrigin,tournamentWagers,immortalAuction}});
+    if (world.eraHeritage !== undefined || world.mortalAgeTrackingSinceTick !== undefined || world.coldWaterVein !== undefined || world.northMiningCharters !== undefined || world.northWellRevisitLaw !== undefined || world.northWellRevisitReviews !== undefined || world.upperPassage !== undefined || world.northGateRenewal !== undefined || world.frontier !== undefined || world.upperArrayField !== undefined || world.scribeCommissions !== undefined || world.waypostMeals !== undefined || world.craftTraining !== undefined || world.disasterShelter !== undefined || world.roguelikeEncounters !== undefined || world.forbiddenDuels !== undefined || world.dramaticBonds !== undefined || world.builtinScenarioOrigin !== undefined || world.tournamentWagers !== undefined || world.immortalAuction !== undefined || world.tianjiGazette !== undefined) {
+      const {eraHeritage,mortalAgeTrackingSinceTick,coldWaterVein,northMiningCharters,northWellRevisitLaw,northWellRevisitReviews,upperPassage,northGateRenewal,frontier,upperArrayField,scribeCommissions,waypostMeals,craftTraining,disasterShelter,roguelikeEncounters,forbiddenDuels,dramaticBonds,builtinScenarioOrigin,tournamentWagers,immortalAuction,tianjiGazette,...legacy}=world;
+      return JSON.stringify({format:FORMAT,version:VERSION,world:{...legacy,eraHeritage,mortalAgeTrackingSinceTick,coldWaterVein,northMiningCharters,northWellRevisitLaw,northWellRevisitReviews,upperPassage,northGateRenewal,frontier,upperArrayField,scribeCommissions,waypostMeals,craftTraining,disasterShelter,roguelikeEncounters,forbiddenDuels,dramaticBonds,builtinScenarioOrigin,tournamentWagers,immortalAuction,tianjiGazette}});
     }
     return JSON.stringify({ format: FORMAT, version: VERSION, world });
   } catch { throw new WorldSaveError('json', '当前世界不能序列化为 JSON。'); }

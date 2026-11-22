@@ -1,3 +1,4 @@
+import type { TianjiGazetteState } from './tianjiGazette';
 import type { ImmortalAuctionMove, ImmortalAuctionPillId } from './immortalAuction';
 import type { ImmortalAuctionState } from './immortalAuction';
 import type { DaoIntentActivation, DaoPathState } from './daoPath';
@@ -3707,6 +3708,7 @@ export interface WorldState {
   villageEvolution:VillageEvolutionState;
   markets: MarketState;
   immortalAuction?: ImmortalAuctionState;
+  tianjiGazette?: TianjiGazetteState;
   oaths: OathState;
   oathArbitrations: OathArbitrationState;
   mentorship: MentorshipState;
