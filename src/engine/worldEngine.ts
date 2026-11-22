@@ -1,6 +1,7 @@
 import { recordRegionalActorReturn, recordRegionalEarlyPromotions, recordRegionalLatePromotions } from './regionalPromotionEngine';
 import { beginRegionalSimulationTurn, deferRegionalActorTurn, finishRegionalSimulationTurn, recordRegionalTurnRegistry, renewRegionalProtectionAfterEvent } from './regionalSimulationEngine';
 import {advanceDoctrineMaturity,resolveDoctrineMaturityAction} from './doctrineMaturityEngine';
+import { resolveWaterVeinAction } from './waterVeinEngine';
 import { advanceDanxiaMedicine, resolveDanxiaMedicineAction } from './danxiaMedicineEngine';
 import { advanceDanxiaSeasonReviews, resolveDanxiaReviewAction } from './danxiaSeasonReviewEngine';
 import {advanceDoctrineFoundings,resolveDoctrineFoundingAction} from './doctrineFoundingEngine';
@@ -51,6 +52,7 @@ import { activeCourierForActor, advanceCouriers, courierActedThisTick, courierCh
   reconcileCourierDeaths, resolveCourierAction, resolveCourierHandoffAction } from './sealedCourierEngine';
 import { captureWatchDigests } from './watchlistEngine';
 import { advanceVillageWorks, resolveVillageWorksAction } from './villageWorksEngine';
+import { advanceWaterVein } from './waterVeinEngine';
 import { advanceHouseholds, resolveGuardianAction } from './householdEngine';
 import { advanceTerritorialLeases, resolveTerritorialLeaseAction } from './territorialLeaseEngine';
 import { advanceFormations, resolveFormationAction } from './formationNetworkEngine';
@@ -249,6 +251,14 @@ export function applyCultivatorBrainDecision(
     cultivator.currentAction = 'BOUNDARY_RELIEF';
     cultivator.innerMonologue = '按已核实的换防关口行进，未到岗前不计驻守。';
     return null;
+  }
+  if(decision.chosenAction==='WATER_VEIN'){
+    const applied=resolveWaterVeinAction(world,cultivator,decision);
+    if(applied){
+      cultivator.innerMonologue=decision.innerMonologue;
+      cultivator.currentAction='WATER_VEIN';
+    }
+    return applied;
   }
   cultivator.innerMonologue = decision.innerMonologue;
   cultivator.currentAction = decision.chosenAction;
@@ -865,7 +875,7 @@ export function advanceWorldTick(
   const avatarOrder = consumeAvatarOrder(nextState);
   const danxiaRegrowth = maintainAlchemy(nextState);
   maintainSectEconomy(nextState);
-  const newEvents: WorldEvent[] = [...advanceSanctuaries(nextState), ...advanceCeasefires(nextState), ...advanceCompetitionSeasons(nextState), ...advanceMapHazards(nextState), ...advanceTerrainSuccession(nextState), ...advanceRoads(nextState), ...advanceCouriers(nextState), ...advanceDanxiaMedicine(nextState), ...advanceDanxiaSeasonReviews(nextState), ...advancePilgrimages(nextState), ...advanceRelocations(nextState), ...advanceDoctrineMaturity(nextState,prevState), ...advanceWorkshopInstitutionClosures(nextState), ...advanceSettlements(nextState), ...advanceVillageSupply(nextState), ...advanceVillageWorks(nextState), ...advanceSpiritBeasts(nextState, rng), ...advanceSeedCulture(nextState), ...advanceVillageFairs(nextState), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...advanceSharedCommons(nextState), ...advanceHouseholds(nextState), ...advanceSeasonalHousing(nextState)];
+  const newEvents: WorldEvent[] = [...advanceSanctuaries(nextState), ...advanceCeasefires(nextState), ...advanceCompetitionSeasons(nextState), ...advanceMapHazards(nextState), ...advanceTerrainSuccession(nextState), ...advanceWaterVein(nextState), ...advanceRoads(nextState), ...advanceCouriers(nextState), ...advanceDanxiaMedicine(nextState), ...advanceDanxiaSeasonReviews(nextState), ...advancePilgrimages(nextState), ...advanceRelocations(nextState), ...advanceDoctrineMaturity(nextState,prevState), ...advanceWorkshopInstitutionClosures(nextState), ...advanceSettlements(nextState), ...advanceVillageSupply(nextState), ...advanceVillageWorks(nextState), ...advanceSpiritBeasts(nextState, rng), ...advanceSeedCulture(nextState), ...advanceVillageFairs(nextState), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...advanceSharedCommons(nextState), ...advanceHouseholds(nextState), ...advanceSeasonalHousing(nextState)];
   newEvents.push(...openDanxiaShortage(nextState,danxiaRegrowth));
   for (const event of newEvents) witnessEvent(nextState, event);
   openFurnaceTurn(nextState);

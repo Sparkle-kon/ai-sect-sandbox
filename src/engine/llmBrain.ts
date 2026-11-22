@@ -15,6 +15,7 @@ import { availableShortShiftActions } from './shortShiftEngine';
 import { availableCaravanRestitutionActions } from './caravanRestitutionEngine';
 import { availableVillageGranaryActions, projectVillageGranary } from './villageGranaryEngine';
 import { availableVillageFairActions } from './villageFairEngine';
+import { availableWaterVeinActions, utilityWaterVeinDecision } from './waterVeinEngine';
 import { availableSeedCultureActions } from './seedCultureEngine';
 import { availableCivicMemorialActions } from './civicMemorialEngine';
 import { availableVillageSupplyActions } from './villageSupplyEngine';
@@ -910,6 +911,11 @@ export function computeHeuristicDecision(
     if (choice) return { ...choice, chosenAction: 'SCRIPTURE', innerMonologue: '经义须以原本核证，异读不可混同。' };
   }
 
+  // Known local water work is weighed after actual harvest/planting, before elective relic hunting.
+  const waterVein=utilityWaterVeinDecision(cultivator,world);
+  if(waterVein)return {chosenAction:waterVein.action,waterVeinMove:waterVein.waterVeinMove,targetLocationId:waterVein.targetLocationId,
+    innerMonologue:waterVein.waterVeinMove==='observe'?'到井边实看水尺，不猜井背后的事。':
+      waterVein.waterVeinMove==='mine'?'只掘此处够取的一铲，不把空矿当收成。':'据已勘明的原井与地权，按实账行门。'};
   if (!cultivator.guardAssignment && world.tick >= 4 && world.tick % 4 === 1) {
     const relicChoices = availableRelicActions(cultivator, world);
     const relic = relicChoices.find(({ relicMove }) => relicMove === 'assemble') ?? relicChoices.find(({ relicMove }) => relicMove === 'recover');
@@ -1664,6 +1670,7 @@ export async function requestCultivatorLLMDecision(
   const arbitrationOptions = availableOathArbitrationActions(cultivator, world);
   const oathOptions = availableOathActions(cultivator, world);
   const marketOptions = availableMarketActions(cultivator, world);
+  const waterVeinOptions = availableWaterVeinActions(cultivator,world,requestTick);
   const seedOptions = availableSeedCultureActions(cultivator, world, requestTick);
   const seedPromptOptions = seedOptions.map(({ seedMove, targetLocationId, targetSeedLotId, targetSeedPlotId }) =>
     ({ seedMove, targetLocationId, targetSeedLotId, targetSeedPlotId }));
@@ -1795,6 +1802,7 @@ ${JSON.stringify(cultivator.rumors.slice(0, 6).map(({ subject, locationId, confi
 - 本宗邦交：${JSON.stringify(world.diplomacy.filter((relation) => relation.sectAId === cultivator.sectId || relation.sectBId === cultivator.sectId))}；公示的外事权限：${JSON.stringify(availableDiplomacyActions(cultivator, world))}
 - 赛季复核只选真实可核验收据；提交不会改写原榜：${JSON.stringify(honorReviewOptions)}
 - 临时观象只复制实际地点的 fund、到期 measure 或带原日期 relay。仅 fund 任选列表中的观测位（现地中心省略、边位用 observatoryStation:'edge'）；不填写读数或强度：${JSON.stringify(observatoryOptions)}
+${waterVeinOptions.length ? `- 本人在场的水线许可，只抄 waterVeinMove 与 targetLocationId；不得代报水尺、费用、产量或原因：${JSON.stringify(waterVeinOptions.map(({action,waterVeinMove,targetLocationId})=>({chosenAction:action,waterVeinMove,targetLocationId})))}` : ''}
 - 同刻异读只复制本人实际许可：offer 用自身原本的 targetLocationId、现场同行人 targetCultivatorId、本人 targetObservatoryTick；compare 用 targetAlignedWeatherId 及本人 targetObservatoryTick；decline 或 withdraw 只填 targetAlignedWeatherId。没见过的读数、强度、方位或结论不得填写：${JSON.stringify(alignedWeatherPromptOptions)}
 - 巡界换防只复制当前获准选项；offer 必须用已列真实哨位和候任修士，accept、decline、withdraw 只用换防编号。不可填写路线、灵气、地权、岗哨覆盖或其他守卫：${JSON.stringify(boundaryReliefOptions)}
 - 续结师承只可原样复制本人合法动作。结束不删旧课；接受、到场与真正授课彼此不同，额度与熟练度不得自报：${JSON.stringify(mentorTransferOptions)}
@@ -1890,6 +1898,7 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
             'STUDY_TECHNIQUE',
             'GATHER_HERBS',
             'SEED_CULTURE',
+            'WATER_VEIN',
             'BREW_PILL',
             'USE_PILL',
             'FORGE_ARTIFACT',
@@ -2005,6 +2014,14 @@ ${COGNITIVE_RESPONSE_GUIDE}`;
           if (rescueOnly && chosenAction !== 'EXPEDITION_RESCUE') return undefined;
           if (activeVow && chosenAction !== 'PILGRIMAGE' &&
               (onPilgrimagePath || (chosenAction !== 'REST' && chosenAction !== 'ROUTE_WARNING'))) return undefined;
+          if(parsed.waterVeinMove!==undefined&&chosenAction!=='WATER_VEIN')return undefined;
+          if(chosenAction==='WATER_VEIN'){
+            const exact=waterVeinOptions.find(row=>row.waterVeinMove===parsed.waterVeinMove&&row.targetLocationId===parsed.targetLocationId);
+            if(!exact||Object.keys(parsed).some(field=>!['chosenAction','waterVeinMove','targetLocationId','innerMonologue'].includes(field)))return undefined;
+            const innerMonologue=(typeof parsed.innerMonologue==='string'&&parsed.innerMonologue.trim().slice(0,160))||
+              '到实址照现有水线许可办理。';
+            return {chosenAction:'WATER_VEIN',waterVeinMove:exact.waterVeinMove,targetLocationId:exact.targetLocationId,innerMonologue};
+          }
           const legalRoad = chosenAction === 'ROAD' ? roadOptions.find((item) =>
             item.roadMove === parsed.roadMove && item.targetRoadId === parsed.targetRoadId &&
             item.targetLocationId === parsed.targetLocationId) : undefined;

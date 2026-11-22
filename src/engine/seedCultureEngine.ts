@@ -6,6 +6,7 @@ import { flowActor,flowSeedLot,flowSeedPlot,recordResourceFlow } from './resourc
 import { routeWarningHazardValid } from './routeWarningProof';
 import { localQiWeather } from './weatherEngine';
 import { terrainTileAt } from './terrainEngine';
+import { waterVeinFieldDeficit } from './waterVeinTerms';
 import { measureSeedPlot,measureSeedTrial,SEED_GROW_TICKS,SEED_LOT_UNITS,SEED_PLOT_UNITS,SEED_READY_TICKS,SEED_SAMPLE_UNITS,SEED_SOURCE_HERBS } from './seedCultureTerms';
 
 export const createSeedCultureState=():SeedCultureState=>({lots:[],plots:[],nextLotId:1,nextPlotId:1});
@@ -49,7 +50,8 @@ function hazardAt(world:WorldState,site:LocationNode,tick:number){
 }
 function observed(world:WorldState,site:LocationNode):SeedWeather|undefined {
   const tile=terrainTileAt(world,site.x,site.y);
-  return tile ? {...localQiWeather(world,site),soilQi:tile.spiritQi} : undefined;
+  const waterDeficit=waterVeinFieldDeficit(world,site.id);
+  return tile ? {...localQiWeather(world,site),soilQi:tile.spiritQi,...(waterDeficit===undefined?{}:{waterDeficit})} : undefined;
 }
 const idlePlot=(world:WorldState,siteId:string)=>!world.seedCulture.plots.some(plot=>plot.siteId===siteId&&runs(plot));
 const goodHeadroom=(actor:Cultivator,yielded:number)=>

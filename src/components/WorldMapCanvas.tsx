@@ -1,4 +1,5 @@
 import {REGIONAL_SIMULATION_VERSION,regionForPoint,SIMULATION_REGION_NAMES} from '../engine/regionalSimulationEngine';
+import {projectWaterVein} from '../engine/waterVeinEngine';
 import {projectEraHeritage} from '../engine/eraHeritageEngine';
 import {localDoctrineFoundingNotice} from '../engine/doctrineFoundingEngine';
 import {localDanxiaSeasonReviewSite} from '../engine/danxiaSeasonReviewEngine';
@@ -363,6 +364,13 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     return !!siteTile && currentVisibleTileIds(world, selected).has(siteTile.id) &&
       projectEraHeritage(world, selected).presentSiteId === selectedLocation.id;
   }, [toolsExpanded, world, selected, selectedLocation]);
+  const localWaterVeinNotice = useMemo(() => {
+    if (!toolsExpanded || !selected || !selectedLocation) return false;
+    const observation=projectWaterVein(world,selected);
+    if(observation?.scope!=='local'||!observation.symptom||observation.siteId!==selectedLocation.id)return false;
+    const tile=terrainTileAt(world,selectedLocation.x,selectedLocation.y);
+    return !!tile&&currentVisibleTileIds(world,selected).has(tile.id);
+  }, [toolsExpanded,world,selected,selectedLocation]);
   const selectedTrial = selected?.tribulation;
   const selectedBounty = selected && relevantBounty(world.bounties, selected.id);
   const activeSieges = world.sieges.filter(isActiveCampaign);
@@ -1230,6 +1238,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           {fog ? `${selected?.name ?? '无修士'}视角 · 已探索 ${mapView.known?.size ?? 0}/${world.terrain.tiles.length} 格 · 视野内 ${mapView.current?.size ?? 0} 格` : '天道全图 · 宗门色线为领地边界'}
         </span>
         {heat && <span className="text-[11px] text-slate-400">蓝色至橙红色表示灵气由低到高。</span>}
+        {localWaterVeinNotice&&<span className="text-[11px] text-sky-200">此人正在寒玉井边，可核看水势。</span>}
         {toolsExpanded && selectedKnownRegion && <span className="text-[11px] text-emerald-200">
           所选已知地点所属地域：{SIMULATION_REGION_NAMES[selectedKnownRegion]}
         </span>}

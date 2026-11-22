@@ -35,8 +35,8 @@ describe('opt-in focused native cadence',()=>{
     expect(REGIONAL_BENCHMARK.months).toBe(24);
     expect(REGIONAL_BENCHMARK.metrics.map(row=>row.monthly)).toEqual(Object.values(counts(exact)));
     expect(REGIONAL_BENCHMARK.metrics.map(row=>row.regional)).toEqual(Object.values(counts(regional)));
-    expect(report.annual.map(({regionId,actorMonths,qiAdded})=>({regionId,actorMonths,qiAdded}))).toEqual([
-      {regionId:'east',actorMonths:33,qiAdded:33},{regionId:'east',actorMonths:9,qiAdded:9},
+    expect(report.annual.map(({regionId,actorMonths,waivedActorMonths,qiAdded})=>({regionId,actorMonths,waivedActorMonths,qiAdded}))).toEqual([
+      {regionId:'east',actorMonths:33,waivedActorMonths:0,qiAdded:33},{regionId:'east',actorMonths:0,waivedActorMonths:15,qiAdded:0},
     ]);
   });
   it('waives previously deferred east months when it becomes the actual focus in December, and preflight never writes',()=>{

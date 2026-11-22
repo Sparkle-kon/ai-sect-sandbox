@@ -164,6 +164,7 @@ export type ActionType =
   | 'VILLAGE_FAIR'
   | 'SECT_STIPEND'
   | 'SEED_CULTURE'
+  | 'WATER_VEIN'
   | 'TOOL_LOAN'
   | 'FORGE_ARTIFACT'
   | 'BIND_ARTIFACT'
@@ -468,6 +469,7 @@ export interface LLMConfig {
 export interface LLMDecisionPayload {
   innerMonologue: string;
   chosenAction: ActionType;
+  waterVeinMove?: WaterVeinMove;
   danxiaMedicineMove?: DanxiaMedicineMove;
   danxiaReviewMove?: DanxiaReviewMove;
   targetDanxiaReviewId?: string;
@@ -1006,6 +1008,7 @@ export type AvatarInteractionCommand = AvatarInteractionRequest;
 export type AvatarOrder = 'REST' | 'CULTIVATE';
 export type AvatarPendingOrder = { actorId: string; queuedTick: number } & (
   | { action: AvatarOrder }
+  | { action: 'WATER_VEIN'; waterVeinMove: WaterVeinMove; targetLocationId: 'loc-vein-north' }
   | { action: 'SALVAGE_ARTIFACT'; targetArtifactId: string; targetLocationId: string }
   | { action:'DOCTRINE_MATURITY';doctrineMaturityMove:DoctrineMaturityMove;targetDoctrineFoundingId:string }
   | { action:'DOCTRINE_FOUNDING'; doctrineFoundingMove:DoctrineFoundingMove; targetDoctrineFoundingId?:string;
@@ -2492,6 +2495,7 @@ export interface SectStipendsState {stipends:SectStipend[];nextId:number}
 
 export type SeedCultureMove='reserve'|'test'|'plant'|'harvest';
 export interface SeedWeather {
+  waterDeficit?:number;
   tick:number;
   season:'春'|'夏'|'秋'|'冬';
   kind:'平息'|'灵潮'|'罡风'|'霜息';
@@ -2557,7 +2561,7 @@ export interface SharedCommonsPact {
 export interface SharedCommonsState { pacts: SharedCommonsPact[]; nextId: number }
 
 export type ResourceFlowGood = 'stone' | 'jade_seed' | MarketGood;
-export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation' | 'terrain' | 'workshop' | 'road' | 'observatory' | 'pilgrimage' | 'granary' | 'furnace_safety' | 'artifact_salvage' | 'village_supply' | 'civic_memorial' | 'village_fair' | 'sect_stipend' | 'seed_culture' | 'care_followup' | 'danxia_medicine';
+export type ResourceFlowMechanism = 'alchemy' | 'market' | 'sect_economy' | 'oath' | 'commons' | 'relocation' | 'terrain' | 'workshop' | 'road' | 'observatory' | 'pilgrimage' | 'granary' | 'furnace_safety' | 'artifact_salvage' | 'village_supply' | 'civic_memorial' | 'village_fair' | 'sect_stipend' | 'seed_culture' | 'care_followup' | 'danxia_medicine' | 'water_vein';
 export type ResourceFlowAccount =
   | { kind: 'actor' | 'site' | 'sect' | 'order' | 'shipment' | 'relocation' | 'workshop' | 'salvage' | 'granary' | 'village_supply' | 'village_fair' | 'seed_lot' | 'seed_plot' | 'danxia_medicine'; id: string }
   | { kind: 'oath'; id: string; pocket: 'payment' | 'collateral' };
@@ -3295,7 +3299,42 @@ export interface EraHeritageState {
   version: 1; oaths: EraHeritageOath[]; artifacts: EraHeritageArtifact[]; facts: EraHeritageFact[];
 }
 
+export type WaterVeinMove = 'observe' | 'open' | 'mine';
+export type WaterVeinSymptom = 'well' | 'field' | 'mine' | 'recovered';
+
+export interface WaterVeinOpening {
+  id: string;
+  openedTick: number; year: number; month: number;
+  openerId: string; sectId: string; wellProjectId: string;
+  paidStones: number; borrowedUnits: number;
+  completedTick?: number;
+}
+export interface WaterVeinObservation {
+  id: string;
+  actorId: string; tick: number; year: number; month: number;
+  paidStones: number;
+  wellDepth?: number; fieldDeficit?: number; mineYield: number;
+  symptom?: WaterVeinSymptom;
+}
+export interface WaterVeinMiningReceipt {
+  id: string; actorId: string; tick: number;
+  units: number;
+}
+export interface ColdWaterVeinState {
+  version: 1;
+  veinId: 'north-cold-water';
+  siteId: 'loc-vein-north';
+  settlementId: string;
+  tileIds: [string,string,string];
+  oreRemaining: number;
+  openings: WaterVeinOpening[];
+  observations: WaterVeinObservation[];
+  mining: WaterVeinMiningReceipt[];
+  lastAdvancedTick?: number;
+}
+
 export interface WorldState {
+  coldWaterVein?:ColdWaterVeinState;
   mortalAgeTrackingSinceTick?: number;
   eraHeritage?: EraHeritageState;
   regionalSimulation?:RegionalSimulationState;

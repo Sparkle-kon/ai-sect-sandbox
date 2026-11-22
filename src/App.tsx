@@ -73,7 +73,9 @@ import {projectRegionalPromotions} from './engine/regionalPromotionEngine';
 import {isScopedExpeditionGate} from './engine/expeditionOmenTerms';
 import {REGIONAL_BENCHMARK} from './components/regionalBenchmark';
 import type {RegionalFocusOption,RegionalSimulationControls} from './components/RegionalSimulationPanel';
-import { possessAvatar, queueAvatarOrder, queueAvatarSalvage } from './engine/avatarEngine';
+import { possessAvatar, queueAvatarOrder, queueAvatarSalvage, queueAvatarWaterVein } from './engine/avatarEngine';
+import { availableWaterVeinActions, projectWaterVein } from './engine/waterVeinEngine';
+import type { ColdWaterControls } from './components/ColdWaterVeinPanel';
 import type { ArtifactSalvageControls } from './components/ArtifactPanel';
 import { resolveAvatarSnapshot } from './engine/avatarRuntime';
 import { CHRONICLE_FOCUS_UNAVAILABLE, createChronicleFocusResolver } from './engine/chronicleFocusEngine';
@@ -116,6 +118,7 @@ const ChronicleLibraryPanel = React.lazy(async () => ({ default: (await import('
 const WorldOccasionsPanel = React.lazy(async () => ({ default: (await import('./components/WorldOccasionsPanel')).WorldOccasionsPanel }));
 const ExpeditionRescuePanel = React.lazy(async () => ({ default: (await import('./components/ExpeditionRescuePanel')).ExpeditionRescuePanel }));
 const BoundaryReliefPanel = React.lazy(async () => ({ default: (await import('./components/BoundaryReliefPanel')).BoundaryReliefPanel }));
+const ColdWaterVeinPanel = React.lazy(async () => ({ default: (await import('./components/ColdWaterVeinPanel')).ColdWaterVeinPanel }));
 const WeatherAtlasPanel = React.lazy(async () => ({ default: (await import('./components/WeatherAtlasPanel')).WeatherAtlasPanel }));
 const ShortShiftPanel = React.lazy(async () => ({ default: (await import('./components/ShortShiftPanel')).ShortShiftPanel }));
 const MarketCaravansPanel = React.lazy(async () => ({ default: (await import('./components/MarketCaravansPanel')).MarketCaravansPanel }));
@@ -887,6 +890,30 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
     setAvatarNotice(undefined);
     return true;
   };
+  const waterVeinContextVersion=saveContextVersion.current;
+  const waterVeinActive=dashboardOpen&&workspace==='world';
+  const waterVeinView=waterVeinActive?projectWaterVein(visibleWorld,selectedCultivator):undefined;
+  const waterVeinAvatar=waterVeinView?.scope==='local'&&!preview&&selectedCultivator&&
+    activeAvatar(world)?.id===selectedCultivator.id?selectedCultivator:undefined;
+  const waterVeinPending=world.playerAvatar.pendingOrder;
+  const waterVeinControls:ColdWaterControls|undefined=waterVeinAvatar?{
+    scopeKey:`${viewScopeKey}:${waterVeinAvatar.id}`,revisionKey:visibleWorld,
+    choices:canQueueAvatarSalvage(world,waterVeinAvatar.id)?availableWaterVeinActions(waterVeinAvatar,world,world.tick+1):[],
+    pending:waterVeinPending?.actorId===waterVeinAvatar.id&&waterVeinPending.action==='WATER_VEIN'
+      ?waterVeinPending.waterVeinMove:undefined,
+    disabled:isRunning||isStepping||fastForwardLocked,
+    onQueue:(choice,revision)=>{
+      if(revision!==world||isRunning||isStepping||fastForwardLocked||browsing.current||stepInFlight.current||
+        fastForwardRun.current||campaignGuard.current||history.current!==timeline||authority.current!==world||
+        saveContextVersion.current!==waterVeinContextVersion)return false;
+      const updated=updateWorld(current=>{
+        if(current!==world)return current;
+        const next=structuredClone(current);
+        return queueAvatarWaterVein(next,waterVeinAvatar.id,choice)?next:current;
+      });
+      return updated!==world;
+    },
+  }:undefined;
   const medicineContextVersion=saveContextVersion.current;
   const medicineAvatar=!preview&&selectedCultivator&&activeAvatar(world)?.id===selectedCultivator.id&&
     canQueueAvatarSalvage(world,selectedCultivator.id)?selectedCultivator:undefined;
@@ -1375,6 +1402,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection }) =>
         world: <WorkspaceSections label="世界与设置" initialOpen={opened('world', 'weather')} {...fold('world')} sections={[
           { id: 'weather', label: '灵候图与观测', content: <div className="space-y-2.5">
             <React.Suspense fallback={<p role="status">载入世界记录…</p>}><WeatherAtlasPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense>
+            {waterVeinView&&<React.Suspense fallback={null}><ColdWaterVeinPanel view={waterVeinView} controls={waterVeinControls}/></React.Suspense>}
             {activeActorId && visibleWorld.shortShifts.shifts.some(({ hostId, workerId }) => activeActorId === hostId || activeActorId === workerId) &&
               <React.Suspense fallback={<p role="status">载入短聘凭证…</p>}><ShortShiftPanel world={visibleWorld} cultivator={selectedCultivator} /></React.Suspense>}
           </div> },

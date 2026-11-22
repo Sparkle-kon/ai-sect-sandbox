@@ -8,6 +8,7 @@ import {validateAuthoredEraHistory} from './storageAuthoredEraValidation';
 import {validateRegionalSimulation} from './storageRegionalSimulationValidation';
 import {validateRegionalPromotions} from './storageRegionalPromotionValidation';
 import {validateEraHeritage} from './storageEraHeritageValidation';
+import {validateColdWaterVein} from './storageColdWaterVeinValidation';
 import {validateEraDesignDraft} from './eraDesignSchema';
 import { createAlignedWeatherState } from './alignedWeatherEngine';
 import { alignedWeatherPinnedRuns } from './alignedWeatherTerms';
@@ -197,7 +198,7 @@ const eventCategory = one('breakthrough','combat','intrigue','heavenly','death',
 const mode = one('avatar','ring');
 const intent = one('guide','persuade','deceive','interrogate','recruit');
 const vote = one('support','oppose','abstain');
-const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT SALVAGE_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE DOCTRINE_FOUNDING DOCTRINE_MATURITY RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY CARE_FOLLOWUP DANXIA_MEDICINE DANXIA_REVIEW FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER COURIER_HANDOFF SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP FURNACE_RESERVATION FURNACE_SAFETY DAMAGE_ASSURANCE SPARRING EXPEDITION_RESCUE SHORT_SHIFT BOUNDARY_RELIEF MENTOR_TRANSFER APPRENTICE_COHORT SEASONAL_HOUSING HOUSEHOLD_NAME CARAVAN_RESTITUTION VILLAGE_GRANARY VILLAGE_SUPPLY ROUTE_WARNING PAVILION_LOAN WORKSHOP_CAPACITY CIVIC_MEMORIAL VILLAGE_FAIR SECT_STIPEND SEED_CULTURE TOOL_LOAN RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY ALIGNED_WEATHER SEASON_REVIEW REST'.split(' '));
+const action = one(...'CULTIVATE BREAKTHROUGH EXPLORE SOCIALIZE DUEL SCHEMING PURSUE_SCHEME AUTHOR_TECHNIQUE STUDY_TECHNIQUE GATHER_HERBS BREW_PILL USE_PILL FORGE_ARTIFACT BIND_ARTIFACT REPAIR_ARTIFACT SALVAGE_ARTIFACT AWAKEN_ARTIFACT FACE_TRIBULATION AMBUSH_TRIBULATION CHALLENGE_LEADERSHIP PLOT_COUP BUILD_FACILITY DISPATCH_GUARD GUARD_DUTY OFFER_ALLIANCE DECLARE_WAR DEMAND_TRIBUTE LAUNCH_SIEGE JOIN_OCCASION PURSUE_BOUNTY TAME_BEAST TRADE DUAL_CULTIVATE SECT_DIPLOMACY TEACH ACCEPT_TUITION DECLINE_TUITION OFFER_OATH ACCEPT_OATH DECLINE_OATH FULFILL_OATH APPEAL_OATH PLACE_MARKET_BUY PLACE_MARKET_SELL CANCEL_MARKET_ORDER RECRUIT_SETTLER DELIVER_RELIEF FILE_WITNESS_CLAIM ATTEST_WITNESS CHALLENGE_WITNESS NAME_HEIR CLAIM_ESTATE HOLD_MEMORIAL DOCTRINE DOCTRINE_FOUNDING DOCTRINE_MATURITY RELOCATE RECOLLECT RELIC SCRIPTURE RANK_SEASON ESCORT CEASEFIRE RESEARCH SANCTUARY SECT_CREDIT PILGRIMAGE CHRONICLE_ERRATA HABITAT INFIRMARY CARE_FOLLOWUP DANXIA_MEDICINE DANXIA_REVIEW FORMATION_NETWORK TERRITORIAL_LEASE HOUSEHOLD_GUARDIAN VILLAGE_WORKS SEALED_COURIER COURIER_HANDOFF SECT_SERVICE SHARED_COMMONS TERRAIN_RECOVERY WORKSHOP FURNACE_RESERVATION FURNACE_SAFETY DAMAGE_ASSURANCE SPARRING EXPEDITION_RESCUE SHORT_SHIFT BOUNDARY_RELIEF MENTOR_TRANSFER APPRENTICE_COHORT SEASONAL_HOUSING HOUSEHOLD_NAME CARAVAN_RESTITUTION VILLAGE_GRANARY VILLAGE_SUPPLY ROUTE_WARNING PAVILION_LOAN WORKSHOP_CAPACITY CIVIC_MEMORIAL VILLAGE_FAIR SECT_STIPEND SEED_CULTURE WATER_VEIN TOOL_LOAN RELIC_EXHIBIT PROBATION ROAD VILLAGE_CENSUS OATH_ARBITRATION FIELD_OBSERVATORY ALIGNED_WEATHER SEASON_REVIEW REST'.split(' '));
 const herbs = structure({jade_leaf:count,earth_root:count,star_bloom:count,shadow_moss:count});
 const marketGood = one('jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
 const flowGood = one('stone','jade_seed','jade_leaf','earth_root','star_bloom','shadow_moss','foundation','golden','barrier','heart_poison');
@@ -242,7 +243,7 @@ const routeWarningObservation = structure({
   exitTileId:oid,exitPathIndex:otick,observedTick:tick,hazard:villageSupplyHazard,
 });
 const seedWeather = structure({tick,season:one('春','夏','秋','冬'),kind:one('平息','灵潮','罡风','霜息'),
-  intensity:num(0,1),soilQi:percentage});
+  intensity:num(0,1),soilQi:percentage,waterDeficit:optional(num(1,3,true))});
 const villageSupplyLeg = structure({good:one('earth_root','stone'),phase:one('outbound','returning','delivered','returned','lost'),
   checkpoint:supplyCheckpoint,lastAdvancedTick:tick,settledTick:otick,loss:optional(villageSupplyHazard),
   turnback:optional(structure({tick,checkpoint:supplyCheckpoint,cause:one('destination_closed','unsafe_next'),hazard:optional(villageSupplyHazard)}))});
@@ -685,7 +686,7 @@ const shape = structure({
     tick,year:tick,month,totalEntries:num(0,Number.MAX_SAFE_INTEGER,true),
     totals:arr(10,structure({good:flowGood,transfer:flowMeasure,production:flowMeasure,consumption:flowMeasure,loss:flowMeasure})),
     entries:arr(RESOURCE_FLOW_DETAIL_LIMIT,structure({
-      id:flowSerial,tick,mechanism:one('alchemy','market','sect_economy','oath','commons','relocation','terrain','workshop','road','observatory','pilgrimage','granary','furnace_safety','artifact_salvage','village_supply','civic_memorial','village_fair','sect_stipend','seed_culture','care_followup','danxia_medicine'),
+      id:flowSerial,tick,mechanism:one('alchemy','market','sect_economy','oath','commons','relocation','terrain','workshop','road','observatory','pilgrimage','granary','furnace_safety','artifact_salvage','village_supply','civic_memorial','village_fair','sect_stipend', 'seed_culture','care_followup','danxia_medicine','water_vein'),
       refId:id,reason:strings(40,1),good:flowGood,amount:flowMeasure,visibility:flowScope,
       kind:one('transfer','production','consumption','loss'),from:optional(flowAccount),to:optional(flowAccount)
     }))
@@ -921,6 +922,15 @@ const shape = structure({
     abandonedSites:arr(SAVE_COLLECTION_LIMIT,structure({id,planId:id,sectId:id,originId:id,destinationId:id,tick,
       originalType:locationKind,facilities:facilityLevels,arrayHp:wealth,arrayMaxHp:wealth}))}),
   scenarioOrigin:optional(structure({version:one(1,2,3),ruleset:one(1),id:strings(100,1),endTick:num(1,120,true)})),
+  coldWaterVein:optional(structure({version:one(1),veinId:one('north-cold-water'),siteId:one('loc-vein-north'),
+    settlementId:id,tileIds:arr(3,id),oreRemaining:num(0,18,true),lastAdvancedTick:otick,
+    openings:arr(SAVE_COLLECTION_LIMIT,structure({id,openedTick:tick,year:tick,month,openerId:id,sectId:id,wellProjectId:id,
+      paidStones:num(40,40,true),borrowedUnits:num(9,9,true),completedTick:otick})),
+    observations:arr(SAVE_COLLECTION_LIMIT,structure({id,actorId:id,tick,year:tick,month,paidStones:num(2,2,true),
+      wellDepth:optional(num(21,24,true)),fieldDeficit:optional(num(1,3,true)),mineYield:num(0,2,true),
+      symptom:optional(one('well','field','mine','recovered'))})),
+    mining:arr(18,structure({id,actorId:id,tick,units:num(1,2,true)})),
+  })),
   eraHeritage:optional(structure({version:one(1),
     oaths:arr(SAVE_COLLECTION_LIMIT,structure({tick,year:tick,month,oathId:id,eventId:id,locationId:id,
       requesterId:id,providerId:id,term:one('foundation_pill','jade_herb'),quantity:count,payment:count,collateral:count})),
@@ -1043,6 +1053,8 @@ const shape = structure({
       const fixed = {actorId:id,queuedTick:tick};
       if(order?.action==='SALVAGE_ARTIFACT')
         return structure({...fixed,action:one('SALVAGE_ARTIFACT'),targetArtifactId:id,targetLocationId:id})(value,path);
+      if(order?.action==='WATER_VEIN')return structure({...fixed,action:one('WATER_VEIN'),
+        waterVeinMove:one('observe','open','mine'),targetLocationId:one('loc-vein-north')})(value,path);
       if(order?.action==='DOCTRINE_MATURITY')return structure({...fixed,action:one('DOCTRINE_MATURITY'),
         doctrineMaturityMove,targetDoctrineFoundingId:id})(value,path);
       if(order?.action==='DOCTRINE_FOUNDING'){
@@ -2418,6 +2430,10 @@ function verifyWorld(value: unknown): WorldState {
   if ((w.playerAvatar.possessedId && !actor.has(w.playerAvatar.possessedId)) ||
       (w.playerAvatar.pendingOrder && w.playerAvatar.pendingOrder.actorId !== w.playerAvatar.possessedId) ||
       w.playerAvatar.transcript.some((entry) => !actor.has(entry.targetCultivatorId) || (entry.actorId && !actor.has(entry.actorId)))) fail('playerAvatar.references');
+  const localWaterOrder=w.playerAvatar.pendingOrder;
+  if(localWaterOrder?.action==='WATER_VEIN'&&
+    (!locations.has(localWaterOrder.targetLocationId)||localWaterOrder.queuedTick!==w.tick||
+      (w.playerAvatar.possessionUntilTick??0)<=w.tick+1))fail('playerAvatar.waterVeinOrder');
   unique(w.decisionTrace.records, ({id}) => id, 'decisionTrace.id');
   for (const row of w.decisionTrace.records) {
     unique(row.candidates, ({id}) => id, 'decisionTrace.candidateId');
@@ -3095,6 +3111,7 @@ function verifyWorld(value: unknown): WorldState {
   validateRegionalSimulation(w,fail);
   validateRegionalPromotions(w,fail);
   validateEraHeritage(w,fail);
+  validateColdWaterVein(w,fail);
   w.coldHistory = freezeColdHistory(w.coldHistory);
   return w;
 }
@@ -3109,9 +3126,9 @@ function serializeWorldSave(world: WorldState): string {
   try {
     // A native turn may first attach either optional ledger after a hot-world clone.
     // Normalize that bounded extension order, leaving every pre-extension byte intact.
-    if (world.eraHeritage !== undefined || world.mortalAgeTrackingSinceTick !== undefined) {
-      const {eraHeritage,mortalAgeTrackingSinceTick,...legacy}=world;
-      return JSON.stringify({format:FORMAT,version:VERSION,world:{...legacy,eraHeritage,mortalAgeTrackingSinceTick}});
+    if (world.eraHeritage !== undefined || world.mortalAgeTrackingSinceTick !== undefined || world.coldWaterVein !== undefined) {
+      const {eraHeritage,mortalAgeTrackingSinceTick,coldWaterVein,...legacy}=world;
+      return JSON.stringify({format:FORMAT,version:VERSION,world:{...legacy,eraHeritage,mortalAgeTrackingSinceTick,coldWaterVein}});
     }
     return JSON.stringify({ format: FORMAT, version: VERSION, world });
   } catch { throw new WorldSaveError('json', '当前世界不能序列化为 JSON。'); }

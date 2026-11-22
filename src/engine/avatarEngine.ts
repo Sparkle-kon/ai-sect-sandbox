@@ -1,5 +1,6 @@
 import {availableDoctrineMaturityActions,type DoctrineMaturityOption} from './doctrineMaturityEngine';
 import {availableDoctrineFoundingActions,type DoctrineFoundingOption} from './doctrineFoundingEngine';
+import { availableWaterVeinActions,type WaterVeinOption } from './waterVeinEngine';
 import { availableDanxiaMedicineActions } from './danxiaMedicineEngine';
 import {availableDanxiaReviewActions,type DanxiaReviewOption} from './danxiaSeasonReviewEngine';
 import { activeDanxiaMedicineEscort,danxiaMedicineActedThisTick } from './danxiaMedicineTerms';
@@ -102,6 +103,19 @@ export function queueAvatarSalvage(world: WorldState, actorId: string, targetArt
   return true;
 }
 
+/** Record an exact local intent without drawing water, spending sect funds or moving the body. */
+export function queueAvatarWaterVein(world:WorldState,actorId:string,option:WaterVeinOption):boolean {
+  const host=activeAvatar(world);
+  if(!host||!canQueueAvatarSalvage(world,actorId)||option.action!=='WATER_VEIN')return false;
+  const exact=availableWaterVeinActions(host,world,world.tick+1).find(row=>row.waterVeinMove===option.waterVeinMove&&
+    row.targetLocationId===option.targetLocationId);
+  if(!exact||exact.targetLocationId!=='loc-vein-north')return false;
+  world.playerAvatar.essence-=AVATAR_ORDER_COST;
+  world.playerAvatar.pendingOrder={actorId,queuedTick:world.tick,action:'WATER_VEIN',
+    waterVeinMove:exact.waterVeinMove,targetLocationId:exact.targetLocationId};
+  return true;
+}
+
 export type AvatarDanxiaMedicineOption=ReturnType<typeof availableDanxiaMedicineActions>[number];
 
 /** Queue an eligible exact medicinal choice without reserving any stock before the native turn. */
@@ -160,7 +174,9 @@ export function consumeAvatarOrder(world: WorldState): { actorId: string; decisi
   if (!order || world.tick <= order.queuedTick) return undefined;
   delete state.pendingOrder;
   if (world.tick !== order.queuedTick + 1 || activeAvatar(world)?.id !== order.actorId) return undefined;
-  const targets = order.action === 'SALVAGE_ARTIFACT' ?
+  const targets = order.action === 'WATER_VEIN' ?
+    { waterVeinMove:order.waterVeinMove,targetLocationId:order.targetLocationId } :
+    order.action === 'SALVAGE_ARTIFACT' ?
     { targetArtifactId: order.targetArtifactId, targetLocationId: order.targetLocationId } :
     order.action==='DANXIA_MEDICINE'?{danxiaMedicineMove:order.danxiaMedicineMove,targetDanxiaShortageId:order.targetDanxiaShortageId,
       targetDanxiaMedicineId:order.targetDanxiaMedicineId,targetCultivatorId:order.targetCultivatorId}:

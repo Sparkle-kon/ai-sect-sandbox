@@ -1,4 +1,5 @@
 import type { SeedWeather } from '../types/world';
+import { WATER_VEIN_FIELD_PENALTY_PER_CUN } from './waterVeinTerms';
 
 export const SEED_SOURCE_HERBS=2;
 export const SEED_LOT_UNITS=6;
@@ -17,7 +18,8 @@ function stableHash(seed:number,key:string):number {
 function condition(weather:SeedWeather):number {
   const {intensity,kind}=weather;
   return (Math.max(0,Math.min(100,weather.soilQi))/100-.5)*.28+
-    (kind==='灵潮'?.18*intensity:kind==='罡风'?-.20*intensity:kind==='霜息'?-.36*intensity:0);
+    (kind==='灵潮'?.18*intensity:kind==='罡风'?-.20*intensity:kind==='霜息'?-.36*intensity:0) -
+    WATER_VEIN_FIELD_PENALTY_PER_CUN*(weather.waterDeficit??0);
 }
 function roots(seed:number,lotId:string,key:string,weatherScore:number):0|1|2 {
   const vigor=.38+.40*stableHash(seed,`${lotId}:base-vigor`);
