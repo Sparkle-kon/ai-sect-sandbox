@@ -92,8 +92,7 @@ import { boundaryReliefCheckpoint } from '../boundaryReliefCheckpoint';
 import { disasterShelterCheckpoint } from '../disasterShelterCheckpoint';
 import { availableCalamityArrayChoices } from '../calamityArray';
 import { exactCalamityArrayDecision, calamityArrayCommand } from '../calamityArrayCognition';
-import { availableBattlefieldAftermathActions } from '../battlefieldAftermath';
-import { exactBattlefieldAftermathDecision, battlefieldAftermathCommand } from '../battlefieldAftermathCognition';
+import { utilityBattlefieldAftermathDecision } from '../battlefieldAftermathCognition';
 import { availableVillageReunionActions } from '../villageReunion';
 import { exactVillageReunionDecision, villageReunionCommand } from '../villageReunionCognition';
 import { availableWildMigrationActions } from '../wildMigration';
@@ -813,12 +812,8 @@ export function computeHeuristicDecision(
       if (exact) return exact;
     }
   }
-  if(activeAvatar(world)!==cultivator&&world.battlefieldAftermath?.cases.length){
-    const choices=availableBattlefieldAftermathActions(cultivator,world,world.tick);
-    const offered=choices.find(row=>row.battlefieldAftermathMove==='accept_care');
-    const exact=offered&&exactBattlefieldAftermathDecision(battlefieldAftermathCommand(offered),choices);
-    if(exact)return exact;
-  }
+  const personalAftermath=utilityBattlefieldAftermathDecision(world,cultivator);
+  if(personalAftermath)return personalAftermath;
   if(activeAvatar(world)!==cultivator&&world.villageReunions?.pairs.length){
     const choices=availableVillageReunionActions(cultivator,world,world.tick);
     // Merely meeting does not interrupt an established ordinary habit. A real pending gift is an independent choice.

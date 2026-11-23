@@ -3,6 +3,8 @@ import {projectMapEntitySiteDetails} from '../src/components/mapEntitySiteDetail
 import {createTerrainMapView} from '../src/components/terrainMapView';
 import {createInitialWorld} from '../src/data/initialWorld';
 import {advanceWorldTick} from '../src/engine/worldEngine';
+import {configureStoryteller} from '../src/engine/storytellerDirector';
+import {possessAvatar} from '../src/engine/avatarEngine';
 import {decodeEraWorldSave,encodeEraWorldSave} from '../src/engine/storageEngine';
 import {availableBattlefieldAftermathActions,projectBattlefieldAftermath} from '../src/engine/battlefieldAftermath';
 import {requestCultivatorLLMDecision} from '../src/engine/llmBrain';
@@ -41,6 +43,34 @@ function choice(world:WorldState,id:string,move:BattlefieldAftermathMove):LLMDec
     ...(selected!.targetCultivatorId?{targetCultivatorId:selected!.targetCultivatorId}:{}),innerMonologue:'只自作决定。'};
 }
 describe('a living witness after the real native terminal round',()=>{
+  it('lets one willing NPC initiate native care after a real battle, without preempting the player scope',()=>{
+    const ending=terminal();
+    siegeActor(ending,disciple).personality='刚正';
+    expect(choice(ending,disciple,'offer_care').targetCultivatorId).toBeTruthy();
+    const utility=(world:WorldState)=>advanceWorldTick(world,
+      Object.fromEntries(world.cultivators.filter(row=>row.id!==disciple).map(row=>[row.id,rest])),()=>.5);
+    const calm=structuredClone(ending);
+    configureStoryteller(calm,'still_water');
+    const pinned=structuredClone(ending);
+    configureStoryteller(pinned,'wandering_jianghu',disciple);
+    const mounted=structuredClone(ending);
+    configureStoryteller(mounted,'great_calamity');
+    expect(possessAvatar(mounted,disciple)).toBe(true);
+    const row=(world:WorldState)=>world.battlefieldAftermath?.cases.find(row=>row.actorId===disciple)?.decision;
+    for(const world of [ending,calm,pinned,mounted])expect(row(utility(world))).toBeUndefined();
+    const ordinary=structuredClone(ending);
+    configureStoryteller(ordinary,'wandering_jianghu');
+    const offered=utility(ordinary);
+    const recorded=row(offered);
+    expect(recorded).toMatchObject({move:'offer_care',targetCultivatorId:expect.any(String),tick:ending.tick+1});
+    const targetCultivatorId=recorded?.targetCultivatorId;
+    expect(offered.events).toContainEqual(expect.objectContaining({title:'问一声愿不愿疗伤',
+      actorIds:[disciple,targetCultivatorId],witnessScope:'participants',tick:ending.tick+1}));
+    expect(siegeActor(offered,disciple).qiProgress).toBe(siegeActor(ordinary,disciple).qiProgress);
+    expect(offered.battlefieldAftermath?.cases.find(row=>row.actorId===targetCultivatorId)?.decision).toBeUndefined();
+    expect(decodeEraWorldSave(encodeEraWorldSave(offered)).battlefieldAftermath).toEqual(offered.battlefieldAftermath);
+  });
+
   it('uses the actual witnessed field and exact return approach, with separate own remain and native return',()=>{
     const world=terminal();
     expect(siegeActor(world,commander).locationId).toBe('loc-taixu');
