@@ -1,3 +1,4 @@
+import { validateSectManagement } from './sectManagementValidation';
 import { validateBattlefieldAftermathSave } from '../battlefieldAftermath';
 import { validateBellWatches } from './bellWatchValidation';
 import { validateStoryteller } from './storytellerValidation';
@@ -231,5 +232,6 @@ export function verifyWorld(value: unknown): WorldState {
   w.coldHistory = freezeColdHistory(w.coldHistory);
   validateBellWatches(w, fail);
   validateStoryteller(w, actor, locations, fail);
+  validateSectManagement(w, fail);
   return w;
 }

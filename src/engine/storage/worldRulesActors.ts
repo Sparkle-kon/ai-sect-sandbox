@@ -1,3 +1,4 @@
+import { SECT_QUIRK_IDS } from '../../types/sectManagement';
 import type { Rule } from './primitives';
 import { bellWatchShape } from './bellWatchSchema';
 import { DRAMATIC_BOND_FACTS_MAX, DRAMATIC_BOND_WITNESSES_MAX } from '../dramaticBondTerms';
@@ -123,6 +124,7 @@ export const worldRulesActors: Record<string, Rule> = {
     heavenlyAlchemy:optional(heavenlyAlchemy),
     daoPath:optional(daoPath),
     destinyTraits:optional(destinyTraits),
+    quirks:optional(arr(2,one(...SECT_QUIRK_IDS))),
     heartDemonAftermath:optional(heartAftermath),
     forbiddenScars:optional(arr(FORBIDDEN_ART_IDS.length,forbiddenScar)),
     ordinaryActionEvidence:optional((value,path)=>{if(!isOrdinaryActionEvidence(value))fail(path);}),

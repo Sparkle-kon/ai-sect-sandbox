@@ -1,3 +1,4 @@
+import type { SectManagementState, SectQuirkId } from './sectManagement';
 import type { StorytellerDirectorState, StorytellerMove } from './storytellerDirector';
 import type { BellWatchMove, BellWatchState } from './bellWatch';
 import type {ApprenticeshipReunionMove,ApprenticeshipReunionState} from './apprenticeshipReunion';
@@ -490,6 +491,7 @@ export interface PublicAlchemyPractice {
 export type FictionalGender = 'woman' | 'man';
 
 export interface Cultivator {
+  quirks?: SectQuirkId[];
   heartDemonAftermath?: HeartDemonAftermath;
   gender?: FictionalGender;
   clanHeritage?: CultivationClanHeritage;
@@ -3728,6 +3730,7 @@ export interface NorthWellRevisitReviewState {
 }
 
 export interface WorldState {
+  sectManagement?: SectManagementState;
   storyteller?: StorytellerDirectorState;
   roguelikeEncounters?:RoguelikeEncounterRecord[];
   forbiddenDuels?: ForbiddenDuelContact[];

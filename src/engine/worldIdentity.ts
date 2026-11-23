@@ -20,6 +20,13 @@ function sameAuthoredOrigin(a:WorldState['authoredEraOrigin'],b:WorldState['auth
     });
 }
 
+function sameManagementOrigin(a:WorldState['sectManagement'],b:WorldState['sectManagement']): boolean {
+  return a === b || !!a && !!b && a.version === b.version && a.starterId === b.starterId && a.sectId === b.sectId &&
+    a.leaderId === b.leaderId && a.homeSiteId === b.homeSiteId && a.foundedTick === b.foundedTick && a.draw === b.draw &&
+    a.foundingDiscipleIds.length === b.foundingDiscipleIds.length &&
+    a.foundingDiscipleIds.every((id,index) => id === b.foundingDiscipleIds[index]);
+}
+
 /** Natural, portable and built-in scenario origins all distinguish independent ancestries. */
 export function sameGeneratedWorld(a: WorldState, b: WorldState): boolean {
   return a.random.seed === b.random.seed &&
@@ -32,5 +39,5 @@ export function sameGeneratedWorld(a: WorldState, b: WorldState): boolean {
     a.scenarioOrigin?.version === b.scenarioOrigin?.version &&
     a.scenarioOrigin?.ruleset === b.scenarioOrigin?.ruleset &&
     a.scenarioOrigin?.endTick === b.scenarioOrigin?.endTick &&
-    sameAuthoredOrigin(a.authoredEraOrigin,b.authoredEraOrigin);
+    sameAuthoredOrigin(a.authoredEraOrigin,b.authoredEraOrigin) && sameManagementOrigin(a.sectManagement,b.sectManagement);
 }

@@ -1,3 +1,6 @@
+import {SectManagementHome} from './components/SectManagementHome';
+import {createManagedSectWorld} from './engine/starterSectWorld';
+import type {StarterDraw, StarterSectId} from './types/sectManagement';
 import {useDirectorHighlight} from './components/useDirectorHighlight';
 import {selectReadingOpportunity} from './components/StoryReadingOpportunity';
 import {projectStorytellerPulse} from './engine/storytellerDirector';
@@ -109,9 +112,10 @@ const ExpeditionRescuePanel = React.lazy(async () => ({ default: (await import('
 const DecisionTracePanel = React.lazy(async () => ({ default: (await import('./components/DecisionTracePanel')).DecisionTracePanel }));
 const PossessionPanel = React.lazy(async () => ({ default: (await import('./components/PossessionPanel')).PossessionPanel }));
 const SectCouncilModal = React.lazy(async () => ({ default: (await import('./components/SectCouncilModal')).SectCouncilModal }));
+const WorldStoragePanel = React.lazy(async () => ({ default: (await import('./components/WorldStoragePanel')).WorldStoragePanel }));
 const AnalyticsModal = React.lazy(async () => ({ default: (await import('./components/AnalyticsModal')).AnalyticsModal }));
 
-interface AppProps { initialWorkspace?: WorkspaceId; initialSection?: string; initialCockpit?: boolean }
+interface AppProps { initialWorkspace?: WorkspaceId; initialSection?: string; initialCockpit?: boolean; initialMode?:'sect'|'story' }
 interface ChronicleTrail extends ChronicleFeedReturn {
   viewerId: string;
   category: ChronicleCategoryFilter;
@@ -121,7 +125,11 @@ interface ChronicleTrail extends ChronicleFeedReturn {
 const chronicleWorkspace = { site: 'map', actor: 'people', sect: 'sect' } as const;
 const action = 'xianxia-control inline-flex min-h-11 items-center justify-center gap-1.5 rounded-md px-3 text-xs font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300 disabled:opacity-40';
 
-export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, initialCockpit = false }) => {
+export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, initialCockpit = false, initialMode='story' }) => {
+  const [managerView,setManagerView]=useState<'opening'|'saves'|'closed'>(()=>
+    initialMode==='sect'&&initialWorkspace===undefined&&!initialCockpit?'opening':'closed');
+  const managerHeading=useRef<HTMLHeadingElement>(null);
+  const managerSavesHeading=useRef<HTMLHeadingElement>(null);
   const [cockpitOpen,setCockpitOpen]=useState(initialCockpit);
   const [mapFog,setMapFog]=useState(false);
   const [pulseFocus,setPulseFocus]=useState<WorldPulseFocusRequest>();
@@ -134,7 +142,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   const storyMoreRef = useRef<HTMLButtonElement>(null);
   const storyEntryHeading=useRef<HTMLHeadingElement>(null);
   const dashboardHeading = useRef<HTMLHeadingElement>(null);
-  const storySurface=cockpitOpen?'cockpit':dashboardOpen?'tools':storyEntryOpen?'entry':'home';
+  const storySurface=managerView==='opening'?'manager':managerView==='saves'?'manager-saves':cockpitOpen?'cockpit':dashboardOpen?'tools':storyEntryOpen?'entry':'home';
   const renderedStorySurface=useRef(storySurface);
   const [storyNotice, setStoryNotice] = useState<string>();
   const [storyOutcome,setStoryOutcome]=useState<{world:WorldState;text:string}>();
@@ -142,7 +150,8 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
     if (renderedStorySurface.current === storySurface) return;
     renderedStorySurface.current=storySurface;
     window.scrollTo({top:0,behavior:'instant'});
-    (storySurface==='cockpit'?cockpitHeading.current:storySurface==='tools'?dashboardHeading.current:storySurface==='entry'?storyEntryHeading.current:
+    (storySurface==='manager'?managerHeading.current:storySurface==='manager-saves'?managerSavesHeading.current:
+      storySurface==='cockpit'?cockpitHeading.current:storySurface==='tools'?dashboardHeading.current:storySurface==='entry'?storyEntryHeading.current:
       storyMoreRef.current)?.focus({preventScroll:true});
   }, [storySurface]);
   const [foldPreferences, setFoldPreferences] = useState(readWorkspaceFoldPreferences);
@@ -175,7 +184,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
     onPreviewContextChange:discardChronicleContext,
     onHistoricalPreview:()=>setCouncilOpen(false),
     onActivate:incoming=>{
-      setSelectedCultivatorId(incoming.cultivators.find(({alive})=>alive)?.id??incoming.cultivators[0]?.id??null);
+      setSelectedCultivatorId(incoming.sectManagement?.leaderId??incoming.cultivators.find(({alive})=>alive)?.id??incoming.cultivators[0]?.id??null);
       setLastManualCouncilId(undefined);
       setCouncilOpen(false);
       setAvatarNotice(undefined);
@@ -317,7 +326,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
       }catch{return false;}
     },
   });
-  const storyHome = React.useMemo(() => dashboardOpen ? undefined : projectStoryHomepage(world), [dashboardOpen,world]);
+  const storyHome = React.useMemo(() => dashboardOpen||managerView!=='closed' ? undefined : projectStoryHomepage(world), [dashboardOpen,managerView,world]);
   const publicRead=useMemo(()=>showingChronicle?projectScopedPublicChronicle(visibleWorld):undefined,[showingChronicle,visibleWorld]);
   const selectedCultivator = resolveWorkspaceActor(visibleWorld, selectedCultivatorId);
   const campaignStopOptions=useMemo(()=>readingChronicle&&campaign.available&&!preview?
@@ -333,7 +342,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
     onClearAvatarNotice:()=>setAvatarNotice(undefined),
   });
   const {card:featuredStoryCard,pending:storyDecisionPending}=useFeaturedStoryDecision(simulation);
-  const directorVisible=(!dashboardOpen||cockpitOpen)&&!storyEntryOpen;
+  const directorVisible=managerView==='closed'&&(!dashboardOpen||cockpitOpen)&&!storyEntryOpen;
   const directorMode=cockpitOpen?'cockpit':'story',directorFocus=cockpitOpen?cockpitHeading:storyMoreRef;
   const highlight=useDirectorHighlight(simulation,directorVisible,storyDecisionPending,directorMode,directorFocus);
   const highlightScene=highlight?.card;
@@ -716,7 +725,60 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   const apprenticeshipReunion=apprenticeshipReunionRead?.card;
   const readingOpportunity=highlightScene??selectReadingOpportunity([battlefieldAftermathRead,apprenticeshipReunionRead],directorScene);
   const afterFeaturedScene=storyDecisionPending?undefined:readingOpportunity;
-  if(cockpitOpen)return <PanoramicCockpitView world={visibleWorld} stageViewer={selectedCultivator} titleRef={cockpitHeading} exit={<div className="flex flex-wrap justify-end gap-2">{soundToggle}{cockpitSwitch}</div>} statusStrip={pulseStrip} stageOverride={featuredStoryCard} stageAfterOverride={afterFeaturedScene} highlightStage={highlight?.stage} subplot={guidance.subplot} branchScene={readingOpportunity??furnaceEmergency??bellWatch??vacantGate??nightDoor??lastRoster??boundaryGap??abandonedQuarter??pavilionFire??pilgrimageFork??battlefieldAftermath??apprenticeshipReunion??villageReunion??wildMigration??mercyReunion??farewellLanding??frontierGorge??schoolFormDuel??flightCard??passageScene??banquetStory??campaignAssembly??anomalyRelay}
+  const managerRevision=saveContextVersion.current;
+  const managerBlocked=isRunning||isStepping||fastForwardLocked||!!preview;
+  const managerIsCurrent=()=>!managerBlocked&&!stepInFlight.current&&!browsing.current&&!fastForwardRun.current&&!campaignGuard.current&&
+    authority.current===world&&history.current===timeline&&saveContextVersion.current===managerRevision;
+  const returnManager=()=>{
+    if(stepInFlight.current||fastForwardRun.current||campaignGuard.current)return;
+    if(browsing.current)clearPreview();
+    setIsRunning(false);setStoryEntryOpen(false);setCockpitOpen(false);setDashboardOpen(false);
+    setManagerView('opening');
+  };
+  const managerReturnButton=(initialMode==='sect'||world.sectManagement)&&<button type="button" disabled={isStepping||fastForwardLocked} onClick={returnManager}
+    className={`${action} bg-slate-800 text-amber-100`}>回掌门台</button>;
+  const startManagedSect=(starterId:StarterSectId,draw:StarterDraw):boolean=>{
+    if(managerView!=='opening'||world.sectManagement||!managerIsCurrent())return false;
+    const next=createManagedSectWorld(world.random.seed,world.worldgen?.profileId??'classic',starterId,draw);
+    if(!next||!managerIsCurrent()||!simulation.replaceWorld(next,world,managerRevision))return false;
+    managerHeading.current?.focus({preventScroll:true});
+    return true;
+  };
+  const openFromManager=(view:'story'|'cockpit'|'sandbox'|'saves')=>{
+    if(managerView!=='opening'||!managerIsCurrent())return;
+    if(view==='saves'){setManagerView('saves');return;}
+    setManagerView('closed');setStoryEntryOpen(false);
+    setCockpitOpen(view==='cockpit');
+    setDashboardOpen(view==='sandbox');
+    if(view==='sandbox')openWorkspace('map');
+  };
+  if(managerView==='opening')return <SectManagementHome world={world} titleRef={managerHeading} busy={managerBlocked}
+    onStart={startManagedSect} onOpen={openFromManager}/>;
+  if(managerView==='saves')return <main className="xianxia-shell min-h-dvh bg-slate-950 text-slate-100 px-4 py-3">
+    <div className="mx-auto max-w-3xl space-y-3">
+      <header className="flex items-center justify-between gap-2">
+        <h1 ref={managerSavesHeading} tabIndex={-1} className="font-serif text-xl text-amber-100">读档与存档</h1>
+        <button type="button" className={`${action} bg-slate-800 text-amber-100`} onClick={returnManager}>回掌门台</button>
+      </header>
+      <React.Suspense fallback={<p role="status">正在翻找存档…</p>}>
+        <WorldStoragePanel world={world} busy={managerBlocked} sourceBranch={simulation.sourceBranch} timeline={timeline}
+          contextVersion={managerRevision} canUseContext={simulation.canUseSaveContext}
+          canUseEraContext={(candidate,version)=>!fastForwardRun.current&&simulation.canUseSaveContext(candidate,version)}
+          onArchiveNarrative={simulation.archiveCurrentNarrative}
+          onRestore={(incoming,expected,revision,source)=>{
+            if(!managerIsCurrent()||!simulation.replaceWorld(incoming,expected,revision,source))return false;
+            setManagerView(incoming.sectManagement?'opening':'closed');
+            return true;
+          }}
+          onNewWorld={(seed,profile,expected,revision)=>{
+            if(!managerIsCurrent()||!simulation.newWorldFromSeed(seed,profile,expected,revision))return false;
+            setManagerView('closed');
+            return true;
+          }}/>
+      </React.Suspense>
+    </div>
+  </main>;
+  if(cockpitOpen)return <PanoramicCockpitView world={visibleWorld} stageViewer={selectedCultivator} titleRef={cockpitHeading} exit={<div className="flex flex-wrap justify-end gap-2">{soundToggle}{cockpitSwitch}{managerReturnButton}</div>} statusStrip={pulseStrip} stageOverride={featuredStoryCard} stageAfterOverride={afterFeaturedScene} highlightStage={highlight?.stage} subplot={guidance.subplot} branchScene={readingOpportunity??furnaceEmergency??bellWatch??vacantGate??nightDoor??lastRoster??boundaryGap??abandonedQuarter??pavilionFire??pilgrimageFork??battlefieldAftermath??apprenticeshipReunion??villageReunion??wildMigration??mercyReunion??farewellLanding??frontierGorge??schoolFormDuel??flightCard??passageScene??banquetStory??campaignAssembly??anomalyRelay}
     time={{historical:Boolean(preview),running:isRunning,busy:cockpitBusy||storyDecisionPending,onStep:()=>void handleStepTick(),
       onToggleAutoplay:toggleStoryAutoplay,onReturnLive:()=>handleTimelinePreview(null),onOpenTimeline:()=>{
         openWorkspace('chronicle');rememberFold('chronicle','timeline');setStoryEntryOpen(false);
@@ -754,7 +816,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   const nextGuide=guidanceActor?projectNextStoryGuidance(world,guidanceActor):undefined;
   if (storyHome) return <main data-story-home data-story-turn={storyHome.calendar.tick} className="xianxia-shell min-h-dvh bg-slate-950 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
     <div className="mx-auto flex max-w-[76rem] flex-wrap justify-end gap-2 px-4 empty:hidden">
-      {soundToggle}{cockpitSwitch}
+      {soundToggle}{cockpitSwitch}{managerReturnButton}
       {!storyEntryOpen&&<DesktopSandboxEntrance onOpen={openDashboard} disabled={isStepping||fastForwardLocked}/>}
     </div>
     {featuredStoryCard && afterFeaturedScene?<>{featuredStoryCard}
@@ -786,7 +848,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
               <p className="break-words text-xs text-slate-300">仙历 {visibleWorld.year}年{visibleWorld.month}月 · 在世 {aliveCount} · 已陨落 {visibleWorld.cultivators.length - aliveCount}</p>
             </div>
           </div>
-          {soundToggle}{cockpitSwitch}
+          {soundToggle}{cockpitSwitch}{managerReturnButton}
           <button type="button" disabled={isStepping || fastForwardLocked} onClick={backToStory}
             className={`${action} bg-slate-800 text-amber-100`}>回到故事</button>
           <div aria-label="推演控制" data-control-dock="repeat" className={`flex flex-wrap items-center gap-1.5 ${handedness === 'default' && workspace !== 'map' && !preview && !isRunning ? 'max-sm:hidden' : ''}`}>

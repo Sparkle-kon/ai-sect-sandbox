@@ -1,3 +1,4 @@
+import { sectManagementShape } from './sectManagementValidation';
 import { storytellerShape } from './storytellerSchema';
 import { optional, structure } from './primitives';
 import { worldRulesActors } from './worldRulesActors';
@@ -14,4 +15,5 @@ export const shape = structure({
   ...worldRulesFrontier,
   ...worldRulesAvatars,
   storyteller: optional(storytellerShape),
+  sectManagement: optional(sectManagementShape),
 });

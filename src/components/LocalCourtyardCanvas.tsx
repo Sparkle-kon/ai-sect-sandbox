@@ -5,14 +5,15 @@ import {hitLocalCourtyard,type LocalCourtyardPlan,type LocalCourtyardTarget} fro
 
 interface LocalCourtyardCanvasProps {
   plan:LocalCourtyardPlan;
-  onReturn:()=>void;
+  onReturn?:()=>void;
+  embedded?:boolean;
   /** Delegates to the same native map selection and focus, never moves the subject. */
   onFocusActor?:(id:string)=>boolean;
 }
 const pageSize=12;
 const button='min-h-11 min-w-0 rounded-md border border-amber-300/35 px-3 py-2 text-left text-sm text-amber-50 [overflow-wrap:anywhere] hover:bg-amber-950/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-200';
 
-export function LocalCourtyardCanvas({plan,onReturn,onFocusActor}:LocalCourtyardCanvasProps){
+export function LocalCourtyardCanvas({plan,onReturn,onFocusActor,embedded=false}:LocalCourtyardCanvasProps){
   const title=useId(),detail=useId();
   const heading=useRef<HTMLHeadingElement>(null),canvas=useRef<HTMLCanvasElement>(null);
   const [chosen,setChosen]=useState<LocalCourtyardTarget>();
@@ -39,9 +40,10 @@ export function LocalCourtyardCanvas({plan,onReturn,onFocusActor}:LocalCourtyard
   const lastPage=Math.max(0,Math.ceil(rows.length/pageSize)-1),visiblePage=Math.min(page,lastPage);
 
   useEffect(()=>{
+    if(embedded)return;
     heading.current?.focus({preventScroll:true});
     heading.current?.scrollIntoView?.({block:'nearest'});
-  },[]);
+  },[embedded]);
   useEffect(()=>{
     if(!selected&&chosen)setChosen(undefined);
   },[chosen,selected]);
@@ -106,21 +108,21 @@ export function LocalCourtyardCanvas({plan,onReturn,onFocusActor}:LocalCourtyard
   return <section aria-labelledby={title} data-local-courtyard=""
     className="min-w-0 space-y-3 bg-stone-950/80 px-3 py-3 sm:px-4"
     onKeyDown={event=>{
-      if(event.key!=='Escape'||event.nativeEvent.isComposing)return;
+      if(embedded||!onReturn||event.key!=='Escape'||event.nativeEvent.isComposing)return;
       event.preventDefault();event.stopPropagation();onReturn();
     }}>
     <header className="flex flex-wrap items-center justify-between gap-2">
       <div className="min-w-0">
-        <p className="text-xs text-amber-200">本地图景</p>
+        {!embedded&&<p className="text-xs text-amber-200">本地图景</p>}
         <h3 id={title} ref={heading} tabIndex={-1} className="font-serif text-xl font-semibold text-amber-50 [overflow-wrap:anywhere]">{plan.siteName}</h3>
       </div>
-      <button type="button" className={button} onClick={onReturn}>返回九州山河全图</button>
+      {!embedded&&onReturn&&<button type="button" className={button} onClick={onReturn}>返回九州山河全图</button>}
     </header>
-    <p className="text-xs text-stone-300">人物与设施按眼下可见绘出。水景与庭院布局为示意，不改变山河行程。</p>
-    {plan.population!==undefined&&<p className="text-xs text-stone-300">聚落登记 {plan.population} 人；图中只列实见可辨的人。</p>}
+    {!embedded&&<p className="text-xs text-stone-300">人物与设施按眼下可见绘出。水景与庭院布局为示意，不改变山河行程。</p>}
+    {!embedded&&plan.population!==undefined&&<p className="text-xs text-stone-300">聚落登记 {plan.population} 人；图中只列实见可辨的人。</p>}
     <canvas ref={canvas} width={plan.width} height={plan.height} aria-hidden="true"
       className="aspect-[8/5] w-full select-none rounded-lg bg-stone-900"
-      onClick={event=>{
+      onClick={embedded?undefined:event=>{
         const rect=event.currentTarget.getBoundingClientRect();
         if(rect.width<=0||rect.height<=0)return;
         const target=hitLocalCourtyard(plan,{
@@ -131,12 +133,12 @@ export function LocalCourtyardCanvas({plan,onReturn,onFocusActor}:LocalCourtyard
         if(index<0)return;
         setChosen(target);setPage(Math.floor(index/pageSize));
       }}/>
-    {selected&&<section id={detail} aria-label="庭院图中所选" className="space-y-1 rounded-md border border-amber-300/25 p-2 text-sm text-stone-200">
+    {!embedded&&selected&&<section id={detail} aria-label="庭院图中所选" className="space-y-1 rounded-md border border-amber-300/25 p-2 text-sm text-stone-200">
       <div aria-live="polite"><p className="font-semibold text-amber-50">{selected.label}</p><p>{selected.detail}{selected.distinction&&` · ${selected.distinction}`}</p></div>
       {selected.kind==='actor'&&onFocusActor&&
         <button type="button" className={button} onClick={()=>onFocusActor(selected.id)}>聚焦此人</button>}
     </section>}
-    {!!rows.length&&<div className="space-y-1.5">
+    {!embedded&&!!rows.length&&<div className="space-y-1.5">
       <p className="text-xs text-amber-100">庭院人物与设施</p>
       <ul aria-label="庭院人物与设施" className="grid min-w-0 grid-cols-2 gap-1.5 sm:grid-cols-3">
         {rows.slice(visiblePage*pageSize,(visiblePage+1)*pageSize).map(row=>{
