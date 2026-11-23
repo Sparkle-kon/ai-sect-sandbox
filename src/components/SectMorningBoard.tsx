@@ -1,3 +1,4 @@
+import type {SectReactionCue} from '../types/sectReaction';
 import {useEffect,useMemo,useRef,useState,type DragEvent,type ReactNode} from 'react';
 import {SECT_JOB_DEFINITIONS,eligibleSectDisciples,planSectJob} from '../engine/sectJobs';
 import type {SectJobAssignment,SectJobObservation} from '../types/sectJobs';
@@ -47,8 +48,8 @@ function PlanningSprite({walk}:{walk:Walk}){
   return <canvas ref={marker} aria-hidden="true" width="40" height="40" className="pointer-events-none absolute bottom-0 right-0 z-20 h-9 w-9"/>;
 }
 
-export function SectMorningBoard({world,busy,plan,moving,onConfirmJobs,buildings,observations}:{
-  world:WorldState;busy:boolean;plan?:LocalCourtyardPlan;moving?:ReadonlySet<string>;onConfirmJobs:ConfirmSectJobs;buildings:ReactNode;observations?:readonly SectJobObservation[];
+export function SectMorningBoard({world,busy,plan,moving,onConfirmJobs,buildings,observations,reaction}:{
+  world:WorldState;busy:boolean;plan?:LocalCourtyardPlan;moving?:ReadonlySet<string>;onConfirmJobs:ConfirmSectJobs;buildings:ReactNode;observations?:readonly SectJobObservation[];reaction?:SectReactionCue;
 }){
   const members=useMemo(()=>eligibleSectDisciples(world),[world]);
   const sprites=useMemo(()=>new Map(plan?.actors.map(row=>[row.id,row])),[plan]);
@@ -163,7 +164,7 @@ export function SectMorningBoard({world,busy,plan,moving,onConfirmJobs,buildings
 
   return <div data-sect-morning="" className="grid min-w-0 items-start gap-3 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
     <section className={card} aria-label="宗门庭院">
-      {plan?<LocalCourtyardCanvas plan={plan} embedded renderActor={person=>{
+      {plan?<LocalCourtyardCanvas plan={plan} embedded reaction={reaction} renderActor={person=>{
         const member=memberById.get(person.id);return member?chip(member,true):null;
       }}/>:<p className="text-sm text-slate-300">此刻未见山门内的景象。</p>}
       {inside.length>0&&<ul className="mb-2 flex flex-wrap gap-1.5 lg:hidden" aria-label="庭院弟子">

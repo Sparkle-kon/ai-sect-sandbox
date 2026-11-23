@@ -1,3 +1,5 @@
+import {SectReactionGlyph,useSectReactionShake} from './SectReactionGlyph';
+import type {SectReactionCue} from '../types/sectReaction';
 import {SectQuirkBadges} from './SectQuirkBadges';
 import {drawSeasonalAtmosphere} from './seasonalAtmosphereRenderer';
 import {useEffect,useId,useMemo,useRef,useState,type ReactNode} from 'react';
@@ -9,15 +11,22 @@ interface LocalCourtyardCanvasProps {
   onReturn?:()=>void;
   embedded?:boolean;
   renderActor?:(actor:LocalCourtyardActor)=>ReactNode;
+  reaction?:SectReactionCue;
   /** Delegates to the same native map selection and focus, never moves the subject. */
   onFocusActor?:(id:string)=>boolean;
 }
 const pageSize=12;
 const button='min-h-11 min-w-0 rounded-md border border-amber-300/35 px-3 py-2 text-left text-sm text-amber-50 [overflow-wrap:anywhere] hover:bg-amber-950/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-200';
 
-export function LocalCourtyardCanvas({plan,onReturn,onFocusActor,embedded=false,renderActor}:LocalCourtyardCanvasProps){
+export function LocalCourtyardCanvas({plan,onReturn,onFocusActor,embedded=false,renderActor,reaction}:LocalCourtyardCanvasProps){
   const title=useId(),detail=useId();
   const heading=useRef<HTMLHeadingElement>(null),canvas=useRef<HTMLCanvasElement>(null);
+  const scenery=useRef<HTMLDivElement>(null);
+  const anchors=embedded&&reaction&&plan.atmosphere?.tick===reaction.tick&&!plan.atmosphere.historical&&reaction.siteId===plan.siteId?
+    plan.actors.filter(actor=>actor.id===reaction.actorId):[];
+  const actorWithReaction=anchors.length===1?anchors[0]:undefined;
+  const visibleReaction=actorWithReaction?reaction:undefined;
+  useSectReactionShake(scenery,visibleReaction);
   const [chosen,setChosen]=useState<LocalCourtyardTarget>();
   const [page,setPage]=useState(0);
   const rows=useMemo(()=>{
@@ -122,7 +131,7 @@ export function LocalCourtyardCanvas({plan,onReturn,onFocusActor,embedded=false,
     </header>
     {!embedded&&<p className="text-xs text-stone-300">人物与设施按眼下可见绘出。水景与庭院布局为示意，不改变山河行程。</p>}
     {!embedded&&plan.population!==undefined&&<p className="text-xs text-stone-300">聚落登记 {plan.population} 人；图中只列实见可辨的人。</p>}
-    <div className="relative">
+    <div ref={scenery} className="relative">
     <canvas ref={canvas} width={plan.width} height={plan.height} aria-hidden="true"
       className="aspect-[8/5] w-full select-none rounded-lg bg-stone-900"
       onClick={embedded?undefined:event=>{
@@ -138,6 +147,11 @@ export function LocalCourtyardCanvas({plan,onReturn,onFocusActor,embedded=false,
       }}/>
     {embedded&&renderActor&&plan.actors.map(actor=><div key={actor.id} className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2"
       style={{left:`${actor.x/plan.width*100}%`,top:`${actor.y/plan.height*100}%`}}>{renderActor(actor)}</div>)}
+    {visibleReaction&&actorWithReaction&&<div key={visibleReaction.id} aria-hidden="true" data-courtyard-reaction={visibleReaction.kind}
+      className="pointer-events-none absolute z-10 h-8 w-8 -translate-x-1/2 -translate-y-full"
+      style={{left:`${actorWithReaction.x/plan.width*100}%`,top:`${Math.max(25,actorWithReaction.y-12)/plan.height*100}%`}}>
+      <SectReactionGlyph kind={visibleReaction.kind} className="h-full w-full"/>
+    </div>}
     </div>
     {!embedded&&selected&&<section id={detail} aria-label="庭院图中所选" className="space-y-1 rounded-md border border-amber-300/25 p-2 text-sm text-stone-200">
       <div aria-live="polite"><p className="font-semibold text-amber-50">{selected.label}</p><p>{selected.detail}{selected.distinction&&` · ${selected.distinction}`}</p></div>

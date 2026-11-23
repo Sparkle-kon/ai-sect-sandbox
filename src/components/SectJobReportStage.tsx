@@ -1,4 +1,7 @@
 import {useEffect,useId,useMemo,useRef,useState} from 'react';
+import {projectSectReportReaction} from '../engine/sectReaction';
+import type {SectReactionCue} from '../types/sectReaction';
+import {SectReactionGlyph,useSectReactionShake} from './SectReactionGlyph';
 import {SECT_JOB_DEFINITIONS} from '../engine/sectJobs';
 import type {SectJobReport} from '../types/sectJobs';
 import type {WorldState} from '../types/world';
@@ -9,17 +12,24 @@ import {reportEffectLine,reportExpression,reportTier,reportVoice} from './sectJo
 
 const control='min-h-11 min-w-0 rounded-md border border-amber-300/45 px-3 py-1.5 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300';
 
-export function SectJobReportStage({world,report,present,comic,onDismiss}:{
-  world:WorldState;report:SectJobReport;present?:ReadonlySet<string>;comic?:SectComicView;onDismiss:(report:SectJobReport)=>void;
+export function SectJobReportStage({world,report,present,comic,onDismiss,onReaction}:{
+  world:WorldState;report:SectJobReport;present?:ReadonlySet<string>;comic?:SectComicView;onDismiss:(report:SectJobReport)=>void;onReaction?:(cue:SectReactionCue|undefined)=>void;
 }){
   const title=useId();
   const heading=useRef<HTMLHeadingElement>(null),scene=useRef<HTMLElement>(null);
+  const visual=useRef<HTMLDivElement>(null);
   const [cursor,setCursor]=useState<{report:SectJobReport;index:number}>();
   const progress=useRef<{report:SectJobReport;index:number;done?:true}>();
   const index=cursor?.report===report?cursor.index:0;
   const comicRow=associatedComicRow(comic,report);
   const rows=useMemo(()=>[...report.rows].sort((a,b)=>reportTier(a).order-reportTier(b).order),[report]);
   const row=rows[index];
+  const reaction=useMemo(()=>row?projectSectReportReaction(world,report,row):undefined,[world,report,row]);
+  useSectReactionShake(visual,reaction);
+  useEffect(()=>{
+    onReaction?.(reaction);
+    return ()=>onReaction?.(undefined);
+  },[onReaction,reaction]);
 
   useEffect(()=>{
     const element=scene.current,titleNode=heading.current;
@@ -58,8 +68,13 @@ export function SectJobReportStage({world,report,present,comic,onDismiss}:{
     </header>
     <article ref={scene} className="min-w-0 space-y-3 rounded-lg bg-amber-950/20 p-2.5">
       <div className="flex min-w-0 items-center gap-3">
-        {portrait&&<CultivatorPortrait portrait={{...portrait,expression:reportExpression(row)}}
-          className="h-[4.5rem] w-16 sm:h-[6.5rem] sm:w-[5.75rem]" presentation="stage"/>}
+        {portrait&&<div ref={visual} className="relative shrink-0" data-sect-report-art="">
+          <CultivatorPortrait portrait={{...portrait,expression:reportExpression(row)}}
+            className="h-[4.5rem] w-16 sm:h-[6.5rem] sm:w-[5.75rem]" presentation="stage"/>
+          {reaction&&<SectReactionGlyph key={reaction.id} kind={reaction.kind} className={reaction.kind==='sparkle'
+            ?'absolute left-1/2 top-[29%] h-8 w-9 -translate-x-1/2 sm:h-11 sm:w-12'
+            :'absolute -right-2 -top-2 h-9 w-9 sm:h-11 sm:w-11'}/>}
+        </div>}
         <div className="min-w-0">
           <h3 ref={heading} tabIndex={-1} className="font-serif text-lg font-semibold text-amber-50">{name}</h3>
           <p className="text-sm text-stone-200">{SECT_JOB_DEFINITIONS[row.jobId].label} · <strong className={tier.ink}>{tier.label}</strong></p>

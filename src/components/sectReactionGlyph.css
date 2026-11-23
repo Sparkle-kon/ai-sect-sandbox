@@ -1,0 +1,30 @@
+@keyframes sect-reaction-mark-reveal {
+  0% { opacity: .3; transform: translateY(3px) scale(.82); }
+  56% { opacity: 1; transform: translateY(-1px) scale(1.05); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes sect-reaction-mark-rise {
+  0% { opacity: .45; transform: translateY(3px); }
+  58% { opacity: 1; transform: translateY(-2px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+.sect-reaction-mark {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .sect-reaction-mark {
+    animation: sect-reaction-mark-reveal .38s ease-out both;
+  }
+
+  [data-sect-reaction-glyph="hurt"] .sect-reaction-mark { animation: none; }
+
+  [data-sect-reaction-glyph="smoke"] .sect-reaction-mark,
+  [data-sect-reaction-glyph="soul"] .sect-reaction-mark {
+    animation-name: sect-reaction-mark-rise;
+    animation-duration: .46s;
+  }
+}

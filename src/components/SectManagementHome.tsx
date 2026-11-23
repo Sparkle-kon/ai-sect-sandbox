@@ -1,4 +1,6 @@
-import {lazy,Suspense,useId,useMemo,useRef,useState,type RefObject} from 'react';
+import {projectSectFurnaceReaction} from '../engine/sectReaction';
+import type {SectReactionCue} from '../types/sectReaction';
+import {lazy,Suspense,useCallback,useId,useMemo,useRef,useState,type RefObject} from 'react';
 import {projectSectRecurring} from '../engine/sectRecurring';
 import {projectSectComicMoment} from '../engine/sectComedy';
 import {associatedComicRow,SectComicAside} from './SectComicRead';
@@ -140,6 +142,11 @@ function ManagedCourtyard({world,busy,onTick,onConfirmJobs,observations,report,o
   },[world,siteId]);
   const plan=courtyard?.plan;
   const [dismissedReport,setDismissedReport]=useState<SectJobReport>();
+  const [reactionRead,setReactionRead]=useState<{report:SectJobReport;cue:SectReactionCue}>();
+  const furnaceReaction=useMemo(()=>projectSectFurnaceReaction(world),[world]);
+  const showReaction=useCallback((cue:SectReactionCue|undefined)=>{
+    setReactionRead(previous=>cue&&report?{report,cue}:previous?.report===report?undefined:previous);
+  },[report]);
   const visits=useMemo(()=>projectSectRecurring(world),[world]);
   const comic=useMemo(()=>projectSectComicMoment(world),[world]);
   const comicSpeaker=comic?world.cultivators.filter(actor=>actor.id===comic.speakerId):[];
@@ -148,6 +155,7 @@ function ManagedCourtyard({world,busy,onTick,onConfirmJobs,observations,report,o
   const presentIds=useMemo(()=>new Set(plan?.actors.map(actor=>actor.id)),[plan]);
   const reportIsCurrent=report!==undefined&&report===state?.latestReport&&report!==dismissedReport&&report.rows.length>0&&
     report.settledTick===world.tick&&report.sectId===state.sectId&&report.leaderId===state.leaderId;
+  const courtReaction=reportIsCurrent?(reactionRead?.report===report?reactionRead?.cue:undefined):furnaceReaction;
   if(!state||!sect)return null;
   const roster=world.cultivators.filter(row=>row.alive&&row.id!==state.leaderId&&row.sectId===state.sectId);
   const buildings=growth?<SectBuildingUpgrades view={growth} busy={busy} command={command}/>:<BuildingList levels={state.buildings}/>;
@@ -158,22 +166,22 @@ function ManagedCourtyard({world,busy,onTick,onConfirmJobs,observations,report,o
     {(asideComic||visits.length>0)&&<SectComicAside key={world.tick} world={world} comic={asideComic} speaks={canSpeakComic} visits={visits}/>}
     {reportIsCurrent?<div className="grid min-w-0 items-start gap-3 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
       <section className={card} aria-label="宗门庭院">
-        {plan?<LocalCourtyardCanvas plan={plan} embedded/>:<p className="text-sm text-slate-300">此刻未见山门内的景象。</p>}
+        {plan?<LocalCourtyardCanvas plan={plan} embedded reaction={courtReaction}/>:<p className="text-sm text-slate-300">此刻未见山门内的景象。</p>}
         {buildings}
       </section>
       <Suspense fallback={<p role="status" className="order-first text-sm text-slate-300 lg:order-none">弟子们正在整理回话…</p>}>
-        <SectJobReportStage world={world} report={report} present={presentIds} comic={currentComic} onDismiss={closing=>{
+        <SectJobReportStage world={world} report={report} present={presentIds} comic={currentComic} onReaction={showReaction} onDismiss={closing=>{
           if(closing!==report)return;
           setDismissedReport(closing);onDismissReport?.(closing);
         }}/>
       </Suspense>
     </div>:onConfirmJobs?<Suspense fallback={<p role="status" className="text-sm text-slate-300">正在摆放晨会差事牌…</p>}>
       <SectMorningBoard world={world} busy={busy} plan={plan} moving={courtyard?.moving} onConfirmJobs={onConfirmJobs} observations={observations}
-        buildings={buildings}/>
+        buildings={buildings} reaction={courtReaction}/>
     </Suspense>:<>
     <div className="grid min-w-0 items-start gap-3 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
       <section className={card} aria-label="宗门庭院">
-        {plan?<LocalCourtyardCanvas plan={plan} embedded/>:<p className="text-sm text-slate-300">此刻未见山门内的景象。</p>}
+        {plan?<LocalCourtyardCanvas plan={plan} embedded reaction={courtReaction}/>:<p className="text-sm text-slate-300">此刻未见山门内的景象。</p>}
         {buildings}
       </section>
       <section className={card} aria-label="宗门弟子">
