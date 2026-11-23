@@ -1,3 +1,4 @@
+import {formatAnomalyRelayMark,visibleAnomalyRelayMarks} from './anomalyRelayMapView';
 import {projectLocalAlignedWeather} from '../engine/alignedWeatherEngine';
 import {projectLocalCareFollowupCapacity} from '../engine/careFollowupEngine';
 import {projectLocalCivicMemorialCount} from '../engine/civicMemorialEngine';
@@ -34,6 +35,8 @@ export function projectMapEntitySiteDetails(world:WorldState,view:TerrainView,si
 
   const weather=localQiWeather(world,site);
   add('天象',weather.kind==='平息'?'灵气平息':`${weather.kind} · 强度 ${Math.round(weather.intensity*100)}%`);
+  const relay=visibleAnomalyRelayMarks(world,view,viewer).get(site.id);
+  if(relay)add('兽潮获讯',formatAnomalyRelayMark(relay));
   if(site.inheritanceScrolls.length>0)add('遗卷',`此地存 ${site.inheritanceScrolls.length} 卷`);
   const guards=residents.filter(actor=>isGuardOnDuty(actor,world)).length;
   if(guards>0)add('驻守',`正在值守 ${guards} 人`);

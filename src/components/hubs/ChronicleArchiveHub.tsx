@@ -1,3 +1,4 @@
+import {useAnomalyRelayRead} from '../useAnomalyRelayRead';
 import {TianjiGazetteLauncher} from '../TianjiGazetteLauncher';
 import {lazy,Suspense,type ComponentProps} from 'react';
 import {HallOfImmortalsLauncher} from '../HallOfImmortalsLauncher';
@@ -78,6 +79,7 @@ function PendingCampaign({simulation}:{simulation:Simulation}){
 
 export function ChronicleArchiveHub({simulation,selectedCultivator,active,initialOpen='feed',rememberedOpen,forcedOpen,onOpenChange,
   feed,personal,scopedSupplyLinks,writeAnnotation,writeWatchlist,eraEntry,campaignStopOptions,campaignSelectedStop}:ChronicleArchiveHubProps){
+  const anomalyRelay=useAnomalyRelayRead(simulation.visibleWorld,selectedCultivator,active);
   if(!active)return null;
   const {world,visibleWorld,timeline,preview,viewScopeKey,viewEpoch,isStepping,isRunning,fastForwardLocked,campaign,campaignPhase,
     fastForwardView,startFastForward,stopFastForward,commandFastForward,applyFastForward,saveContextVersion,handleTimelinePreview,
@@ -110,6 +112,7 @@ export function ChronicleArchiveHub({simulation,selectedCultivator,active,initia
     forcedOpen={forced} onOpenChange={onOpenChange} groups={groups} sections={[
       {id:'feed',label:'山河见闻',content:<Suspense fallback={<p role="status">载入山河见闻…</p>}>
         <AuthoredEraChronicle world={visibleWorld} visible={feed.events}/>
+        {!isReturning&&!personal?.active&&anomalyRelay}
         {!isReturning&&!personal?.active&&!personal?.story&&<TianjiGazetteLauncher world={visibleWorld} viewer={selectedCultivator}
           scopeKey={`${viewScopeKey}:${actorId??''}`} historical={!!preview}/>}
         {!isReturning&&scopedSupplyLinks.length>0&&<CrossRegionConsequenceRead key={viewScopeKey} consequences={scopedSupplyLinks}

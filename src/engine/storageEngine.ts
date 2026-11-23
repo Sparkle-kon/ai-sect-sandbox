@@ -1,3 +1,4 @@
+import {validateAnomalyRelaySave} from './anomalyRelay';
 import {validateVacantGateSave} from './vacantGate';
 import {validateWildMigrationSave} from './wildMigration';
 import {validateFarewellLandingSave} from './farewellLanding';
@@ -677,6 +678,13 @@ const shape = structure({
   forbiddenDuels:optional(arr(SAVE_COLLECTION_LIMIT,forbiddenContact)),
   beastDuelContacts:optional(arr(SAVE_COLLECTION_LIMIT,beastDuelContact)),
   schoolFormDuels:optional(arr(SAVE_COLLECTION_LIMIT,schoolFormDuel)),
+  anomalyRelays:optional(structure({
+    origins:arr(SAVE_COLLECTION_LIMIT,structure({eventId:id,hazardId:id,beastId:id,siteId:id,tileId:id,tick})),
+    receipts:arr(SAVE_COLLECTION_LIMIT,structure({
+      eventId:id,actorId:id,siteId:id,tick,channel:one('witness','conversation','flying_sword'),
+      confidence:num(25,100,true),hops:num(0,4,true),originalWitnessId:id,senderId:oid,senderSiteId:oid,
+    })),
+  })),
   vacantGate:optional(structure({records:arr(SAVE_COLLECTION_LIMIT,structure({
     siegeId:id,siteId:id,lostActorId:id,lostRole:one('leader','ward_keeper'),lossTick:tick,lossEventId:id,roundTick:tick,
     roundEventId:id,actorId:id,move:one('guard','withdraw'),paidQi:one(0,8),wallSaved:optional(num(1,128,true)),destinationId:oid,
@@ -1812,6 +1820,7 @@ function verifyWorld(value: unknown): WorldState {
   validateFarewellLandingSave(w,fail);
   validateWildMigrationSave(w,fail);
   validateVacantGateSave(w,fail);
+  validateAnomalyRelaySave(w,fail);
   validateGrandSiegeHistory(w,fail);
   const ordinaryTrace = new Map(w.decisionTrace.records.map(row=>[row.id,row]));
   for(const person of w.cultivators){

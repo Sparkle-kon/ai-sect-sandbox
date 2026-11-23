@@ -1,3 +1,4 @@
+import {drawAnomalyRelaySeal,formatAnomalyRelayMark,visibleAnomalyRelayMarks} from './anomalyRelayMapView';
 import {buildSchoolFormMapStrokes,drawSchoolFormMapStrokes} from './schoolFormMapStroke';
 import {buildCalamityMapFlows,calamityFlowSummary,drawCalamityMapFlows} from './calamityArrayMapFlow';
 import { drawSiegeFormationVfx, SIEGE_FORMATION_LIFETIME_MS } from './siegeFormationVfxDraw';
@@ -429,6 +430,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const escortedCaravan = useMemo(() => visibleMapEscort(world, mapView, selected), [world, mapView, selected]);
   const hazards = useMemo(() => getVisibleHazards(world, mapView), [world, mapView]);
   const beastsByLocation = useMemo(() => visibleBeastsByLocation(world,mapView,selected),[world,mapView,selected]);
+  const anomalyRelayMarks=useMemo(()=>visibleAnomalyRelayMarks(world,mapView,selected),[world,mapView,selected]);
   const wildMigrants=useMemo(()=>currentVisibleWildMigrants(world,beastsByLocation),[world,beastsByLocation]);
   const armedBrush = toolsExpanded && !fog && onBrushStroke && brush !== 'browse' ? brush : undefined;
   const gestureScope = `${clusterScope}|${selectedCultivatorId ?? ''}|${world.tick}|${world.interventionSequence}|${onBrushStroke ? 'live' : 'read'}`;
@@ -750,6 +752,10 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           ctx.beginPath();ctx.moveTo(location.x,location.y);ctx.lineTo(pin.x,pin.y);ctx.stroke();ctx.restore();
         }
         drawMapLandmarkGlyph(ctx,loc,ownerColor);
+        if(anomalyRelayMarks.has(loc.id)){
+          const d=logicalPerCssPixel;
+          drawAnomalyRelaySeal(ctx,loc.x-19*d,loc.y-13*d,d);
+        }
         wildMigrants.get(loc.id)?.forEach((beast,index)=>{
           const offset=logicalPerCssPixel;
           drawWildMigrantGlyph(ctx,loc.x-13*offset,loc.y+(9+index*10)*offset,beast.kind,offset);
@@ -955,7 +961,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener?.('change',stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, atlasDrawing, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, civicObservation, usedVillageSegments, annotationView, annotationPins, armedBrush, preview, compact, clusterScope, scenicRelief, qiFlow, inspectionEnabled, letters, travel, flightMap, canvasFlights, combatVfx, actorBadgeFacts, hasBadgeQuote, domes, strategic, arenaMarks, dungeonMark, alchemyMarks, daoMarks, auctionMark, realmHalos, clanCeremonies, ascensionMarks, formationFrames, calamityFlows, schoolStrokes, historical]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, atlasDrawing, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, civicObservation, usedVillageSegments, annotationView, annotationPins, armedBrush, preview, compact, clusterScope, scenicRelief, qiFlow, inspectionEnabled, letters, travel, flightMap, canvasFlights, combatVfx, actorBadgeFacts, hasBadgeQuote, domes, strategic, arenaMarks, dungeonMark, alchemyMarks, daoMarks, auctionMark, realmHalos, clanCeremonies, ascensionMarks, formationFrames, calamityFlows, schoolStrokes, anomalyRelayMarks, historical]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1549,6 +1555,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
             const localVillage = civicObservation?.locationId === location.id ? civicObservation : undefined;
             const localWeather = weatherAtVisibleSites.get(location.id);
             const localBeasts = beastsByLocation.get(location.id) ?? [];
+            const relayMark=anomalyRelayMarks.get(location.id);
             const habitatView = localHabitat.get(location.id);
             const leaseMark = localLeaseSites.get(location.id);
             const assessed = scenarioSiteProofs.get(location.id);
@@ -1565,6 +1572,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                 {fog && (visibleActorsAtSite.get(location.id) ?? 0) > 0 &&
                   <span className="text-slate-300">· 可见修士 {visibleActorsAtSite.get(location.id)} 位（山河索引可查）</span>}
                 {ascensionMarks.some(mark=>mark.kind==='gate'&&mark.siteId===location.id)&&<span className="text-amber-200">· 仙门接引已实成</span>}
+                {relayMark&&<span className="text-amber-200">· 兽潮获讯 · {formatAnomalyRelayMark(relayMark)}</span>}
                 {clanCeremonies.has(location.id)&&<span className="text-amber-200">· 本月实有结契大典</span>}
                 {auctionMark?.siteId===location.id&&<span className="text-amber-200">· 万宝会 · 实有拍品 {auctionMark.count} 件</span>}
                 {daoMarks.filter(mark=>mark.siteId===location.id).map((mark,index)=><span key={index} className="text-cyan-200">· 本月实见{DAO_PATHS[mark.pathId].name}招式</span>)}

@@ -1,3 +1,4 @@
+import {stampAnomalyTide} from './anomalyRelay';
 import {recordWildMigration} from './wildMigrationStamp';
 import { courierCheckpoint } from './sealedCourierEngine';
 import { habitatCanReceiveWildBeast, isRewildingAcclimating } from './habitatEngine';
@@ -99,7 +100,9 @@ function ensureTide(world: WorldState, beast: SpiritBeast, place: LocationNode):
   if (!tile || world.mapHazards.some((hazard) => hazard.kind === 'beast_tide' && hazard.tileId === tile.id && hazard.expiresTick > world.tick)) return undefined;
   world.mapHazards.push({ id: `natural-beast-tide-${world.tick}-${beast.id}`, kind: 'beast_tide', tileId: tile.id,
     createdTick: world.tick, expiresTick: world.tick + 4, intensity: 1 });
-  return event(world, `tide-${beast.id}`, '凶兽引动兽潮', `${beast.name}长啸，${place.name}附近即将爆发短暂兽潮。`, [], place.id);
+  const source=event(world, `tide-${beast.id}`, '凶兽引动兽潮', `${beast.name}长啸，${place.name}附近即将爆发短暂兽潮。`, [], place.id);
+  stampAnomalyTide(world,source,beast.id,place,tile.id);
+  return source;
 }
 
 export function advanceSpiritBeasts(world: WorldState, rng: () => number): WorldEvent[] {

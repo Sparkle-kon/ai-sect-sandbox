@@ -1,3 +1,4 @@
+import {stampAnomalyRelay,stampAnomalyWitness} from './anomalyRelay';
 import {sealedHeartDemonEventId} from './heartDemonPrivacy';
 import { IMMORTAL_AUCTION_SITE } from './immortalAuctionTerms';
 import { daoPathEventId } from './daoPathTerms';
@@ -17,12 +18,14 @@ function byValue(a: Rumor, b: Rumor): number {
   return b.confidence - a.confidence || b.originTick - a.originTick || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 }
 
-function learn(cultivator: Cultivator, rumor: Rumor, tick: number): void {
+function learn(cultivator: Cultivator, rumor: Rumor, tick: number): boolean {
   const active = cultivator.rumors.filter((item) => tick - item.originTick <= RUMOR_LIFETIME);
   const known = active.find((item) => item.id === rumor.id);
   if (!known || known.confidence < rumor.confidence) {
     cultivator.rumors = [...active.filter((item) => item.id !== rumor.id), rumor].sort(byValue).slice(0, RUMOR_LIMIT);
+    return cultivator.rumors.includes(rumor);
   }
+  return false;
 }
 
 export function witnessEvent(world: WorldState, event: WorldEvent): void {
@@ -48,13 +51,14 @@ export function witnessEvent(world: WorldState, event: WorldEvent): void {
     if (!onLowerPlane(actor)) continue;
     const present = event.locationId !== undefined && actor.locationId === event.locationId && !courierCheckpoint(world, actor);
     if (actor.alive && (involved.has(actor.id) || (present && event.witnessScope !== 'participants'))) {
-      learn(actor, {
+      const packet:Rumor={
         id: `rumor-${event.id}`, subject: event.title, locationId: event.locationId,
         originTick: event.tick, learnedTick: event.tick, provenance: 'witness',
         confidence: 100, hops: 0, originEventId: event.id, originSourceCultivatorId: actor.id,
         witnessScope: event.witnessScope,
         lead: event.id.includes('-explore') || event.id.startsWith('evt-god-treasure-'),
-      }, world.tick);
+      };
+      if(learn(actor,packet,world.tick))stampAnomalyWitness(world,actor,event,packet);
     }
   }
 }
@@ -96,6 +100,7 @@ export function spreadRumors(world: WorldState): void {
   for (const listener of live) {
     const seen = new Map(listener.rumors.map((item) => [item.id, item.confidence]));
     let best: Rumor | undefined;
+    let source: {actor:Cultivator;packet:Rumor} | undefined;
     for (const sender of live) {
       if (sender.id === listener.id) continue;
       const conversation = sender.locationId === listener.locationId;
@@ -110,10 +115,11 @@ export function spreadRumors(world: WorldState): void {
             (item.originTick < best.originTick || (item.originTick === best.originTick && item.id >= best.id))) continue;
         best = { ...item, confidence, learnedTick: world.tick, hops: item.hops + 1,
           provenance: conversation ? 'conversation' : 'flying_sword', sourceCultivatorId: sender.id };
+        source={actor:sender,packet:item};
       }
     }
     if (best) {
-      learn(listener, best, world.tick);
+      if(learn(listener,best,world.tick)&&source)stampAnomalyRelay(world,listener,best,source.actor,source.packet);
       captureHeritageRelay(world, listener, best);
     }
   }

@@ -1,3 +1,4 @@
+import type {AnomalyRelayState} from './anomalyRelay';
 import type {VacantGateMove,VacantGateState} from './vacantGate';
 import type { WildMigrationMove, WildMigrationState } from './wildMigration';
 import type { FarewellLandingMove, FarewellLandingState } from './farewellLanding';
@@ -3686,6 +3687,7 @@ export interface WorldState {
   farewellLandings?: FarewellLandingState;
   wildMigrations?: WildMigrationState;
   vacantGate?: VacantGateState;
+  anomalyRelays?: AnomalyRelayState;
   scribeCommissions?: ScribeCommissionState;
   waypostMeals?: WaypostMealState;
   disasterShelter?: DisasterShelterState;
