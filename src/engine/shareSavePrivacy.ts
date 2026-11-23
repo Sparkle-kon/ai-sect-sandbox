@@ -1,3 +1,4 @@
+import type { SectChatState } from '../types/sectChat';
 import type { DialogueExchange,WorldState } from '../types/world';
 import { decodeWorldSave,encodeWorldSave,WORLD_SAVE_MAX_BYTES,worldSaveByteCount } from './storageEngine';
 
@@ -14,6 +15,7 @@ export interface ShareSavePrivacyCounts {
   readonly whisperMemoryFields:number;
   readonly participantEventFields:number;
   readonly privateBellWatches:number;
+  readonly privateSectChatPosts:number;
   readonly eventDialogueBlocks:number;
   readonly archiveDialogueBlocks:number;
   readonly chapterProseFields:number;
@@ -62,6 +64,8 @@ function countsFor(world:WorldState):ShareSavePrivacyCounts{
       .filter(memory=>memory.category==='whisper').map(memory=>memory.content)),0),
     participantEventFields:world.events.reduce((sum,row)=>sum+(row.witnessScope==='participants'?presentCount([row.title,row.description]):0),0),
     privateBellWatches:world.locations.filter(site=>site.bellWatch!==undefined).length,
+    privateSectChatPosts:world.sectManagement?.chat?.months.reduce((total,month)=>total+
+      month.posts.filter(row=>row.roomId==='own'||row.roomId==='leaders').length,0)??0,
     eventDialogueBlocks:dialogueCount(world.events),
     archiveDialogueBlocks:dialogueCount(world.chronicleArchive.anchors)+
       [...world.chronicleArchive.chapters,...world.coldHistory.chapters].reduce((sum,row)=>sum+dialogueCount(row.anchors),0),
@@ -98,6 +102,13 @@ function nativePracticeRedactions(world:WorldState):ReadonlySet<string>{
 function redactedClone(world:WorldState,practiceRedactions:ReadonlySet<string>):WorldState{
   const copy=structuredClone(world);
   copy.annotations.notes=[];
+  const chat=copy.sectManagement?.chat;
+  if(copy.sectManagement&&chat){
+    const months=chat.months.map(month=>({...month,
+      posts:month.posts.filter(row=>row.roomId==='jiuzhou'||row.roomId==='market')})).filter(month=>month.posts.length);
+    if(months.length)copy.sectManagement.chat={months};
+    else delete copy.sectManagement.chat;
+  }
   for(const site of copy.locations)delete site.bellWatch;
   copy.events=copy.events.filter(event=>!isSealedBellMarker(event));
   for(const entry of copy.playerAvatar.transcript){
@@ -172,6 +183,15 @@ function allowedChange(path:readonly PathPart[],leftParent:unknown,rightParent:u
 }
 function protectedEqual(a:unknown,b:unknown,practiceRedactions:ReadonlySet<string>,path:readonly PathPart[]=[],leftParent?:unknown,rightParent?:unknown):boolean{
   if(Object.is(a,b)||allowedChange(path,leftParent,rightParent,practiceRedactions))return true;
+  if(pathIs(path,['sectManagement','chat'])&&a!==undefined){
+    // a has passed native decoding. Confirm the exact public sequence independently of cloning.
+    const chat=a as SectChatState;
+    const remaining=chat.months.flatMap(month=>{
+      const posts=month.posts.filter(row=>!(row.roomId==='own'||row.roomId==='leaders'));
+      return posts.length?[{tick:month.tick,posts}]:[];
+    });
+    return protectedEqual(remaining.length?{months:remaining}:undefined,b,practiceRedactions);
+  }
   if(Array.isArray(a)||Array.isArray(b))return Array.isArray(a)&&Array.isArray(b)&&a.length===b.length&&
     a.every((entry,index)=>protectedEqual(entry,b[index],practiceRedactions,[...path,index],a,b));
   if(!object(a)||!object(b))return false;

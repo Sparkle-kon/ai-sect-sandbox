@@ -1,0 +1,263 @@
+import {LABELS,GREETINGS,COMIC_NEUTRAL,WITNESS_VOICES,RUMOR_VOICES,GRAVE_VOICES,type Greeting} from '../data/sectChatVoices';
+import {SECT_COMEDY_TEMPLATES} from '../data/sectComedy';
+import {SECT_RECURRING_VOICES} from '../data/sectComedy/recurring';
+import {SECT_CHAT_MONTH_LIMIT,SECT_CHAT_POST_LIMIT,SECT_CHAT_ROOMS,SECT_CHAT_VARIANTS,sectChatPostId,
+  type SectChatPost,type SectChatRoomId,type SectChatSource,type SectChatVariant} from '../types/sectChat';
+import {starterSectIdentity} from '../types/sectManagement';
+import {sectRecurringEventId,sectRecurringIdentity,type SectRecurringRole} from '../types/sectRecurring';
+import type {Cultivator,WorldEvent,WorldState} from '../types/world';
+import {isChronicleStoryFact} from './chronicleLead';
+import {isSectActive} from './sectActivity';
+import {sectComicEventId} from './sectComedy';
+import {onLowerPlane} from './upperPassageIsolation';
+import {sameGeneratedWorld} from './worldIdentity';
+
+
+const cmp=(a:string,b:string)=>a<b?-1:a>b?1:0;
+const living=(actor:Cultivator)=>actor.alive&&actor.hp>0&&onLowerPlane(actor);
+function uniqueIndex<T>(rows:readonly T[],key:(row:T)=>string):ReadonlyMap<string,T>{
+  const index=new Map<string,T>(),duplicate=new Set<string>();
+  for(const row of rows){
+    const id=key(row);
+    if(index.has(id)){index.delete(id);duplicate.add(id);}
+    else if(!duplicate.has(id))index.set(id,row);
+  }
+  return index;
+}
+const byId=<T extends {id:string}>(rows:readonly T[])=>uniqueIndex(rows,row=>row.id);
+const isPublic=(event:WorldEvent,tick:number)=>event.id.startsWith('evt-')&&event.witnessScope===undefined&&isChronicleStoryFact(event,tick);
+const sameEvent=(saved:WorldEvent|undefined,event:WorldEvent):boolean=>saved===event||!!saved&&saved.tick===event.tick&&
+  saved.title===event.title&&saved.locationId===event.locationId&&saved.category===event.category&&
+  saved.witnessScope===event.witnessScope&&saved.actorIds.length===event.actorIds.length&&
+  event.actorIds.every((id,index)=>saved.actorIds[index]===id);
+const isMarket=(world:WorldState,siteId:string|undefined)=>siteId!==undefined&&
+  world.locations.some(site=>site.id===siteId&&site.type==='market'&&site.expeditionOmenId===undefined);
+const chatActor=(actor:Cultivator|undefined):actor is Cultivator=>!!actor&&living(actor);
+const escapeTitle=(title:string)=>[...title.replace(/[\r\n\t]/gu,' ').trim()].slice(0,60).join('');
+function variant(world:WorldState,key:string):SectChatVariant{
+  let hash=(world.random.seed^world.tick)>>>0;
+  for(const character of key)hash=Math.imul(hash^character.charCodeAt(0),16777619)>>>0;
+  return SECT_CHAT_VARIANTS[hash%SECT_CHAT_VARIANTS.length];
+}
+
+type PublicSource=Extract<SectChatSource,{kind:'public_event'}>;
+interface PublicCandidate {readonly actor:Cultivator;readonly event:WorldEvent;readonly knowledge:PublicSource['knowledge']}
+function knownPublicEvent(actor:Cultivator,event:WorldEvent,learnedNow:number,known:ReadonlyMap<string,Cultivator>):PublicSource['knowledge']|undefined{
+  if(event.tick===learnedNow&&event.actorIds.includes(actor.id))return 'witness';
+  for(const rumor of actor.rumors){
+    if(rumor.id!==`rumor-${event.id}`||rumor.originEventId!==event.id||rumor.originTick!==event.tick||
+      rumor.subject!==event.title||rumor.witnessScope!==undefined||rumor.learnedTick!==learnedNow||rumor.learnedTick<rumor.originTick||
+      rumor.confidence<25||rumor.confidence>100)continue;
+    if(rumor.provenance==='witness'&&rumor.hops===0&&rumor.learnedTick===rumor.originTick&&
+      rumor.originSourceCultivatorId===actor.id&&rumor.sourceCultivatorId===undefined)return 'witness';
+    if((rumor.provenance==='conversation'||rumor.provenance==='flying_sword')&&Number.isSafeInteger(rumor.hops)&&
+      rumor.hops>=1&&rumor.hops<=4&&rumor.learnedTick>rumor.originTick&&rumor.sourceCultivatorId&&
+      rumor.sourceCultivatorId!==actor.id&&known.has(rumor.sourceCultivatorId)&&rumor.originSourceCultivatorId&&
+      rumor.originSourceCultivatorId!==actor.id&&known.has(rumor.originSourceCultivatorId))return 'rumor';
+  }
+}
+
+function exactPrivateMarker(events:ReadonlyMap<string,WorldEvent>,id:string,tick:number,actorIds:readonly string[]){
+  const event=events.get(id);
+  return !!event&&event.tick===tick&&event.category==='diplomacy'&&event.witnessScope==='participants'&&
+    event.actorIds.length===actorIds.length&&actorIds.every((actorId,index)=>event.actorIds[index]===actorId)&&
+    event.locationId===undefined&&event.dialogue===undefined;
+}
+
+const templates=byId(SECT_COMEDY_TEMPLATES);
+const recurringRoles=['wang','rival','ancestor','host'] as const satisfies readonly Exclude<SectRecurringRole,'cat'>[];
+const managedContext=(world:WorldState)=>{
+  const managed=world.sectManagement;
+  if(!managed)return;
+  const actors=byId(world.cultivators),leader=actors.get(managed.leaderId),sect=byId(world.sects).get(managed.sectId);
+  if(!isSectActive(sect)||!chatActor(leader)||leader.sectId!==sect.id||sect.leaderId!==leader.id)return;
+  return {managed,actors,leader,sect};
+};
+
+type Draft=Omit<SectChatPost,'id'|'tick'|'source'|'variant'>;
+const audience=(senderId:string,leaderId:string):Draft['audience']=>[senderId,leaderId];
+function publicDraft(candidate:PublicCandidate,roomId:Exclude<SectChatRoomId,'leaders'>,leaderId:string):Draft{
+  const {event,actor,knowledge}=candidate;
+  return {roomId,senderId:actor.id,about:{kind:'public_event',eventId:event.id,eventTick:event.tick,knowledge},
+    ...(roomId==='own'?{audience:audience(actor.id,leaderId)}:{})};
+}
+function recurringIdentity(world:WorldState){
+  const managed=world.sectManagement;
+  if(managed)return sectRecurringIdentity(managed.sectId,starterSectIdentity(world.random.seed,managed.starterId,managed.draw).creditorId);
+}
+
+export function settleSectChatMonth(world:WorldState,prevWorld:WorldState,completedPublicEvents:readonly WorldEvent[]):void{
+  const context=managedContext(world);
+  if(!context||context.managed.growth?.failure||world.tick!==prevWorld.tick+1||!sameGeneratedWorld(world,prevWorld)||
+    context.managed.chat?.months.some(row=>row.tick>=world.tick))return;
+  const {actors,leader,managed}=context;
+  const retained=byId(world.events);
+  const thisMonth=byId(completedPublicEvents.filter(event=>event.tick===world.tick));
+  // An event must exist in the completed native batch for this month. Older retained facts are
+  // eligible only when a character actually learned a matching relay this month.
+  const publicEvents=[...[...thisMonth.values()].filter(event=>sameEvent(retained.get(event.id),event)),
+    ...[...retained.values()].filter(event=>event.tick<world.tick)]
+    .filter(event=>event.tick>managed.foundedTick&&isPublic(event,world.tick));
+  const candidates:PublicCandidate[]=[];
+  const alive=[...actors.values()].filter(living).sort((a,b)=>cmp(a.id,b.id));
+  const liveDisciple=(actor:Cultivator)=>actor.sectId===managed.sectId&&actor.id!==leader.id&&actor.sectRank!=='掌门';
+  const bySource=byId(publicEvents);
+  // Walk actual participants and each actor's bounded knowledge packets; do not multiply the
+  // roster by the event stream or infer old witnesses from a current map position.
+  const offered=new Set<string>();
+  const offer=(actor:Cultivator,event:WorldEvent)=>{
+    const key=JSON.stringify([actor.id,event.id]);
+    if(offered.has(key))return;
+    const knowledge=knownPublicEvent(actor,event,world.tick,actors);
+    if(!knowledge)return;
+    offered.add(key);
+    candidates.push({actor,event,knowledge});
+  };
+  for(const event of publicEvents){
+    if(event.tick!==world.tick)continue;
+    for(const id of event.actorIds){
+      const actor=actors.get(id);
+      if(chatActor(actor))offer(actor,event);
+    }
+  }
+  for(const actor of alive)for(const row of actor.rumors){
+    if(row.learnedTick!==world.tick||!row.originEventId)continue;
+    const event=bySource.get(row.originEventId);
+    if(event)offer(actor,event);
+  }
+  const recurring=recurringIdentity(world);
+  const score=(candidate:PublicCandidate)=>Number(candidate.knowledge==='rumor')*16+
+    Number(candidate.knowledge==='rumor'&&candidate.actor.id===recurring?.rival)*8+
+    Number(candidate.event.actorIds.includes(candidate.actor.id))*8+
+    Number(candidate.event.category==='breakthrough'||candidate.event.category==='combat')*4+
+    Number(candidate.event.tick===world.tick)*2;
+  candidates.sort((a,b)=>score(b)-score(a)||cmp(a.event.id,b.event.id)||cmp(a.actor.id,b.actor.id));
+  const drafts:Draft[]=[];
+  const used=new Set<string>();
+  const pick=(room:Exclude<SectChatRoomId,'leaders'>,predicate:(candidate:PublicCandidate)=>boolean)=>{
+    const match=candidates.find(candidate=>!used.has(candidate.event.id)&&predicate(candidate));
+    if(!match)return;
+    used.add(match.event.id);
+    drafts.push(publicDraft(match,room,leader.id));
+  };
+  const comedy=managed.comedy?.moments.find(row=>row.tick===world.tick);
+  const comicSpeaker=comedy&&actors.get(comedy.speakerId);
+  if(comedy&&chatActor(comicSpeaker)&&liveDisciple(comicSpeaker)&&templates.get(comedy.templateId)?.chatHook?.group==='own'&&
+    exactPrivateMarker(retained,sectComicEventId(world.tick,managed.sectId),world.tick,[comicSpeaker.id]))
+    drafts.push({roomId:'own',senderId:comicSpeaker.id,about:{kind:'comic',templateId:comedy.templateId},
+      audience:audience(comicSpeaker.id,leader.id)});
+  if(recurring)for(const role of recurringRoles){
+    const note=managed.recurring?.encounters.find(row=>row.tick===world.tick&&row.role===role&&row.entityId===recurring[role]);
+    const actor=note&&actors.get(note.entityId);
+    if(!note||!chatActor(actor)||actor.id===leader.id||!SECT_RECURRING_VOICES[note.outcome].length||
+      !exactPrivateMarker(retained,sectRecurringEventId(world.tick,managed.sectId,role),world.tick,[actor.id,leader.id]))continue;
+    drafts.push({roomId:'leaders',senderId:actor.id,about:{kind:'recurring',role,outcome:note.outcome},
+      audience:audience(actor.id,leader.id)});
+  }
+  pick('market',row=>isMarket(world,row.event.locationId)&&(isMarket(world,row.actor.locationId)||
+    row.event.tick===world.tick&&row.event.actorIds.includes(row.actor.id)));
+  if(!drafts.some(row=>row.roomId==='own'))pick('own',row=>liveDisciple(row.actor));
+  pick('jiuzhou',()=>true);
+  const greet=(room:Greeting,speakers:readonly Cultivator[])=>{
+    const actor=speakers[(world.tick+variant(world,room))%speakers.length];
+    if(actor&&!drafts.some(post=>post.roomId===room))drafts.push({roomId:room,senderId:actor.id,
+      about:{kind:'room_greeting',kindOfGreeting:room},...(room==='own'?{audience:audience(actor.id,leader.id)}:{})});
+  };
+  greet('own',alive.filter(actor=>liveDisciple(actor)&&managed.foundingDiscipleIds.includes(actor.id)));
+  greet('jiuzhou',alive.filter(actor=>actor.id!==leader.id));
+  greet('market',alive.filter(actor=>isMarket(world,actor.locationId)));
+  pick('jiuzhou',row=>row.knowledge==='rumor');
+  if(!drafts.length)return;
+  const posts=drafts.slice(0,SECT_CHAT_POST_LIMIT).map((row,index):SectChatPost=>{
+    const id=sectChatPostId(managed.sectId,world.tick,index);
+    return {...row,id,tick:world.tick,source:'template',variant:variant(world,id)};
+  });
+  managed.chat={months:[...(managed.chat?.months??[]).filter(month=>world.tick-month.tick<SECT_CHAT_MONTH_LIMIT),
+    {tick:world.tick,posts}].slice(-SECT_CHAT_MONTH_LIMIT)};
+}
+
+export interface SectChatMessageView {
+  readonly id:string;
+  readonly tick:number;
+  readonly senderId:string;
+  readonly name:string;
+  readonly text:string;
+  readonly about:SectChatSource['kind'];
+  readonly sourceEventId?:string;
+}
+export interface SectChatRoomView {
+  readonly id:SectChatRoomId;
+  readonly label:string;
+  readonly posts:readonly SectChatMessageView[];
+}
+
+export function projectSectChat(world:WorldState):readonly SectChatRoomView[]{
+  const context=managedContext(world);
+  if(!context)return SECT_CHAT_ROOMS.map(id=>({id,label:LABELS[id],posts:[]}));
+  const {managed,leader,actors}=context,events=byId(world.events);
+  const recurring=recurringIdentity(world);
+  const output=new Map<SectChatRoomId,SectChatMessageView[]>();
+  const currentOwn=(actor:Cultivator)=>actor.id!==leader.id&&actor.sectId===managed.sectId;
+  for(const month of managed.chat?.months??[]){
+    if(month.tick>world.tick)continue;
+    for(const post of month.posts){
+      const actor=actors.get(post.senderId);
+      if(!actor||post.tick!==month.tick||post.source!=='template'||!SECT_CHAT_VARIANTS.includes(post.variant))continue;
+      const {roomId,about}=post,scoped=roomId==='own'||roomId==='leaders';
+      if(scoped?(actor.id===leader.id||post.audience?.length!==2||post.audience[0]!==actor.id||post.audience[1]!==leader.id):
+        post.audience!==undefined)continue;
+      if(roomId==='own'&&post.tick===world.tick&&!currentOwn(actor))continue;
+      let text:string|undefined,sourceEventId:string|undefined;
+      switch(about.kind){
+        case 'room_greeting':
+          if(roomId===about.kindOfGreeting&&(roomId!=='own'||managed.foundingDiscipleIds.includes(actor.id)))text=GREETINGS[about.kindOfGreeting][post.variant];
+          break;
+        case 'comic':{
+          if(roomId!=='own')break;
+          const template=templates.get(about.templateId);
+          const beat=managed.comedy?.moments.find(row=>row.tick===post.tick&&row.templateId===about.templateId&&row.speakerId===actor.id);
+          if(template?.chatHook?.group!=='own'||!beat||
+            !exactPrivateMarker(events,sectComicEventId(post.tick,managed.sectId),post.tick,[actor.id]))break;
+          // Only independent ambient quips may reuse original hook text. Work-hook variants never
+          // repeat the job, result, private site or any person mentioned in the original aside.
+          text=template.match.phase==='ambient'&&!/[{}]/.test(template.chatHook.line)?template.chatHook.line:COMIC_NEUTRAL[post.variant];
+          break;
+        }
+        case 'recurring':{
+          if(roomId!=='leaders'||recurring?.[about.role]!==actor.id||
+            !managed.recurring?.encounters.some(row=>row.tick===post.tick&&row.entityId===actor.id&&row.role===about.role&&row.outcome===about.outcome)||
+            !exactPrivateMarker(events,sectRecurringEventId(post.tick,managed.sectId,about.role),post.tick,[actor.id,leader.id]))break;
+          const lines=SECT_RECURRING_VOICES[about.outcome];
+          text=lines[post.variant%lines.length];
+          break;
+        }
+        case 'public_event':{
+          if(roomId==='leaders'||about.eventTick>post.tick||about.eventTick<=managed.foundedTick)break;
+          const event=events.get(about.eventId);
+          if(!event){
+            if(!world.events.some(row=>row.id===about.eventId)&&post.tick<world.tick)text='这条旧讯已收卷。';
+            break;
+          }
+          if(!isPublic(event,world.tick)||event.tick!==about.eventTick||
+            roomId==='market'&&(!isMarket(world,event.locationId)||post.tick===world.tick&&!isMarket(world,actor.locationId)&&
+              (event.tick!==post.tick||!event.actorIds.includes(actor.id))))break;
+          if(knownPublicEvent(actor,event,post.tick,actors)!==about.knowledge){
+            if(post.tick<world.tick)text='这条旧讯已收卷。';
+            break;
+          }
+          const line=event.category==='death'?GRAVE_VOICES[about.knowledge]:
+            (about.knowledge==='witness'?WITNESS_VOICES:RUMOR_VOICES)[post.variant];
+          text=line.replace('{title}',()=>escapeTitle(event.title));
+          sourceEventId=event.id;
+          break;
+        }
+      }
+      if(!text)continue;
+      const row={id:post.id,tick:post.tick,senderId:actor.id,name:actor.name,text,about:about.kind,...(sourceEventId?{sourceEventId}:{})};
+      const existing=output.get(roomId);
+      if(existing)existing.push(row);
+      else output.set(roomId,[row]);
+    }
+  }
+  return SECT_CHAT_ROOMS.map(id=>({id,label:id==='own'?`${context.sect.name}内部群`:LABELS[id],posts:output.get(id)??[]}));
+}

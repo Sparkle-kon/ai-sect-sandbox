@@ -21,11 +21,13 @@ it('keeps the same sect and disciples when an authorized Cognitive reply settles
   const requested={[actor.id]:order};
   const utility=advanceWorldTick(world,requested);
   const cognitive=advanceWorldTick(world,requested,undefined,'deferred',undefined,{modelActors:new Set([actor.id])});
-  const {growth,comedy,recurring,...continued}=cognitive.sectManagement!;
+  const {growth,comedy,recurring,chat,...continued}=cognitive.sectManagement!;
   expect(continued).toEqual(management);
   expect(world.sectManagement?.growth).toBeUndefined();
   expect(world.sectManagement?.comedy).toBeUndefined();
   expect(world.sectManagement?.recurring).toBeUndefined();
+  expect(world.sectManagement?.chat).toBeUndefined();
+  expect(chat?.months).toEqual([expect.objectContaining({tick:cognitive.tick,posts:expect.any(Array)})]);
   expect(recurring?.openedTick).toBe(cognitive.tick);
   expect(growth).toMatchObject({closing:{tick:cognitive.tick,overduePrincipal:0,negativeMonths:0,livingDisciples:3}});
   expect(comedy?.moments).toEqual([expect.objectContaining({tick:cognitive.tick,source:expect.objectContaining({phase:'ambient'}),effects:[]})]);

@@ -741,6 +741,7 @@ const privacyLabels: Record<keyof ShareSavePrivacyInspection['counts'], string> 
   whisperMemoryFields: '传音记忆字段',
   participantEventFields: '仅参与者可见的事件字段',
   privateBellWatches: '私下报平安记录',
+  privateSectChatPosts: '宗门私聊消息',
   eventDialogueBlocks: '事件对话块',
   archiveDialogueBlocks: '史库对话块',
   councilDialogueFields: '议事发言字段',

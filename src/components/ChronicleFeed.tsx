@@ -27,6 +27,8 @@ interface ChronicleFeedProps {
   onJump?: (request: ChronicleFocusRequest, position: ChronicleFeedPosition) => void;
   returnPosition?: ChronicleFeedReturn;
   onReturnHandled?: (token: number) => void;
+  sourceOpening?:{readonly eventId:string;readonly token:number};
+  onSourceOpened?:(token:number)=>void;
   focusNotice?: string;
   causality?: (eventId: string) => CausalChronicleView | undefined;
   lead?: ChronicleLead;
@@ -114,7 +116,8 @@ export function reopenChronicleReadingPlace(proofs: ReadonlyMap<string, HTMLDeta
 }
 
 export function ChronicleFeed({
-  events, category, onCategoryChange, focusOptions, onJump, returnPosition, onReturnHandled, focusNotice, causality, lead, succession, resolvePublicDialogue, reading,
+  events, category, onCategoryChange, focusOptions, onJump, returnPosition, onReturnHandled, sourceOpening,onSourceOpened,
+  focusNotice, causality, lead, succession, resolvePublicDialogue, reading,
 }: ChronicleFeedProps) {
   const [localCategory, setLocalCategory] = useState<ChronicleCategoryFilter>('all');
   const filter = category ?? localCategory;
@@ -130,6 +133,22 @@ export function ChronicleFeed({
   const handled = useRef<number>();
   const onHandled = useRef(onReturnHandled);
   onHandled.current = onReturnHandled;
+
+  const sourceOpened=useRef<number>();
+  const sourceCallback=useRef(onSourceOpened);
+  sourceCallback.current=onSourceOpened;
+  useReadingLayout(()=>{
+    if(!sourceOpening||sourceOpened.current===sourceOpening.token)return;
+    const proof=proofRefs.current.get(sourceOpening.eventId);
+    const list=listRef.current;
+    if(!proof||!list||proofOwners.current.get(proof)!==sourceOpening.eventId||!list.contains(proof))return;
+    proof.open=true;
+    const summary=proof.querySelector<HTMLElement>('summary')??proof;
+    summary.focus({preventScroll:true});
+    summary.scrollIntoView?.({block:'nearest',inline:'nearest',behavior:'instant'});
+    sourceOpened.current=sourceOpening.token;
+    sourceCallback.current?.(sourceOpening.token);
+  },[sourceOpening,events,filter]);
 
   const readingOperation = useRef(0);
   const readingFrame = useRef(reading);

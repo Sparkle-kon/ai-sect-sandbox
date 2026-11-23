@@ -22,10 +22,12 @@ import {mapTransitActorIds} from './mapConvoyView';
 import {SectQuirkBadges} from './SectQuirkBadges';
 import {sectQuirkLabels} from './sectQuirkLabels';
 import {SectBuildingUpgrades,SectFailurePanel,SectGrowthNotices,SectTreasurySummary,type SectGrowthView} from './SectGrowthControls';
+
 import type {ConfirmSectJobs} from './SectMorningBoard';
 
 const SectJobReportStage=lazy(async()=>({default:(await import('./SectJobReportStage')).SectJobReportStage}));
 const SectMorningBoard=lazy(async()=>({default:(await import('./SectMorningBoard')).SectMorningBoard}));
+const SectChatPanel=lazy(async()=>({default:(await import('./SectChatPanel')).SectChatPanel}));
 
 type HomeView='story'|'cockpit'|'sandbox'|'saves';
 export interface SectManagementHomeProps {
@@ -42,6 +44,8 @@ export interface SectManagementHomeProps {
   onManagementAction?:(expectedWorld:WorldState,command:SectGrowthCommand)=>boolean;
   onRestart?:(expectedWorld:WorldState,starterId:StarterSectId,draw:StarterDraw)=>boolean;
   restartSeed?:number;
+  chatScope?:string;
+  onOpenChatSource?:(expectedWorld:WorldState,postId:string)=>boolean;
 }
 
 const destinations:Readonly<Record<HomeView,string>>={
@@ -215,7 +219,7 @@ function ManagedCourtyard({world,busy,onTick,onConfirmJobs,observations,report,o
   </>;
 }
 
-export function SectManagementHome({world,busy=false,onStart,onOpen,onTick,onConfirmJobs,observations,report,onDismissReport,titleRef,onManagementAction,onRestart,restartSeed}:SectManagementHomeProps){
+export function SectManagementHome({world,busy=false,onStart,onOpen,onTick,onConfirmJobs,observations,report,onDismissReport,titleRef,onManagementAction,onRestart,restartSeed,chatScope,onOpenChatSource}:SectManagementHomeProps){
   const sect=world.sects.find(row=>row.id===world.sectManagement?.sectId);
   const growth=useMemo(()=>projectSectGrowth(world),[world]);
   const [restarting,setRestarting]=useState<WorldState>();
@@ -232,8 +236,9 @@ export function SectManagementHome({world,busy=false,onStart,onOpen,onTick,onCon
     try{applied=onManagementAction(world,choice);}
     finally{if(!applied){consumed.current=undefined;setNotice({world,text:'这一笔没办成，灵石还在原处。'});}}
   }:undefined;
+  const chatKey=sect?`${chatScope??world.random.seed}:${sect.id}`:undefined;
   return <main className="xianxia-shell min-h-dvh bg-slate-950 px-3 pb-8 pt-[max(.75rem,env(safe-area-inset-top))] text-slate-100 sm:px-6">
-    <div className="mx-auto max-w-6xl space-y-3">
+    <div className={`mx-auto max-w-6xl space-y-3 ${sect&&!growth?.failure?'min-[1440px]:max-w-[90rem]':''}`}>
       <header className={`xianxia-header flex min-w-0 items-start justify-between gap-2 border-b border-amber-400/30 pb-2 ${growth?'sticky top-0 z-30 bg-slate-950 pt-2':''}`}>
         <div className="min-w-0">
           <p className="text-xs text-amber-200">天道沙盒 · 仙历 {world.year} 年 {world.month} 月</p>
@@ -248,9 +253,13 @@ export function SectManagementHome({world,busy=false,onStart,onOpen,onTick,onCon
         <button type="button" className={button} disabled={busy} onClick={()=>setRestarting(undefined)}>取消，留在旧山门</button>
         <StarterSelection key={restartSeed??world.random.seed} seed={restartSeed??world.random.seed} busy={busy} onStart={(starter,draw)=>onRestart(world,starter,draw)}/>
       </section>:<SectFailurePanel view={growth} busy={busy} onRestart={onRestart?()=>setRestarting(world):undefined}/>):
-        sect?<ManagedCourtyard world={world} busy={busy} onTick={onTick} onConfirmJobs={onConfirmJobs} observations={observations}
-          report={report} onDismissReport={onDismissReport} growth={growth} command={command}/>:
-          <StarterSelection key={world.random.seed} seed={world.random.seed} busy={busy} onStart={onStart}/>}
+        sect?<div className="grid min-w-0 items-start gap-3 min-[1440px]:grid-cols-[minmax(0,1fr)_19rem]">
+          <div className="min-w-0 space-y-3"><ManagedCourtyard world={world} busy={busy} onTick={onTick} onConfirmJobs={onConfirmJobs}
+            observations={observations} report={report} onDismissReport={onDismissReport} growth={growth} command={command}/></div>
+          {chatKey&&<Suspense fallback={<p role="status" className="text-sm text-stone-300">正在翻看群聊…</p>}>
+            <SectChatPanel key={chatKey} scope={chatKey} world={world} busy={busy} onOpenSource={onOpenChatSource}/>
+          </Suspense>}
+        </div>:<StarterSelection key={world.random.seed} seed={world.random.seed} busy={busy} onStart={onStart}/>}
     </div>
   </main>;
 }

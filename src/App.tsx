@@ -1,3 +1,4 @@
+import {projectSectChat} from './engine/sectChat';
 import {managedRestartSeed} from './engine/timelineEngine';
 import type {SectGrowthCommand} from './types/sectGrowth';
 import type {SectJobAssignment,SectJobReport} from './types/sectJobs';
@@ -167,6 +168,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   const [personalStoryChoice, setPersonalStoryChoice] = useState<{actorId:string;scope:string;eventId?:string}>();
   const [focusTrail, setFocusTrail] = useState<ChronicleTrail>();
   const [chronicleReturn, setChronicleReturn] = useState<ChronicleFeedReturn>();
+  const [chatChronicle,setChatChronicle]=useState<{world:WorldState;scope:string;eventId:string;token:number}>();
   const [focusNotice, setFocusNotice] = useState<string>();
   const [mapFocusFailed, setMapFocusFailed] = useState<number>();
   const focusSerial = useRef(0);
@@ -760,6 +762,16 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
     if(managerView!=='opening'||expected!==world||!world.sectManagement||!managerIsCurrent())return false;
     return simulation.confirmSectMeeting(expected,timeline.activeBranchId,managerRevision,assignments);
   };
+  const openChatSource=(expected:WorldState,postId:string):boolean=>{
+    if(managerView!=='opening'||expected!==world||!managerIsCurrent())return false;
+    const matches=projectSectChat(world).flatMap(room=>room.posts).filter(post=>post.id===postId);
+    const sourceEventId=matches.length===1?matches[0].sourceEventId:undefined;
+    if(!sourceEventId||projectScopedPublicChronicle(world).events.filter(event=>event.id===sourceEventId).length!==1)return false;
+    setChronicleFilter('all');openWorkspace('chronicle');rememberFold('chronicle','feed');
+    setChatChronicle({world,scope:viewScopeKey,eventId:sourceEventId,token:++focusSerial.current});
+    setStoryEntryOpen(false);setManagerView('closed');setCockpitOpen(false);setDashboardOpen(true);
+    return true;
+  };
   const manageGrowth=(expected:WorldState,command:SectGrowthCommand):boolean=>
     managerView==='opening'&&expected===world&&!!world.sectManagement&&managerIsCurrent()&&
     simulation.manageSectGrowth(expected,timeline,managerRevision,command);
@@ -778,7 +790,8 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   };
   if(managerView==='opening')return <SectManagementHome world={world} titleRef={managerHeading} busy={managerBlocked}
     onStart={startManagedSect} onOpen={openFromManager} onConfirmJobs={confirmSectJobs} observations={simulation.sectJobObservations}
-    report={currentSectReport} onDismissReport={dismissSectReport} onManagementAction={manageGrowth} onRestart={restartManaged} restartSeed={restartSeed}/>;
+    report={currentSectReport} onDismissReport={dismissSectReport} onManagementAction={manageGrowth} onRestart={restartManaged} restartSeed={restartSeed}
+    chatScope={viewScopeKey} onOpenChatSource={openChatSource}/>;
   if(managerView==='saves')return <main className="xianxia-shell min-h-dvh bg-slate-950 text-slate-100 px-4 py-3">
     <div className="mx-auto max-w-3xl space-y-3">
       <header className="flex items-center justify-between gap-2">
@@ -979,7 +992,9 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
               scopeKey:`${viewScopeKey}:${activeActorId??''}`,
               isCurrent:()=>saveContextVersion.current===readingRevision&&history.current.activeBranchId===timeline.activeBranchId&&
                 (preview?browsing.current:!browsing.current&&authority.current===world)}:undefined,
-            onJump:followChronicle,returnPosition:chronicleReturn,onReturnHandled:clearChronicleReturn,focusNotice}}
+            onJump:followChronicle,returnPosition:chronicleReturn,onReturnHandled:clearChronicleReturn,focusNotice,
+            sourceOpening:chatChronicle?.world===visibleWorld&&chatChronicle.scope===viewScopeKey?chatChronicle:undefined,
+            onSourceOpened:token=>setChatChronicle(current=>current?.token===token?undefined:current)}}
           personal={selectedCultivator?{available:mayReadPersonal,active:personalStoryActive,story:personalStory,focusEventId:selectedRosterEvent,
             onToggle:()=>setPersonalStoryChoice(personalStoryActive?undefined:{actorId:selectedCultivator.id,scope:viewScopeKey})}:undefined}
           scopedSupplyLinks={scopedSupplyLinks} writeAnnotation={writeAnnotation} writeWatchlist={writeWatchlist}
