@@ -1,3 +1,5 @@
+import {availableLastRosterActions,isPrivateLastRosterEvent,recordLastRosterClosure,resolveLastRosterAction} from './lastRoster';
+import {exactLastRosterDecision} from './lastRosterCognition';
 import {availableBanquetSeatActions,isPrivateBanquetSeatEvent,recordBanquetSeatInvitation,resolveBanquetSeatAction,settleBanquetSeats} from './banquetSeats';
 import {exactBanquetSeatDecision} from './banquetSeatCognition';
 import {advanceNightDoors,availableNightDoorActions,isPrivateNightDoorEvent,recordNightDoorArrival,recordNightDoorBlocked,resolveNightDoorAction} from './nightDoor';
@@ -850,6 +852,20 @@ export function applyCultivatorBrainDecision(
       return resolveRelicExhibitAction(world, cultivator, decision);
     case 'WORKSHOP':
       return resolveWorkshopAction(world, cultivator, decision, rng);
+    case 'LAST_ROSTER': {
+      if((modelInput||isProviderPersonaDecision(decision))&&activeAvatar(world)===cultivator)return null;
+      const exact=exactLastRosterDecision(decision,availableLastRosterActions(cultivator,world,world.tick),true);
+      if(!exact)return null;
+      const result=resolveLastRosterAction(world,cultivator,exact,siteId=>{
+        const from=cultivator.locationId;
+        const movement=applyCultivatorBrainDecision(world,cultivator,{chosenAction:'EXPLORE',targetLocationId:siteId,
+          innerMonologue:'去自己认得的那个去处。'},rng,undefined,emit);
+        if(movement)emit?.(movement);
+        return cultivator.alive&&cultivator.locationId!==from&&cultivator.locationId===siteId&&cultivator.currentAction==='EXPLORE';
+      });
+      if(result){cultivator.currentAction='LAST_ROSTER';cultivator.innerMonologue=exact.innerMonologue;}
+      return result;
+    }
     case 'BANQUET_SEAT': {
       if((modelInput||isProviderPersonaDecision(decision))&&activeAvatar(world)===cultivator)return null;
       const exact=exactBanquetSeatDecision(decision,availableBanquetSeatActions(cultivator,world,world.tick),true);
@@ -1066,8 +1082,11 @@ export function applyCultivatorBrainDecision(
         :null;
     case 'DANXIA_MEDICINE':
       return resolveDanxiaMedicineAction(world,cultivator,decision,rng);
-    case 'DOCTRINE_MATURITY':
-      return resolveDoctrineMaturityAction(world,cultivator,decision);
+    case 'DOCTRINE_MATURITY': {
+      const native=resolveDoctrineMaturityAction(world,cultivator,decision);
+      if(native&&decision.doctrineMaturityMove==='finalize_merge')recordLastRosterClosure(world,native);
+      return native;
+    }
     case 'DOCTRINE_FOUNDING':
       return resolveDoctrineFoundingAction(world,cultivator,decision);
     case 'DANXIA_REVIEW':
@@ -1806,6 +1825,14 @@ export function advanceWorldTick(
         modelOrdinaryReplaced=true;
       }
     }
+    if(modelProposal?.chosenAction==='LAST_ROSTER'&&!avatarDecision){
+      const prior=prevState.cultivators.find(row=>row.id===cultivator.id);
+      if(!prior||activeAvatar(prevState)===prior||!exactLastRosterDecision(modelProposal,
+        availableLastRosterActions(prior,prevState,nextState.tick),true)){
+        provided=undefined;
+        modelOrdinaryReplaced=true;
+      }
+    }
     if(modelProposal?.chosenAction==='BANQUET_SEAT'&&!avatarDecision){
       const prior=prevState.cultivators.find(row=>row.id===cultivator.id);
       if(!prior||activeAvatar(prevState)===prior||!exactBanquetSeatDecision(modelProposal,
@@ -2166,6 +2193,7 @@ export function advanceWorldTick(
         availableBoundaryGapActions(cultivator,nextState,nextState.tick).length>0||
         availableNightDoorActions(cultivator,nextState,nextState.tick).length>0||
         availableBanquetSeatActions(cultivator,nextState,nextState.tick).length>0||
+        availableLastRosterActions(cultivator,nextState,nextState.tick).length>0||
         availableVillageReunionActions(cultivator,nextState,nextState.tick).some(row=>row.villageReunionMove==='accept')||
         availableBattlefieldAftermathActions(cultivator,nextState,nextState.tick).some(row=>row.battlefieldAftermathMove==='accept_care')))continue;
 
@@ -2265,7 +2293,7 @@ export function advanceWorldTick(
         if (receipt && evt.id === `evt-${receipt.id}`) recordReliefCompetition(nextState, receipt);
       }
       newEvents.push(evt);
-      if(!isBattlefieldRevisitEvent(evt)&&!isPrivateCalamityArrayEvent(evt)&&!isTaughtSwordPracticeEvent(evt)&&!isPrivateSchoolFormEvent(evt)&&!isPrivateWitnessInquiryEvent(evt)&&!isPrivatePavilionFireEvent(evt)&&!isPrivateMercyReunionEvent(evt)&&!isPrivateWildMigrationEvent(evt)&&!isPrivateVillageReunionEvent(evt)&&!isPrivateBattlefieldAftermathEvent(evt)&&!isPrivatePilgrimageForkEvent(evt)&&!isPrivateApprenticeshipReunionEvent(evt)&&!isPrivateFurnaceEmergencyEvent(evt)&&!isPrivateAbandonedQuarterEvent(evt)&&!isPrivateBoundaryGapEvent(evt)&&!isPrivateNightDoorEvent(evt)&&!isPrivateBanquetSeatEvent(evt)&&!(evt.witnessScope==='participants'&&evt.id.endsWith('-study-technique-fire')))witnessEvent(nextState, evt);
+      if(!isBattlefieldRevisitEvent(evt)&&!isPrivateCalamityArrayEvent(evt)&&!isTaughtSwordPracticeEvent(evt)&&!isPrivateSchoolFormEvent(evt)&&!isPrivateWitnessInquiryEvent(evt)&&!isPrivatePavilionFireEvent(evt)&&!isPrivateMercyReunionEvent(evt)&&!isPrivateWildMigrationEvent(evt)&&!isPrivateVillageReunionEvent(evt)&&!isPrivateBattlefieldAftermathEvent(evt)&&!isPrivatePilgrimageForkEvent(evt)&&!isPrivateApprenticeshipReunionEvent(evt)&&!isPrivateFurnaceEmergencyEvent(evt)&&!isPrivateAbandonedQuarterEvent(evt)&&!isPrivateBoundaryGapEvent(evt)&&!isPrivateNightDoorEvent(evt)&&!isPrivateBanquetSeatEvent(evt)&&!isPrivateLastRosterEvent(evt)&&!(evt.witnessScope==='participants'&&evt.id.endsWith('-study-technique-fire')))witnessEvent(nextState, evt);
       if(decision.chosenAction==='SOCIALIZE'&&cultivator.currentAction==='SOCIALIZE'){
         const after=recordTournamentBanquetAfterTalk(nextState,evt);
         if(after&&!newEvents.some(row=>row.id===after.id))newEvents.push(after);

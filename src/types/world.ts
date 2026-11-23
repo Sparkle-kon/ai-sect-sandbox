@@ -1,5 +1,6 @@
 import type {ApprenticeshipReunionMove,ApprenticeshipReunionState} from './apprenticeshipReunion';
 import type {BanquetSeatMove,BanquetSeatState} from './banquetSeat';
+import type {LastRosterMove,LastRosterState} from './lastRoster';
 import type {NightDoorMove,NightDoorState} from './nightDoor';
 import type {ReliefHomecomingState} from './reliefHomecoming';
 import type {BoundaryGapMove,BoundaryGapState} from './boundaryGap';
@@ -245,6 +246,7 @@ export type ActionType =
   | 'WORKSHOP_RELEASE'
   | 'WORKSHOP'
   | 'FURNACE_RESERVATION'
+  | 'LAST_ROSTER'
   | 'BANQUET_SEAT'
   | 'NIGHT_DOOR'
   | 'BOUNDARY_GAP'
@@ -835,6 +837,8 @@ export interface LLMDecisionPayload {
   targetNightDoorId?: string;
   banquetSeatMove?: BanquetSeatMove;
   targetBanquetSeatId?: string;
+  lastRosterMove?: LastRosterMove;
+  targetLastRosterId?: string;
   damageAssuranceMove?: DamageAssuranceMove;
   targetDamageAssuranceId?: string;
   targetFurnaceSafetyId?: string;
@@ -3764,6 +3768,7 @@ export interface WorldState {
   reliefHomecomings?: ReliefHomecomingState;
   nightDoors?: NightDoorState;
   banquetSeats?: BanquetSeatState;
+  lastRosters?: LastRosterState;
   damageAssurance: DamageAssuranceState;
   sparring: SparringState;
   expeditionRescues: ExpeditionRescueState;

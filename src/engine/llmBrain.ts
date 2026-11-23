@@ -1,3 +1,5 @@
+import {availableLastRosterActions} from './lastRoster';
+import {lastRosterCommand,exactLastRosterDecision} from './lastRosterCognition';
 import {availableBanquetSeatActions} from './banquetSeats';
 import {banquetSeatCommand,exactBanquetSeatDecision} from './banquetSeatCognition';
 import {availableNightDoorActions} from './nightDoor';
@@ -976,6 +978,15 @@ export function computeHeuristicDecision(
     const preference=cultivator.hp<cultivator.maxHp*.55||cultivator.personality==='阴险'?'decline':'attend';
     const choice=banquet.find(row=>row.banquetSeatMove===preference)??banquet.find(row=>row.banquetSeatMove==='late')??banquet[0];
     const exact=exactBanquetSeatDecision(banquetSeatCommand(choice),banquet);
+    if(exact)return exact;
+  }
+  const afterSect=availableLastRosterActions(cultivator,world,world.tick);
+  if(afterSect.length){
+    if(activeAvatar(world)===cultivator)return {chosenAction:'REST',innerMonologue:'各人去向，由自己择。'};
+    const preferred=cultivator.hp<cultivator.maxHp*.55||cultivator.personality==='痴情'?'stay':
+      cultivator.personality==='逍遥'?'home':'new_gate';
+    const choice=afterSect.find(row=>row.lastRosterMove===preferred)??afterSect.find(row=>row.lastRosterMove==='stay');
+    const exact=choice&&exactLastRosterDecision(lastRosterCommand(choice),afterSect);
     if(exact)return exact;
   }
   const boundaryGap=availableBoundaryGapActions(cultivator,world,world.tick);
@@ -2741,6 +2752,10 @@ export async function requestCultivatorLLMDecision(
     availableBanquetSeatActions(cultivator,world,requestTick):[];
   const banquetGuide=banquet.length?'若选择赴宴，只原样抄本人真正受邀的一项许可。不安排他人、不伪写到达或对谈：'+
     JSON.stringify(banquet.map(banquetSeatCommand)):'';
+  const afterSect=requestTick===world.tick+1&&activeAvatar(world)!==cultivator?
+    availableLastRosterActions(cultivator,world,requestTick):[];
+  const afterSectGuide=afterSect.length?'可另选本人确属旧宗终末名册、实际所在才有的一项去向。不代旁人选择、不得填继任或新职位：'+
+    JSON.stringify(afterSect.map(lastRosterCommand)):'';
   const gap=availableBoundaryGapActions(cultivator,world,requestTick);
   if(gap.length){
     if(requestTick!==world.tick+1||activeAvatar(world)===cultivator)return undefined;
@@ -3153,6 +3168,7 @@ ${!onPilgrimagePath && routeWarningOptions.length ? `停站可另选 ROUTE_WARNI
 ${routeWarningGuide}` : ''}` : `你是修仙沙盒世界中的修士【${cultivator.name}】（称号：${cultivator.title}）。
 ${ownReliefScene?'【只限你在旧村亲见的片刻】'+JSON.stringify(ownReliefScene.beats.map(beat=>beat.line))+'。只当见闻，不得推断缺席者去向、替别人回忆或新增行动字段。':''}
 ${banquetGuide}
+${afterSectGuide}
 【自身状态】
 - 境界：${cultivator.realm}${cultivator.realmStage}层（灵气进度：${cultivator.qiProgress}%）
 - 气血：${cultivator.hp}/${cultivator.maxHp} | 战力：${cultivator.combatPower}
@@ -3275,6 +3291,11 @@ ${JSON.stringify(cultivator.reflections.filter(row=>!sealedHeartDemonReflection(
 ${COGNITIVE_RESPONSE_GUIDE}`;
 
   return requestDecisionPrompt(config, requestTick, options, prompt, (parsed) => {
+          if(parsed?.chosenAction==='LAST_ROSTER'){
+            if(requestTick!==world.tick+1||activeAvatar(world)===cultivator||!exactLastRosterDecision(parsed,afterSect))return undefined;
+            return exactLastRosterDecision(parsed,availableLastRosterActions(cultivator,world,requestTick));
+          }
+          if(parsed&&(Object.hasOwn(parsed,'lastRosterMove')||Object.hasOwn(parsed,'targetLastRosterId')))return undefined;
           if(parsed?.chosenAction==='BANQUET_SEAT'){
             if(requestTick!==world.tick+1||activeAvatar(world)===cultivator||!exactBanquetSeatDecision(parsed,banquet))return undefined;
             return exactBanquetSeatDecision(parsed,availableBanquetSeatActions(cultivator,world,requestTick));

@@ -124,6 +124,7 @@ function log(world: WorldState, village: MortalSettlement, row: Omit<SettlementR
     for(const id of villageReunionPinnedRecruitmentIds(world))pinned.add(id);
     for(const visit of world.abandonedQuarters?.visits??[])if(visit.formerRecruitmentId)pinned.add(visit.formerRecruitmentId);
     for(const id of reliefHomecomingPinnedSettlementIds(world))pinned.add(id);
+    for(const row of world.lastRosters?.entries??[])for(const person of row.people)if(person.home)pinned.add(person.home.recruitmentId);
     world.settlements.records=world.settlements.records.filter((entry,index)=>index>=tail||pinned.has(entry.id));
   }
   if (actual.kind === 'relief') {
