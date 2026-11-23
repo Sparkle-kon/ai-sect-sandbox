@@ -1,3 +1,5 @@
+import {quoteSectMeetingOrders} from '../engine/sectMeetingOrders';
+import type {SectJobAssignment,SectJobObservation} from '../types/sectJobs';
 import {configureStoryteller} from '../engine/storytellerDirector';
 import {cloneWorldWithColdHistory} from '../engine/coldHistoryEngine';
 import {resolveGuidedWorldTurn,type GuidedWorldTurn} from './guidedWorldTurn';
@@ -55,6 +57,18 @@ function createPlayableWorld(...args: Parameters<typeof createInitialWorld>): Wo
   return world;
 }
 
+interface SectMeetingRequest {
+  readonly world:WorldState;
+  readonly branchId:string;
+  readonly revision:number;
+  readonly assignments:readonly SectJobAssignment[];
+}
+interface RetainedReplay {
+  readonly tape:DecisionReplayTape;
+  readonly committed:WorldState;
+  readonly sectJobAssignments?:readonly SectJobAssignment[];
+}
+
 interface WorldSimulationControllerOptions {
   playbackEnabled:boolean;
   inspectCampaign:boolean;
@@ -86,10 +100,12 @@ export function useWorldSimulationController({
   const authority = useRef(world);
   const [timeline, setTimeline] = useState(() => createTimeline(world));
   const history = useRef(timeline);
-  const replayTapes = useRef(new Map<string, Map<number, { tape: DecisionReplayTape; committed: WorldState }>>());
-  const retainReplay = useCallback((branchId: string, tape: DecisionReplayTape, committed: WorldState) => {
-    const byTick = replayTapes.current.get(branchId) ?? new Map<number, { tape: DecisionReplayTape; committed: WorldState }>();
-    byTick.set(committed.tick, { tape, committed });
+  const [lastSectMeeting,setLastSectMeeting]=useState<{world:WorldState;rows:readonly SectJobObservation[]}>();
+  const replayTapes = useRef(new Map<string, Map<number, RetainedReplay>>());
+  const retainReplay = useCallback((branchId: string, tape: DecisionReplayTape, committed: WorldState,
+    sectJobAssignments?:readonly SectJobAssignment[]) => {
+    const byTick = replayTapes.current.get(branchId) ?? new Map<number, RetainedReplay>();
+    byTick.set(committed.tick, { tape, committed, sectJobAssignments });
     while (byTick.size > 12) {
       const oldest = byTick.keys().next().value;
       if (oldest === undefined) break;
@@ -140,15 +156,23 @@ export function useWorldSimulationController({
     setLlmConfig(config);
   };
 
-  const handleStepTick = useCallback(async (guide?:GuidedWorldTurn) => {
-    if (fastForwardRun.current || campaignGuard.current || !tryBeginInteraction()) return;
+  const runStepTick = useCallback(async (guide?:GuidedWorldTurn, meeting?:SectMeetingRequest):Promise<boolean> => {
+    if ((guide&&meeting)||fastForwardRun.current || campaignGuard.current || !tryBeginInteraction()) return false;
     let modelAbort: AbortController | undefined;
     try {
       const starting = authority.current;
       const branchId = history.current.activeBranchId;
       const revision=saveContextVersion.current;
       const directed=guide&&resolveGuidedWorldTurn(guide,starting,branchId,revision);
-      if(guide&&!directed)return;
+      if(guide&&!directed)return false;
+      const sectJobAssignments=meeting&&meeting.world===starting&&meeting.branchId===branchId&&meeting.revision===revision?
+        quoteSectMeetingOrders(starting,meeting.assignments):undefined;
+      if(meeting&&!sectJobAssignments)return false;
+      const directedDisciples=new Set(sectJobAssignments?.map(row=>row.discipleId));
+      let sectJobRows:readonly SectJobObservation[]=[];
+      const sectJobOptions=sectJobAssignments===undefined?undefined:{
+        sectJobAssignments,onSectJobsSettled:(rows:readonly SectJobObservation[])=>{sectJobRows=rows;},
+      };
       if (llmConfig.enabled && llmConfig.apiKey.trim()) {
         const controller = new AbortController();
         modelAbort = controller;
@@ -162,7 +186,7 @@ export function useWorldSimulationController({
         const fairness = fairTurns.current.get(branchId)?.state ?? createFairModelTurnState();
         const admission = () => llmScheduler.decisionAdmission(requestedTick, endpoint);
         const turn = await runModelDecisionTurn({
-          state: fairness, eligible: modelDecisionCandidates(starting).filter(actor=>actor.id!==directed?.actorId), signal: controller.signal,
+          state: fairness, eligible: modelDecisionCandidates(starting).filter(actor=>actor.id!==directed?.actorId&&!directedDisciples.has(actor.id)), signal: controller.signal,
           admission: admission(), currentAdmission: admission,
           request: (actor, signal, onStart) => requestCultivatorLLMDecision(actor, starting, llmConfig, requestedTick, { signal, onStart }),
         });
@@ -170,7 +194,7 @@ export function useWorldSimulationController({
         llmScheduler.markDecision('validated', modelActors.size);
         if (turn.stale || !current()) {
           llmScheduler.markDecision('stale', modelActors.size);
-          return;
+          return false;
         }
         const decisions = Object.fromEntries(turn.orders);
         if(directed)decisions[directed.actorId]=directed.decision;
@@ -180,24 +204,24 @@ export function useWorldSimulationController({
         let canonicalEraBatch:readonly WorldEvent[]=[];
         const tick = advanceWorldTick(starting, decisions, undefined, 'deferred', (id, effective) => {
           if (effective && modelActors.has(id)) applied.add(id);
-        }, { tape, modelActors, suppressAutoClanConsent:new Set(turn.startedActorIds), onWatchBatch: (events) => { canonicalWatchBatch = events; },
+        }, { tape, ...sectJobOptions, modelActors, suppressAutoClanConsent:new Set(turn.startedActorIds), onWatchBatch: (events) => { canonicalWatchBatch = events; },
           onCompletedEvents:events=>{canonicalEraBatch=events;} });
         const [reflected, dramatized] = await Promise.all([
           enrichAnnualReflections(tick, llmConfig), enrichTickDialogues(tick, llmConfig),
         ]);
         if (!current()) {
           llmScheduler.markDecision('stale', modelActors.size);
-          return;
+          return false;
         }
         const withCouncil = await settleAnnualCouncilOnline({ ...reflected, events: dramatized.events }, llmConfig);
         if (!current()) {
           llmScheduler.markDecision('stale', modelActors.size);
-          return;
+          return false;
         }
         const next = await settleChronicleOnline(withCouncil, llmConfig);
         if (!current()) {
           llmScheduler.markDecision('stale', modelActors.size);
-          return;
+          return false;
         }
         const nativeEraIds=new Set(canonicalEraBatch.map(({id})=>id));
         recordEraHistoryTurn(starting,next,[...canonicalEraBatch,...next.events.filter(({tick,id})=>tick===next.tick&&!nativeEraIds.has(id))]);
@@ -208,7 +232,8 @@ export function useWorldSimulationController({
         }
         modelStepAbort.current = undefined;
         if (updateWorld((live) => commitCouncilSnapshot(live, starting, next)) === next) {
-          retainReplay(branchId, tape, next);
+          retainReplay(branchId,tape,next,sectJobAssignments);
+          if(sectJobAssignments)setLastSectMeeting({world:next,rows:sectJobRows});
           const livingActorIds = next.cultivators.filter(({ alive, hp }) => alive && hp > 0).map(({ id }) => id);
           const state = commitFairModelTurn(fairness, { ...turn, livingActorIds });
           const utility = turn.eligibleActorIds.length - modelActors.size;
@@ -220,19 +245,29 @@ export function useWorldSimulationController({
           llmScheduler.markDecision('local_fallback', utility);
           llmScheduler.markDecision('applied', applied.size);
           llmScheduler.markDecision('simulation_rejected', modelActors.size - applied.size);
+          return true;
         } else {
           llmScheduler.markDecision('stale', modelActors.size);
+          return false;
         }
       } else {
         const tape = createDecisionReplayTape(starting, 'utility');
-        const next = updateWorld((prev) => advanceWorldTick(prev,directed?{[directed.actorId]:directed.decision}:undefined,undefined,'utility',undefined,{ tape }));
-        retainReplay(branchId, tape, next);
+        const next=updateWorld(prev=>prev===starting?
+          advanceWorldTick(prev,directed?{[directed.actorId]:directed.decision}:undefined,undefined,'utility',undefined,{tape,...sectJobOptions}):prev);
+        if(next===starting||next.tick!==starting.tick+1)return false;
+        retainReplay(branchId,tape,next,sectJobAssignments);
+        if(sectJobAssignments)setLastSectMeeting({world:next,rows:sectJobRows});
+        return true;
       }
     } finally {
       if (modelStepAbort.current === modelAbort) modelStepAbort.current = undefined;
       endInteraction();
     }
   }, [llmConfig, updateWorld, retainReplay, tryBeginInteraction, endInteraction]);
+
+  const handleStepTick=useCallback(async(guide?:GuidedWorldTurn):Promise<void>=>{await runStepTick(guide);},[runStepTick]);
+  const confirmSectMeeting=useCallback((world:WorldState,branchId:string,revision:number,
+    assignments:readonly SectJobAssignment[])=>runStepTick(undefined,{world,branchId,revision,assignments}),[runStepTick]);
 
   useEffect(() => {
     if (!playbackEnabled || !isRunning) return;
@@ -258,6 +293,7 @@ export function useWorldSimulationController({
   const activateTimeline = (next: WorldTimeline, incoming: WorldState) => {
     if (fastForwardRun.current) stopFastForward('原分支已改变，暂存快进已丢弃。');
     modelStepAbort.current?.abort();
+    setLastSectMeeting(undefined);
     saveContextVersion.current += 1;
     setIsRunning(false);
     clearPreview();
@@ -506,10 +542,13 @@ export function useWorldSimulationController({
     const trace = visibleWorld.decisionTrace.records.find(({ id }) => id === traceId);
     const saved = trace && replayTapes.current.get(history.current.activeBranchId)?.get(trace.tick);
     if (!saved) return { ok: false, reason: '原始决策快照不在本分支最近 12 轮的复演缓存中。' };
+    if(saved.sectJobAssignments?.some(row=>row.discipleId===trace.actorId))
+      return {ok:false,reason:'这是掌门亲自交付的差事，不做自行改派。'};
     return replayOneTurn(saved.tape, saved.committed, traceId, candidateId,
       (base, orders, mode, onActor, replayDraws, replayHeartModelActors, replayForbiddenModelActors, replayGrandSiegeModelActors) =>
         advanceWorldTick(base, orders, undefined, mode, undefined, {
           captureTrace: false, onActor, replayDraws, replayHeartModelActors, replayForbiddenModelActors, replayGrandSiegeModelActors,
+          sectJobAssignments:saved.sectJobAssignments,
         }));
   };
   const toggleAutoplay = () => { if (!fastForwardRun.current && !campaignGuard.current) setIsRunning((current) => !current); };
@@ -526,7 +565,8 @@ export function useWorldSimulationController({
     viewEpoch,viewScopeKey,sourceBranch,preview,activateTimeline,restoreHistoricalFrame,clearPreview,
     updateWorld,replaceWorld,newWorldFromSeed,changeStorytellerStyle,canUseSaveContext,archiveCurrentNarrative,handleReset,
     isRunning,setIsRunning,isStepping,tryBeginInteraction,endInteraction,tickIntervalMs,setTickIntervalMs,
-    llmConfig,changeLlmConfig,handleStepTick,toggleAutoplay,compareDecision,fairModelCoverage,
+    llmConfig,changeLlmConfig,handleStepTick,toggleAutoplay,compareDecision,fairModelCoverage,confirmSectMeeting,
+    sectJobObservations:!preview&&lastSectMeeting?.world===world?lastSectMeeting.rows:undefined,
     handleTimelinePreview,handleTimelineSelectBranch,handleTimelineFork,timelineNotice,
     fastForwardView,fastForwardLocked,startFastForward,stopFastForward,
     commandFastForward,applyFastForward,campaign,campaignPhase,

@@ -1,3 +1,5 @@
+import type {SectJobAssignment,SectJobObservation} from '../../types/sectJobs';
+import type {SectMeetingTurn} from '../sectMeetingOrders';
 import type { Cultivator, DecisionTraceCandidate, LLMDecisionPayload, WorldEvent, WorldState } from '../../types/world';
 import type { BeastDuelContact } from '../../types/beastDuelProtection';
 import type { ForbiddenDuelContact, NativeDuelRolls } from '../../types/forbiddenArt';
@@ -10,6 +12,8 @@ import type { beginRegionalSimulationTurn } from '../regionalSimulationEngine';
 
 export interface TickTraceOptions {
   tape?: DecisionReplayTape;
+  sectJobAssignments?:readonly SectJobAssignment[];
+  onSectJobsSettled?:(rows:readonly SectJobObservation[])=>void;
   modelActors?: ReadonlySet<string>;
   /** An attempted online choice that did not validate cannot become an offline assent. */
   suppressAutoClanConsent?: ReadonlySet<string>;
@@ -37,6 +41,7 @@ export interface TickInputs {
 export interface TickBaseContext extends TickInputs {
   readonly nextState: WorldState;
   readonly rng: () => number;
+  readonly sectMeeting?:SectMeetingTurn;
 }
 
 export interface PendingGateEffect {

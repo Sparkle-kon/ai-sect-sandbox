@@ -78,7 +78,7 @@ function poseDetails(ctx: Pen, model: MapActorSpriteModel, px: number, time: num
  * reads. Zero phase uses the same contemplative frame for reduced motion and deterministic previews.
  */
 export function drawCanvasCharacterSprite(ctx: Pen, x: number, y: number, character: MapActorSpriteModel,
-  size: number, phaseSeconds: number, mounted = false): void {
+  size: number, phaseSeconds: number, mounted = false, walking = false): void {
   if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(size) || size <= 0) return;
   const seconds = Number.isFinite(phaseSeconds) ? Math.max(0, phaseSeconds) : 0;
   const phase = phaseFromId(character.id);
@@ -94,7 +94,7 @@ export function drawCanvasCharacterSprite(ctx: Pen, x: number, y: number, charac
   if (mounted) mount(ctx,size,base + 1,character.appearance.palette.spirit,facing);
   poseDetails(ctx,character,size,seconds,phase,facing);
   ctx.save(); ctx.translate(0,base); ctx.scale(scale,scale);
-  drawStageFigure(ctx,character,seconds,facing,phase);
+  drawStageFigure(ctx,character,seconds,facing,phase,walking);
   ctx.restore();
   ctx.restore();
 }

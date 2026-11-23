@@ -1,3 +1,4 @@
+import type {SectJobAssignment} from './types/sectJobs';
 import {SectManagementHome} from './components/SectManagementHome';
 import {createManagedSectWorld} from './engine/starterSectWorld';
 import type {StarterDraw, StarterSectId} from './types/sectManagement';
@@ -752,8 +753,12 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
     setDashboardOpen(view==='sandbox');
     if(view==='sandbox')openWorkspace('map');
   };
+  const confirmSectJobs=async(expected:WorldState,assignments:readonly SectJobAssignment[]):Promise<boolean>=>{
+    if(managerView!=='opening'||expected!==world||!world.sectManagement||!managerIsCurrent())return false;
+    return simulation.confirmSectMeeting(expected,timeline.activeBranchId,managerRevision,assignments);
+  };
   if(managerView==='opening')return <SectManagementHome world={world} titleRef={managerHeading} busy={managerBlocked}
-    onStart={startManagedSect} onOpen={openFromManager}/>;
+    onStart={startManagedSect} onOpen={openFromManager} onConfirmJobs={confirmSectJobs} observations={simulation.sectJobObservations}/>;
   if(managerView==='saves')return <main className="xianxia-shell min-h-dvh bg-slate-950 text-slate-100 px-4 py-3">
     <div className="mx-auto max-w-3xl space-y-3">
       <header className="flex items-center justify-between gap-2">

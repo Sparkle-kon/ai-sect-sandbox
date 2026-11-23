@@ -43,7 +43,7 @@ function sleeve(ctx: Pen,x: number,y: number,flip: number,rotation: number,color
   ctx.restore();
 }
 
-export function drawStageFigure(ctx: Pen,actor: Pick<SceneStageActor, 'appearance' | 'pose'>,time: number,facing: number,phase: number): void {
+export function drawStageFigure(ctx: Pen,actor: Pick<SceneStageActor, 'appearance' | 'pose'>,time: number,facing: number,phase: number,walking=false): void {
   const {face,palette,attire,ageBand} = actor.appearance;
   const {pose} = actor;
   const ink = shade(face.ink,'#141a26',.44);
@@ -54,7 +54,8 @@ export function drawStageFigure(ctx: Pen,actor: Pick<SceneStageActor, 'appearanc
   const skinLight = shade(face.skin,'#fff2bc',.37);
   const motion = Math.sin(time * (pose === 'fight' ? 5.2 : pose === 'labor' ? 3.4 : 2.3) + phase);
   const seated = pose === 'cultivate';
-  const bob = time === 0 ? 0 : motion > .62 ? 1 : 0;
+  const gait=walking?Math.sin(time*29):0;
+  const bob = walking?Math.abs(gait)*2:time === 0 ? 0 : motion > .62 ? 1 : 0;
   const lean = pose === 'labor' ? 2.7 + motion*1.15 : pose === 'fight' ? 1 : 0;
 
   ctx.save();
@@ -82,9 +83,13 @@ export function drawStageFigure(ctx: Pen,actor: Pick<SceneStageActor, 'appearanc
     patch(ctx,fabric,[[-19,-11],[-12,-16],[0,-18],[13,-16],[20,-11],[17,-8],[-16,-8]]);
     rect(ctx,palette.trim,-12,-10,24,1);
   } else {
+    if(walking){ctx.save();ctx.translate(-gait*5,Math.min(0,gait*3));}
     patch(ctx,ink,[[-10,-11],[-3,-11],[-3,-1],[-5,1],[-13,1],[-13,-2],[-10,-4]]);
+    rect(ctx,'#a18169',-11,-2,7,1);
+    if(walking){ctx.restore();ctx.save();ctx.translate(gait*5,Math.min(0,-gait*3));}
     patch(ctx,ink,[[3,-11],[rightFoot+3,-11],[rightFoot+4,-4],[rightFoot+7,-2],[rightFoot+6,1],[rightFoot-2,1],[rightFoot-2,-3]]);
-    rect(ctx,'#a18169',-11,-2,7,1); rect(ctx,'#a18169',rightFoot,-2,6,1);
+    rect(ctx,'#a18169',rightFoot,-2,6,1);
+    if(walking)ctx.restore();
   }
 
   const hem = seated ? -12 : -4;

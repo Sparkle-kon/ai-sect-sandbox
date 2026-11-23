@@ -1,3 +1,5 @@
+import {observeSectJob,planSectJob,settleSectJobChore,snapshotSectJobEvidence} from '../sectJobs';
+import type {SectJobPlan} from '../../types/sectJobs';
 import type { Cultivator, LLMDecisionPayload, WorldEvent, WorldState } from '../../types/world';
 import type { TickActionPorts, WorldTickContext } from './tickContext';
 import { activeAvatar } from '../avatarEngine';
@@ -90,9 +92,18 @@ function creditSectService(world: WorldState, actor: Cultivator, event: WorldEve
   rewardContribution(actor, world, points);
 }
 
+/** A standing appointment takes precedence unless it is exactly the job the player picked. */
+function matchesSectJobDecision(job:LLMDecisionPayload,due:LLMDecisionPayload):boolean{
+  const mechanics=(decision:LLMDecisionPayload)=>(Object.keys(decision) as (keyof LLMDecisionPayload)[])
+    .filter(key=>key!=='innerMonologue'&&String(key)!=='action'&&decision[key]!==undefined).sort()
+    .map(key=>[key,decision[key]] as const);
+  const left=mechanics(job),right=mechanics(due);
+  return left.length===right.length&&left.every(([key,value],i)=>key===right[i][0]&&value===right[i][1]);
+}
+
 export function runOrdinaryActorAction(
   cultivator: Cultivator,
-  { nextState, prevState, rng, newEvents, regionalTurn, pendingGateEffects, avatarOrder, precomputedDecisions, recordDecisionEffect, traceOptions }: WorldTickContext,
+  { nextState, prevState, rng, newEvents, regionalTurn, pendingGateEffects, avatarOrder, precomputedDecisions, recordDecisionEffect, traceOptions, sectMeeting }: WorldTickContext,
   { applyCultivatorBrainDecision }: TickActionPorts,
 ): void {
   const supplied = precomputedDecisions && Object.hasOwn(precomputedDecisions, cultivator.id) ? precomputedDecisions[cultivator.id] : undefined;
@@ -494,6 +505,19 @@ export function runOrdinaryActorAction(
       if (local) { provided = local; modelStoryChoiceReplaced = Boolean(modelProposal); }
     }
   }
+  const job=sectMeeting?.byDisciple.get(cultivator.id);
+  let plannedJob:Exclude<SectJobPlan,{kind:'blocked'}>|undefined;
+  if(job&&sectMeeting&&!avatarDecision&&!expeditionOrder&&!occasion&&!liveEncounter&&!liveDestiny&&
+      activeAvatar(nextState)!==cultivator&&!activeSiegeForActor(nextState,cultivator)){
+    const possible=planSectJob(nextState,cultivator,job.jobId);
+    const required=requiredBeforeOrdinaryDecision(cultivator,nextState);
+    if(possible.kind!=='blocked'&&(!required||matchesSectJobDecision(possible.decision,required))){
+      plannedJob=possible;
+      provided=possible.decision;
+    }else if(possible.kind==='blocked'){
+      sectMeeting.observations.set(cultivator.id,{...job,tick:nextState.tick,phase:'unavailable',line:possible.reason});
+    }
+  }
   if(!liveEncounter&&!liveDestiny&&expeditionOrder?.chosenAction!=='EXPEDITION_DUNGEON'&&deferRegionalActorTurn(nextState,regionalTurn,cultivator,expeditionOrder??provided??supplied??fieldNegotiation,
     ()=>!!requiredBeforeOrdinaryDecision(cultivator,nextState)||
       availableVacantGateActions(cultivator,nextState,nextState.tick).length>0||
@@ -551,6 +575,7 @@ export function runOrdinaryActorAction(
   const previousRealm = cultivator.realm;
   const previousRealmStage = cultivator.realmStage;
   const ordinaryBefore = snapshotOrdinaryAction(cultivator, decision);
+  const jobBefore=plannedJob&&plannedJob.decision===decision?snapshotSectJobEvidence(nextState,cultivator):undefined;
   const evt = applyCultivatorBrainDecision(nextState, cultivator, decision, rng, undefined, (event) => {
     newEvents.push(event);
     if(!isTaughtSwordPracticeEvent(event)&&!isPrivateSchoolFormEvent(event)&&!isPrivateMercyReunionEvent(event))witnessEvent(nextState,event);
@@ -585,6 +610,12 @@ export function runOrdinaryActorAction(
   const validEffect = decision.chosenAction === cultivator.currentAction && (evt !== null ||
     (decision.chosenAction === 'REST' && decision.targetHeartDemonAftermathId===undefined) || decision.chosenAction === 'CULTIVATE' ||
     (decision.chosenAction === 'EXPLORE' && previousLocation !== cultivator.locationId));
+  if(job&&sectMeeting&&plannedJob&&jobBefore){
+    const choreEvent=validEffect&&plannedJob.kind==='chore'?settleSectJobChore(nextState,cultivator,plannedJob):undefined;
+    if(choreEvent){newEvents.push(choreEvent);witnessEvent(nextState,choreEvent);}
+    sectMeeting.observations.set(cultivator.id,
+      observeSectJob(nextState,cultivator,job,plannedJob,jobBefore,choreEvent??evt??undefined,validEffect));
+  }
   if(story)completeStorytellerChoice(nextState,cultivator,story,
     validEffect&&storytellerActionApplied(cultivator,story.native,previousLocation,evt));
   recordOrdinaryActionEvidence(cultivator,nextState.tick,decision,ordinaryBefore,

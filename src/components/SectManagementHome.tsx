@@ -1,16 +1,21 @@
-import {useId,useMemo,useRef,useState,type RefObject} from 'react';
+import {lazy,Suspense,useId,useMemo,useRef,useState,type RefObject} from 'react';
 import {previewStarterSect} from '../engine/starterSectWorld';
 import {MANAGEMENT_BUILDING_IDS,STARTER_SECT_IDS,
   type ManagementBuildings,type StarterDraw,type StarterSectId} from '../types/sectManagement';
 import type {WorldState} from '../types/world';
+import type {SectJobObservation} from '../types/sectJobs';
 import {CultivatorPortrait} from './CultivatorPortrait';
 import {projectCultivatorPortrait} from './cultivatorPortraitModel';
 import {LocalCourtyardCanvas} from './LocalCourtyardCanvas';
 import {buildLocalCourtyard} from './localCourtyardModel';
 import {createTerrainMapView} from './terrainMapView';
+import {mapTransitActorIds} from './mapConvoyView';
 
 import {SectQuirkBadges} from './SectQuirkBadges';
 import {sectQuirkLabels} from './sectQuirkLabels';
+import type {ConfirmSectJobs} from './SectMorningBoard';
+
+const SectMorningBoard=lazy(async()=>({default:(await import('./SectMorningBoard')).SectMorningBoard}));
 
 type HomeView='story'|'cockpit'|'sandbox'|'saves';
 export interface SectManagementHomeProps {
@@ -19,6 +24,8 @@ export interface SectManagementHomeProps {
   onStart:(starterId:StarterSectId,draw:StarterDraw)=>boolean;
   onOpen:(view:HomeView)=>void;
   onTick?:()=>void;
+  onConfirmJobs?:ConfirmSectJobs;
+  observations?:readonly SectJobObservation[];
   titleRef?:RefObject<HTMLHeadingElement>;
 }
 
@@ -109,15 +116,18 @@ function StarterSelection({world,busy,onStart}:Omit<SectManagementHomeProps,'onO
   </>;
 }
 
-function ManagedCourtyard({world,busy,onTick}:Pick<SectManagementHomeProps,'world'|'onTick'>&{busy:boolean}){
+function ManagedCourtyard({world,busy,onTick,onConfirmJobs,observations}:Pick<SectManagementHomeProps,'world'|'onTick'|'onConfirmJobs'|'observations'>&{busy:boolean}){
   const state=world.sectManagement;
   const sect=world.sects.find(row=>row.id===state?.sectId);
   const leader=world.cultivators.find(row=>row.id===state?.leaderId);
   const siteId=state?.homeSiteId;
-  const plan=useMemo(()=>{
+  const courtyard=useMemo(()=>{
     if(!siteId)return undefined;
-    return buildLocalCourtyard(world,createTerrainMapView(world,undefined,false),siteId);
+    const view=createTerrainMapView(world,undefined,false),moving=mapTransitActorIds(world);
+    for(const id of view.trailPositions.keys())moving.add(id);
+    return {plan:buildLocalCourtyard(world,view,siteId),moving};
   },[world,siteId]);
+  const plan=courtyard?.plan;
   if(!state||!sect)return null;
   const roster=world.cultivators.filter(row=>row.alive&&row.id!==state.leaderId&&row.sectId===state.sectId);
   const creditor=state.debt&&world.cultivators.find(row=>row.id===state.debt?.creditorId)?.name;
@@ -129,6 +139,10 @@ function ManagedCourtyard({world,busy,onTick}:Pick<SectManagementHomeProps,'worl
       <span>{state.debt&&state.debt.principal>0
         ?`欠${creditor??'债主'} ${state.debt.principal} 枚 · ${due?`余 ${due} 月`:'还款日已到'}`:'暂无欠款'}</span>
     </p>
+    {onConfirmJobs?<Suspense fallback={<p role="status" className="text-sm text-slate-300">正在摆放晨会差事牌…</p>}>
+      <SectMorningBoard world={world} busy={busy} plan={plan} moving={courtyard?.moving} onConfirmJobs={onConfirmJobs} observations={observations}
+        buildings={<BuildingList levels={state.buildings}/>}/>
+    </Suspense>:<>
     <div className="grid min-w-0 items-start gap-3 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
       <section className={card} aria-label="宗门庭院">
         {plan?<LocalCourtyardCanvas plan={plan} embedded/>:<p className="text-sm text-slate-300">此刻未见山门内的景象。</p>}
@@ -151,10 +165,11 @@ function ManagedCourtyard({world,busy,onTick}:Pick<SectManagementHomeProps,'worl
       </section>
     </div>
     {onTick&&<button type="button" className={button} disabled={busy} onClick={onTick}>过一个月</button>}
+    </>}
   </>;
 }
 
-export function SectManagementHome({world,busy=false,onStart,onOpen,onTick,titleRef}:SectManagementHomeProps){
+export function SectManagementHome({world,busy=false,onStart,onOpen,onTick,onConfirmJobs,observations,titleRef}:SectManagementHomeProps){
   const sect=world.sects.find(row=>row.id===world.sectManagement?.sectId);
   return <main className="xianxia-shell min-h-dvh bg-slate-950 px-3 pb-8 pt-[max(.75rem,env(safe-area-inset-top))] text-slate-100 sm:px-6">
     <div className="mx-auto max-w-6xl space-y-3">
@@ -165,7 +180,7 @@ export function SectManagementHome({world,busy=false,onStart,onOpen,onTick,title
         </div>
         <More busy={busy} onOpen={onOpen}/>
       </header>
-      {sect?<ManagedCourtyard world={world} busy={busy} onTick={onTick}/>:
+      {sect?<ManagedCourtyard world={world} busy={busy} onTick={onTick} onConfirmJobs={onConfirmJobs} observations={observations}/>:
         <StarterSelection key={world.random.seed} world={world} busy={busy} onStart={onStart}/>}
     </div>
   </main>;

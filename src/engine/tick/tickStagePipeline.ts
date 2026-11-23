@@ -1,3 +1,4 @@
+import {openSectMeetingTurn,readSettledSectMeeting} from '../sectMeetingOrders';
 import type { WorldState } from '../../types/world';
 import { cloneWorldWithColdHistory } from '../coldHistoryEngine';
 import { worldRandom } from '../worldRandom';
@@ -42,12 +43,17 @@ export type TickStageName = TickStagePipeline[number]['id'];
 export function runTickStagePipeline(inputs: TickInputs, ports: TickActionPorts): WorldState {
   const nextState: WorldState = cloneWorldWithColdHistory(inputs.prevState);
   const rng = inputs.injectedRandom ?? worldRandom(nextState);
-  const context: TickBaseContext = { ...inputs, nextState, rng };
+  const sectMeeting=openSectMeetingTurn(inputs.prevState,inputs.traceOptions?.sectJobAssignments);
+  const precomputedDecisions=sectMeeting?.byDisciple.size&&inputs.precomputedDecisions?
+    Object.fromEntries(Object.entries(inputs.precomputedDecisions).filter(([id])=>!sectMeeting.byDisciple.has(id))):
+    inputs.precomputedDecisions;
+  const context: TickBaseContext = { ...inputs, precomputedDecisions, nextState, rng, sectMeeting };
   const [preTurn, movement, actions, institutions, chronicle] = tickStagePipeline;
   const preTurnContext = preTurn.run(context);
   const turnContext = movement.run(preTurnContext);
   actions.run(turnContext, ports);
   institutions.run(turnContext, ports);
   chronicle.run(turnContext);
+  if(sectMeeting)inputs.traceOptions?.onSectJobsSettled?.(readSettledSectMeeting(sectMeeting,nextState.tick));
   return turnContext.nextState;
 }
