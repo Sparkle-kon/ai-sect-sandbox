@@ -60,7 +60,7 @@
   - 解决“每写一个剧情就要新建 3 个 `.ts` 文件并往 `WorldState` 顶层加字段”的膨胀瓶颈！构建 `src/engine/storyletEngine.ts`（统一管理 `Condition 触发条件 -> Role 角色绑定 -> Scene 2D舞台配置 -> Choices 选项 -> Effects 状态变更`），将散落的微剧本逐步收敛为干净的数据驱动 Storylet 注册表，不再污染 `WorldState` 顶层结构。
 - [x] **[SV3-2] Engine 2.0 第二刀：拆解 4,600 行 `storageEngine.ts` 与 4,000 行 `llmBrain.ts` 上帝文件 (`ModularStorageAndBrainRegistry`)**：
   - 将 `src/engine/storageEngine.ts`（4624行）按领域拆分为声明式/模块化的子校验器（`src/engine/storage/`），将 `src/engine/llmBrain.ts`（4041行）拆分为独立的领域候选动作注册表（`src/engine/cognition/`），使核心引擎单个文件控制在 1,000 行以内，大幅提升大型游戏的可维护性与编译速度。
-- [ ] **[SV3-3] Engine 2.0 第三刀：2,500 行 `worldEngine.ts` 回合管线插件化 (`WorldTickPipelineRegistry`)**：
+- [x] **[SV3-3] Engine 2.0 第三刀：2,500 行 `worldEngine.ts` 回合管线插件化 (`WorldTickPipelineRegistry`)**：
   - 将 `worldEngine.ts` 中硬编码串联的 110+ 个子系统调用重构为清晰的五阶段 `TickStagePipeline`（`PreTurn -> MovementAndEncounter -> ActionAndCombat -> InstitutionAndWorld -> ChronicleAndPostTurn`），让新系统通过标准插件接口挂载。
 - [ ] **[SV3-4] 视觉一致性与 UI 卡片国风纹理全面精修 (`XianxiaVisualIdentityAudit`)**：
   - 为全站面板、按钮、弹窗与页签统一赋予极具辨识度的东方仙侠美术风格（玄墨底纹、暗金边角纹饰、宣纸卷轴卡片、清晰的角色小头像徽章），确保无论在「故事首页」、「全息大盘」还是「五大工作区」中，每一屏都有丰富的图形、立绘与场景视觉元素，绝无单调的黑底纯文字页。

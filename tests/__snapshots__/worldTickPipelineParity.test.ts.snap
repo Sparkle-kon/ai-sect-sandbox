@@ -1,0 +1,596 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ordered native month: exact pre-extraction authority and event outputs > keeps an uncapped busy native month separate from the capped live feed and annual council supplements 1`] = `
+{
+  "deferred": {
+    "calendar": [
+      13,
+      1002,
+      1,
+    ],
+    "completedCount": 129,
+    "input": {
+      "sha256": "24988bfe23aaff30d9d8357694cf8117363dd3cfd119d206252920348572ad10",
+      "utf8Bytes": 343056,
+    },
+    "liveCount": 120,
+    "output": {
+      "sha256": "66151309d4bb5229858137bc2b0f449b83067acc5573943073cec1c560d9ec62",
+      "utf8Bytes": 1544670,
+    },
+    "randomAfter": {
+      "algorithm": "mulberry32-v1",
+      "seed": 50421,
+      "state": 50421,
+    },
+    "randomBefore": {
+      "algorithm": "mulberry32-v1",
+      "seed": 50421,
+      "state": 50421,
+    },
+    "rawCount": 129,
+    "streams": {
+      "actorSteps": {
+        "sha256": "64a2c6cb1196e7e63cd9af4cd31ee0c29986ea2fd472ec6a5149d777ae098d56",
+        "utf8Bytes": 149433,
+      },
+      "archive": {
+        "sha256": "9e747b9aa642b111c1422a52fb96c49594aafe26c1a60dc77e042e0ebf037e6b",
+        "utf8Bytes": 49828,
+      },
+      "completed": {
+        "sha256": "9e747b9aa642b111c1422a52fb96c49594aafe26c1a60dc77e042e0ebf037e6b",
+        "utf8Bytes": 49828,
+      },
+      "council": {
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "utf8Bytes": 2,
+      },
+      "draws": {
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "utf8Bytes": 2,
+      },
+      "effects": {
+        "sha256": "749a2e95ee694fa371c2ab396cf6937d0b32a3d9039502b9166903a167f96a33",
+        "utf8Bytes": 3349,
+      },
+      "live": {
+        "sha256": "d85a2f5ce3b8a1b76a385593bde4a599cfc939e7d5479d6db4ff04849a5e9c7f",
+        "utf8Bytes": 46313,
+      },
+      "map": {
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "utf8Bytes": 2,
+      },
+      "order": {
+        "sha256": "434c86cd8940aa4d81adf478a59cb38b2ce449f46f0d442d7468744eb1f478c9",
+        "utf8Bytes": 15047,
+      },
+      "presentation": {
+        "sha256": "e02d25837bd2a24583546f128aa985b8e6e2552afaac866434800314bd13fae4",
+        "utf8Bytes": 36,
+      },
+      "replay": {
+        "sha256": "6674f70dfcc0e303c0dcdcefef3ddc17b52bb0e3707b9fcd63d47248f3af0074",
+        "utf8Bytes": 19371,
+      },
+      "savedArchive": {
+        "sha256": "b222e502a1c47a65b23d6647d5c3216d8ce51ac318d18766f95bd8a465ff0ac0",
+        "utf8Bytes": 3206,
+      },
+      "trace": {
+        "sha256": "e9da5dedb4484548e733c363269a5303c64d4e84259138ed0fa1b2fc5381b16a",
+        "utf8Bytes": 115937,
+      },
+      "watch": {
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "utf8Bytes": 2,
+      },
+      "watches": {
+        "sha256": "6ad6cb5d9e9f0aac151e71e7d75da2ce502688dfd3cf448dfa309db636fee90d",
+        "utf8Bytes": 281,
+      },
+      "witness": {
+        "sha256": "c0d2c836d61120994e61fd50b88f8a54fa5fd3095ef078cb7b568b1a6a9727d2",
+        "utf8Bytes": 51116,
+      },
+    },
+    "supplemental": [],
+  },
+  "offline": {
+    "calendar": [
+      13,
+      1002,
+      1,
+    ],
+    "completedCount": 130,
+    "input": {
+      "sha256": "24988bfe23aaff30d9d8357694cf8117363dd3cfd119d206252920348572ad10",
+      "utf8Bytes": 343056,
+    },
+    "liveCount": 120,
+    "output": {
+      "sha256": "a073f23e44ef67291737640378c79441e70959ae1da14a053bd5b35191e59e87",
+      "utf8Bytes": 1519068,
+    },
+    "randomAfter": {
+      "algorithm": "mulberry32-v1",
+      "seed": 50421,
+      "state": 50421,
+    },
+    "randomBefore": {
+      "algorithm": "mulberry32-v1",
+      "seed": 50421,
+      "state": 50421,
+    },
+    "rawCount": 129,
+    "streams": {
+      "actorSteps": {
+        "sha256": "64a2c6cb1196e7e63cd9af4cd31ee0c29986ea2fd472ec6a5149d777ae098d56",
+        "utf8Bytes": 149433,
+      },
+      "archive": {
+        "sha256": "48d34841851e51d6c8e6a690315b0f8f2d8c3c0d4375a1ef1160d11135865ac7",
+        "utf8Bytes": 50192,
+      },
+      "completed": {
+        "sha256": "9a053d12004bb7292797444cea2df1fb2ea080f6a33386f53ad81784441bbc34",
+        "utf8Bytes": 50190,
+      },
+      "council": {
+        "sha256": "b2f02a20e747246785194f62c38df77a82db786cce5fa0293adca156c3331951",
+        "utf8Bytes": 2175,
+      },
+      "draws": {
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "utf8Bytes": 2,
+      },
+      "effects": {
+        "sha256": "749a2e95ee694fa371c2ab396cf6937d0b32a3d9039502b9166903a167f96a33",
+        "utf8Bytes": 3349,
+      },
+      "live": {
+        "sha256": "fcc9f8401886129a37f4f7c69cc5ad478e8ea9a387b03fcdd40de9f3b7b7bdd5",
+        "utf8Bytes": 46272,
+      },
+      "map": {
+        "sha256": "9e747b9aa642b111c1422a52fb96c49594aafe26c1a60dc77e042e0ebf037e6b",
+        "utf8Bytes": 49828,
+      },
+      "order": {
+        "sha256": "564c6897d4c4d3578df5e8c9bcc051a560b9d2156637c6460d0881a5b3858a81",
+        "utf8Bytes": 15071,
+      },
+      "presentation": {
+        "sha256": "e02d25837bd2a24583546f128aa985b8e6e2552afaac866434800314bd13fae4",
+        "utf8Bytes": 36,
+      },
+      "replay": {
+        "sha256": "6674f70dfcc0e303c0dcdcefef3ddc17b52bb0e3707b9fcd63d47248f3af0074",
+        "utf8Bytes": 19371,
+      },
+      "savedArchive": {
+        "sha256": "60602f45f93d81edbab1e3ca088eb1764999bf4e6d1263dc6f700150c0f76d7d",
+        "utf8Bytes": 4330,
+      },
+      "trace": {
+        "sha256": "43d99d7c8f5718165b855c97d134ac3a59e637072ea429f8eea77dc40f65a608",
+        "utf8Bytes": 87181,
+      },
+      "watch": {
+        "sha256": "9e747b9aa642b111c1422a52fb96c49594aafe26c1a60dc77e042e0ebf037e6b",
+        "utf8Bytes": 49828,
+      },
+      "watches": {
+        "sha256": "aedfe5006d46181ae2954adf535046b965fbd23e973160b983eec0ee5bd2210a",
+        "utf8Bytes": 179,
+      },
+      "witness": {
+        "sha256": "c0d2c836d61120994e61fd50b88f8a54fa5fd3095ef078cb7b568b1a6a9727d2",
+        "utf8Bytes": 51116,
+      },
+    },
+    "supplemental": [
+      "evt-council-13-sect-bloodmoon-war:sect-qingyun",
+    ],
+  },
+}
+`;
+
+exports[`ordered native month: exact pre-extraction authority and event outputs > processes native brush damage before furnace allocation or the actor’s repeated brew 1`] = `
+{
+  "calendar": [
+    18,
+    1002,
+    6,
+  ],
+  "completedCount": 2,
+  "input": {
+    "sha256": "1a3e682f0b85a4b5d2087c1eb83877639d21623aa92406581d8f9db482c580bc",
+    "utf8Bytes": 227882,
+  },
+  "liveCount": 15,
+  "output": {
+    "sha256": "b53c52f070357e70a551cc29749b3339d0c2e73f961596e7e05ac817508f5b88",
+    "utf8Bytes": 237769,
+  },
+  "randomAfter": {
+    "algorithm": "mulberry32-v1",
+    "seed": 1,
+    "state": 1,
+  },
+  "randomBefore": {
+    "algorithm": "mulberry32-v1",
+    "seed": 1,
+    "state": 1,
+  },
+  "rawCount": 2,
+  "streams": {
+    "actorSteps": {
+      "sha256": "9dc67b5288600f29a1d6fb9908578761efc6f35a48f1e2a1acb15bf75fb211ad",
+      "utf8Bytes": 19400,
+    },
+    "archive": {
+      "sha256": "866dbfa5a1f4e9380e17194cc0b58b82c19bfc5ef1a2eb3a7a6bf82825d15266",
+      "utf8Bytes": 912,
+    },
+    "completed": {
+      "sha256": "866dbfa5a1f4e9380e17194cc0b58b82c19bfc5ef1a2eb3a7a6bf82825d15266",
+      "utf8Bytes": 912,
+    },
+    "council": {
+      "sha256": "4a53cbe7a7f184294d88b597a9aa17e83bb5f3dbb749d7f78251b61a1ff404bc",
+      "utf8Bytes": 2195,
+    },
+    "draws": {
+      "sha256": "b67ba9121266f0b61c4d88a85fc21983801c89cbb7f6d3b20f4bbf98f3206b77",
+      "utf8Bytes": 6,
+    },
+    "effects": {
+      "sha256": "f4f367e90bdb6c9b632cdfb117d624e982167b66008c6d75b299ae6d9e967802",
+      "utf8Bytes": 486,
+    },
+    "live": {
+      "sha256": "e5ead2907e0f3f3f508a5992b866056b04b797ca87da8b811f2e6c471d2df8fe",
+      "utf8Bytes": 4737,
+    },
+    "map": {
+      "sha256": "866dbfa5a1f4e9380e17194cc0b58b82c19bfc5ef1a2eb3a7a6bf82825d15266",
+      "utf8Bytes": 912,
+    },
+    "order": {
+      "sha256": "eada2616623575bde78639e4f8c43c0e7800ac67676aa5769a79db43bcaae188",
+      "utf8Bytes": 1538,
+    },
+    "presentation": {
+      "sha256": "dc1aa8a3fdfe73cd2b2bf31d94bd7070757a693791b879269254e57140fa0ec2",
+      "utf8Bytes": 1022,
+    },
+    "replay": {
+      "sha256": "92b6ad0fef436058c7129d3cb6f36c9e97deb08063a1d2c75d23c568724adc0a",
+      "utf8Bytes": 2133,
+    },
+    "savedArchive": {
+      "sha256": "f190b1169fcd776579d26e5567ac5cd4c4abb17be9aba78ec2aaabbb6a33b164",
+      "utf8Bytes": 4934,
+    },
+    "trace": {
+      "sha256": "5f583057be15713324a11d19b54bc353ab82d62573f8fedfb965554c68613aca",
+      "utf8Bytes": 107943,
+    },
+    "watch": {
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "utf8Bytes": 2,
+    },
+    "watches": {
+      "sha256": "8dc6e9d7c6ff94205cbc7ab311c65f5220fb882a486af13771be142a50406de7",
+      "utf8Bytes": 38,
+    },
+    "witness": {
+      "sha256": "93f6412f0ca1efb17438662c432e4c06425f914418a368eeba985000db49c3bb",
+      "utf8Bytes": 930,
+    },
+  },
+  "supplemental": [],
+}
+`;
+
+exports[`ordered native month: exact pre-extraction authority and event outputs > retains accepted strict provider choice and actual deferred native receipt, alongside Utility 1`] = `
+{
+  "decision": {
+    "chosenAction": "EXPEDITION_DUNGEON",
+    "dungeonMove": "gather",
+    "innerMonologue": "只按实际所在的秘境房间行事。",
+    "targetDungeonRoomId": "garden",
+    "targetOccasionId": "occasion-4-expedition",
+  },
+  "deferred": {
+    "calendar": [
+      9,
+      1001,
+      9,
+    ],
+    "completedCount": 1,
+    "input": {
+      "sha256": "11d081ccf21ab784de80d583b9972fe595c990a537ab34abdf7c40a1c89539b0",
+      "utf8Bytes": 178905,
+    },
+    "liveCount": 7,
+    "output": {
+      "sha256": "dd654a913689fd7cd3699a33c235dd8fcbcf7cec9f54a08c9ee6b2fffab44d72",
+      "utf8Bytes": 179071,
+    },
+    "randomAfter": {
+      "algorithm": "mulberry32-v1",
+      "seed": 2031,
+      "state": 2031,
+    },
+    "randomBefore": {
+      "algorithm": "mulberry32-v1",
+      "seed": 2031,
+      "state": 2031,
+    },
+    "rawCount": 1,
+    "streams": {
+      "actorSteps": {
+        "sha256": "848a4d0df5af55a55d7ff47db4b5f46edf5b909120686eb756aea95a4e5f48a4",
+        "utf8Bytes": 11622,
+      },
+      "archive": {
+        "sha256": "57a1c4f71a5aaaf33b246c3fd5a0c98d368ba8909c1b1ef994abdf15faaf3c0c",
+        "utf8Bytes": 319,
+      },
+      "completed": {
+        "sha256": "57a1c4f71a5aaaf33b246c3fd5a0c98d368ba8909c1b1ef994abdf15faaf3c0c",
+        "utf8Bytes": 319,
+      },
+      "council": {
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "utf8Bytes": 2,
+      },
+      "draws": {
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "utf8Bytes": 2,
+      },
+      "effects": {
+        "sha256": "35d6a076deee364817acc09ea88d9d7ae6ffb0bc81ef4f2830eedb942088b6e7",
+        "utf8Bytes": 309,
+      },
+      "live": {
+        "sha256": "db5a975b1ea1a6b144521e530d3fd23397a3a364f8ea229e703082554e4cc624",
+        "utf8Bytes": 2159,
+      },
+      "map": {
+        "sha256": "57a1c4f71a5aaaf33b246c3fd5a0c98d368ba8909c1b1ef994abdf15faaf3c0c",
+        "utf8Bytes": 319,
+      },
+      "order": {
+        "sha256": "bdefc497cd5c09ab4cd331efed2a0a2737d792a7c7b773137284490c6674cfb8",
+        "utf8Bytes": 996,
+      },
+      "presentation": {
+        "sha256": "1ffeca2822d18b9677e6522833f580c765c16b38d55530fe8efc76e174b54611",
+        "utf8Bytes": 35,
+      },
+      "replay": {
+        "sha256": "b659d847c9350a776c7da5983d480e6e4df78888d46afcc8bfaf768ddb6fdd66",
+        "utf8Bytes": 1720,
+      },
+      "savedArchive": {
+        "sha256": "294967bce307ffd4ed864f87412f389dc8db0dbbe3f9a0582959462cd69461e0",
+        "utf8Bytes": 382,
+      },
+      "trace": {
+        "sha256": "b51ee730c3397ef590f0d35868b8f4514f9183fa835628b4d0b0f03b6bf6b9a4",
+        "utf8Bytes": 85928,
+      },
+      "watch": {
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "utf8Bytes": 2,
+      },
+      "watches": {
+        "sha256": "8dc6e9d7c6ff94205cbc7ab311c65f5220fb882a486af13771be142a50406de7",
+        "utf8Bytes": 38,
+      },
+      "witness": {
+        "sha256": "709be7f16eb1f927ad49f516522ee6740043421ebce157bf9bc35afe5c03f0c5",
+        "utf8Bytes": 327,
+      },
+    },
+    "supplemental": [],
+  },
+  "utility": {
+    "calendar": [
+      9,
+      1001,
+      9,
+    ],
+    "completedCount": 1,
+    "input": {
+      "sha256": "11d081ccf21ab784de80d583b9972fe595c990a537ab34abdf7c40a1c89539b0",
+      "utf8Bytes": 178905,
+    },
+    "liveCount": 7,
+    "output": {
+      "sha256": "a60e240f67bd5efac0fb4f7eeca6d54171e42b3a23448a99b4c1d0d83fc3934b",
+      "utf8Bytes": 179073,
+    },
+    "randomAfter": {
+      "algorithm": "mulberry32-v1",
+      "seed": 2031,
+      "state": 2031,
+    },
+    "randomBefore": {
+      "algorithm": "mulberry32-v1",
+      "seed": 2031,
+      "state": 2031,
+    },
+    "rawCount": 1,
+    "streams": {
+      "actorSteps": {
+        "sha256": "848a4d0df5af55a55d7ff47db4b5f46edf5b909120686eb756aea95a4e5f48a4",
+        "utf8Bytes": 11622,
+      },
+      "archive": {
+        "sha256": "57a1c4f71a5aaaf33b246c3fd5a0c98d368ba8909c1b1ef994abdf15faaf3c0c",
+        "utf8Bytes": 319,
+      },
+      "completed": {
+        "sha256": "57a1c4f71a5aaaf33b246c3fd5a0c98d368ba8909c1b1ef994abdf15faaf3c0c",
+        "utf8Bytes": 319,
+      },
+      "council": {
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "utf8Bytes": 2,
+      },
+      "draws": {
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "utf8Bytes": 2,
+      },
+      "effects": {
+        "sha256": "533af7ca4681482c3b064d12edf6020aac5908b23934aa1c46e17bcda26151d2",
+        "utf8Bytes": 294,
+      },
+      "live": {
+        "sha256": "db5a975b1ea1a6b144521e530d3fd23397a3a364f8ea229e703082554e4cc624",
+        "utf8Bytes": 2159,
+      },
+      "map": {
+        "sha256": "57a1c4f71a5aaaf33b246c3fd5a0c98d368ba8909c1b1ef994abdf15faaf3c0c",
+        "utf8Bytes": 319,
+      },
+      "order": {
+        "sha256": "961f305459f48dc2e600f00cfe00bebee56826f0f023601c1d354b13fcd73545",
+        "utf8Bytes": 981,
+      },
+      "presentation": {
+        "sha256": "1ffeca2822d18b9677e6522833f580c765c16b38d55530fe8efc76e174b54611",
+        "utf8Bytes": 35,
+      },
+      "replay": {
+        "sha256": "4438ea154ed996f20d928ea39c1348ae8b8ae681f0141eff6bcf75025967000b",
+        "utf8Bytes": 1721,
+      },
+      "savedArchive": {
+        "sha256": "294967bce307ffd4ed864f87412f389dc8db0dbbe3f9a0582959462cd69461e0",
+        "utf8Bytes": 382,
+      },
+      "trace": {
+        "sha256": "beeb9b46c91a8bd0d2f8a3ff44c3f78ac26800ecb6dd9a3d9875ff56b080b89b",
+        "utf8Bytes": 85930,
+      },
+      "watch": {
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "utf8Bytes": 2,
+      },
+      "watches": {
+        "sha256": "8dc6e9d7c6ff94205cbc7ab311c65f5220fb882a486af13771be142a50406de7",
+        "utf8Bytes": 38,
+      },
+      "witness": {
+        "sha256": "709be7f16eb1f927ad49f516522ee6740043421ebce157bf9bc35afe5c03f0c5",
+        "utf8Bytes": 327,
+      },
+    },
+    "supplemental": [],
+  },
+}
+`;
+
+exports[`ordered native month: exact pre-extraction authority and event outputs > witnesses the same-name observer present when the act settles, never their same-month late arrival 1`] = `
+{
+  "calendar": [
+    2,
+    1001,
+    2,
+  ],
+  "completedCount": 1,
+  "input": {
+    "sha256": "2a939c76cb657a5bd7765f06b90c5122c0968783080d58b9d883f5a9deb8f4d7",
+    "utf8Bytes": 72152,
+  },
+  "liveCount": 2,
+  "output": {
+    "sha256": "340c4a63d41da2e37b59d5ffefc20d65cf0d2e58dec7a6a2779592989ce676a3",
+    "utf8Bytes": 93801,
+  },
+  "randomAfter": {
+    "algorithm": "mulberry32-v1",
+    "seed": 764,
+    "state": 1831566577,
+  },
+  "randomBefore": {
+    "algorithm": "mulberry32-v1",
+    "seed": 764,
+    "state": 764,
+  },
+  "rawCount": 1,
+  "streams": {
+    "actorSteps": {
+      "sha256": "545258d4a78a75befc2bd07168956ee4cd4ed3190bb515b7d05b5869b3ecaf25",
+      "utf8Bytes": 13121,
+    },
+    "archive": {
+      "sha256": "43aa3bebc8b20e95e8f7e2e04bd2a7f71a1c3a9d04d833ccd7c5b1a6b82ec233",
+      "utf8Bytes": 348,
+    },
+    "completed": {
+      "sha256": "43aa3bebc8b20e95e8f7e2e04bd2a7f71a1c3a9d04d833ccd7c5b1a6b82ec233",
+      "utf8Bytes": 348,
+    },
+    "council": {
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "utf8Bytes": 2,
+    },
+    "draws": {
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "utf8Bytes": 2,
+    },
+    "effects": {
+      "sha256": "35d6a076deee364817acc09ea88d9d7ae6ffb0bc81ef4f2830eedb942088b6e7",
+      "utf8Bytes": 309,
+    },
+    "live": {
+      "sha256": "260e8deabb100cdf69aea27a28012658c3ef309149c16826607f6156ed6dbcdc",
+      "utf8Bytes": 701,
+    },
+    "map": {
+      "sha256": "43aa3bebc8b20e95e8f7e2e04bd2a7f71a1c3a9d04d833ccd7c5b1a6b82ec233",
+      "utf8Bytes": 348,
+    },
+    "order": {
+      "sha256": "2cba89bb4166a7070b8746a4c5fbad4b0905c7a87bb39a11d2be15dbee240998",
+      "utf8Bytes": 966,
+    },
+    "presentation": {
+      "sha256": "ba23318b926a4efc6139c0384c492d276c1748c7638dd063de8c90e59eaf48c9",
+      "utf8Bytes": 496,
+    },
+    "replay": {
+      "sha256": "baba70dcda40812d6360a4d8159ea06fefac21888c32a066613d791fdd10b7bc",
+      "utf8Bytes": 1646,
+    },
+    "savedArchive": {
+      "sha256": "a1979c8ca27f45347a2217aae6843ec05e0aa234943f0649f91d9b77781aa29d",
+      "utf8Bytes": 727,
+    },
+    "trace": {
+      "sha256": "4af481e3d64b04208a2813ef6dad89a34226ffb1f2584a74686d1e5b3e8f6679",
+      "utf8Bytes": 15378,
+    },
+    "watch": {
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "utf8Bytes": 2,
+    },
+    "watches": {
+      "sha256": "8dc6e9d7c6ff94205cbc7ab311c65f5220fb882a486af13771be142a50406de7",
+      "utf8Bytes": 38,
+    },
+    "witness": {
+      "sha256": "a204f0db1c78cf8b2c951995f7351c70d69bde8f2fb533317da0746be2cbed14",
+      "utf8Bytes": 422,
+    },
+  },
+  "supplemental": [],
+}
+`;
