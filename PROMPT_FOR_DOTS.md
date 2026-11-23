@@ -1,22 +1,24 @@
-# PROMPT_FOR_DOTS.md — 唤醒 / 纠偏指令（复制整段发给 GPT Dots）
+# PROMPT_FOR_DOTS.md — H 线转向指令（复制整段发给 GPT Dots）
 
 ```markdown
 Target GitHub Repository: https://github.com/Sparkle-kon/ai-sect-sandbox
 
-You stopped committing at 19:18. Resume now.
+MAJOR DIRECTION CHANGE. Stop the current G-track task after committing whatever is already verified.
 
-1. `git pull --rebase origin main`, then read `AGENTS.md`, `BACKLOG.md`, and **`docs/design/G0-reference-guide.md`** completely before writing any code.
+1. `git pull --rebase origin main`, then read `AGENTS.md`, `BACKLOG.md`, and **`docs/design/H-sect-comedy-guide.md`** completely before coding.
 
-2. Second review findings (2026-11-23 22:30):
-   - G1-1's "41 interactive opportunities in 120 months" were only the four basic moves (rest / cultivate / talk / travel) wrapped in six flavor texts. That is not a highlight. The acceptance criterion was under-specified; it is now fixed.
-   - G1-3 fell into micro-tuning (A/B/C/D sub-commits moving 0→1, 3→9). 26 of 40 story systems still trigger 0 times in 1,200 months. Stop micro-tuning.
+2. User feedback (verbatim, translated): "The gameplay is still mediocre — just clicking around one item after another. No immersion, no humor, no identity at all."
 
-3. New counting rule: a **highlight** = ≥2 options with different outcomes, and at least one option causes a consequence that ordinary actions never produce (item/technique, bond, injury/breakthrough/lifespan, sequel, sect/reputation). Use `isHighlight` from the guide everywhere. The four basic moves never count.
+3. The user chose a new direction: **Comedic sect management + cultivation-world group chat / moments feed / livestream** (references: Amazing Cultivation Simulator, Hero's Adventure / 大侠立志传). Tone: classical Chinese xianxia base with moderate, tasteful humor — no internet meme spam, no crude jokes.
 
-4. Execute the G0 section in this exact order, **one commit per task**:
-   - `[G0-1]` Rebuild the director: probe real gameplay sources (encounters, heart demon, tournament, dungeon, auction, dao path, forbidden art, bond reunions, quests, sequels) via a `HighlightSource` registry; when nothing is available, **seed** missing preconditions with future-only nudges (`travel_bias`, `encounter_ticket`, `omen_bias`, `npc_accept_bias`) stored in one field. Acceptance: seed 13071 "wandering_jianghu" 120 months → ≥30 highlights, ≥6 kinds, max gap ≤4; still_water ≥15; great_calamity ≥45; deterministic; output `docs/director-highlights.md`.
-   - `[G0-2]` Close G1-3 in a single commit: classify every <2-trigger system as director-seeded / folded into a storylet / frozen (see the table in the guide), rewrite `docs/trigger-audit.md`, remove the "should not force antecedents" section, tick G1-3.
-   - `[G2-1]` Origin selection & player cultivator. `[G2-2]` Career goals & "仙途" card. `[G2-3]` 20+ quest templates as storylet data. `[G4-2]` 30 new encounter storylets as data (use the generic `StoryletRuntimeState` + `StoryletEffect` descriptors; no new per-story top-level WorldState fields).
+   Pitch: the player inherits a nearly bankrupt sect, leads a bunch of disciples with comedic quirks (glutton, directionally hopeless, socially anxious, chatterbox, miser, jinx, coward-king…), assigns them monthly jobs, watches them fail hilariously or succeed by accident, while the whole jianghu gossips, roasts and livestreams it in group chats — and the player can post as the sect leader or via sock-puppet alts.
 
-5. For every task: implement fully, deterministic tests with mocked LLM, `npm run verify`, tick BACKLOG, CHANGELOG in player-readable Chinese, commit, `git push origin main`, continue immediately. Never stop to ask.
+4. Two-layer truth rule: settlement (stones, injuries, realm, death, relations, buildings) stays strictly rule-driven and deterministic. Character speech (chat, moments, danmaku, report quotes) may exaggerate, brag, lie, or spread rumors, and may be LLM-generated, but can only affect the world through structured intents settled by rules. The narrator never invents facts.
+
+5. Execute the H-track at the top of `BACKLOG.md` in order, **one commit per task**:
+   H1-1 starter sect & default entry → H1-2 12 data-driven quirks → H1-3 morning-meeting job assignment (drag on desktop, tap on mobile, sprites walk to job cards) → H1-4 per-disciple return reports with expressions and 4 outcome tiers → H1-5 sect growth, debt, annual review, fail/restart → H2 comedy template library (≥60, ≥10 combos), recurring gag NPCs, comic expressions/animations, disciple drama → H3 chat UI, LLM-driven chat (optional token burner), leader & sock-puppet posting with intent parsing, moments feed, Tianji livestream → H4 raids, tabloid, festival calendar → H5 onboarding ≤60s, copy cleanup, real-browser playtest & redeploy.
+
+   Reuse everything that exists: disciples are `Cultivator`, sect is `Sect`, months advance via `tickStagePipeline`, reuse courtyard canvas, sprites, portraits, duel arena, gazette. All new content is data. G2-1/2/3 and G4-2 are merged into H and already ticked.
+
+6. For every task: implement fully, deterministic tests (mock LLM), `npm run verify`, tick BACKLOG, write CHANGELOG in fun, player-readable Chinese, commit, `git push origin main`, continue immediately. Never stop to ask.
 ```
