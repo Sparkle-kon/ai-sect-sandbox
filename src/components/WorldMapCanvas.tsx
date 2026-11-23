@@ -61,7 +61,9 @@ import { isActiveCampaign, SIEGE_LABELS } from './siegeLabels';
 import { OCCASION_KIND, OCCASION_STATUS } from './occasionLabels';
 import { BOUNTY_STATUS, relevantBounty } from './bountyLabels';
 import { BIOME_PALETTE, createTerrainMapView, mapActorPositions } from './terrainMapView';
-import {buildCanvasBiomeRelief,drawCanvasBiomeRelief,type CanvasBiomeReliefPlan} from './canvasBiomeShader';
+import {buildLushTilemap} from './lushTilemapModel';
+import {drawLushTilemap} from './lushTilemapRenderer';
+import {drawMapArchitecturalSprite} from './mapArchitecturalSprites';
 import {buildQiFlowPlan,drawQiFlow} from './qiFlowCanvas';
 import {mapScenicAnimationAllowed,mapScenicFrameDelay} from './mapScenicScheduler';
 import { drawTerrain } from './terrainMapDraw';
@@ -189,7 +191,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   onChronicleFocusUnavailable,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const reliefLayerRef=useRef<{plan:CanvasBiomeReliefPlan;width:number;height:number;canvas:HTMLCanvasElement}>();
+  const reliefLayerRef=useRef<{plan:ReturnType<typeof buildLushTilemap>;width:number;height:number;canvas:HTMLCanvasElement}>();
   const [camera, setCamera] = useState(DEFAULT_CAMERA);
   const [strategicMode,setStrategicMode]=useState<StrategicCameraMode>();
   const [inspection,setInspection]=useState<MapInspection>();
@@ -371,7 +373,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const localLeaseSites = useMemo(() => visibleLeaseMapSites(world, mapView, selected), [world, mapView, selected]);
   const localCommons = useMemo(() => visibleSharedCommonsMapSites(world, mapView, selected), [world, mapView, selected]);
   const formationLines = useMemo(() => visibleFormationMapLinks(world, mapView, selected), [world, mapView, selected]);
-  const scenicRelief=useMemo(()=>buildCanvasBiomeRelief(world,mapView),[world,mapView]);
+  const scenicRelief=useMemo(()=>buildLushTilemap(world,mapView),[world,mapView]);
+  const facades=useMemo(()=>new Map(scenicRelief.architecture.map(facade=>[facade.siteId,facade] as const)),[scenicRelief]);
   const qiFlow=useMemo(()=>buildQiFlowPlan(world,mapView,formationLines),[world,mapView,formationLines]);
   const letters=useMemo(()=>visibleMapFlyingSwords(world,mapView,selected),[world,mapView,selected]);
   const flightMap=useMemo(()=>{
@@ -608,12 +611,16 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         layer.width=width;layer.height=height;
         const reliefContext=layer.getContext('2d');
         if(reliefContext){
-          drawCanvasBiomeRelief(reliefContext,scenicRelief);
+          drawLushTilemap(reliefContext,scenicRelief);
           cachedRelief={plan:scenicRelief,width,height,canvas:layer};
           reliefLayerRef.current=cachedRelief;
         }
       }
     }
+    const drawVisibleLandscape=(target:CanvasRenderingContext2D)=>{
+      if(cachedRelief)target.drawImage(cachedRelief.canvas,0,0);
+      else drawLushTilemap(target,scenicRelief);
+    };
     let markerSize: MarkerViewport = canvas.getBoundingClientRect();
     let staticMarkers: ReturnType<typeof planActorMarkers> | undefined;
     let badgeLayoutCache:{markers:ReturnType<typeof planActorMarkers>;layout:ReturnType<typeof planMapActorBadgeLayout>}|undefined;
@@ -670,9 +677,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
 
       // 2. Terrain, spirit qi overlay and sect boundaries.
       drawTerrain(ctx, world, mapView.tileState, heat, phase, territorySemantics, logicalPerCssPixel,
-        {showGrid:!!armedBrush||camera.zoom>=2.5});
-      if(cachedRelief)ctx.drawImage(cachedRelief.canvas,0,0);
-      else drawCanvasBiomeRelief(ctx,scenicRelief);
+        {showGrid:!!armedBrush||camera.zoom>=2.5,drawVisibleLandscape});
       // Native combat/travel may ask for faster repaints; ambient motion stays on its own lower cadence.
       const scenicDelay=mapScenicFrameDelay({moving:false,heat:false,ambient:qiFlow.hasMotion,width:markerSize.width});
       const scenicPhase=animate&&Number.isFinite(scenicDelay)?Math.floor(phase*1350/scenicDelay)*scenicDelay/1350:0;
@@ -747,6 +752,29 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       drawPilgrimageForkSegments(ctx,forkSegments,logicalPerCssPixel);
       drawFurnaceEmergencyRescueSegments(ctx,furnaceRescueSegments,logicalPerCssPixel);
       // No landmark connects to an invented route. Qi uses only the approved geometry painted above.
+      // 4. Approved physical facades use one shared current-sight mask on this frame.
+      const useFacades=facades.size>0&&qiFlow.clip.length>0;
+      const paintedFacades=new Set<string>();
+      if(useFacades){
+        ctx.save();
+        try{
+          ctx.beginPath();
+          for(const {x,y,width,height} of qiFlow.clip)ctx.rect(x,y,width,height);
+          ctx.clip();
+          for(const loc of seenLocations){
+            const facade=facades.get(loc.id);
+            if(!facade||!isCurrentLocation(loc.id))continue;
+            const pin=sitePins.get(loc.id);
+            if(pin&&!qiFlow.clip.some(({x,y,width,height})=>
+              pin.x>=x&&pin.y>=y&&pin.x<x+width&&pin.y<y+height))continue;
+            const ownerColor=loc.ownerSectId?sectColors.get(loc.ownerSectId):undefined;
+            drawMapArchitecturalSprite(ctx,pin?{...loc,...pin}:loc,ownerColor,{
+              abandoned:abandonedQuarterSites.has(loc.id),village:facade.kind==='village'||facade.village===true,
+            });
+            paintedFacades.add(loc.id);
+          }
+        }finally{ctx.restore();}
+      }
       // 4. Draw Locations
       for (const location of seenLocations) {
         const pin=sitePins.get(location.id),loc=pin?{...location,...pin}:location;
@@ -763,7 +791,9 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           ctx.save();ctx.strokeStyle='rgba(217,193,123,.5)';ctx.lineWidth=logicalPerCssPixel;
           ctx.beginPath();ctx.moveTo(location.x,location.y);ctx.lineTo(pin.x,pin.y);ctx.stroke();ctx.restore();
         }
-        drawMapLandmarkGlyph(ctx,loc,ownerColor,abandonedQuarterSites.has(loc.id));
+        // A display-only pin in fog keeps its existing safe glyph and hit target.
+        if(!paintedFacades.has(loc.id))
+          drawMapLandmarkGlyph(ctx,loc,ownerColor,abandonedQuarterSites.has(loc.id));
         drawBoundaryGapFlag(ctx,loc,logicalPerCssPixel,boundaryCoverage.get(loc.id)?.kind);
         if(anomalyRelayMarks.has(loc.id)){
           const d=logicalPerCssPixel;
@@ -984,7 +1014,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener?.('change',stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, spriteModels, heat, presentation, camera, territorySemantics, atlasDrawing, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, boundaryCoverage, civicObservation, usedVillageSegments, annotationView, annotationPins, armedBrush, preview, compact, clusterScope, scenicRelief, qiFlow, inspectionEnabled, letters, travel, flightMap, canvasFlights, combatVfx, actorBadgeFacts, hasBadgeQuote, domes, strategic, arenaMarks, dungeonMark, alchemyMarks, daoMarks, auctionMark, realmHalos, clanCeremonies, ascensionMarks, formationFrames, calamityFlows, schoolStrokes, anomalyRelayMarks, abandonedQuarterSites, forkSegments, furnaceRescueSegments, historical]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, spriteModels, heat, presentation, camera, territorySemantics, atlasDrawing, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, boundaryCoverage, civicObservation, usedVillageSegments, annotationView, annotationPins, armedBrush, preview, compact, clusterScope, scenicRelief, facades, qiFlow, inspectionEnabled, letters, travel, flightMap, canvasFlights, combatVfx, actorBadgeFacts, hasBadgeQuote, domes, strategic, arenaMarks, dungeonMark, alchemyMarks, daoMarks, auctionMark, realmHalos, clanCeremonies, ascensionMarks, formationFrames, calamityFlows, schoolStrokes, anomalyRelayMarks, abandonedQuarterSites, forkSegments, furnaceRescueSegments, historical]);
 
   useEffect(() => {
     const canvas = canvasRef.current;

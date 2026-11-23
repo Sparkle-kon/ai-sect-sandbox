@@ -21,7 +21,7 @@
   - 构建 `src/components/canvasCharacterSprite.ts` 并接入 `WorldMapCanvas.tsx` 与场景画布：彻底淘汰用“小圆圈/几何玉牌”代替活人的简陋画法！
   - 为每位修士在 Canvas 上绘制 **2D 具象 Q 版/像素风全身小人（head + hair bun/crown + face with eyes + flowing sect robe & sleeves + held/backed sword or staff + flying sword/lotus mount）**。
   - 实现 **4 种具象动作姿态与微动画**：① **待机/游历**（衣袂微摆、御剑悬浮） ② **盘膝吐纳修炼**（盘腿坐于蒲团/莲台，周身环绕上升的五行灵气光点） ③ **挥剑斗法**（持剑前刺/劈砍姿态 + 刀光剑影） ④ **采药/炼丹/劳作**（俯身采摘或炉前控火姿态），人物下方配清晰的半透明墨金姓名与境界铭牌。
-- [ ] **[SV1-3] 九州地图背景重绘为「星露谷式彩绘地形瓦片 + 飞檐古建筑群立面」(`LushTilemap & ArchitecturalSprites`)**：
+- [x] **[SV1-3] 九州地图背景重绘为「星露谷式彩绘地形瓦片 + 飞檐古建筑群立面」(`LushTilemap & ArchitecturalSprites`)**：
   - 构建 `src/components/lushTilemapRenderer.ts` 并升级 `WorldMapCanvas.tsx`：彻底改变“深黑底色块拼贴”的简陋感！
   - **丰富的自然地貌瓦片**：绘制色彩层次饱满的翠绿灵山草甸、蜿蜒流动的碧蓝溪流与海岸浪花、青石板古驿道、苍松翠竹林、金黄沙丘、皑皑雪原与紫雾魔渊，相邻地貌自然衔接。
   - **具象化古风建筑群 Sprite**：在每个地点坐标上不再画空心圆圈，而是绘制**立体感十足的 2D 古风建筑立面图标**——太虚剑峰绘制【三重飞檐白玉剑阁与巨剑石碑】、丹霞灵谷绘制【茅檐丹房、紫金八卦炉与整齐的灵田菜畦】、万仙坊市绘制【红灯笼酒楼、木牌坊与摊位帐篷】、摘星天机台绘制【悬空星象高塔】、极北寒玉脉绘制【雪地石井与木架矿洞】、凡人村落绘制【青瓦农舍、篱笆与水车】。

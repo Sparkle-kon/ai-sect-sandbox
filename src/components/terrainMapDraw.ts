@@ -9,6 +9,8 @@ export const INK_TERRAIN_FILL: Readonly<Record<TerrainBiome,string>> = {
 export interface TerrainDrawingOptions {
   /** Coordinate grid is for close inspection and tools, not the normal landscape. */
   readonly showGrid?:boolean;
+  /** Optional scoped art; the fog/base still renders and overlays remain on top. */
+  readonly drawVisibleLandscape?:(ctx:CanvasRenderingContext2D)=>void;
 }
 
 type Classification = (tile: MapTile) => 'visible' | 'explored' | 'hidden';
@@ -29,6 +31,13 @@ export function drawTerrain(
   }
   const sectColors = new Map(world.sects.map(({ id, color }) => [id, color]));
 
+  const drawLandscape=options?.drawVisibleLandscape;
+  const paintHeat=(tile:MapTile,x:number,y:number)=>{
+    const qi = Math.min(100, Math.max(0, tile.spiritQi)) / 100;
+    const pulse = 0.96 + 0.04 * Math.sin(phase + (tile.col + tile.row) * 0.24);
+    ctx.fillStyle = `hsla(${Math.round(191 - qi * 159)},88%,58%,${(0.12 + qi * 0.41) * pulse})`;
+    ctx.fillRect(x, y, cellW, cellH);
+  };
   ctx.save();
   for (const {tile,state} of classified) {
     const x = tile.col * cellW;
@@ -41,11 +50,20 @@ export function drawTerrain(
     }
     ctx.fillStyle = INK_TERRAIN_FILL[tile.biome];
     ctx.fillRect(x, y, cellW, cellH);
-    if (heat) {
-      const qi = Math.min(100, Math.max(0, tile.spiritQi)) / 100;
-      const pulse = 0.96 + 0.04 * Math.sin(phase + (tile.col + tile.row) * 0.24);
-      ctx.fillStyle = `hsla(${Math.round(191 - qi * 159)},88%,58%,${(0.12 + qi * 0.41) * pulse})`;
-      ctx.fillRect(x, y, cellW, cellH);
+    if(heat&&!drawLandscape)paintHeat(tile,x,y);
+  }
+  if(drawLandscape){
+    ctx.save();
+    try{
+      ctx.beginPath();
+      for(const {tile,state} of classified){
+        if(state==='visible')ctx.rect(tile.col*cellW,tile.row*cellH,cellW,cellH);
+      }
+      ctx.clip();
+      drawLandscape(ctx);
+    }finally{ctx.restore();}
+    if(heat)for(const {tile,state} of classified){
+      if(state==='visible')paintHeat(tile,tile.col*cellW,tile.row*cellH);
     }
   }
 

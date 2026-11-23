@@ -82,6 +82,31 @@ describe('terrain map presentation', () => {
     expect(warm.strokes).not.toContain(world.sects[2].color);
   });
 
+  it('clips the replacement landscape to current sight and leaves heat and ownership on top',()=>{
+    const {world,hereTile,rememberedTile,remoteTile}=setup();
+    const owner=world.sects[0];
+    hereTile.ownerSectId=owner.id;
+    world.terrain.tiles=[hereTile,rememberedTile,remoteTile];
+    const calls:string[]=[];
+    const rectangles:number[][]=[];
+    const ctx={
+      canvas:{width:1000,height:600},fillStyle:'',strokeStyle:'',
+      save(){},restore(){},beginPath(){},moveTo(){},lineTo(){},
+      rect(...args:[number,number,number,number]){rectangles.push(args);},
+      clip(){calls.push('visible-mask');},
+      fillRect(){calls.push(this.fillStyle);},
+      stroke(){calls.push(this.strokeStyle);},
+    };
+    drawTerrain(ctx as unknown as CanvasRenderingContext2D,world,tile=>
+      tile===hereTile?'visible':tile===rememberedTile?'explored':'hidden',true,0,undefined,1,
+      {drawVisibleLandscape:()=>{calls.push('landscape');}});
+    const unitWidth=1000/world.terrain.columns,unitHeight=600/world.terrain.rows;
+    expect(rectangles).toEqual([[hereTile.col*unitWidth,hereTile.row*unitHeight,unitWidth,unitHeight]]);
+    expect(calls.slice(0,5)).toEqual([INK_TERRAIN_FILL[hereTile.biome],'#192238','#070c19','visible-mask','landscape']);
+    expect(calls[5]).toMatch(/^hsla/);
+    expect(calls.slice(6)).toContain(owner.color);
+  });
+
   it('uses quiet terrain by default and an explicit coordinate grid for map tools',()=>{
     const {world}=setup();
     const quiet=recordTerrain(world,()=> 'visible',false,0);
