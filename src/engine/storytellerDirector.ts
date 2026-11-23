@@ -1,11 +1,14 @@
 import {
-  STORYTELLER_MOVES, STORYTELLER_STYLES, STORYTELLER_STORYLET_MOVES, storytellerOfferId,
+  STORYTELLER_MOVES, STORYTELLER_PULSE_LIMIT, STORYTELLER_STYLES, STORYTELLER_STORYLET_MOVES,
+  STORYTELLER_STORYLET_TONES, storytellerOfferId,
   type StorytellerDirectorState, type StorytellerMove, type StorytellerOption,
+  type StorytellerPulseReason, type StorytellerPulseView, type StorytellerWorldBeat,
   type StorytellerStoryletId, type StorytellerStyle, type StorytellerTone, type StorytellerView,
 } from '../types/storytellerDirector';
 import type { Cultivator, LLMDecisionPayload, LocationNode, MapTile, WorldEvent, WorldState } from '../types/world';
 import { activeAvatar } from './avatarEngine';
 import { activeBellWatchForActor } from './bellWatchPresence';
+import { isChronicleStoryFact } from './chronicleLead';
 import { isGrandSiegeFighterPresent } from './grandSiegePresence';
 import { currentVisibleTileIds, knownMapLocations, terrainTileAt } from './terrainEngine';
 import { createStoryletRegistry, type StoryletDefinition } from './storyletEngine';
@@ -34,27 +37,27 @@ type DirectorSchema={
 };
 const labels:Record<StorytellerMove,string>={rest:'在这里歇一歇',cultivate:'收心吐纳',talk:'过去说两句话',travel:'沿熟路去看看'};
 
-function authored(id:StorytellerStoryletId,tone:StorytellerTone,title:string,body:string,
+function authored(id:StorytellerStoryletId,title:string,body:string,
   conditions:DirectorSchema['Condition'][]=[]):StoryletDefinition<DirectorSchema>{
-  return {id,conditions,roles:[{id:'lead',binder:{kind:'lead'}}],scene:{title,body,tone},
+  return {id,conditions,roles:[{id:'lead',binder:{kind:'lead'}}],scene:{title,body,tone:STORYTELLER_STORYLET_TONES[id]},
     choices:STORYTELLER_STORYLET_MOVES[id].map(move=>({id:move,meta:labels[move],effect:{kind:'native',move}}))};
 }
 
 const director=createStoryletRegistry<DirectorSchema>([
-  authored('rain-eaves','quiet','檐下留一刻','新月才起，四下还静。那些未急着回答的事，可以先交给一盏薄茶。'),
-  authored('lamplight-rest','quiet','灯下调息','这一程走得并不轻松。趁窗边还留着清静，先听一听自己的呼吸。',[
+  authored('rain-eaves','檐下留一刻','新月才起，四下还静。那些未急着回答的事，可以先交给一盏薄茶。'),
+  authored('lamplight-rest','灯下调息','这一程走得并不轻松。趁窗边还留着清静，先听一听自己的呼吸。',[
     {kind:'strain',minimum:20},
   ]),
-  authored('shared-tea','journey','茶盏旁有位同路人','这一处有人也未离开。若你愿意，可以走近说几句话，看看彼此是否还有下文。',[
+  authored('shared-tea','茶盏旁有位同路人','这一处有人也未离开。若你愿意，可以走近说几句话，看看彼此是否还有下文。',[
     {kind:'companion'},
   ]),
-  authored('mountain-road','journey','去看看旧山路','熟路就在眼前。留在这儿还能练一炉功，顺着它走，也许能听见另一处的消息。',[
+  authored('mountain-road','去看看旧山路','熟路就在眼前。留在这儿还能练一炉功，顺着它走，也许能听见另一处的消息。',[
     {kind:'destination'},
   ]),
-  authored('storm-watch','crisis','山外风声紧','局势已经不如先前安静。山风落到檐角，接下来这一步，仍由你自己拿主意。',[
+  authored('storm-watch','山外风声紧','局势已经不如先前安静。山风落到檐角，接下来这一步，仍由你自己拿主意。',[
     {kind:'pressure',minimum:33},
   ]),
-  authored('retreat-from-danger','crisis','先保住这一口气','眼前确有险意。熟路在脚下；要离开，得自己走过去。留在这里，也还有几分力气可以收拢。',[
+  authored('retreat-from-danger','先保住这一口气','眼前确有险意。熟路在脚下；要离开，得自己走过去。留在这里，也还有几分力气可以收拢。',[
     {kind:'danger',minimum:12},{kind:'destination'},
   ]),
 ],{
@@ -146,18 +149,26 @@ function situation(world:WorldState,actor:Cultivator,site:LocationNode,state:Sto
     companion:nearby(world,actor)[0],destination:destinationOptions(world,actor,site,world.tick+1)[0]};
 }
 const impulse:Record<WorldEvent['category'],number>={combat:10,death:13,heavenly:7,intrigue:5,breakthrough:-5,diplomacy:-3};
-function advanceTension(world:WorldState,state:StorytellerDirectorState,events:readonly WorldEvent[]){
+function advanceTension(world:WorldState,state:StorytellerDirectorState,events:readonly WorldEvent[]):StorytellerWorldBeat{
+  const redacted=new Set(events.filter(event=>event.tick===world.tick&&!isChronicleStoryFact(event,world.tick))
+    .map(event=>event.id));
   const seen=new Set<string>();
-  let rise=0,fall=0;
+  let rise=0,fall=0,clashes=0,peril=0,celebration=0;
   for(const event of events){
-    if(event.tick!==world.tick||event.witnessScope!==undefined||seen.has(event.id))continue;
+    if(event.tick!==world.tick||redacted.has(event.id)||seen.has(event.id))continue;
     seen.add(event.id);
     const weight=impulse[event.category];
     if(weight>=0)rise+=weight;
     else fall+=weight;
+    if(event.category==='combat')clashes++;
+    if(event.category==='heavenly'||event.category==='death')peril++;
+    if(event.category==='breakthrough')celebration++;
   }
   const war=Math.min(12,world.sieges.filter(row=>row.status==='sieging'||row.status==='marching').length*4);
   state.tension=cap(state.tension*.76+5+Math.min(rise,32)+Math.max(fall,-17)+war);
+  if(clashes&&clashes>=peril&&clashes>=celebration||war>0&&!peril&&!celebration)return 'conflict';
+  if(peril&&peril>=celebration)return 'peril';
+  return celebration?'celebration':'quiet';
 }
 const toneWeight:Record<StorytellerStyle,Record<StorytellerTone,number>>={
   still_water:{quiet:35,journey:14,crisis:0},
@@ -198,39 +209,98 @@ export function configureStoryteller(world:WorldState,style:StorytellerStyle,foc
   return true;
 }
 
-/** Choose one invitation after the world's ordinary rules complete. No world RNG draws and no actions are executed. */
-export function advanceStorytellerDirector(world:WorldState,recentEvents:readonly WorldEvent[]=world.events):void{
-  const state=world.storyteller;
-  if(!state||state.lastAdvancedTick===world.tick)return;
-  const style=styleOf(state.style);
-  if(!style)return;
-  state.lastAdvancedTick=world.tick;
-  advanceTension(world,state,recentEvents);
+type ChosenPulse = {offeredTone:StorytellerTone;reason:StorytellerPulseReason};
+
+function repeatedExtreme(state:StorytellerDirectorState,tick:number):StorytellerTone|undefined{
+  const prior=state.pulse?.at(-1),earlier=state.pulse?.at(-2);
+  if(prior?.tick!==tick-1||earlier?.tick!==tick-2||earlier.offeredTone!==prior.offeredTone)return undefined;
+  const tone=prior.offeredTone;
+  return tone==='quiet'||tone==='crisis'?tone:undefined;
+}
+function choiceReason(context:Drama,tone:StorytellerTone,id:StorytellerStoryletId,changed:boolean):StorytellerPulseReason{
+  if(changed)return 'change_of_pace';
+  if(tone==='crisis')return context.localDanger||context.conflict?'local_peril':'world_pressure';
+  if(tone==='quiet')return context.tired>=20?'health':context.tension>=35?'breather':'cadence';
+  if(id==='shared-tea')return 'companion';
+  return context.destination?'open_road':'cadence';
+}
+function scheduleStorylet(world:WorldState,state:StorytellerDirectorState,cadence:number):ChosenPulse|undefined{
   const current=state.offer;
   const liveActor=actorAt(world,current?.actorId);
   const usable=current&&liveActor&&availableStorytellerActions(liveActor,world,world.tick+1).length>0;
-  const due=world.tick-state.lastOfferTick>=style.cadence;
-  if(!due&&(!current||usable))return;
+  const due=world.tick-state.lastOfferTick>=cadence;
+  if(!due&&(!current||usable))return undefined;
   if(current&&!usable&&!due)delete state.offer;
   const actor=canonicalFocus(world,state);
   const site=actor&&siteAt(world,actor.locationId);
   if(!actor||!openSite(site)){
     if(current&&!usable)delete state.offer;
-    return;
+    return undefined;
   }
   const context=situation(world,actor,site,state);
-  const selected=director.definitions.filter(row=>director.admit(row.id,context))
+  const ranked=director.definitions.filter(row=>director.admit(row.id,context))
     .map(row=>({row,weight:score(world,state,context,row)}))
-    .sort((a,b)=>b.weight-a.weight||compare(a.row.id,b.row.id))[0]?.row;
-  if(!selected)return;
+    .sort((a,b)=>b.weight-a.weight||compare(a.row.id,b.row.id));
+  const lead=ranked[0]?.row;
+  if(!lead)return undefined;
+  const repeated=repeatedExtreme(state,world.tick);
+  const alternate=repeated===lead.scene.tone?ranked.find(({row})=>row.scene.tone!==repeated)?.row:undefined;
+  const selected=alternate??lead;
   const {companion,destination}=context;
   const moves=selected.choices.map(choice=>choice.id).filter(move=>move!=='talk'&&move!=='travel'||
     move==='talk'&&companion!==undefined||move==='travel'&&destination!==undefined);
   state.offer={id:storytellerOfferId(world.tick,actor.id,selected.id),storyletId:selected.id,
-    actorId:actor.id,siteId:site.id,openedTick:world.tick,expiresTick:world.tick+style.cadence,optionMoves:moves,
+    actorId:actor.id,siteId:site.id,openedTick:world.tick,expiresTick:world.tick+cadence,optionMoves:moves,
     ...(moves.includes('talk')&&companion?{targetActorId:companion.id}:{}),
     ...(moves.includes('travel')&&destination?{targetSiteId:destination.id}:{})};
   state.lastOfferTick=world.tick;
+  const offeredTone=selected.scene.tone;
+  return {offeredTone,reason:choiceReason(context,offeredTone,selected.id,alternate!==undefined)};
+}
+
+/** Sample an actual completed month and choose one invitation without drawing from the world's RNG. */
+export function advanceStorytellerDirector(world:WorldState,recentEvents:readonly WorldEvent[]=world.events):void{
+  const state=world.storyteller;
+  if(!state||world.tick<=state.configuredTick||world.tick<=(state.lastAdvancedTick??-1))return;
+  const style=styleOf(state.style);
+  if(!style)return;
+  state.lastAdvancedTick=world.tick;
+  const worldBeat=advanceTension(world,state,recentEvents);
+  const chosen=scheduleStorylet(world,state,style.cadence);
+  state.pulse=[...(state.pulse??[]).slice(-(STORYTELLER_PULSE_LIMIT-1)),
+    {tick:world.tick,tension:state.tension,worldBeat,...chosen}];
+}
+
+const pulseBeatLabels:Record<StorytellerWorldBeat,string>={
+  conflict:'人间有交锋，风声渐紧。',
+  peril:'这一月有风浪，行路要多看一步。',
+  celebration:'这一月有新进展，山门也添了几分生气。',
+  quiet:'这一月风声尚缓。',
+};
+const pulseReasonLabels:Record<StorytellerPulseReason,string>={
+  health:'前一程耗了力气，这一回先留些工夫调养。',
+  local_peril:'近处有风浪，可停一停，再选脚下的路。',
+  open_road:'有一段认得的路，正可趁此月走一程。',
+  companion:'身边有人可谈，先从说几句话起。',
+  world_pressure:'近来的动静未歇，眼下这一步值得自己拿主意。',
+  breather:'接连几件事催得紧，这一回给故事留点空处。',
+  change_of_pace:'前两月同是一种声调，这一回换个走法。',
+  cadence:'山中岁月虽寻常，这一刻也有可亲手决定的事。',
+};
+
+export function projectStorytellerPulse(world:WorldState):StorytellerPulseView|undefined{
+  const samples=world.storyteller?.pulse;
+  if(!samples?.length)return undefined;
+  const absolute=world.year*12+world.month-1;
+  const points=samples.slice(-STORYTELLER_PULSE_LIMIT).flatMap(({tick,tension,worldBeat,offeredTone,reason})=>{
+    if(!Number.isSafeInteger(tick)||tick<0||tick>world.tick||!Number.isSafeInteger(tension)||tension<0||tension>100||
+      !Object.hasOwn(pulseBeatLabels,worldBeat))return [];
+    const monthAt=absolute-(world.tick-tick);
+    return [{tick,tension,worldBeat,year:Math.floor(monthAt/12),month:((monthAt%12+12)%12)+1,
+      beatLabel:pulseBeatLabels[worldBeat],...(offeredTone&&reason&&Object.hasOwn(pulseReasonLabels,reason)?{offeredTone,reason,reasonLabel:pulseReasonLabels[reason]}:{})}];
+  });
+  const current=points.at(-1);
+  return current?{title:'天势',points,current:{...current}}:undefined;
 }
 
 function currentOffer(actor:Cultivator,world:WorldState,tick:number){

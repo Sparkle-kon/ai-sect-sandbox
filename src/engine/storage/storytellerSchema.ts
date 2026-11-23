@@ -1,4 +1,7 @@
-import { STORYTELLER_MOVES, STORYTELLER_STORYLETS, STORYTELLER_STYLES } from '../../types/storytellerDirector';
+import {
+  STORYTELLER_MOVES, STORYTELLER_PULSE_LIMIT, STORYTELLER_PULSE_REASONS, STORYTELLER_STORYLETS, STORYTELLER_STYLES,
+  STORYTELLER_WORLD_BEATS,
+} from '../../types/storytellerDirector';
 import { arr, id, num, oid, one, optional, otick, structure, tick } from './primitives';
 
 const scene = one(...STORYTELLER_STORYLETS);
@@ -16,4 +19,8 @@ export const storytellerShape = structure({
     optionMoves: arr(STORYTELLER_MOVES.length, move), targetActorId: oid, targetSiteId: oid,
   })),
   lastOutcome: optional(structure({ offerId: id, actorId: id, storyletId: scene, move, tick })),
+  pulse: optional(arr(STORYTELLER_PULSE_LIMIT, structure({
+    tick, tension: num(0, 100, true), worldBeat: one(...STORYTELLER_WORLD_BEATS),
+    offeredTone: optional(one('quiet', 'journey', 'crisis')), reason: optional(one(...STORYTELLER_PULSE_REASONS)),
+  }))),
 });

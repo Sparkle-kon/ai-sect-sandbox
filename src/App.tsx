@@ -1,3 +1,4 @@
+import {projectStorytellerPulse} from './engine/storytellerDirector';
 import {StorytellerStyleSetting,useStorytellerScene} from './components/useStorytellerScene';
 import {useBellWatchStory} from './components/useBellWatchStory';
 import {SoundscapeToggle,useSoundscape} from './components/useSoundscape';
@@ -692,7 +693,8 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
     setPulseFocus({world:visibleWorld,scopeKey:viewScopeKey,viewerId:activeActorId,fog:mapFog,riskId:risk.id,token:++pulseSerial.current});
   };
   const clearWorldPulse=(token:number)=>setPulseFocus(current=>current?.token===token?undefined:current);
-  const pulseStrip=worldPulse&&<WorldPulseBar view={worldPulse} historical={Boolean(preview)}
+  const directorPulse=useMemo(()=>cockpitOpen?projectStorytellerPulse(visibleWorld):undefined,[cockpitOpen,visibleWorld]);
+  const pulseStrip=worldPulse&&<WorldPulseBar view={worldPulse} storyteller={directorPulse} historical={Boolean(preview)}
     canFocus={!immersive} onFocusAlert={focusWorldPulse}/>;
   const soundViewer=cockpitOpen||dashboardOpen?selectedCultivator:activeAvatar(world);
   const soundStage=!cockpitOpen&&!dashboardOpen&&!storyEntryOpen&&!featuredStoryCard&&!storyHome?.scene?.earlier

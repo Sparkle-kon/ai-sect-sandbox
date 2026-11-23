@@ -1,3 +1,5 @@
+import {StorytellerPulseStrip} from './StorytellerPulseStrip';
+import type {projectStorytellerPulse} from '../engine/storytellerDirector';
 import {useId} from 'react';
 import {CloudSnow,Flame,Leaf,Sparkles,Swords,TriangleAlert,Wind} from 'lucide-react';
 import type {WorldPulseRisk,WorldPulseView} from './worldPulseModel';
@@ -23,8 +25,9 @@ function Fortune({side,score}:{side:'正道'|'魔道';score:WorldPulseView['righ
   </div>;
 }
 
-export function WorldPulseBar({view,historical=false,canFocus=true,onFocusAlert}:{
+export function WorldPulseBar({view,storyteller,historical=false,canFocus=true,onFocusAlert}:{
   view:WorldPulseView;
+  storyteller?:ReturnType<typeof projectStorytellerPulse>;
   historical?:boolean;
   canFocus?:boolean;
   onFocusAlert:(risk:WorldPulseRisk)=>void;
@@ -39,7 +42,9 @@ export function WorldPulseBar({view,historical=false,canFocus=true,onFocusAlert}
 
   return <section aria-labelledby={heading}
     className="xianxia-frame w-full min-w-0 space-y-2 rounded-xl border border-teal-300/20 bg-slate-950/90 px-3 py-2 text-slate-100 [overflow-wrap:anywhere]">
-    <div className="grid min-w-0 grid-cols-2 gap-x-3 gap-y-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,.85fr)_minmax(0,1fr)] lg:items-center">
+    <div className={`grid min-w-0 grid-cols-2 gap-x-3 gap-y-2 ${storyteller?
+      'lg:grid-cols-[minmax(0,1fr)_minmax(0,.85fr)_minmax(0,1fr)_minmax(0,1fr)] lg:items-start':
+      'lg:grid-cols-[minmax(0,1fr)_minmax(0,.85fr)_minmax(0,1fr)] lg:items-center'}`}>
       <div className="min-w-0">
         <h2 id={heading} className="flex flex-wrap items-center gap-x-1.5 text-xs font-semibold tracking-wide text-amber-100">
           天地气运 {historical&&<span className="font-normal tracking-normal text-slate-400">历史一帧</span>}
@@ -66,6 +71,7 @@ export function WorldPulseBar({view,historical=false,canFocus=true,onFocusAlert}
           <Fortune side="魔道" score={view.demonic}/>
         </div>
       </div>
+      {storyteller&&<StorytellerPulseStrip view={storyteller}/>}
     </div>
     {rows.length===0?<p className="text-xs text-slate-400">当前范围未见高危。</p>:
       <ul aria-label="当前范围的高危与交锋" className="flex min-w-0 flex-wrap items-center gap-1.5">

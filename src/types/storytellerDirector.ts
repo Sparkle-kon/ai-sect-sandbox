@@ -12,6 +12,37 @@ export const STORYTELLER_STORYLETS=[
 export type StorytellerStoryletId = typeof STORYTELLER_STORYLETS[number];
 export type StorytellerTone = 'quiet' | 'journey' | 'crisis';
 
+export const STORYTELLER_STORYLET_TONES:Readonly<Record<StorytellerStoryletId,StorytellerTone>>=Object.freeze({
+  'rain-eaves':'quiet','lamplight-rest':'quiet','shared-tea':'journey','mountain-road':'journey',
+  'storm-watch':'crisis','retreat-from-danger':'crisis',
+});
+export const STORYTELLER_PULSE_LIMIT=24;
+export const STORYTELLER_WORLD_BEATS=['conflict','peril','celebration','quiet'] as const;
+export type StorytellerWorldBeat=typeof STORYTELLER_WORLD_BEATS[number];
+export const STORYTELLER_PULSE_REASONS=[
+  'health','local_peril','open_road','companion','world_pressure','breather','change_of_pace','cadence',
+] as const;
+export type StorytellerPulseReason=typeof STORYTELLER_PULSE_REASONS[number];
+export interface StorytellerPulsePoint {
+  tick:number;
+  tension:number;
+  worldBeat:StorytellerWorldBeat;
+  offeredTone?:StorytellerTone;
+  reason?:StorytellerPulseReason;
+}
+export interface StorytellerPulseDatedPoint extends StorytellerPulsePoint {
+  year:number;
+  month:number;
+  beatLabel:string;
+  reasonLabel?:string;
+}
+export interface StorytellerPulseView {
+  title:'天势';
+  points:StorytellerPulseDatedPoint[];
+  current:StorytellerPulseDatedPoint;
+}
+
+
 export interface StorytellerOffer {
   id: string;
   storyletId: StorytellerStoryletId;
@@ -39,6 +70,7 @@ export interface StorytellerDirectorState {
   lastOfferTick: number;
   lastAdvancedTick?: number;
   tension: number;
+  pulse?: StorytellerPulsePoint[];
   offer?: StorytellerOffer;
   lastOutcome?: StorytellerOutcome;
 }
