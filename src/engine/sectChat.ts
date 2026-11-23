@@ -1,4 +1,5 @@
-import {LABELS,GREETINGS,COMIC_NEUTRAL,WITNESS_VOICES,RUMOR_VOICES,GRAVE_VOICES,type Greeting} from '../data/sectChatVoices';
+import {isSectChallengeCut,matchSectChallengeResult} from './sectChallengeProof';
+import {CHALLENGE_RESULT_VOICES,LABELS,GREETINGS,COMIC_NEUTRAL,WITNESS_VOICES,RUMOR_VOICES,GRAVE_VOICES,type Greeting} from '../data/sectChatVoices';
 import {SECT_COMEDY_TEMPLATES} from '../data/sectComedy';
 import {SECT_RECURRING_VOICES} from '../data/sectComedy/recurring';
 import {SECT_CHAT_MONTH_LIMIT,SECT_CHAT_POST_LIMIT,SECT_CHAT_ROOMS,SECT_CHAT_VARIANTS,isSectChatModelText,sameSectChatReplyContext,sectChatPostId,
@@ -103,7 +104,8 @@ export function settleSectChatMonth(world:WorldState,prevWorld:WorldState,comple
   // eligible only when a character actually learned a matching relay this month.
   const publicEvents=[...[...thisMonth.values()].filter(event=>sameEvent(retained.get(event.id),event)),
     ...[...retained.values()].filter(event=>event.tick<world.tick)]
-    .filter(event=>event.tick>managed.foundedTick&&isPublic(event,world.tick));
+    .filter(event=>event.tick>managed.foundedTick&&isPublic(event,world.tick)&&
+      (!isSectChallengeCut(event)||matchSectChallengeResult(world,event)));
   const candidates:PublicCandidate[]=[];
   const alive=[...actors.values()].filter(living).sort((a,b)=>cmp(a.id,b.id));
   const liveDisciple=(actor:Cultivator)=>actor.sectId===managed.sectId&&actor.id!==leader.id&&actor.sectRank!=='掌门';
@@ -132,7 +134,8 @@ export function settleSectChatMonth(world:WorldState,prevWorld:WorldState,comple
     if(event)offer(actor,event);
   }
   const recurring=recurringIdentity(world);
-  const score=(candidate:PublicCandidate)=>Number(candidate.knowledge==='rumor')*16+
+  const currentChallenges=new Set(publicEvents.filter(event=>event.tick===world.tick&&isSectChallengeCut(event)).map(event=>event.id));
+  const score=(candidate:PublicCandidate)=>Number(currentChallenges.has(candidate.event.id))*64+Number(candidate.knowledge==='rumor')*16+
     Number(candidate.knowledge==='rumor'&&candidate.actor.id===recurring?.rival)*8+
     Number(candidate.event.actorIds.includes(candidate.actor.id))*8+
     Number(candidate.event.category==='breakthrough'||candidate.event.category==='combat')*4+
@@ -252,7 +255,7 @@ export function projectSectChat(world:WorldState):readonly SectChatRoomView[]{
       if(scoped?(actor.id===leader.id||post.audience?.length!==2||post.audience[0]!==actor.id||post.audience[1]!==leader.id):
         post.audience!==undefined)continue;
       if(roomId==='own'&&post.tick===world.tick&&!currentOwn(actor))continue;
-      let text:string|undefined,sourceEventId:string|undefined;
+      let text:string|undefined,sourceEventId:string|undefined,settledChallenge=false;
       switch(about.kind){
         case 'room_greeting':
           if(roomId===about.kindOfGreeting&&(roomId!=='own'||managed.foundingDiscipleIds.includes(actor.id)))text=GREETINGS[about.kindOfGreeting][post.variant];
@@ -290,6 +293,17 @@ export function projectSectChat(world:WorldState):readonly SectChatRoomView[]{
             if(post.tick<world.tick)text='这条旧讯已收卷。';
             break;
           }
+          if(isSectChallengeCut(event)){
+            const challenge=matchSectChallengeResult(world,event);
+            const winner=challenge?actors.get(challenge.winnerId):undefined;
+            if(!winner){
+              if(post.tick<world.tick)text='这条旧讯已收卷。';
+              break;
+            }
+            text=CHALLENGE_RESULT_VOICES[about.knowledge][post.variant].replace('{winner}',()=>escapeTitle(winner.name));
+            sourceEventId=event.id;settledChallenge=true;
+            break;
+          }
           const line=event.category==='death'?GRAVE_VOICES[about.knowledge]:
             (about.knowledge==='witness'?WITNESS_VOICES:RUMOR_VOICES)[post.variant];
           text=line.replace('{title}',()=>escapeTitle(event.title));
@@ -299,7 +313,7 @@ export function projectSectChat(world:WorldState):readonly SectChatRoomView[]{
       }
       if(!text)continue;
       const existing=output.get(roomId);
-      const model=post.source==='llm'&&!scoped&&isSectChatModelText(post.text)&&
+      const model=post.source==='llm'&&!settledChallenge&&!scoped&&isSectChatModelText(post.text)&&
         (about.kind==='room_greeting'&&living(actor)||about.kind==='public_event'&&sourceEventId!==undefined);
       const target=model&&post.replyTo?month.posts.find(row=>row.id===post.replyTo):undefined;
       const replyTo=target&&sameSectChatReplyContext(post,target)&&existing?.some(row=>row.id===target.id&&

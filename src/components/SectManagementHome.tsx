@@ -1,3 +1,4 @@
+import type {SectChallengeCommand} from '../engine/sectChallenges';
 import {projectSectFurnaceReaction} from '../engine/sectReaction';
 import type {SectReactionCue} from '../types/sectReaction';
 import {lazy,Suspense,useCallback,useId,useMemo,useRef,useState,type RefObject} from 'react';
@@ -31,6 +32,7 @@ import type {SectChatModelControls} from './SectChatPanel';
 
 const SectJobReportStage=lazy(async()=>({default:(await import('./SectJobReportStage')).SectJobReportStage}));
 const SectMorningBoard=lazy(async()=>({default:(await import('./SectMorningBoard')).SectMorningBoard}));
+const SectChallengePanel=lazy(async()=>({default:(await import('./SectChallengePanel')).SectChallengePanel}));
 const SectChatPanel=lazy(async()=>({default:(await import('./SectChatPanel')).SectChatPanel}));
 
 type HomeView='story'|'cockpit'|'sandbox'|'saves';
@@ -53,6 +55,7 @@ export interface SectManagementHomeProps {
   chatPosting?:SectPlayerChatControls;
   momentsAction?:SectMomentsAction;
   liveAction?:SectLiveAction;
+  challengeAction?:(expected:WorldState,command:SectChallengeCommand)=>Promise<boolean>;
   onOpenChatSource?:(expectedWorld:WorldState,postId:string)=>boolean;
 }
 
@@ -227,7 +230,7 @@ function ManagedCourtyard({world,busy,onTick,onConfirmJobs,observations,report,o
   </>;
 }
 
-export function SectManagementHome({world,busy=false,onStart,onOpen,onTick,onConfirmJobs,observations,report,onDismissReport,titleRef,onManagementAction,onRestart,restartSeed,chatScope,onOpenChatSource,chatModel,chatPosting,momentsAction,liveAction}:SectManagementHomeProps){
+export function SectManagementHome({world,busy=false,onStart,onOpen,onTick,onConfirmJobs,observations,report,onDismissReport,titleRef,onManagementAction,onRestart,restartSeed,chatScope,onOpenChatSource,chatModel,chatPosting,momentsAction,liveAction,challengeAction}:SectManagementHomeProps){
   const sect=world.sects.find(row=>row.id===world.sectManagement?.sectId);
   const growth=useMemo(()=>projectSectGrowth(world),[world]);
   const [restarting,setRestarting]=useState<WorldState>();
@@ -263,7 +266,13 @@ export function SectManagementHome({world,busy=false,onStart,onOpen,onTick,onCon
       </section>:<SectFailurePanel view={growth} busy={busy} onRestart={onRestart?()=>setRestarting(world):undefined}/>):
         sect?<div className="grid min-w-0 items-start gap-3 min-[1440px]:grid-cols-[minmax(0,1fr)_19rem]">
           <div className="min-w-0 space-y-3"><ManagedCourtyard world={world} busy={busy} onTick={onTick} onConfirmJobs={onConfirmJobs}
-            observations={observations} report={report} onDismissReport={onDismissReport} growth={growth} command={command}/></div>
+            observations={observations} report={report} onDismissReport={onDismissReport} growth={growth} command={command}/>
+            {challengeAction&&chatKey&&<Suspense fallback={null}>
+              <SectChallengePanel key={chatKey} world={world} busy={busy||pendingReport}
+                onRequest={(expected,discipleId,defenderSectId)=>challengeAction(expected,{kind:'request',discipleId,defenderSectId})}
+                onAnswer={(expected,offerId,accept)=>challengeAction(expected,{kind:'answer',offerId,accept})}/>
+            </Suspense>}
+          </div>
           {chatKey&&<Suspense fallback={<p role="status" className="text-sm text-stone-300">正在翻看群聊…</p>}>
             <SectChatPanel key={chatKey} scope={chatKey} world={world} busy={busy} onOpenSource={onOpenChatSource} model={chatModel} posting={chatPosting} momentsAction={momentsAction} liveAction={liveAction}/>
           </Suspense>}

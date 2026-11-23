@@ -5,6 +5,7 @@ import {DAO_INTENT_QI,DAO_INTENT_READY_TICKS,DAO_PATHS} from '../engine/daoPathT
 import {FORBIDDEN_ART_CATALOG,forbiddenDuelContactId,forbiddenArtScarId} from '../engine/forbiddenArtCatalog';
 import {terrainTileAt} from '../engine/terrainEngine';
 import {isChronicleStoryFact} from '../engine/chronicleLead';
+import {matchSectChallengeResult} from '../engine/sectChallengeProof';
 import {projectSchoolFormStrokes} from '../engine/schoolFormDuel';
 import {projectCultivatorPortrait} from './cultivatorPortraitModel';
 import {mapTransitActorIds} from './mapConvoyView';
@@ -13,7 +14,7 @@ import type {SceneStageSeason,SceneStageTheme} from './sceneStageModel';
 import type {createTerrainMapView} from './terrainMapView';
 
 type View=ReturnType<typeof createTerrainMapView>;
-export type VisualDuelArenaSource={kind:'duel';eventId:string}|{kind:'tournament';occasionId:string;round:number;bout:number}|
+export type VisualDuelArenaSource={kind:'duel';eventId:string}|{kind:'sect_challenge';eventId:string}|{kind:'tournament';occasionId:string;round:number;bout:number}|
   {kind:'dungeon';occasionId:string};
 export interface VisualDuelArenaOptions {readonly viewer?:Cultivator;readonly historical?:boolean}
 type Side='left'|'right';
@@ -79,6 +80,21 @@ export function projectVisualDuelArena(world:WorldState,view:View,source:VisualD
       ...(art?{sprite:{id:actor.id,appearance:art,pose:'fight' as const}}:{}),...(hp?{hp}:{}),...(qi?{qi}:{})};
   }
   const damage=(target:Side,amount:number):VisualArenaDamage[]=>positive(amount)?[{target,amount}]:[];
+  if(source.kind==='sect_challenge'){
+    const event=events.get(source.eventId);
+    if(!actualPublic(event))return;
+    const result=matchSectChallengeResult(world,event),site=venue(result?.siteId);
+    if(!result||!site)return;
+    const left=people.get(result.challengerId),right=people.get(result.defenderId);
+    if(!left||!right)return;
+    const layout=base(event.id,site,event),current=!layout.historical;
+    // The verdict itself is dated proof. If a fighter already returned home, never
+    // present that newer body's gauges as if they were still on the gate forecourt.
+    const leftHere=current&&here(left,site.id),rightHere=current&&here(right,site.id);
+    return {...layout,left:fighter(left,event.id,leftHere,leftHere),right:fighter(right,event.id,rightHere,rightHere),
+      damages:damage(result.loserId===left.id?'left':'right',result.injury),
+      outcome:result.winnerId===left.id?'left':'right'};
+  }
   if(source.kind==='duel'){
     const event=events.get(source.eventId);
     if(!actualPublic(event)||event.actorIds.length!==2||event.actorIds[0]===event.actorIds[1])return;

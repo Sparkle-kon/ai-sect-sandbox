@@ -23,3 +23,10 @@ export const RUMOR_VOICES:Voices=['听闻「{title}」。我没在场，先把�
 export const GRAVE_VOICES:Readonly<Record<'witness'|'rumor',string>>={
   witness:'「{title}」是我亲见。余情未明，先不妄议。',rumor:'听闻「{title}」。不是亲见，还请待来者分说。',
 };
+/** Settled scores stay on the record even if model chatter is enabled. */
+export const CHALLENGE_RESULT_VOICES:Readonly<Record<'witness'|'rumor',Voices>>={
+  witness:['亲见这一场山门踢馆，是{winner}胜了。','门前那番交手我看见了，{winner}赢下此场。',
+    '这一回在山门分了高下，亲眼见{winner}占了上风。','我在山门跟前，{winner}确实赢下这一场。'],
+  rumor:['听人传来，山门踢馆是{winner}胜了。','这一场山门交锋，传来的胜者是{winner}。',
+    '我未在门前；只听说是{winner}赢了。','山门那场有消息了，听说{winner}取胜。'],
+};

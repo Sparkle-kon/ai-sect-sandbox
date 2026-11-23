@@ -13,8 +13,8 @@ export function projectSectLiveScene(world:WorldState,show:SectLiveShow):LiveSce
   const event=resolveSectLiveSource(world,show);
   if(!event)return;
   const historical=show.tick!==world.tick;
-  if(show.bout||show.kind==='combat'){
-    const source=show.bout?{kind:'tournament' as const,...show.bout}:{kind:'duel' as const,eventId:event.id};
+  if(show.bout||show.kind==='combat'||show.kind==='sect_challenge'){
+    const source=show.bout?{kind:'tournament' as const,...show.bout}:{kind:show.kind==='sect_challenge'?'sect_challenge' as const:'duel' as const,eventId:event.id};
     const frame=projectVisualDuelArena(world,createTerrainMapView(world,undefined,false),source,{historical});
     if(frame?.siteId===show.siteId&&frame.tick===show.tick)return {kind:'arena',frame};
   }

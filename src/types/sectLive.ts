@@ -1,4 +1,4 @@
-export const SECT_LIVE_KINDS=['tournament','tribulation','furnace','furnace_hazard','combat'] as const;
+export const SECT_LIVE_KINDS=['tournament','tribulation','furnace','furnace_hazard','combat','sect_challenge'] as const;
 export type SectLiveKind=typeof SECT_LIVE_KINDS[number];
 export const SECT_LIVE_VARIANTS=[0,1,2,3] as const;
 export type SectLiveVariant=typeof SECT_LIVE_VARIANTS[number];

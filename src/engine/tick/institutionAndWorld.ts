@@ -1,3 +1,4 @@
+import { advanceSectChallenges } from '../sectChallenges';
 import { isPrivateBanquetSeatEvent, settleBanquetSeats } from '../banquetSeats';
 import { advanceNightDoors, recordNightDoorArrival, recordNightDoorBlocked } from '../nightDoor';
 import { advanceReliefHomecomings } from '../reliefHomecoming';
@@ -86,6 +87,7 @@ const institutionEventPlugins = defineTickPlugins<WorldTickContext, [WorldEvent[
   institutionEvents('advanceApprenticeCohorts', ({ nextState }) => advanceApprenticeCohorts(nextState)),
   institutionEvents('advanceBoundaryReliefs', ({ nextState }) => advanceBoundaryReliefs(nextState)),
   institutionEvents('advanceShortShifts', ({ nextState }) => advanceShortShifts(nextState)),
+  {id:'advanceSectChallenges',run:({nextState},events)=>advanceSectChallenges(nextState,events)},
   institutionEvents('advanceSparring', ({ nextState }) => advanceSparring(nextState)),
   institutionEvents('advanceDiplomacy', ({ nextState, rng, traceOptions, recordDecisionEffect }, grandReplies) =>
     advanceDiplomacy(nextState, rng, {

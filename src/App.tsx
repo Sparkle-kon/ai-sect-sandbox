@@ -1,3 +1,4 @@
+import type {SectChallengeCommand} from './engine/sectChallenges';
 import type {SectLiveCommand} from './types/sectLive';
 import type {SectMomentCommand} from './types/sectMoments';
 import {projectSectChat} from './engine/sectChat';
@@ -781,6 +782,8 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
     canManage(expected)&&simulation.manageSectMoment(expected,timeline,managerRevision,command);
   const manageLive=async(expected:WorldState,command:SectLiveCommand):Promise<boolean>=>
     canManage(expected)&&simulation.manageSectLive(expected,timeline,managerRevision,command);
+  const manageChallenge=async(expected:WorldState,command:SectChallengeCommand):Promise<boolean>=>
+    canManage(expected)&&simulation.manageSectChallenge(expected,timeline,managerRevision,command);
   const restartSeed=managerView==='opening'?managedRestartSeed(timeline):undefined;
   const restartManaged=(expected:WorldState,starterId:StarterSectId,draw:StarterDraw):boolean=>{
     if(managerView!=='opening'||expected!==world||restartSeed===undefined||!world.sectManagement?.growth?.failure||!managerIsCurrent())return false;
@@ -798,7 +801,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
     onStart={startManagedSect} onOpen={openFromManager} onConfirmJobs={confirmSectJobs} observations={simulation.sectJobObservations}
     report={currentSectReport} onDismissReport={dismissSectReport} onManagementAction={manageGrowth} onRestart={restartManaged} restartSeed={restartSeed}
     chatScope={viewScopeKey} onOpenChatSource={openChatSource} chatModel={{config:llmConfig,onChange:simulation.changeLlmConfig}}
-    chatPosting={simulation.sectPlayerPosting} momentsAction={manageMoment} liveAction={manageLive}/>;
+    chatPosting={simulation.sectPlayerPosting} momentsAction={manageMoment} liveAction={manageLive} challengeAction={manageChallenge}/>;
   if(managerView==='saves')return <main className="xianxia-shell min-h-dvh bg-slate-950 text-slate-100 px-4 py-3">
     <div className="mx-auto max-w-3xl space-y-3">
       <header className="flex items-center justify-between gap-2">

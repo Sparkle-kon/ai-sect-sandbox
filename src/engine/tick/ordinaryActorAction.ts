@@ -1,3 +1,4 @@
+import { chooseSectChallengeAction } from '../sectChallenges';
 import {deferSectPairChore} from '../sectMeetingOrders';
 import {observeSectJob,planSectJob,settleSectJobChore,snapshotSectJobEvidence} from '../sectJobs';
 import type {SectJobPlan} from '../../types/sectJobs';
@@ -506,9 +507,21 @@ export function runOrdinaryActorAction(
       if (local) { provided = local; modelStoryChoiceReplaced = Boolean(modelProposal); }
     }
   }
+  const pendingChallenge=nextState.sectManagement?.challenges?.pending;
+  const challenge=pendingChallenge&&(pendingChallenge.challengerId===cultivator.id||pendingChallenge.defenderId===cultivator.id)&&
+    !avatarDecision&&!expeditionOrder&&
+    !occasion&&!liveEncounter&&!liveDestiny&&activeAvatar(nextState)!==cultivator&&
+    !activeSiegeForActor(nextState,cultivator)&&!requiredBeforeOrdinaryDecision(cultivator,nextState)
+    ?chooseSectChallengeAction(nextState,cultivator):undefined;
+  if(challenge){
+    // An admitted challenge owns the route even if the provider suggests something else.
+    if(modelProposal&&!matchesSectJobDecision(challenge,modelProposal))modelOrdinaryReplaced=true;
+    provided=challenge;
+  }
   const job=sectMeeting?.byDisciple.get(cultivator.id);
   let plannedJob:Exclude<SectJobPlan,{kind:'blocked'}>|undefined;
-  if(job&&sectMeeting&&!avatarDecision&&!expeditionOrder&&!occasion&&!liveEncounter&&!liveDestiny&&
+  if(challenge&&job&&sectMeeting)sectMeeting.observations.set(cultivator.id,{...job,tick:nextState.tick,phase:'unavailable',line:'先履已经应下的山门比试。'});
+  if(!challenge&&job&&sectMeeting&&!avatarDecision&&!expeditionOrder&&!occasion&&!liveEncounter&&!liveDestiny&&
       activeAvatar(nextState)!==cultivator&&!activeSiegeForActor(nextState,cultivator)){
     const possible=planSectJob(nextState,cultivator,job.jobId);
     const required=requiredBeforeOrdinaryDecision(cultivator,nextState);

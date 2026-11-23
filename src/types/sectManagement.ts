@@ -1,3 +1,4 @@
+import type { SectChallengeState } from './sectChallenge';
 import type { SectLiveState } from './sectLive';
 import type { SectMomentsState } from './sectMoments';
 import type { SectPlayerChatState } from './sectPlayerChat';
@@ -49,6 +50,7 @@ export interface SectManagementState {
   playerChat?:SectPlayerChatState;
   moments?:SectMomentsState;
   live?:SectLiveState;
+  challenges?:SectChallengeState;
 }
 
 /** Stable genesis namespace; a new draw is a new lineage, not a changed live roster. */

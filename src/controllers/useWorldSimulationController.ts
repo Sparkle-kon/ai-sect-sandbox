@@ -1,3 +1,4 @@
+import {applySectChallengeCommand} from '../engine/sectChallenges';
 import {applySectLiveCommand} from '../engine/sectLive';
 import {applySectMomentCommand} from '../engine/sectMoments';
 import {applySectGrowthCommand} from '../engine/sectGrowth';
@@ -398,6 +399,7 @@ export function useWorldSimulationController({
   const manageSectGrowth=manageSectCommand(applySectGrowthCommand);
   const manageSectMoment=manageSectCommand(applySectMomentCommand);
   const manageSectLive=manageSectCommand(applySectLiveCommand);
+  const manageSectChallenge=manageSectCommand(applySectChallengeCommand);
 
   const restartManagedSect=(expected:WorldState,expectedTimeline:WorldTimeline,revision:number,fresh:WorldState):boolean=>{
     if(isRunning||fastForwardRun.current||campaignGuard.current||history.current!==expectedTimeline||
@@ -654,7 +656,7 @@ export function useWorldSimulationController({
     ...freshness,
     world,visibleWorld,timeline,saveTimelineId,restoredReadingOrigin,
     viewEpoch,viewScopeKey,sourceBranch,preview,activateTimeline,restoreHistoricalFrame,clearPreview,
-    updateWorld,replaceWorld,manageSectGrowth,manageSectMoment,manageSectLive,restartManagedSect,newWorldFromSeed,changeStorytellerStyle,canUseSaveContext,archiveCurrentNarrative,handleReset,
+    updateWorld,replaceWorld,manageSectGrowth,manageSectMoment,manageSectLive,manageSectChallenge,restartManagedSect,newWorldFromSeed,changeStorytellerStyle,canUseSaveContext,archiveCurrentNarrative,handleReset,
     isRunning,setIsRunning,isStepping,tryBeginInteraction,endInteraction,tickIntervalMs,setTickIntervalMs,
     llmConfig,changeLlmConfig,handleStepTick,toggleAutoplay,compareDecision,fairModelCoverage,confirmSectMeeting,
     sectPlayerPosting,sectJobObservations:!preview&&lastSectMeeting?.world===world?lastSectMeeting.rows:undefined,

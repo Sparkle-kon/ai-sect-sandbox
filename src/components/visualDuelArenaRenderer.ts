@@ -97,7 +97,7 @@ function venueWing(ctx:Pen,kind:VisualDuelArenaFrame['kind'],c:ArenaInk):void{
       wash(ctx,x,y,'#9cb4ab',17,.57);
       poly(ctx,'#9bbcb4',[[x,y-8],[x+3,y-1],[x+2,y+4],[x-3,y+3]]);
     }
-  }else if(kind==='tournament'){
+  }else if(kind==='tournament'||kind==='sect_challenge'){
     for(const [x,d] of [[96,1],[544,-1]]){
       rect(ctx,c.shade,x-2,161,4,75);
       rect(ctx,c.edge,x-1,159,1.1,75);

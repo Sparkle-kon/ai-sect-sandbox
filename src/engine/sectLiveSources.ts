@@ -4,6 +4,7 @@ import {ALCHEMY_RECIPES} from './alchemyCatalog';
 import {isChronicleStoryFact} from './chronicleLead';
 import {furnaceSafetyDamage} from './furnaceSafetyEngine';
 import {onLowerPlane} from './upperPassageIsolation';
+import {matchSectChallengeResult,SECT_CHALLENGE_PUBLIC_TITLE} from './sectChallengeProof';
 import {sameGeneratedWorld} from './worldIdentity';
 
 const cmp=(a:string,b:string)=>a<b?-1:a>b?1:0;
@@ -57,6 +58,9 @@ export function isSectLiveSourceId(source:SectLiveSource):boolean {
   switch(source.kind){
     case 'furnace_hazard':
       return source.castIds.length===0&&new RegExp(`^evt-furnace-safety-[1-9]\\d*-closed-${source.tick}$`).test(source.sourceEventId);
+    case 'sect_challenge':
+      return source.castIds.length===2&&!!first&&!!second&&first!==second&&
+        new RegExp(`^evt-${source.tick}-sect-challenge-(?:inbound|outbound)-[0-9]+-completed$`).test(source.sourceEventId);
     case 'combat':
       return source.castIds.length===2&&!!first&&!!second&&first!==second&&source.sourceEventId===prefix+'duel';
     case 'furnace':
@@ -148,6 +152,9 @@ function nativeSource(world:WorldState,event:WorldEvent,site:LocationNode,
   actors:ReadonlyMap<string,Cultivator|undefined>):SectLiveSource|undefined {
   if(event.witnessScope!==undefined||event.locationId!==site.id||!dated(world,event)||!isChronicleStoryFact(event,world.tick))return;
   const base={tick:event.tick,sourceEventId:event.id,siteId:site.id} as const;
+  const challenge=event.title===SECT_CHALLENGE_PUBLIC_TITLE&&matchSectChallengeResult(world,event);
+  if(challenge&&event.actorIds.every(id=>!!actors.get(id)))
+    return {...base,kind:'sect_challenge',castIds:[challenge.challengerId,challenge.defenderId]};
   const contest=tournamentSource(world,event,site);
   if(contest&&contest.castIds.every(id=>!!actors.get(id)))return contest;
   if(hazardSource(world,event,site))return {...base,kind:'furnace_hazard',castIds:[]};
@@ -180,7 +187,7 @@ export function resolveSectLiveSource(world:WorldState,source:SectLiveSource):Wo
   return event&&matchesSectLiveEvent(world,source,event)?event:undefined;
 }
 
-const subjectPriority:Readonly<Record<SourceKind,number>>={tournament:0,tribulation:1,furnace:2,furnace_hazard:3,combat:4};
+const subjectPriority:Readonly<Record<SourceKind,number>>={sect_challenge:0,tournament:1,tribulation:2,furnace:3,furnace_hazard:4,combat:5};
 const sameEvent=(a:WorldEvent,b:WorldEvent)=>a.tick===b.tick&&a.year===b.year&&a.month===b.month&&a.title===b.title&&
   a.description===b.description&&a.category===b.category&&a.locationId===b.locationId&&a.witnessScope===b.witnessScope&&
   a.duelWinnerId===b.duelWinnerId&&sameIds(a.actorIds,b.actorIds)&&

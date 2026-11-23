@@ -1,3 +1,4 @@
+import { sectChallengeShape, validateSectChallenges } from './sectChallengeValidation';
 import { sectLiveShape, validateSectLive } from './sectLiveValidation';
 import { sectMomentsShape, validateSectMoments } from './sectMomentsValidation';
 import { sectPlayerChatShape, validateSectPlayerChat } from './sectPlayerChatValidation';
@@ -32,6 +33,7 @@ export const sectManagementShape = structure({
   playerChat: optional(sectPlayerChatShape),
   moments: optional(sectMomentsShape),
   live: optional(sectLiveShape),
+  challenges: optional(sectChallengeShape),
 });
 
 export function validateSectManagement(world: WorldState, fail: (field:string)=>never): void {
@@ -91,5 +93,6 @@ export function validateSectManagement(world: WorldState, fail: (field:string)=>
   if(state.chat)validateSectChat(world,state,state.chat,fail);
   if(state.playerChat)validateSectPlayerChat(world,state,state.playerChat,fail);
   if(state.moments)validateSectMoments(world,state,state.moments,fail);
+  if(state.challenges)validateSectChallenges(world,state,state.challenges,fail);
   validateSectLive(world,state,state.live,fail);
 }

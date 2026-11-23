@@ -1,3 +1,4 @@
+import {matchSectChallengeResult,SECT_CHALLENGE_PUBLIC_TITLE} from './sectChallengeProof';
 import {LABELS} from '../data/sectChatVoices';
 import {SECT_QUIRK_NAMES} from '../types/sectManagement';
 import type {PersonalityTrait,WorldEvent,WorldState} from '../types/world';
@@ -59,6 +60,7 @@ export function quoteSectChatModelMonth(world:WorldState):readonly SectChatModel
     if(!actor?.alive||actor.hp<=0||!onLowerPlane(actor)||card.senderId!==senderId)continue;
     const event=about.kind==='public_event'&&card.sourceEventId===about.eventId?unique(world.events,about.eventId):undefined;
     if(about.kind==='public_event'&&(!event||event.witnessScope!==undefined||event.tick!==about.eventTick))continue;
+    if(event?.title===SECT_CHALLENGE_PUBLIC_TITLE&&matchSectChallengeResult(world,event))continue;
     const knowledge=about.kind==='public_event'?about.knowledge:undefined;
     const key=JSON.stringify([roomId,event?.id??null,event?.tick??null]);
     const existing=batches.get(key);

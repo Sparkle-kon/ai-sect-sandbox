@@ -4,7 +4,7 @@ import {drawVisualDuelArena} from './visualDuelArenaRenderer';
 import type {VisualDuelArenaFrame} from './visualDuelArenaModel';
 
 const DUR=1150,STEP=1000/15;
-const titles={duel:'生死交锋',tournament:'演武交锋',dungeon:'禁地斗法'} as const;
+const titles={duel:'生死交锋',sect_challenge:'山门踢馆',tournament:'演武交锋',dungeon:'禁地斗法'} as const;
 type Fighter=VisualDuelArenaFrame['left'];
 
 function Gauge({label,value}:{label:string;value:Fighter['hp']}){
