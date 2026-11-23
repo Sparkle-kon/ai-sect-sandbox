@@ -136,6 +136,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   const [managerView,setManagerView]=useState<'opening'|'saves'|'closed'>(()=>
     initialMode==='sect'&&initialWorkspace===undefined&&!initialCockpit?'opening':'closed');
   const [dismissedSectReport,setDismissedSectReport]=useState<string>();
+  const [firstMeeting,setFirstMeeting]=useState<{sectId:string;foundedTick:number}>();
   const managerHeading=useRef<HTMLHeadingElement>(null);
   const managerSavesHeading=useRef<HTMLHeadingElement>(null);
   const [cockpitOpen,setCockpitOpen]=useState(initialCockpit);
@@ -750,11 +751,15 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
     if(managerView!=='opening'||world.sectManagement||!managerIsCurrent())return false;
     const next=createManagedSectWorld(world.random.seed,world.worldgen?.profileId??'classic',starterId,draw);
     if(!next||!managerIsCurrent()||!simulation.replaceWorld(next,world,managerRevision))return false;
-    managerHeading.current?.focus({preventScroll:true});
+    if(next.sectManagement){
+      const {sectId,foundedTick}=next.sectManagement;
+      setFirstMeeting({sectId,foundedTick});
+    }
     return true;
   };
   const openFromManager=(view:'story'|'cockpit'|'sandbox'|'saves')=>{
     if(managerView!=='opening'||!managerIsCurrent())return;
+    setFirstMeeting(undefined);
     if(view==='saves'){setManagerView('saves');return;}
     setManagerView('closed');setStoryEntryOpen(false);
     setCockpitOpen(view==='cockpit');
@@ -763,7 +768,9 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   };
   const confirmSectJobs=async(expected:WorldState,assignments:readonly SectJobAssignment[]):Promise<boolean>=>{
     if(managerView!=='opening'||expected!==world||!world.sectManagement||!managerIsCurrent())return false;
-    return simulation.confirmSectMeeting(expected,timeline.activeBranchId,managerRevision,assignments);
+    const accepted=await simulation.confirmSectMeeting(expected,timeline.activeBranchId,managerRevision,assignments);
+    if(accepted&&firstMeeting)setFirstMeeting(current=>current===firstMeeting?undefined:current);
+    return accepted;
   };
   const openChatSource=(expected:WorldState,postId:string):boolean=>{
     if(managerView!=='opening'||expected!==world||!managerIsCurrent())return false;
@@ -772,6 +779,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
     if(!sourceEventId||projectScopedPublicChronicle(world).events.filter(event=>event.id===sourceEventId).length!==1)return false;
     setChronicleFilter('all');openWorkspace('chronicle');rememberFold('chronicle','feed');
     setChatChronicle({world,scope:viewScopeKey,eventId:sourceEventId,token:++focusSerial.current});
+    setFirstMeeting(undefined);
     setStoryEntryOpen(false);setManagerView('closed');setCockpitOpen(false);setDashboardOpen(true);
     return true;
   };
@@ -797,8 +805,11 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
     if(managerView==='opening'&&expected===latestSectReport&&sectReportKey&&authority.current===world)
       setDismissedSectReport(sectReportKey);
   };
+  // A deliberate new start arms the hint. Saved games do not carry tutorial state.
+  const showFirstMeeting=!!firstMeeting&&world.sectManagement?.sectId===firstMeeting.sectId&&world.tick===firstMeeting.foundedTick;
   if(managerView==='opening')return <SectManagementHome world={world} titleRef={managerHeading} busy={managerBlocked}
     onStart={startManagedSect} onOpen={openFromManager} onConfirmJobs={confirmSectJobs} observations={simulation.sectJobObservations}
+    onSkipFirstMeeting={showFirstMeeting?()=>setFirstMeeting(undefined):undefined}
     report={currentSectReport} onDismissReport={dismissSectReport} onManagementAction={manageGrowth} onRestart={restartManaged} restartSeed={restartSeed}
     chatScope={viewScopeKey} onOpenChatSource={openChatSource} chatModel={{config:llmConfig,onChange:simulation.changeLlmConfig}}
     chatPosting={simulation.sectPlayerPosting} momentsAction={manageMoment} liveAction={manageLive} challengeAction={manageChallenge}/>;

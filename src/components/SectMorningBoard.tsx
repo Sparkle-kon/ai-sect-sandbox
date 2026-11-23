@@ -4,6 +4,7 @@ import {SECT_JOB_DEFINITIONS,eligibleSectDisciples,quoteSectJob,visibleSectJobDe
 import {projectSectFestivals} from '../engine/sectFestivals';
 import type {SectJobAssignment,SectJobObservation} from '../types/sectJobs';
 import type {Cultivator,WorldState} from '../types/world';
+import {SectFirstMeetingHint,type FirstMeetingStep} from './SectFirstMeetingHint';
 import {LocalCourtyardCanvas} from './LocalCourtyardCanvas';
 import {drawCanvasCharacterSprite} from './canvasCharacterSprite';
 import type {LocalCourtyardActor,LocalCourtyardPlan} from './localCourtyardModel';
@@ -16,6 +17,7 @@ type Walk={actor:LocalCourtyardActor;job:JobId;dx:number;dy:number;sequence:numb
 const empty:Draft=new Map();
 const dragType='application/x-tian-dao-disciple';
 const card='xianxia-frame min-w-0 rounded-xl border border-amber-300/25 bg-slate-950/75 px-3 py-3 [overflow-wrap:anywhere]';
+const hintHighlight=' outline outline-2 outline-offset-2 outline-amber-200';
 const control='min-h-11 min-w-0 rounded-md border border-amber-300/35 text-amber-100 hover:bg-amber-950/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300 disabled:opacity-50';
 
 function PlanningSprite({walk}:{walk:Walk}){
@@ -48,8 +50,8 @@ function PlanningSprite({walk}:{walk:Walk}){
   return <canvas ref={marker} aria-hidden="true" width="40" height="40" className="pointer-events-none absolute bottom-0 right-0 z-20 h-9 w-9"/>;
 }
 
-export function SectMorningBoard({world,busy,plan,moving,onConfirmJobs,buildings,observations,reaction}:{
-  world:WorldState;busy:boolean;plan?:LocalCourtyardPlan;moving?:ReadonlySet<string>;onConfirmJobs:ConfirmSectJobs;buildings:ReactNode;observations?:readonly SectJobObservation[];reaction?:SectReactionCue;
+export function SectMorningBoard({world,busy,plan,moving,onConfirmJobs,buildings,observations,reaction,onSkipFirstMeeting}:{
+  world:WorldState;busy:boolean;plan?:LocalCourtyardPlan;moving?:ReadonlySet<string>;onConfirmJobs:ConfirmSectJobs;buildings:ReactNode;observations?:readonly SectJobObservation[];reaction?:SectReactionCue;onSkipFirstMeeting?:()=>void;
 }){
   const members=useMemo(()=>eligibleSectDisciples(world),[world]);
   const jobs=useMemo(()=>visibleSectJobDefinitions(world),[world]);
@@ -67,6 +69,7 @@ export function SectMorningBoard({world,busy,plan,moving,onConfirmJobs,buildings
   const latest=useRef(world);
   latest.current=world;
   const sequence=useRef(0);
+  const meetingTitle=useRef<HTMLHeadingElement>(null);
   const actor=selected?.world===world?memberById.get(selected.id):undefined;
   const blocked=busy||pending===world||committed===world;
   const draftOrders=draft?.world===world?draft.orders:empty;
@@ -148,6 +151,11 @@ export function SectMorningBoard({world,busy,plan,moving,onConfirmJobs,buildings
   const selectedJob=actor&&draftOrders.get(actor.id);
   const selectedPlan=selectedJob&&actor&&actor===jobFocus?currentPlans.get(selectedJob):undefined;
   const remaining=members.length-draftOrders.size;
+  const namedOrder=members.find(member=>draftOrders.has(member.id));
+  const namedJob=namedOrder&&draftOrders.get(namedOrder.id);
+  const firstStep:FirstMeetingStep|undefined=onSkipFirstMeeting&&members.length?
+    namedOrder&&namedJob?{kind:'confirm',name:namedOrder.name,job:SECT_JOB_DEFINITIONS[namedJob].label}:
+      actor?{kind:'job',name:actor.name,practice:usable(actor,'cultivate')}:{kind:'disciple'}:undefined;
   const activeWalk=draft?.world===world?walk:undefined;
   const inside=members.filter(member=>sprites.has(member.id));
   const outside=members.filter(member=>!sprites.has(member.id));
@@ -159,12 +167,13 @@ export function SectMorningBoard({world,busy,plan,moving,onConfirmJobs,buildings
   const phaseLabel={performed:'已办',on_route:'进行中',unavailable:'未办'} as const;
   const chip=(member:Cultivator,desktop:boolean)=><button type="button" aria-label={`点选 ${member.name}`}
     aria-pressed={actor===member} disabled={blocked} data-morning-disciple={desktop?'sprite':'name'}
-    className={`${control} px-2 text-xs aria-pressed:border-amber-300 aria-pressed:bg-amber-950 ${desktop?'pointer-events-auto relative hidden min-w-11 cursor-grab border-transparent bg-transparent lg:block':'bg-slate-950/80'}`}
+    className={`${control} px-2 text-xs aria-pressed:border-amber-300 aria-pressed:bg-amber-950 ${desktop?'pointer-events-auto relative hidden min-w-11 cursor-grab border-transparent bg-transparent lg:block':'bg-slate-950/80'}${firstStep?.kind==='disciple'?hintHighlight:''}`}
     draggable={desktop&&!blocked} onDragStart={event=>dragStart(event,member)} onDragEnd={dragEnd} onClick={()=>select(member.id)}>
     {desktop?<span className="pointer-events-none absolute left-1/2 top-8 max-w-24 -translate-x-1/2 truncate rounded bg-slate-950/90 px-1.5 py-0.5 text-xs text-amber-100">{member.name}</span>:member.name}
   </button>;
 
   return <div data-sect-morning="" className="grid min-w-0 items-start gap-3 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+    {firstStep&&onSkipFirstMeeting&&<SectFirstMeetingHint step={firstStep} onSkip={()=>{onSkipFirstMeeting();meetingTitle.current?.focus({preventScroll:true});}}/>}
     <section className={card} aria-label="宗门庭院">
       {plan?<LocalCourtyardCanvas plan={plan} embedded reaction={reaction} renderActor={person=>{
         const member=memberById.get(person.id);return member?chip(member,true):null;
@@ -179,7 +188,7 @@ export function SectMorningBoard({world,busy,plan,moving,onConfirmJobs,buildings
       {buildings}
     </section>
     <section className={card} aria-label="晨会差事">
-      <h2 className="font-serif text-lg font-semibold text-amber-100">掌门晨会</h2>
+      <h2 ref={meetingTitle} tabIndex={-1} className="font-serif text-lg font-semibold text-amber-100">掌门晨会</h2>
       {festivals.length>0&&<details className="mt-1 rounded-md border border-amber-300/25 bg-amber-950/20 px-2">
         <summary className="min-h-11 cursor-pointer content-center text-xs text-amber-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300">
           江湖节庆{festivals[0]&&` · ${festivals[0].month}月 ${festivals[0].title}`}
@@ -204,7 +213,7 @@ export function SectMorningBoard({world,busy,plan,moving,onConfirmJobs,buildings
           const currentMarker=activeWalk?.job===job.id?activeWalk:undefined;
           const assigned=members.filter(member=>draftOrders.get(member.id)===job.id);
           return <button key={job.id} type="button" aria-label={job.label} title={candidate?.kind==='blocked'?candidate.reason:job.intent} disabled={blocked}
-            aria-disabled={blocked||!jobFocus} data-festival-job={seasonal?.id} data-unavailable={jobFocus&&!ready||undefined} className={`${control} relative break-words px-2 py-1.5 text-left text-sm aria-disabled:opacity-60 ${currentMarker?'pr-10':''}`}
+            aria-disabled={blocked||!jobFocus} data-festival-job={seasonal?.id} data-unavailable={jobFocus&&!ready||undefined} className={`${control} relative break-words px-2 py-1.5 text-left text-sm aria-disabled:opacity-60 ${currentMarker?'pr-10':''}${firstStep?.kind==='job'&&job.id==='cultivate'&&ready?hintHighlight:''}`}
             onDragOver={event=>{if(!blocked&&drag.current?.world===world&&usable(drag.current.actor,job.id)){
               event.preventDefault();event.dataTransfer.dropEffect='move';
             }}} onDrop={event=>drop(event,job.id)} onClick={event=>{if(actor)assign(actor,job.id,event.currentTarget);}}>
@@ -219,7 +228,7 @@ export function SectMorningBoard({world,busy,plan,moving,onConfirmJobs,buildings
       {selectedJob&&<button type="button" className={`${control} mt-2 px-2 text-xs`} disabled={blocked} onClick={undo}>撤回这件差事</button>}
       <p className="my-2 text-xs text-slate-300">已派 {draftOrders.size} 人，{remaining} 人自行安排。</p>
       {notice?.world===world&&<p role="status" className="mb-2 text-sm text-rose-200">{notice.text}</p>}
-      <button type="button" className={`${control} w-full px-3 text-sm font-semibold`} disabled={blocked} onClick={()=>void confirm()}>
+      <button type="button" className={`${control} w-full px-3 text-sm font-semibold${firstStep?.kind==='confirm'?hintHighlight:''}`} disabled={blocked} onClick={()=>void confirm()}>
         {pending===world||committed===world?'晨会已交卷':'开晨会，过一个月'}
       </button>
       {settled.length>0&&<details className="mt-2 rounded-md border border-amber-300/20 px-2">

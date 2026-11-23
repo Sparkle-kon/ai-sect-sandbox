@@ -44,6 +44,7 @@ export interface SectManagementHomeProps {
   onOpen:(view:HomeView)=>void;
   onTick?:()=>void;
   onConfirmJobs?:ConfirmSectJobs;
+  onSkipFirstMeeting?:()=>void;
   observations?:readonly SectJobObservation[];
   report?:SectJobReport;
   onDismissReport?:(report:SectJobReport)=>void;
@@ -147,7 +148,7 @@ function StarterSelection({seed,busy,onStart}:Pick<SectManagementHomeProps,'busy
   </>;
 }
 
-function ManagedCourtyard({world,busy,onTick,onConfirmJobs,observations,report,onDismissReport,growth,command}:Pick<SectManagementHomeProps,'world'|'onTick'|'onConfirmJobs'|'observations'|'report'|'onDismissReport'>&{busy:boolean;growth?:SectGrowthView;command?:(command:SectGrowthCommand)=>void}){
+function ManagedCourtyard({world,busy,onTick,onConfirmJobs,onSkipFirstMeeting,observations,report,onDismissReport,growth,command}:Pick<SectManagementHomeProps,'world'|'onTick'|'onConfirmJobs'|'onSkipFirstMeeting'|'observations'|'report'|'onDismissReport'>&{busy:boolean;growth?:SectGrowthView;command?:(command:SectGrowthCommand)=>void}){
   const state=world.sectManagement;
   const sect=world.sects.find(row=>row.id===state?.sectId);
   const siteId=state?.homeSiteId;
@@ -203,7 +204,7 @@ function ManagedCourtyard({world,busy,onTick,onConfirmJobs,observations,report,o
       </Suspense>
     </div>:onConfirmJobs?<Suspense fallback={<p role="status" className="text-sm text-slate-300">正在摆放晨会差事牌…</p>}>
       <SectMorningBoard world={world} busy={busy} plan={plan} moving={courtyard?.moving} onConfirmJobs={onConfirmJobs} observations={observations}
-        buildings={buildings} reaction={courtReaction}/>
+        buildings={buildings} reaction={courtReaction} onSkipFirstMeeting={onSkipFirstMeeting}/>
     </Suspense>:<>
     <div className="grid min-w-0 items-start gap-3 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
       <section className={card} aria-label="宗门庭院">
@@ -231,7 +232,7 @@ function ManagedCourtyard({world,busy,onTick,onConfirmJobs,observations,report,o
   </>;
 }
 
-export function SectManagementHome({world,busy=false,onStart,onOpen,onTick,onConfirmJobs,observations,report,onDismissReport,titleRef,onManagementAction,onRestart,restartSeed,chatScope,onOpenChatSource,chatModel,chatPosting,momentsAction,liveAction,challengeAction}:SectManagementHomeProps){
+export function SectManagementHome({world,busy=false,onStart,onOpen,onTick,onConfirmJobs,onSkipFirstMeeting,observations,report,onDismissReport,titleRef,onManagementAction,onRestart,restartSeed,chatScope,onOpenChatSource,chatModel,chatPosting,momentsAction,liveAction,challengeAction}:SectManagementHomeProps){
   const sect=world.sects.find(row=>row.id===world.sectManagement?.sectId);
   const growth=useMemo(()=>projectSectGrowth(world),[world]);
   const [restarting,setRestarting]=useState<WorldState>();
@@ -268,7 +269,7 @@ export function SectManagementHome({world,busy=false,onStart,onOpen,onTick,onCon
         <StarterSelection key={restartSeed??world.random.seed} seed={restartSeed??world.random.seed} busy={busy} onStart={(starter,draw)=>onRestart(world,starter,draw)}/>
       </section>:<SectFailurePanel view={growth} busy={busy} onRestart={onRestart?()=>setRestarting(world):undefined}/>):
         sect?<div className="grid min-w-0 items-start gap-3 min-[1440px]:grid-cols-[minmax(0,1fr)_19rem]">
-          <div className="min-w-0 space-y-3"><ManagedCourtyard world={world} busy={busy} onTick={onTick} onConfirmJobs={onConfirmJobs}
+          <div className="min-w-0 space-y-3"><ManagedCourtyard world={world} busy={busy} onTick={onTick} onConfirmJobs={onConfirmJobs} onSkipFirstMeeting={onSkipFirstMeeting}
             observations={observations} report={report} onDismissReport={onDismissReport} growth={growth} command={command}/>
             {challengeAction&&chatKey&&<Suspense fallback={null}>
               <SectChallengePanel key={chatKey} world={world} busy={busy||pendingReport}
