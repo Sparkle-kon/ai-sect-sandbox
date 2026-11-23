@@ -1,3 +1,5 @@
+import {applySectGrowthCommand} from '../engine/sectGrowth';
+import type {SectGrowthCommand} from '../types/sectGrowth';
 import {quoteSectMeetingOrders} from '../engine/sectMeetingOrders';
 import type {SectJobAssignment,SectJobObservation} from '../types/sectJobs';
 import {configureStoryteller} from '../engine/storytellerDirector';
@@ -22,7 +24,7 @@ import {captureWatchDigests} from '../engine/watchlistEngine';
 import {commitFairModelTurn,createFairModelTurnState,longestModelWait,type FairModelTurnState} from '../engine/fairModelTurnEngine';
 import {modelDecisionCandidates,runModelDecisionTurn,type FairModelCoverage} from '../engine/modelDecisionTurn';
 import {createDecisionReplayTape,replayOneTurn,type DecisionReplayTape,type DecisionReplayResult} from '../engine/decisionTraceEngine';
-import {createTimeline,forkTimeline,forkTimelineCheckpoint,readTimelineHead,readTimelineSnapshot,recordTimelineWorld,selectTimelineBranch,TIMELINE_MAX_BRANCHES,type WorldTimeline} from '../engine/timelineEngine';
+import {appendManagedRestartTimelineRoot,createTimeline,forkTimeline,forkTimelineCheckpoint,readTimelineHead,readTimelineSnapshot,recordTimelineWorld,selectTimelineBranch,TimelineError,TIMELINE_MAX_BRANCHES,type WorldTimeline} from '../engine/timelineEngine';
 import type {SaveBranchSource} from '../engine/storageEngine';
 import type {NarrativeArchivePlan} from '../engine/saveCapacityEngine';
 import {applyArchiveOptimization} from '../engine/saveArchiveSeal';
@@ -167,7 +169,7 @@ export function useWorldSimulationController({
       if(guide&&!directed)return false;
       const sectJobAssignments=meeting&&meeting.world===starting&&meeting.branchId===branchId&&meeting.revision===revision?
         quoteSectMeetingOrders(starting,meeting.assignments):undefined;
-      if(meeting&&!sectJobAssignments)return false;
+      if(meeting&&(!sectJobAssignments||starting.sectManagement?.growth?.failure))return false;
       const directedDisciples=new Set(sectJobAssignments?.map(row=>row.discipleId));
       let sectJobRows:readonly SectJobObservation[]=[];
       const sectJobOptions=sectJobAssignments===undefined?undefined:{
@@ -325,6 +327,35 @@ export function useWorldSimulationController({
     setViewEpoch((previous) => previous + 1);
     activateTimeline(nextTimeline, next);
     return true;
+  };
+
+  const manageSectGrowth=(expected:WorldState,expectedTimeline:WorldTimeline,revision:number,command:SectGrowthCommand):boolean=>{
+    if(isRunning||fastForwardRun.current||campaignGuard.current||history.current!==expectedTimeline||
+        !canUseSaveContext(expected,revision))return false;
+    const next=cloneWorldWithColdHistory(expected);
+    if(!applySectGrowthCommand(next,command))return false;
+    const retained=recordTimelineWorld(expectedTimeline,next);
+    if(retained===expectedTimeline)return false;
+    updateTimeline(retained);
+    if(lastSectMeeting?.world===expected)setLastSectMeeting({world:next,rows:lastSectMeeting.rows});
+    return updateWorld(current=>current===expected?next:current,false)===next;
+  };
+
+  const restartManagedSect=(expected:WorldState,expectedTimeline:WorldTimeline,revision:number,fresh:WorldState):boolean=>{
+    if(isRunning||fastForwardRun.current||campaignGuard.current||history.current!==expectedTimeline||
+        !canUseSaveContext(expected,revision))return false;
+    const head=expectedTimeline.branches.find(row=>row.id===expectedTimeline.activeBranchId)?.snapshots.at(-1);
+    if(!head||head.tick!==expected.tick)return false;
+    try{
+      const rooted=appendManagedRestartTimelineRoot(expectedTimeline,expectedTimeline.activeBranchId,head,fresh);
+      setRestoredReadingOrigin(undefined);
+      setTimelineNotice(undefined);
+      activateTimeline(rooted,fresh);
+      return true;
+    }catch(error){
+      if(!(error instanceof TimelineError))throw error;
+      return false;
+    }
   };
 
   const archiveCurrentNarrative = async (plan: NarrativeArchivePlan, expected: WorldState, contextVersion: number,
@@ -563,7 +594,7 @@ export function useWorldSimulationController({
     ...freshness,
     world,visibleWorld,timeline,saveTimelineId,restoredReadingOrigin,
     viewEpoch,viewScopeKey,sourceBranch,preview,activateTimeline,restoreHistoricalFrame,clearPreview,
-    updateWorld,replaceWorld,newWorldFromSeed,changeStorytellerStyle,canUseSaveContext,archiveCurrentNarrative,handleReset,
+    updateWorld,replaceWorld,manageSectGrowth,restartManagedSect,newWorldFromSeed,changeStorytellerStyle,canUseSaveContext,archiveCurrentNarrative,handleReset,
     isRunning,setIsRunning,isStepping,tryBeginInteraction,endInteraction,tickIntervalMs,setTickIntervalMs,
     llmConfig,changeLlmConfig,handleStepTick,toggleAutoplay,compareDecision,fairModelCoverage,confirmSectMeeting,
     sectJobObservations:!preview&&lastSectMeeting?.world===world?lastSectMeeting.rows:undefined,

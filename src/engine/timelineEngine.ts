@@ -30,7 +30,7 @@ export interface WorldTimeline {
   readonly nextBranchNumber: number;
 }
 export class TimelineError extends Error {
-  constructor(readonly code: 'branch_limit' | 'missing_snapshot' | 'invalid_intervention' | 'invalid_checkpoint' | 'invalid_avatar_entry' | 'invalid_authored_root' | 'invalid_north_well_law', message: string) {
+  constructor(readonly code: 'branch_limit' | 'missing_snapshot' | 'invalid_intervention' | 'invalid_checkpoint' | 'invalid_avatar_entry' | 'invalid_managed_restart' | 'invalid_authored_root' | 'invalid_north_well_law', message: string) {
     super(message); this.name = 'TimelineError';
   }
 }
@@ -127,6 +127,37 @@ export function appendAuthoredTimelineRoot(timeline:WorldTimeline,expectedBranch
   const founded=immutableBranch({id,label:(typeof label==='string'&&cut(label,TIMELINE_MAX_LABEL))||`作者纪元 ${number}`},
     [saveSnapshot(preparedWorld)]);
   return Object.freeze({activeBranchId:founded.id,nextBranchNumber:number+1,branches:Object.freeze([...timeline.branches,founded])});
+}
+
+/** Fresh uses a deterministic new seed, so a displayed founding roster always matches the approved restart. */
+export function managedRestartSeed(timeline:WorldTimeline):number|undefined {
+  if(timeline.branches.length>=TIMELINE_MAX_BRANCHES)return undefined;
+  const head=branchOf(timeline)?.snapshots.at(-1)?.world,number=timeline.nextBranchNumber;
+  if(!head?.sectManagement?.growth?.failure||!Number.isSafeInteger(number)||number<1||timeline.branches.some(row=>row.id===`branch-${number}`))
+    return undefined;
+  const occupied=new Set(timeline.branches.map(row=>row.snapshots.at(-1)?.world.random.seed));
+  let seed=(head.random.seed^Math.imul(number+1,0x9e3779b1)^Math.imul(head.tick+1,0x85ebca6b))>>>0;
+  while(occupied.has(seed))seed=(seed+0x9e3779b1)>>>0;
+  return seed;
+}
+
+/** A restart begins a separate root. It does not destroy the failed branch or pretend the old months never happened. */
+export function appendManagedRestartTimelineRoot(timeline:WorldTimeline,expectedBranchId:string,expectedHead:TimelineSnapshot,
+  fresh:WorldState):WorldTimeline {
+  if(timeline.branches.length>=TIMELINE_MAX_BRANCHES)
+    throw new TimelineError('branch_limit','旧卷已满，不会删掉原来的宗门。');
+  const invalid=()=>new TimelineError('invalid_managed_restart','旧局或开宗同行者已经变化，这回还没接任。');
+  const head=branchOf(timeline,expectedBranchId)?.snapshots.at(-1);
+  const seed=managedRestartSeed(timeline),management=fresh.sectManagement;
+  if(timeline.activeBranchId!==expectedBranchId||!head||head!==expectedHead||seed===undefined||fresh.random.seed!==seed||
+      !management||management.growth!==undefined||management.latestReport!==undefined||fresh.tick!==1||management.foundedTick!==1||
+      fresh.worldgen?.birthTick!==1||fresh.worldgen.profileId!==head.world.worldgen?.profileId||
+      fresh.authoredEraOrigin||fresh.scenarioOrigin||fresh.interventionSequence!==0||sameGeneratedWorld(fresh,head.world))throw invalid();
+  const named=fresh.sects.find(row=>row.id===management.sectId);
+  if(!named||named.leaderId!==management.leaderId||named.headquartersId!==management.homeSiteId)throw invalid();
+  const number=timeline.nextBranchNumber,id=`branch-${number}`;
+  const branch=immutableBranch({id,label:cut(`${named.name} · 东山再起 ${number}`,TIMELINE_MAX_LABEL)},[saveSnapshot(fresh)]);
+  return Object.freeze({activeBranchId:id,nextBranchNumber:number+1,branches:Object.freeze([...timeline.branches,branch])});
 }
 
 /** A declared present-day rule on one verified live frame. This is not a second natural past. */

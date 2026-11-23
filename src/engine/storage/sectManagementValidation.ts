@@ -1,9 +1,10 @@
+import { sectGrowthShape, validateSectGrowth } from './sectGrowthValidation';
 import { sectJobReportShape, validateSectJobReport } from './sectJobReportValidation';
 import { STARTER_SECT_IDS, starterSectIdentity } from '../../types/sectManagement';
 import type { WorldState } from '../../types/world';
 import { arr, id, num, one, optional, structure, tick, wealth } from './primitives';
 
-const building = num(0,100,true);
+const building = num(0,3,true);
 export const sectManagementShape = structure({
   version: one(1),
   starterId: one(...STARTER_SECT_IDS),
@@ -16,6 +17,7 @@ export const sectManagementShape = structure({
   buildings: structure({ hall:building, kitchen:building, furnace:building, trainingGround:building, gate:building, library:building }),
   debt: optional(structure({ creditorId:id, principal:wealth, dueTick:tick })),
   latestReport: optional(sectJobReportShape),
+  growth: optional(sectGrowthShape),
 });
 
 export function validateSectManagement(world: WorldState, fail: (field:string)=>never): void {
@@ -57,12 +59,14 @@ export function validateSectManagement(world: WorldState, fail: (field:string)=>
         !creditor.alive||creditor.hp<=0||creditor.locationId!=='loc-market'||creditor.positionPlane!==undefined||
         creditor.sectId===sect.id)return fail('sectManagement.foundingBodies');
   }
-  // The named creditor must be the real Wang minted in this exact world. Due dates after opening
-  // may move when later management rules actually renegotiate the note; never assert fictitious payment.
-  if(state.debt&&(state.debt.principal<=0||state.debt.dueTick<=state.foundedTick||state.debt.creditorId!==creditor.id))
+  // The original note can only be paid down; no borrowing or deadline rewrite in this lane.
+  if(state.debt&&(state.starterId!=='qingyun-odd-jobs'||state.debt.creditorId!==creditor.id||
+      !Number.isInteger(state.debt.principal)||state.debt.principal<1||state.debt.principal>80||
+      state.debt.dueTick!==state.foundedTick+6))
     return fail('sectManagement.debt');
   if(world.tick===state.foundedTick&&(state.starterId==='qingyun-odd-jobs'?
       state.debt?.principal!==80||state.debt?.dueTick!==state.foundedTick+6:state.debt!==undefined))
     return fail('sectManagement.debt');
   if(state.latestReport)validateSectJobReport(world,state.latestReport,fail);
+  if(state.growth)validateSectGrowth(world,state,state.growth,fail);
 }

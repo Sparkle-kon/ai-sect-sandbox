@@ -1,3 +1,5 @@
+import {managedRestartSeed} from './engine/timelineEngine';
+import type {SectGrowthCommand} from './types/sectGrowth';
 import type {SectJobAssignment,SectJobReport} from './types/sectJobs';
 import {SectManagementHome} from './components/SectManagementHome';
 import {createManagedSectWorld} from './engine/starterSectWorld';
@@ -758,6 +760,15 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
     if(managerView!=='opening'||expected!==world||!world.sectManagement||!managerIsCurrent())return false;
     return simulation.confirmSectMeeting(expected,timeline.activeBranchId,managerRevision,assignments);
   };
+  const manageGrowth=(expected:WorldState,command:SectGrowthCommand):boolean=>
+    managerView==='opening'&&expected===world&&!!world.sectManagement&&managerIsCurrent()&&
+    simulation.manageSectGrowth(expected,timeline,managerRevision,command);
+  const restartSeed=managerView==='opening'?managedRestartSeed(timeline):undefined;
+  const restartManaged=(expected:WorldState,starterId:StarterSectId,draw:StarterDraw):boolean=>{
+    if(managerView!=='opening'||expected!==world||restartSeed===undefined||!world.sectManagement?.growth?.failure||!managerIsCurrent())return false;
+    const fresh=createManagedSectWorld(restartSeed,world.worldgen?.profileId??'classic',starterId,draw);
+    return !!fresh&&simulation.restartManagedSect(expected,timeline,managerRevision,fresh);
+  };
   const latestSectReport=world.sectManagement?.latestReport;
   const sectReportKey=latestSectReport?`${simulation.viewScopeKey}:${latestSectReport.sectId}:${latestSectReport.settledTick}`:undefined;
   const currentSectReport=latestSectReport?.settledTick===world.tick&&sectReportKey!==dismissedSectReport?latestSectReport:undefined;
@@ -767,7 +778,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   };
   if(managerView==='opening')return <SectManagementHome world={world} titleRef={managerHeading} busy={managerBlocked}
     onStart={startManagedSect} onOpen={openFromManager} onConfirmJobs={confirmSectJobs} observations={simulation.sectJobObservations}
-    report={currentSectReport} onDismissReport={dismissSectReport}/>;
+    report={currentSectReport} onDismissReport={dismissSectReport} onManagementAction={manageGrowth} onRestart={restartManaged} restartSeed={restartSeed}/>;
   if(managerView==='saves')return <main className="xianxia-shell min-h-dvh bg-slate-950 text-slate-100 px-4 py-3">
     <div className="mx-auto max-w-3xl space-y-3">
       <header className="flex items-center justify-between gap-2">

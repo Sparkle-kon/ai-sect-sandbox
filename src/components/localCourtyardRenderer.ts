@@ -254,22 +254,47 @@ function village(ctx:Pen,x:number,y:number,c:Ink):void{
 }
 
 function facilityPaint(ctx:Pen,item:Facility,c:Ink,time:number):void{
-  const {x,y,kind}=item;
+  const {x,y,kind,level}=item;
   const scale=courtyardFacilityScale(kind);
   ctx.save();ctx.translate(x,y);ctx.scale(scale,scale);ctx.translate(-x,-y);
   ctx.beginPath();ctx.rect(x-20,y-20,40,40);ctx.clip();
   oval(ctx,'#282c3b65',x,y+9,18,6.4);
   switch(kind){
     case 'gate':
-      hall(ctx,c,x,y+9,37,2);
+      hall(ctx,c,x,y+9,level===undefined?37:Math.min(39,26+3*level),level===undefined?2:Math.min(3,level));
       for(let i=0;i<3;i++)rect(ctx,c.glaze,x-7-i*1.2,y+8+i,14+i*2.4,1.05);
       break;
-    case 'pavilion':pavilion(ctx,x,y,c);break;
-    case 'furnace':furnace(ctx,x,y,c,time);break;
+    case 'pavilion':
+      pavilion(ctx,x,y,c);if(level&&level>1)trimRoof(ctx,c,x,y-13,9+Math.min(level,5),4);
+      break;
+    case 'furnace':
+      furnace(ctx,x,y,c,time);
+      if(level&&level>1)for(let i=0;i<Math.min(level-1,4);i++)rect(ctx,c.trim,x-14+i*2,y-6-i,1.2,9+i);
+      break;
+    case 'hall':hall(ctx,c,x,y+10,27+Math.min(level??1,5)*2,Math.min(level??1,3));break;
+    case 'kitchen':
+      hall(ctx,c,x-3,y+8,26,level&&level>2?2:1);
+      rect(ctx,c.mortar,x+8,y-12,4,11);rect(ctx,c.trim,x+7,y-12,6,2);
+      for(let i=0;i<Math.min(level??1,5);i++)oval(ctx,c.glaze,x-10+i*5,y+9,2.4,2.2);
+      if(time&&level)oval(ctx,'#c9ac8d55',x+10+Math.sin(time)*2,y-15,3.5,2);
+      break;
+    case 'training':
+      poly(ctx,c.mortar,[[x,y-10],[x+17,y],[x,y+13],[x-17,y]]);
+      line(ctx,c.trim,.9,[[x,y-8],[x+14,y],[x,y+10],[x-14,y],[x,y-8]]);
+      for(let i=0;i<Math.min(level??1,5);i++){
+        const px=x-12+i*6;line(ctx,c.roof,1.3,[[px,y+5],[px,y-7]]);
+        rect(ctx,c.trim,px-1,y-7,3.5,2);
+      }
+      break;
     case 'herbs':allotment(ctx,x,y,c);break;
     case 'array':array(ctx,x,y,c,time);break;
     case 'market':market(ctx,x,y,c,time);break;
     case 'village':village(ctx,x,y,c);break;
+  }
+  if(level!==undefined)for(let i=0;i<Math.min(level,8);i++){
+    // A visible rank on each paid-for structure, even where the structural roof reaches its visual limit.
+    const px=x-(Math.min(level,8)-1)*2+i*4;
+    rect(ctx,c.shadow,px-1.4,y+14,3.2,2.6);rect(ctx,c.trim,px-.8,y+14.5,2,1.2);
   }
   ctx.restore();
 }

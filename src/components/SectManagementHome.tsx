@@ -1,4 +1,6 @@
 import {lazy,Suspense,useId,useMemo,useRef,useState,type RefObject} from 'react';
+import {projectSectGrowth,quoteSectGrowthCommand} from '../engine/sectGrowth';
+import type {SectGrowthCommand} from '../types/sectGrowth';
 import {previewStarterSect} from '../engine/starterSectWorld';
 import {MANAGEMENT_BUILDING_IDS,STARTER_SECT_IDS,
   type ManagementBuildings,type StarterDraw,type StarterSectId} from '../types/sectManagement';
@@ -13,6 +15,7 @@ import {mapTransitActorIds} from './mapConvoyView';
 
 import {SectQuirkBadges} from './SectQuirkBadges';
 import {sectQuirkLabels} from './sectQuirkLabels';
+import {SectBuildingUpgrades,SectFailurePanel,SectGrowthNotices,SectTreasurySummary,type SectGrowthView} from './SectGrowthControls';
 import type {ConfirmSectJobs} from './SectMorningBoard';
 
 const SectJobReportStage=lazy(async()=>({default:(await import('./SectJobReportStage')).SectJobReportStage}));
@@ -30,6 +33,9 @@ export interface SectManagementHomeProps {
   report?:SectJobReport;
   onDismissReport?:(report:SectJobReport)=>void;
   titleRef?:RefObject<HTMLHeadingElement>;
+  onManagementAction?:(expectedWorld:WorldState,command:SectGrowthCommand)=>boolean;
+  onRestart?:(expectedWorld:WorldState,starterId:StarterSectId,draw:StarterDraw)=>boolean;
+  restartSeed?:number;
 }
 
 const destinations:Readonly<Record<HomeView,string>>={
@@ -60,7 +66,7 @@ function BuildingList({levels}:{levels:ManagementBuildings}){
   </ul>;
 }
 
-function StarterSelection({world,busy,onStart}:Omit<SectManagementHomeProps,'onOpen'>){
+function StarterSelection({seed,busy,onStart}:Pick<SectManagementHomeProps,'busy'|'onStart'>&{seed:number}){
   const group=useId();
   const [starter,setStarter]=useState<StarterSectId>(STARTER_SECT_IDS[0]);
   const [draw,setDraw]=useState<StarterDraw>(0);
@@ -68,9 +74,9 @@ function StarterSelection({world,busy,onStart}:Omit<SectManagementHomeProps,'onO
   const committed=useRef(false);
   const [error,setError]=useState(false);
   const roster=useMemo(()=>STARTER_SECT_IDS.flatMap(id=>{
-    const row=previewStarterSect(world.random.seed,id,draw);
+    const row=previewStarterSect(seed,id,draw);
     return row?[row]:[];
-  }),[world.random.seed,draw]);
+  }),[seed,draw]);
   const current=roster.find(row=>row.id===starter);
   const start=()=>{
     if(!current||busy||committed.current)return;
@@ -119,10 +125,9 @@ function StarterSelection({world,busy,onStart}:Omit<SectManagementHomeProps,'onO
   </>;
 }
 
-function ManagedCourtyard({world,busy,onTick,onConfirmJobs,observations,report,onDismissReport}:Pick<SectManagementHomeProps,'world'|'onTick'|'onConfirmJobs'|'observations'|'report'|'onDismissReport'>&{busy:boolean}){
+function ManagedCourtyard({world,busy,onTick,onConfirmJobs,observations,report,onDismissReport,growth,command}:Pick<SectManagementHomeProps,'world'|'onTick'|'onConfirmJobs'|'observations'|'report'|'onDismissReport'>&{busy:boolean;growth?:SectGrowthView;command?:(command:SectGrowthCommand)=>void}){
   const state=world.sectManagement;
   const sect=world.sects.find(row=>row.id===state?.sectId);
-  const leader=world.cultivators.find(row=>row.id===state?.leaderId);
   const siteId=state?.homeSiteId;
   const courtyard=useMemo(()=>{
     if(!siteId)return undefined;
@@ -137,19 +142,12 @@ function ManagedCourtyard({world,busy,onTick,onConfirmJobs,observations,report,o
     report.settledTick===world.tick&&report.sectId===state.sectId&&report.leaderId===state.leaderId;
   if(!state||!sect)return null;
   const roster=world.cultivators.filter(row=>row.alive&&row.id!==state.leaderId&&row.sectId===state.sectId);
-  const creditor=state.debt&&world.cultivators.find(row=>row.id===state.debt?.creditorId)?.name;
-  const due=state.debt&&Math.max(0,state.debt.dueTick-world.tick);
+  const buildings=growth?<SectBuildingUpgrades view={growth} busy={busy} command={command}/>:<BuildingList levels={state.buildings}/>;
   return <>
-    <p className="flex flex-wrap gap-x-3 gap-y-1 text-sm text-amber-100">
-      {leader?.alive&&<span>掌门：{leader.name}</span>}
-      <span>灵石 {sect.spiritStones} 枚</span>
-      <span>{state.debt&&state.debt.principal>0
-        ?`欠${creditor??'债主'} ${state.debt.principal} 枚 · ${due?`余 ${due} 月`:'还款日已到'}`:'暂无欠款'}</span>
-    </p>
     {reportIsCurrent?<div className="grid min-w-0 items-start gap-3 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
       <section className={card} aria-label="宗门庭院">
         {plan?<LocalCourtyardCanvas plan={plan} embedded/>:<p className="text-sm text-slate-300">此刻未见山门内的景象。</p>}
-        <BuildingList levels={state.buildings}/>
+        {buildings}
       </section>
       <Suspense fallback={<p role="status" className="order-first text-sm text-slate-300 lg:order-none">弟子们正在整理回话…</p>}>
         <SectJobReportStage world={world} report={report} present={presentIds} onDismiss={closing=>{
@@ -159,12 +157,12 @@ function ManagedCourtyard({world,busy,onTick,onConfirmJobs,observations,report,o
       </Suspense>
     </div>:onConfirmJobs?<Suspense fallback={<p role="status" className="text-sm text-slate-300">正在摆放晨会差事牌…</p>}>
       <SectMorningBoard world={world} busy={busy} plan={plan} moving={courtyard?.moving} onConfirmJobs={onConfirmJobs} observations={observations}
-        buildings={<BuildingList levels={state.buildings}/>}/>
+        buildings={buildings}/>
     </Suspense>:<>
     <div className="grid min-w-0 items-start gap-3 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
       <section className={card} aria-label="宗门庭院">
         {plan?<LocalCourtyardCanvas plan={plan} embedded/>:<p className="text-sm text-slate-300">此刻未见山门内的景象。</p>}
-        <BuildingList levels={state.buildings}/>
+        {buildings}
       </section>
       <section className={card} aria-label="宗门弟子">
         <h2 className="mb-2 font-serif text-lg font-semibold text-amber-100">本宗弟子 · {roster.length} 人</h2>
@@ -187,19 +185,42 @@ function ManagedCourtyard({world,busy,onTick,onConfirmJobs,observations,report,o
   </>;
 }
 
-export function SectManagementHome({world,busy=false,onStart,onOpen,onTick,onConfirmJobs,observations,report,onDismissReport,titleRef}:SectManagementHomeProps){
+export function SectManagementHome({world,busy=false,onStart,onOpen,onTick,onConfirmJobs,observations,report,onDismissReport,titleRef,onManagementAction,onRestart,restartSeed}:SectManagementHomeProps){
   const sect=world.sects.find(row=>row.id===world.sectManagement?.sectId);
+  const growth=useMemo(()=>projectSectGrowth(world),[world]);
+  const [restarting,setRestarting]=useState<WorldState>();
+  const [notice,setNotice]=useState<{world:WorldState;text:string}>();
+  const consumed=useRef<WorldState>();
+  const restart=!!onRestart&&restarting===world&&!!growth?.failure;
+  const pendingReport=report!==undefined&&report===world.sectManagement?.latestReport&&report.settledTick===world.tick;
+  const command=onManagementAction&&!pendingReport&&!growth?.failure?(choice:SectGrowthCommand)=>{
+    if(busy||consumed.current===world)return;
+    const offer=quoteSectGrowthCommand(world,choice);
+    if(!offer){setNotice({world,text:'眼下还办不了这一笔。'});return;}
+    consumed.current=world;
+    let applied=false;
+    try{applied=onManagementAction(world,choice);}
+    finally{if(!applied){consumed.current=undefined;setNotice({world,text:'这一笔没办成，灵石还在原处。'});}}
+  }:undefined;
   return <main className="xianxia-shell min-h-dvh bg-slate-950 px-3 pb-8 pt-[max(.75rem,env(safe-area-inset-top))] text-slate-100 sm:px-6">
     <div className="mx-auto max-w-6xl space-y-3">
-      <header className="xianxia-header flex min-w-0 items-start justify-between gap-2 border-b border-amber-400/30 pb-2">
+      <header className={`xianxia-header flex min-w-0 items-start justify-between gap-2 border-b border-amber-400/30 pb-2 ${growth?'sticky top-0 z-30 bg-slate-950 pt-2':''}`}>
         <div className="min-w-0">
           <p className="text-xs text-amber-200">天道沙盒 · 仙历 {world.year} 年 {world.month} 月</p>
-          <h1 ref={titleRef} tabIndex={-1} className="break-words font-serif text-2xl font-semibold text-amber-100">{sect?.name??'接手一间小宗门'}</h1>
+          <h1 ref={titleRef} tabIndex={-1} className="break-words font-serif text-2xl font-semibold text-amber-100">{growth?.sectName??sect?.name??'接手一间小宗门'}</h1>
+          {growth&&<SectTreasurySummary view={growth}/>}
         </div>
         <More busy={busy} onOpen={onOpen}/>
       </header>
-      {sect?<ManagedCourtyard world={world} busy={busy} onTick={onTick} onConfirmJobs={onConfirmJobs} observations={observations} report={report} onDismissReport={onDismissReport}/>:
-        <StarterSelection key={world.random.seed} world={world} busy={busy} onStart={onStart}/>}
+      {growth&&<SectGrowthNotices view={growth} tick={world.tick} busy={busy} command={command}/>}
+      {notice?.world===world&&<p role="status" className="text-sm text-amber-100">{notice.text}</p>}
+      {growth?.failure?(restart&&onRestart?<section className="space-y-3" aria-label="东山再起">
+        <button type="button" className={button} disabled={busy} onClick={()=>setRestarting(undefined)}>取消，留在旧山门</button>
+        <StarterSelection key={restartSeed??world.random.seed} seed={restartSeed??world.random.seed} busy={busy} onStart={(starter,draw)=>onRestart(world,starter,draw)}/>
+      </section>:<SectFailurePanel view={growth} busy={busy} onRestart={onRestart?()=>setRestarting(world):undefined}/>):
+        sect?<ManagedCourtyard world={world} busy={busy} onTick={onTick} onConfirmJobs={onConfirmJobs} observations={observations}
+          report={report} onDismissReport={onDismissReport} growth={growth} command={command}/>:
+          <StarterSelection key={world.random.seed} seed={world.random.seed} busy={busy} onStart={onStart}/>}
     </div>
   </main>;
 }

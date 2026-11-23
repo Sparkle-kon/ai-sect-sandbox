@@ -1,3 +1,4 @@
+import {MANAGEMENT_BUILDING_IDS,type ManagementBuildingId} from '../types/sectManagement';
 import {sectQuirkLabels} from './sectQuirkLabels';
 import {projectAtmosphere,type AtmosphereFrame} from './seasonalAtmosphereModel';
 import {isScopedExpeditionGate} from '../engine/expeditionOmenTerms';
@@ -13,13 +14,13 @@ import type {createTerrainMapView} from './terrainMapView';
 
 type NativeMapView=ReturnType<typeof createTerrainMapView>;
 export type CourtyardGround='grass'|'stone'|'soil'|'snow'|'ash'|'water'|'bridge';
-export type LocalCourtyardFacilityKind='gate'|'pavilion'|'furnace'|'herbs'|'array'|'market'|'village';
+export type LocalCourtyardFacilityKind='gate'|'pavilion'|'furnace'|'herbs'|'array'|'market'|'village'|'hall'|'kitchen'|'training';
 export type LocalCourtyardTarget={kind:'actor'|'villager'|'facility';id:string};
 interface Cell {readonly col:number;readonly row:number}
 interface Position extends Cell {readonly x:number;readonly y:number}
 export interface LocalCourtyardTile extends Cell {readonly ground:CourtyardGround}
 export interface LocalCourtyardFacility extends Position {
-  readonly id:string;readonly kind:LocalCourtyardFacilityKind;readonly label:string;readonly detail:string;
+  readonly id:string;readonly kind:LocalCourtyardFacilityKind;readonly label:string;readonly detail:string;readonly level?:number;
 }
 export interface LocalCourtyardActor extends Position {
   readonly id:string;readonly name:string;readonly realm:string;readonly sprite:MapActorSpriteModel;readonly quirkLabels?:readonly string[];
@@ -39,7 +40,7 @@ export interface LocalCourtyardOptions {readonly viewer?:Cultivator;readonly his
 
 const columns=16,rows=10,width=640,height=400,size=40;
 export const courtyardFacilityScale=(kind:LocalCourtyardFacilityKind):number=>
-  kind==='gate'?1.60:kind==='herbs'?1.33:1.38;
+  kind==='gate'||kind==='hall'?1.60:kind==='herbs'?1.33:1.38;
 const unique=<T extends {id:string}>(items:readonly T[])=>{
   const result=new Map<string,T|undefined>();
   for(const row of items)result.set(row.id,result.has(row.id)?undefined:row);
@@ -52,6 +53,11 @@ const locate=({col,row}:Cell):Position=>({col,row,x:(col+.5)*size,y:(row+.5)*siz
 const slots:Record<LocalCourtyardFacilityKind,Cell>={
   gate:{col:8,row:2},pavilion:{col:3,row:2},furnace:{col:12,row:2},herbs:{col:3,row:6},
   array:{col:12,row:6},market:{col:6,row:3},village:{col:10,row:3},
+  hall:{col:8,row:1},kitchen:{col:5,row:3},training:{col:10,row:5},
+};
+const managedStructures:Readonly<Record<ManagementBuildingId,{kind:LocalCourtyardFacilityKind;label:string}>>={
+  hall:{kind:'hall',label:'大殿'},kitchen:{kind:'kitchen',label:'饭堂'},furnace:{kind:'furnace',label:'丹房'},
+  trainingGround:{kind:'training',label:'演武场'},gate:{kind:'gate',label:'山门'},library:{kind:'pavilion',label:'藏经阁'},
 };
 const thematic=(siteId:string):SceneStageTheme=>siteId==='loc-taixu'?'sword_peak':siteId==='loc-danxia'?'pill_valley':
   siteId==='loc-market'||siteId==='loc-market-east'?'market':siteId==='loc-blood'?'blood_abyss':
@@ -91,11 +97,20 @@ export function buildLocalCourtyard(world:WorldState,view:NativeMapView,siteId:s
   const details=projectMapEntitySiteDetails(world,view,site,residents,local);
   const fact=(label:string,fallback:string)=>details.find(row=>row.label===label)?.text??fallback;
   const facilities:LocalCourtyardFacility[]=[];
-  const add=(kind:LocalCourtyardFacilityKind,label:string,detail:string)=>facilities.push({id:`${siteId}:${kind}`,kind,label,
-    detail:safe(detail,120),...locate(slots[kind])});
-  if(sect)add('gate','山门',`${safe(sect.name)} · 当前宗门驻地`);
-  if(sect&&hasGrade(sect.facilities.scripture_pavilion))add('pavilion','藏经阁',fact('藏经阁','此地有实存藏经阁。'));
-  if(hasGrade(site.furnaceGrade))add('furnace','丹炉',fact('丹炉',`${site.furnaceGrade} 阶`));
+  const add=(kind:LocalCourtyardFacilityKind,label:string,detail:string,level?:number)=>facilities.push({id:`${siteId}:${kind}`,kind,label,
+    detail:safe(detail,120),...locate(slots[kind]),...(level===undefined?{}:{level})});
+  const manager=world.sectManagement;
+  const managed=sect&&manager?.sectId===sect.id&&manager.homeSiteId===site.id?manager.buildings:undefined;
+  if(managed){
+    for(const id of MANAGEMENT_BUILDING_IDS){
+      const level=managed[id],entry=managedStructures[id];
+      if(Number.isSafeInteger(level)&&level>0)add(entry.kind,entry.label,`${entry.label} ${level} 级`,level);
+    }
+  }else{
+    if(sect)add('gate','山门',`${safe(sect.name)} · 当前宗门驻地`);
+    if(sect&&hasGrade(sect.facilities.scripture_pavilion))add('pavilion','藏经阁',fact('藏经阁','此地有实存藏经阁。'));
+    if(hasGrade(site.furnaceGrade))add('furnace','丹炉',fact('丹炉',`${site.furnaceGrade} 阶`));
+  }
   const plants=Object.entries(site.herbs).filter(([name,stock])=>stock>0&&hasGrade(site.herbCapacity[name as keyof typeof site.herbCapacity])).length;
   if(plants)add('herbs','灵草地',`此地实有 ${plants} 类可见灵草存量。`);
   if(sect&&hasGrade(sect.facilities.defense_array))add('array','护山阵',`此地实有 ${sect.facilities.defense_array} 级护山阵。`);

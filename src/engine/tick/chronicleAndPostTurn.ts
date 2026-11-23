@@ -1,3 +1,4 @@
+import {advanceSectGrowth} from '../sectGrowth';
 import {ensureManagedSectQuirks} from '../sectQuirkAssignment';
 import { advanceStorytellerDirector, canonicalStorytellerFocus, STORYTELLER_STYLES } from '../storytellerDirector';
 import { advanceDirectorHighlights } from '../director/directorHighlights';
@@ -32,7 +33,7 @@ import { advanceWitnessedPersonalStory } from '../witnessedPersonalStory';
 import { finalizeProtagonistFlightTurn } from '../protagonistFlightEngine';
 import { settleChronicleOffline } from '../chronicleRuntime';
 import { settleAnnualCouncilOffline } from '../councilRuntime';
-import { spreadRumors } from '../rumorEngine';
+import { spreadRumors, witnessEvent } from '../rumorEngine';
 import { noteTerrainVisit } from '../terrainEngine';
 import { deriveMapPresentation } from '../mapMotionEngine';
 import type { WorldTickContext } from './tickContext';
@@ -85,6 +86,17 @@ export function runChronicleAndPostTurn(context: WorldTickContext): void {
   const completedEvents=[...newEvents,...nextState.events.filter(({id,tick})=>tick===nextState.tick&&!mainEventIds.has(id))];
   settleUpperPassageMortality(nextState);
   settleFrontierMortality(nextState);
+  if(nextState.sectManagement){
+    // Review living members and the real treasury only once the native month's losses and income are known.
+    const closingEvents=advanceSectGrowth(nextState,prevState);
+    if(closingEvents.length){
+      for(const event of closingEvents)witnessEvent(nextState,event);
+      newEvents.push(...closingEvents);
+      nextState.events=[...closingEvents,...nextState.events].slice(0,120);
+      archiveChronicleEvents(nextState,[...closingEvents]);
+      completedEvents.push(...closingEvents);
+    }
+  }
   ensureManagedSectQuirks(nextState);
   expireRingAudiences(nextState);
   finalizeDestinyTraitOffers(nextState);
