@@ -60,14 +60,14 @@ it('shows one narrative and one quote on the exact settled report, never on its 
     expect(scene.querySelector('blockquote')?.textContent).toContain(comic.quote);
     expect(scene.querySelector('[aria-label="所得与折损"]')?.textContent).not.toContain(comic.quote);
     expect(scene.querySelector('[aria-label="小插曲的得失"]')?.textContent).toContain('真气进度 +1 个百分点');
-    expect(host.querySelector('[data-sect-comic-aside]')).toBeNull();
+    expect(host.querySelector('[data-sect-comic-aside]')?.textContent??'').not.toContain(comic.report);
     expect(host.textContent).not.toContain(comic.templateId);
     const serialized=JSON.stringify(arrived);
     const skip=[...scene.querySelectorAll('button')].find(button=>button.textContent==='跳过汇报');
     if(!skip)throw Error('Missing existing skip control');
     await act(async()=>skip.click());
     expect(host.querySelector('[data-sect-report]')).toBeNull();
-    expect(host.querySelector('[data-sect-comic-aside]')).toBeNull();
+    expect(host.querySelector('[data-sect-comic-aside]')?.textContent??'').not.toContain(comic.report);
     expect(JSON.stringify(arrived)).toBe(serialized);
   }finally{await cleanup();}
 });

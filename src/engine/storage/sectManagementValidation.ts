@@ -1,3 +1,4 @@
+import { sectRecurringShape, validateSectRecurring } from './sectRecurringValidation';
 import { sectComedyShape, validateSectComedy } from './sectComedyValidation';
 import { sectGrowthShape, validateSectGrowth } from './sectGrowthValidation';
 import { sectJobReportShape, validateSectJobReport } from './sectJobReportValidation';
@@ -20,6 +21,7 @@ export const sectManagementShape = structure({
   latestReport: optional(sectJobReportShape),
   growth: optional(sectGrowthShape),
   comedy: optional(sectComedyShape),
+  recurring: optional(sectRecurringShape),
 });
 
 export function validateSectManagement(world: WorldState, fail: (field:string)=>never): void {
@@ -72,4 +74,5 @@ export function validateSectManagement(world: WorldState, fail: (field:string)=>
   if(state.latestReport)validateSectJobReport(world,state.latestReport,fail);
   if(state.growth)validateSectGrowth(world,state,state.growth,fail);
   if(state.comedy)validateSectComedy(world,state,state.comedy,fail);
+  validateSectRecurring(world,state,state.recurring,creditor.id,fail);
 }

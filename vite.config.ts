@@ -137,7 +137,7 @@ export default defineConfig({
           'storyteller-save-proof': ['./src/engine/storage/storytellerValidation.ts'],
           'sect-management-proof': ['./src/engine/storage/sectManagementValidation.ts', './src/types/sectManagement.ts'],
           'sect-growth-controls': ['./src/components/SectGrowthControls.tsx'],
-          'sect-comedy-catalog': ['./src/data/sectComedy/index.ts'],
+          'sect-comedy-catalog': ['./src/data/sectComedy/index.ts', './src/data/sectComedy/recurring.ts'],
           'pavilion-save-proof': ['./src/engine/storagePavilionLoanValidation.ts'],
           'grand-siege-proof': ['./src/engine/grandSiegeProof.ts', './src/engine/grandSiegeWitnessView.ts', './src/engine/storageGrandSiegeValidation.ts', './src/types/grandSiege.ts'],
           // The game seed depends only on trace state; keep the optional replay rules separate.

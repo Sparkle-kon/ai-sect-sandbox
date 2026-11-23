@@ -1,3 +1,4 @@
+import type { SectRecurringState } from './sectRecurring';
 import type { SectComedyState } from './sectComedy';
 import type { SectGrowthState } from './sectGrowth';
 import type { SectJobReport } from './sectJobs';
@@ -37,6 +38,7 @@ export interface SectManagementState {
   latestReport?:SectJobReport;
   growth?:SectGrowthState;
   comedy?:SectComedyState;
+  recurring?:SectRecurringState;
 }
 
 /** Stable genesis namespace; a new draw is a new lineage, not a changed live roster. */

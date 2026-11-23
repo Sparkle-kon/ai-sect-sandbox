@@ -1,0 +1,59 @@
+import type {SectRecurringOutcome,SectRecurringRole} from '../../types/sectRecurring';
+
+export const SECT_RECURRING_PROFILES:Readonly<Record<SectRecurringRole,{readonly label:string;readonly every:number;readonly offset:number}>>={
+  wang:{label:'王掌柜',every:1,offset:0},
+  rival:{label:'隔壁赵掌门',every:3,offset:1},
+  cat:{label:'偷丹灵猫',every:3,offset:2},
+  ancestor:{label:'后山老祖',every:4,offset:0},
+  host:{label:'天机阁说书人',every:4,offset:2},
+};
+export const SECT_RECURRING_VOICES:Readonly<Record<SectRecurringOutcome,readonly string[]>>={
+  debt_notice:[
+    '山门漏雨，纸可以烘。借条晾干了，数目还是原来的数目。',
+    '月底催账，原是为免两边忘记。我这边还没到会忘的时候。',
+    '掌门若有难处，且慢慢讲。我先把算盘摆正，免得它听岔了。',
+    '别急着给我沏茶。咱们先谈账，谈完了自然有茶。',
+  ],
+  market_remark:[
+    '从前人赊的是灵石，如今净来赊我的耐心。后一样总不见有人还。',
+    '秤砣一头轻一头重。话也一样，说得太圆，我便要再称一遍。',
+    '今日柜上无须多写一行。我竟有些不习惯。',
+    '若要做买卖，先问价。若只聊天，且容我把算盘收起来。',
+  ],
+  comparison:[
+    '名声这事尽可慢慢比。山门要是先修好了，可别悄悄把它也算进去。',
+    '比武须等人肯，比名声不用。可惜后一样赢了也没处摆擂台。',
+    '隔壁的宗门也能有长处。我暂且承认这句话，旁的留到下回。',
+    '我不怕旁人出名，就怕还没听清，弟子已经给我另写了十句狠话。',
+  ],
+  cat_sighting:[],
+  pill_taken:[],
+  ancestor_remark:[
+    '我这回只出来说一句。你们若还有第二句要问，留给下回的我。',
+    '你眉头皱得太紧，先把眉头松开。欠款和劫云都得另想办法。',
+    '修的是道，不是嗓门。后山松树听了许久，至今也没回一句嘴。',
+    '闭关久了，听见有新人谈大道。说得好，当年我也这般饿着肚子。',
+  ],
+  host_cue:[
+    '诸位先别起哄，我还在擦天机镜。镜上连个指印都能惹出三种说法。',
+    '今日先留一张凳子给眼见为实。那位道友若得空，就请入座。',
+    '话若还没核明，我宁肯多念半句开场。开场重复，总胜过新闻说错。',
+    '外头传得热闹，且容我找个当时看见的人。风再大，也算不得证人。',
+  ],
+  public_news:[
+    '这一条已有明面上的消息。其余几句，先留在茶馆里慢慢分辨。',
+    '诸位只听这一段。要添神仙出手，还得先请那位神仙自己来。',
+    '话说到这儿就够了。留白处不是藏了什么，各位切莫抢着填。',
+    '这一回有事可讲。尾声先不押韵，免得一个韵脚又叫人多猜半卷。',
+  ],
+};
+export const SECT_RECURRING_RECALL:Readonly<Record<SectRecurringOutcome,string>>={
+  debt_notice:'上回说到这张借条，我还记得咱们谈到了哪一处。',
+  market_remark:'上回也是从闲话说起的，我倒还记得那阵子的话头。',
+  comparison:'上回还谈过两门的名声，今儿再把眼光放回眼下。',
+  cat_sighting:'上回认得这只猫的那件事，仍有当事人记得。',
+  pill_taken:'先前确有丹药从手上少过一枚，持药人还记得。',
+  ancestor_remark:'上回已说过一句，今儿添一句便是。',
+  host_cue:'上回也有人等开场，镜前这话倒还没忘。',
+  public_news:'上回提过的那条消息，我仍记得只讲到了哪一步。',
+};

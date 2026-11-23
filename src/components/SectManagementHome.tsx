@@ -1,4 +1,5 @@
 import {lazy,Suspense,useId,useMemo,useRef,useState,type RefObject} from 'react';
+import {projectSectRecurring} from '../engine/sectRecurring';
 import {projectSectComicMoment} from '../engine/sectComedy';
 import {associatedComicRow,SectComicAside} from './SectComicRead';
 import {projectSectGrowth,quoteSectGrowthCommand} from '../engine/sectGrowth';
@@ -139,6 +140,7 @@ function ManagedCourtyard({world,busy,onTick,onConfirmJobs,observations,report,o
   },[world,siteId]);
   const plan=courtyard?.plan;
   const [dismissedReport,setDismissedReport]=useState<SectJobReport>();
+  const visits=useMemo(()=>projectSectRecurring(world),[world]);
   const comic=useMemo(()=>projectSectComicMoment(world),[world]);
   const comicSpeaker=comic?world.cultivators.filter(actor=>actor.id===comic.speakerId):[];
   const canSpeakComic=comicSpeaker.length===1&&comicSpeaker[0].alive&&comicSpeaker[0].hp>0;
@@ -151,8 +153,9 @@ function ManagedCourtyard({world,busy,onTick,onConfirmJobs,observations,report,o
   const buildings=growth?<SectBuildingUpgrades view={growth} busy={busy} command={command}/>:<BuildingList levels={state.buildings}/>;
   const linked=state.latestReport?.sectId===sect.id&&state.latestReport.leaderId===state.leaderId&&
     associatedComicRow(currentComic,state.latestReport)!==undefined;
+  const asideComic=linked?undefined:currentComic;
   return <>
-    {currentComic&&!linked&&<SectComicAside key={currentComic.moment.tick} comic={currentComic} speaks={canSpeakComic}/>}
+    {(asideComic||visits.length>0)&&<SectComicAside key={world.tick} world={world} comic={asideComic} speaks={canSpeakComic} visits={visits}/>}
     {reportIsCurrent?<div className="grid min-w-0 items-start gap-3 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
       <section className={card} aria-label="宗门庭院">
         {plan?<LocalCourtyardCanvas plan={plan} embedded/>:<p className="text-sm text-slate-300">此刻未见山门内的景象。</p>}
