@@ -1,3 +1,5 @@
+import {VisualDuelArena} from './VisualDuelArena';
+import type {VisualDuelArenaFrame} from './visualDuelArenaModel';
 import {useEffect,useId,useRef} from 'react';
 
 export type SchoolFormDuelChoice='counter'|'stop';
@@ -13,10 +15,10 @@ const words={
   stop:['只收自己的剑','不再继续这次挑战，但不替对手决定，也不离开原地。'],
 } as const;
 const button='min-h-[44px] w-full min-w-0 rounded-md border border-amber-300/35 bg-slate-950/65 px-2.5 py-1.5 text-left text-sm text-amber-50 hover:bg-amber-950/35 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-200 disabled:opacity-50';
-export function SchoolFormDuelCard({view,receipt,busy=false,notice,onChoose,onContinue,historical=false,sceneScope,receiptFocus=false}:{
+export function SchoolFormDuelCard({view,receipt,busy=false,notice,onChoose,onContinue,historical=false,sceneScope,receiptFocus=false,arena}:{
   view:SchoolFormDuelCardView;receipt?:{title:string;description:string};busy?:boolean;notice?:string;
   onChoose?:(choice:SchoolFormDuelChoice)=>boolean;onContinue?:()=>void;
-  historical?:boolean;sceneScope?:object|string|number;receiptFocus?:boolean;
+  historical?:boolean;sceneScope?:object|string|number;receiptFocus?:boolean;arena?:VisualDuelArenaFrame;
 }){
   const label=useId();
   const scene=useRef<HTMLElement>(null),resultTitle=useRef<HTMLParagraphElement>(null);
@@ -40,6 +42,7 @@ export function SchoolFormDuelCard({view,receipt,busy=false,notice,onChoose,onCo
       <h3 id={label} className="font-serif text-lg font-semibold text-amber-50">剑锋里的一式旧招</h3>
     </header>
     {historical&&<p className="text-xs text-amber-200">历史回看 · 只读</p>}
+    {!historical&&!receipt&&arena&&<VisualDuelArena frame={arena}/>}
     {receipt?<section aria-label="还招实录" className="space-y-1 font-serif text-sm leading-relaxed">
       <p ref={resultTitle} tabIndex={receiptFocus&&!historical?-1:undefined} className="font-semibold text-amber-100 focus-visible:outline focus-visible:outline-amber-200">{receipt.title}</p>
       <p className="text-slate-200">{receipt.description}</p>

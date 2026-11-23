@@ -1,3 +1,5 @@
+import {VisualDuelArena} from './VisualDuelArena';
+import type {VisualDuelArenaFrame} from './visualDuelArenaModel';
 import {useEffect,useId,useRef,useState} from 'react';
 import {TOURNAMENT_ARENA_PRIZE_NAME,type TournamentArenaView} from '../engine/tournamentArenaEngine';
 import type {availableTournamentWager,placeTournamentWager,projectTournamentWager} from '../engine/tournamentWagerEngine';
@@ -88,8 +90,8 @@ function BoutList({label,children}:{label:string;children:React.ReactNode}){
   </section>;
 }
 
-export function TournamentArenaRead({arena,named,siteName,championName,controls}:{
-  arena:TournamentArenaView;named:(id:string)=>string;siteName?:string;championName?:string;controls?:TournamentArenaControls;
+export function TournamentArenaRead({arena,named,siteName,championName,controls,duel}:{
+  arena:TournamentArenaView;named:(id:string)=>string;siteName?:string;championName?:string;controls?:TournamentArenaControls;duel?:VisualDuelArenaFrame;
 }){
   const id=useId();
   const [pending,setPending]=useState<'next'|'finish'>();
@@ -122,6 +124,7 @@ export function TournamentArenaRead({arena,named,siteName,championName,controls}
       {siteName&&<p className="mt-1 text-xs text-slate-300 [overflow-wrap:anywhere]">{siteName}</p>}
       {size>0&&<p className="mt-1 text-xs text-slate-300">入签：{size} 人</p>}
     </header>
+    {duel&&<VisualDuelArena frame={duel}/>}
     {arena.status==='registration'&&<p className="text-sm text-slate-300">尚在报名，未排定对阵。</p>}
     <div className="grid min-w-0 gap-2 lg:grid-cols-2 xl:grid-cols-4">
       {arena.rounds.map((round,index)=><BoutList key={round.round} label={roundLabel(round.round,size,!!arena.prize&&index===arena.rounds.length-1)}>

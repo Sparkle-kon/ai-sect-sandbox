@@ -1,3 +1,4 @@
+import {projectGuidedVisualDuelArena} from './visualGuidedDuelArenaModel';
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { createSceneFrameLease, type SceneFrame } from '../controllers/sceneFrameLease';
 import { resolveGuidedSchoolFormDuelTurn, type GuidedSchoolFormDuelTurn } from '../controllers/guidedSchoolFormDuelTurn';
@@ -101,7 +102,9 @@ export function useSchoolFormDuelStory(sim:Sim,active:boolean,viewer:Cultivator|
       window.scrollTo({left:result.before.x,top:result.before.y,behavior:'instant'});
     setFollowup(undefined);
   };
-  return <Suspense fallback={null}><Card view={scene} receipt={result?.receipt} busy={busy}
+  const arena=view&&!result&&sameRole()&&sim.authority.current===world?
+    projectGuidedVisualDuelArena(world,viewer,'school',view.contactId):undefined;
+  return <Suspense fallback={null}><Card view={scene} arena={arena} receipt={result?.receipt} busy={busy}
     sceneScope={result?.view??world} receiptFocus={result?.focusAllowed}
     notice={stale===world?'这次交锋的情形已变，没能按原选择落定。':undefined}
     onChoose={view&&stale!==world?choose:undefined} onContinue={result?close:undefined}/></Suspense>;

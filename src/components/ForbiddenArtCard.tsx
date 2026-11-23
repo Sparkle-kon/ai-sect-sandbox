@@ -1,3 +1,5 @@
+import {VisualDuelArena} from './VisualDuelArena';
+import type {VisualDuelArenaFrame} from './visualDuelArenaModel';
 import {useEffect,useId,useRef,useState} from 'react';
 import {Flame} from 'lucide-react';
 import {FORBIDDEN_ART_CATALOG} from '../engine/forbiddenArtCatalog';
@@ -16,8 +18,8 @@ export function forbiddenCostText(cost:ForbiddenArtCost){
 }
 
 type Props={busy:boolean}&(
-  | {view:View;scar?:never;onChoose:(choice:ForbiddenArtChoice)=>boolean;onAdvance:()=>boolean;onContinue?:never}
-  | {view?:never;scar:ForbiddenArtScar;onChoose?:never;onAdvance?:never;onContinue:()=>void}
+  | {view:View;scar?:never;arena?:VisualDuelArenaFrame;onChoose:(choice:ForbiddenArtChoice)=>boolean;onAdvance:()=>boolean;onContinue?:never}
+  | {view?:never;scar:ForbiddenArtScar;arena?:never;onChoose?:never;onAdvance?:never;onContinue:()=>void}
 );
 export function ForbiddenArtCard(props:Props){
   const title=useId(),heading=useRef<HTMLHeadingElement>(null);
@@ -41,6 +43,7 @@ export function ForbiddenArtCard(props:Props){
       <h2 ref={heading} tabIndex={-1} id={title} className="font-serif text-xl font-semibold text-amber-50 sm:text-2xl">
         {view?'绝境一息，禁术可发':'禁术留下的痕迹'}</h2>
     </header>
+    {view&&props.arena&&<VisualDuelArena frame={props.arena}/>}
     {view&&!queued&&<>
       <p className="font-serif text-base leading-relaxed text-slate-200">锋芒已到身前，连一口气都难续。掌中法宝低鸣；这一步若要借它，便得用自己的东西去换。</p>
       <div role="group" aria-label="这一场交手的抉择" className="grid gap-1.5">

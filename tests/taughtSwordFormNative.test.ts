@@ -1,3 +1,4 @@
+import {projectGuidedVisualDuelArena} from '../src/components/visualGuidedDuelArenaModel';
 import {createSceneFrameLease,type SceneFrame} from '../src/controllers/sceneFrameLease';
 import { resolveGuidedWorldTurn } from '../src/controllers/guidedWorldTurn';
 import {afterEach,describe,expect,it,vi} from 'vitest';
@@ -100,6 +101,13 @@ describe('actual direct sword lesson and independent cultivation receipt',()=>{
     const opened=month(source,{[learnerId]:aimed});
     const view=schoolFormDuelView(opened,actor(opened,learnerId))!;
     expect(view.options).toEqual(['counter','stop']);
+    const arena=projectGuidedVisualDuelArena(opened,actor(opened,learnerId),'school',view.contactId);
+    expect(arena).toMatchObject({siteId,damages:[],left:{id:learnerId},right:{id:mentorId}});
+    expect(arena?.outcome).toBeUndefined();
+    expect(arena?.accent).toBeUndefined();
+    expect(arena?.right.qi).toBeUndefined();
+    expect(projectGuidedVisualDuelArena(opened,actor(opened,mentorId),'school',view.contactId)).toBeUndefined();
+    expect(projectGuidedVisualDuelArena(opened,{...actor(opened,learnerId)},'school',view.contactId)).toBeUndefined();
     const saved=decodeWorldSave(encodeWorldSave(opened));
     expect(schoolFormDuelView(saved,actor(saved,learnerId))?.contactId).toBe(view.contactId);
     const guard={kind:'school-form-duel',world:opened,branchId:'real-fork',revision:7,

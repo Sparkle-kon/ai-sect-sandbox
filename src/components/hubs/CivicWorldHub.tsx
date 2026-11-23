@@ -179,7 +179,7 @@ export function CivicWorldHub({
       { id: 'occasions', label: '比武与秘境盛会', content: <div className="space-y-2.5">
         {banquetScene}
         {selectedCultivator
-          ? <React.Suspense fallback={<p role="status">载入盛会记录…</p>}><WorldOccasionsPanel world={visibleWorld} cultivator={selectedCultivator} arenaControls={arenaControls} dungeonControls={dungeonControls} /></React.Suspense>
+          ? <React.Suspense fallback={<p role="status">载入盛会记录…</p>}><WorldOccasionsPanel world={visibleWorld} cultivator={selectedCultivator} arenaControls={arenaControls} dungeonControls={dungeonControls} historical={!!preview} /></React.Suspense>
           : <p className="text-xs text-slate-300">从人物名册选择实际修士后查看盛会。</p>}
       </div> },
       { id: 'bounties', label: '天机悬赏榜', content: <React.Suspense fallback={<p role="status">载入悬赏榜…</p>}><BountyBoard world={visibleWorld} /></React.Suspense> },

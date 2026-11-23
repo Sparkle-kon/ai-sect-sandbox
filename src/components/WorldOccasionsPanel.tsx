@@ -1,3 +1,5 @@
+import {projectVisualDuelArena} from './visualDuelArenaModel';
+import {createTerrainMapView} from './terrainMapView';
 import {DungeonExpeditionRead,type DungeonExpeditionControls} from './DungeonExpeditionRead';
 import {projectExpeditionDungeon} from '../engine/expeditionDungeonEngine';
 import {TournamentArenaRead,type TournamentArenaControls} from './TournamentArenaRead';
@@ -39,11 +41,12 @@ function OmenReceipts({ rows }: { rows: readonly ExpeditionOmenView[] }) {
 }
 
 
-export function WorldOccasionsPanel({ world, cultivator, arenaControls, dungeonControls }: { world: WorldState; cultivator: Cultivator; arenaControls?:TournamentArenaControls; dungeonControls?:DungeonExpeditionControls }) {
+export function WorldOccasionsPanel({ world, cultivator, arenaControls, dungeonControls, historical=false }: { world: WorldState; cultivator: Cultivator; arenaControls?:TournamentArenaControls; dungeonControls?:DungeonExpeditionControls; historical?:boolean }) {
   const names = new Map(world.cultivators.map(({ id, name }) => [id, name]));
   const places = new Map(world.locations.map(({ id, name }) => [id, name]));
   const named = (id: string) => names.get(id) ?? '修士未详';
   const viewer = world.cultivators.find((actor) => actor === cultivator);
+  const terrain=createTerrainMapView(world,viewer,true);
   const visible = world.occasions.filter((occasion) => canSeeOccasion(world, viewer, occasion));
   const clues = projectExpeditionOmens(world, viewer);
   const open = visible.filter(isOpenOccasion).sort((a, b) => b.startedTick - a.startedTick);
@@ -59,9 +62,19 @@ export function WorldOccasionsPanel({ world, cultivator, arenaControls, dungeonC
           <ul className="mt-2 space-y-2">
             {[...open, ...recent].map((occasion) => {
               const arena=occasion.kind==='tournament'?projectTournamentArena(world,occasion.id):undefined;
-              if(arena)return <li key={occasion.id}><TournamentArenaRead arena={arena} named={named}
-                siteName={places.get(arena.siteId)} championName={occasion.championId?named(occasion.championId):undefined} controls={arenaControls}/></li>;
+              if(arena){
+                const latest=arena.rounds.at(-1);
+                const bouts=latest?.bouts??[];
+                const witnessed=bouts.findIndex(bout=>!!bout.secondId&&
+                  (bout.firstId===viewer?.id||bout.secondId===viewer?.id));
+                const bout=witnessed>=0?witnessed:bouts.findIndex(record=>!!record.secondId);
+                const duel=latest&&bout>=0?projectVisualDuelArena(world,terrain,
+                  {kind:'tournament',occasionId:arena.occasionId,round:latest.round,bout},{viewer,historical}):undefined;
+                return <li key={occasion.id}><TournamentArenaRead arena={arena} named={named} duel={duel}
+                  siteName={places.get(arena.siteId)} championName={occasion.championId?named(occasion.championId):undefined} controls={arenaControls}/></li>;
+              }
               const dungeon=viewer&&occasion.kind==='expedition'?projectExpeditionDungeon(world,viewer,occasion.id):undefined;
+              const duel=dungeon?projectVisualDuelArena(world,terrain,{kind:'dungeon',occasionId:occasion.id},{viewer,historical}):undefined;
               const linkedOmen = occasion.omenId !== undefined;
               const expeditionResults = linkedOmen
                 ? occasion.expeditions.filter(({ cultivatorId }) => cultivatorId === viewer?.id)
@@ -94,7 +107,7 @@ export function WorldOccasionsPanel({ world, cultivator, arenaControls, dungeonC
                     ))}
                   </ol>
                 )}
-                {dungeon&&viewer&&<DungeonExpeditionRead view={dungeon} viewerId={viewer.id} tick={world.tick} named={named} controls={dungeonControls}/>}
+                {dungeon&&viewer&&<DungeonExpeditionRead view={dungeon} viewerId={viewer.id} tick={world.tick} named={named} controls={dungeonControls} duel={duel}/>}
                 {!dungeon&&expeditionResults.length > 0 && (
                   <ul className="max-h-40 overflow-y-auto space-y-1" aria-label="秘境远征结果">
                     {expeditionResults.map((result, index) => (

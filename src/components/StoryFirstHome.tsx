@@ -1,3 +1,6 @@
+import {VisualDuelArena} from './VisualDuelArena';
+import {projectVisualDuelArena} from './visualDuelArenaModel';
+import {createTerrainMapView} from './terrainMapView';
 import { lazy, Suspense, useMemo, useRef } from 'react';
 import type {ReliefHomecomingView} from '../engine/reliefHomecoming';
 import type {NextStoryGuidance} from '../engine/nextStoryGuidance';
@@ -53,6 +56,10 @@ export function StoryFirstHome({ scene, stageWorld, stageViewer, leadId, reliefH
     viewer:stageViewer,leadId:quietSite?undefined:leadId,historical:earlier,
     ...(quietSite&&stageViewer?.locationId===quietSite?{localSceneActor:stageViewer}:{})}):undefined,
     [stageWorld,stageViewer,sceneEventId,leadId,quietSite,earlier]);
+  const duel=useMemo(()=>stageWorld&&stage?.sourceId?projectVisualDuelArena(stageWorld,
+    createTerrainMapView(stageWorld,stageViewer,stageViewer!==undefined),
+    {kind:'duel',eventId:stage.sourceId},{viewer:stageViewer,historical:stage.historical}):undefined,
+    [stageWorld,stageViewer,stage]);
   return (
     <section ref={storyReader} aria-label="故事主页" className="mx-auto w-full min-w-0 max-w-lg px-4 pb-[calc(8rem+env(safe-area-inset-bottom))] pt-4 text-slate-100 sm:px-6 sm:pb-8 sm:pt-8">
       <header className="flex min-w-0 items-center justify-between gap-2 border-b border-slate-800 pb-3">
@@ -81,8 +88,8 @@ export function StoryFirstHome({ scene, stageWorld, stageViewer, leadId, reliefH
         </section>
         <article aria-label={primary?.earlier ? '上一幕' : '当前故事'}
           className="min-w-0 space-y-2 rounded-xl border border-slate-800 bg-slate-900/65 px-3.5 py-3.5 [overflow-wrap:anywhere] sm:px-5 sm:py-5">
-          {stage&&<SceneStageCanvas frame={stage}/>}
-          <StoryStageDialogue portrait={stage?.portrait}>
+          {duel?<VisualDuelArena frame={duel}/>:stage&&<SceneStageCanvas frame={stage}/>}
+          <StoryStageDialogue portrait={duel?undefined:stage?.portrait}>
           <p className="text-xs font-medium text-amber-200">{quiet?<>{quiet.siteName}{reliefHomecomingFocus&&` · 随${reliefHomecomingFocus}所见`}</>:primary?.earlier ? '本月暂无新见闻 · 上一幕' : '本月见闻'}</p>
           <h2 data-chronicle-reader-heading className="font-serif text-xl font-semibold leading-snug text-amber-50 sm:text-2xl">{primary?.title ?? '暂无新的公开见闻'}</h2>
           {primary && primary.paragraph !== primary.title && <p className="font-serif text-base leading-7 text-slate-200"><span data-chronicle-paragraph-text>{primary.paragraph}</span></p>}

@@ -1,3 +1,5 @@
+import {VisualDuelArena} from './VisualDuelArena';
+import type {VisualDuelArenaFrame} from './visualDuelArenaModel';
 import {useId,useRef,useState} from 'react';
 import type {DungeonMove,DungeonOutcome,DungeonStep} from '../types/expeditionDungeon';
 import type {ExpeditionDungeonView} from '../engine/expeditionDungeonEngine';
@@ -52,8 +54,8 @@ function stepText(step:DungeonStep){
   }
 }
 
-export function DungeonExpeditionRead({view,viewerId,tick,named,controls}:{
-  view:ExpeditionDungeonView;viewerId:string;tick:number;named:(id:string)=>string;controls?:DungeonExpeditionControls;
+export function DungeonExpeditionRead({view,viewerId,tick,named,controls,duel}:{
+  view:ExpeditionDungeonView;viewerId:string;tick:number;named:(id:string)=>string;controls?:DungeonExpeditionControls;duel?:VisualDuelArenaFrame;
 }){
   const titleId=useId();
   const [failed,setFailed]=useState(false);
@@ -83,7 +85,8 @@ export function DungeonExpeditionRead({view,viewerId,tick,named,controls}:{
       {!view.outcome&&<p className="mt-1 text-xs text-slate-300">距秘境关闭 {Math.max(0,view.expiresTick-tick)} 月。</p>}
     </header>
     <DungeonMap visited={visited} at={inside?view.room:undefined}/>
-    {inside&&view.room!=='garden'&&<div className="flex min-w-0 flex-wrap items-center gap-2 text-sm text-cyan-100">
+    {duel&&<VisualDuelArena frame={duel}/>}
+    {!duel?.right.hp&&inside&&view.room!=='garden'&&<div className="flex min-w-0 flex-wrap items-center gap-2 text-sm text-cyan-100">
       <span>护宝妖王：{view.bossHp} / {view.bossMaxHp} 气血</span>
       <meter aria-label="护宝妖王气血" min={0} max={view.bossMaxHp} value={view.bossHp} className="h-2 w-24 accent-cyan-300"/>
     </div>}

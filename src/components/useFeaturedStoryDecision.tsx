@@ -1,3 +1,4 @@
+import {projectGuidedVisualDuelArena} from './visualGuidedDuelArenaModel';
 import { projectNextStoryGuidance } from '../engine/nextStoryGuidance';
 import {useBeastDuelSpotlight} from './useBeastDuelSpotlight';
 import {useEffect,useState} from 'react';
@@ -121,7 +122,9 @@ export function useFeaturedStoryDecision(simulation:Simulation){
     void simulation.handleStepTick();
     return true;
   };
-  const forbiddenCard=contact?<ForbiddenArtCard key={`${viewScopeKey}:${contact.contact.id}`} view={contact}
+  const forbiddenArena=contact&&actor&&!heartCard&&!browsing.current&&authority.current===world&&history.current===timeline?
+    projectGuidedVisualDuelArena(world,actor,'forbidden',contact.contact.id):undefined;
+  const forbiddenCard=contact?<ForbiddenArtCard key={`${viewScopeKey}:${contact.contact.id}`} view={contact} arena={forbiddenArena}
     busy={busy} onChoose={chooseForbidden} onAdvance={advanceForbidden}/>:
     artScar?<ForbiddenArtCard key={`${viewScopeKey}:${artScar.contactId}`} scar={artScar} busy={busy}
       onContinue={()=>setTrackedArt(undefined)}/>:undefined;
