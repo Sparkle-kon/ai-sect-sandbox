@@ -83,7 +83,7 @@ export function SectJobReportStage({world,report,present,comic,drama,onDismiss,o
         <div className="min-w-0">
           <h3 ref={heading} tabIndex={-1} className="font-serif text-lg font-semibold text-amber-50">{name}</h3>
           <p className="text-sm text-stone-200">{SECT_JOB_DEFINITIONS[row.jobId].label} · <strong className={tier.ink}>{tier.label}</strong></p>
-          <p className="text-xs text-stone-300">{!speaks?'差事留档':atHome?'人在山门':'人未在庭院露面，读其回话'}</p>
+          <p className="text-xs text-stone-300">{!speaks?'差事记在册上':atHome?'人在山门':'人未在庭院露面，且读回话'}</p>
         </div>
       </div>
       {sceneComic&&<p data-sect-comic-report="" className="text-sm leading-6 text-stone-200">{sceneComic.report}</p>}
@@ -94,7 +94,7 @@ export function SectJobReportStage({world,report,present,comic,drama,onDismiss,o
           {row.effects.map((effect,step)=><li key={step} className={`rounded bg-stone-950/80 px-1.5 py-1 ${effect.amount<0?'text-rose-200':'text-emerald-200'}`}>
             <span className="text-stone-400">{effect.stage==='native'?'办差：':'后续：'}</span>{reportEffectLine(effect)}
           </li>)}
-        </ul>:!sceneComic?.effects.length&&<p>这一单没有可记的收获或折损。</p>}
+        </ul>:!sceneComic?.effects.length&&<p>这一趟账上没记下得失。</p>}
         {sceneComic&&<SectComicEffects effects={sceneComic.effects}/>}
       </section>
       {drama&&dramaVisible&&<SectPairDramaRead drama={drama}/>}

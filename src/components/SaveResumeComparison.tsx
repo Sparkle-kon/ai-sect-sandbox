@@ -15,7 +15,7 @@ const RELATION: Record<SaveResumePairReview['relation'], string> = {
   unavailable: '此组没有足够证据核验沿革。',
 };
 const UNAVAILABLE: Record<Exclude<Candidate['status'], 'available'>, string> = {
-  absent: '此版位无副本', damaged: '此版完整性校验失败', unsupported: '存储后端不支持核验此版位',
+  absent: '这里没有存档', damaged: '此版完整性校验失败', unsupported: '当前存档方式无法核对这一版',
 };
 const button = 'min-h-11 rounded border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs text-slate-100 disabled:opacity-45';
 const input = 'min-h-11 min-w-0 w-full rounded border border-slate-700 bg-slate-950 px-2 text-base text-slate-100 disabled:opacity-45 sm:text-xs';

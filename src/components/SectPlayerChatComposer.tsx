@@ -55,10 +55,10 @@ export function SectPlayerChatComposer({world,room,roomLabel,busy,modelReady,pos
     try{
       const prepared=await posting.prepare(world,draft,useModel);
       if(operation.current!==token)return;
-      if(liveWorld.current!==world||!prepared){setNotice('这句话暂未备好，请再试一次。');return;}
+      if(liveWorld.current!==world||!prepared){setNotice('这一笺还没写好，请再试一次。');return;}
       setPreview({world,card:prepared});
     }catch{
-      if(operation.current===token)setNotice('这句话暂未备好，请再试一次。');
+      if(operation.current===token)setNotice('这一笺还没写好，请再试一次。');
     }finally{
       if(operation.current===token){operation.current=undefined;setPending(undefined);}
     }
@@ -72,10 +72,10 @@ export function SectPlayerChatComposer({world,room,roomLabel,busy,modelReady,pos
       const sent=await posting.send(world,card);
       if(operation.current!==token)return;
       if(sent){setPreview(undefined);setText('');setPreset(undefined);setOptionId(undefined);}
-      setNotice(sent?'已发出。':'这句话没有发出，请重新预览。');
+      setNotice(sent?'已发出。':'这一笺没能送出，请再看一遍再发。');
       if(!sent)setPreview(undefined);
     }catch{
-      if(operation.current===token){setPreview(undefined);setNotice('这句话没有发出，请重新预览。');}
+      if(operation.current===token){setPreview(undefined);setNotice('这一笺没能送出，请再看一遍再发。');}
     }finally{
       if(operation.current===token){operation.current=undefined;setPending(undefined);}
     }
@@ -116,14 +116,14 @@ export function SectPlayerChatComposer({world,room,roomLabel,busy,modelReady,pos
                 onClick={()=>{setPreset(id);setOptionId(undefined);clearPreview();}}>{label}</button>;
             })}
           </div>
-          {options.length===0&&<p className="text-xs text-stone-300">眼下没有可用的快捷回复。</p>}
+          {options.length===0&&<p className="text-xs text-stone-300">眼下没有合适的回话。不妨另写一句。</p>}
           {choices.length>1&&<label className="grid gap-1 text-xs text-stone-200">这句话说给
             <select value={optionId??''} className={control} onChange={event=>{setOptionId(event.currentTarget.value);clearPreview();}}>
               <option value="">请选择</option>
               {choices.map(choice=><option key={choice.id} value={choice.id}>{choice.targetLabel??choice.label}</option>)}
             </select>
           </label>}
-          {chosen?.targetLabel&&choices.length===1&&<p className="text-xs text-amber-200">对象：{chosen.targetLabel}</p>}
+          {chosen?.targetLabel&&choices.length===1&&<p className="text-xs text-amber-200">说给：{chosen.targetLabel}</p>}
           {preset&&chosen&&!card&&<button type="button" className={`${control} w-full`}
             onClick={()=>void prepare({roomId:room,identity,body:{kind:'quick',preset,optionId:chosen.id}})}>
             预览发言
@@ -134,7 +134,7 @@ export function SectPlayerChatComposer({world,room,roomLabel,busy,modelReady,pos
               onChange={event=>{setText(event.currentTarget.value);clearPreview();}}/>
           </label>
           {text.trim()&&!readyText&&<p className="text-xs text-amber-200">请写一行，不放链接，最多 {SECT_PLAYER_CHAT_TEXT_LIMIT} 字。</p>}
-          {modelReady&&<p className="text-xs leading-5 text-stone-300">辨意会把这句话送到你设置的模型服务，可能产生 API 费用。发出前还要确认。</p>}
+          {modelReady&&<p className="text-xs leading-5 text-stone-300">用模型辨意会把这句话送到你填写的服务，可能收费。传进群聊之前，还要你亲自点头。</p>}
           {!card&&<div className={modelReady?'grid grid-cols-2 gap-1':''}>
             <button type="button" className={`${control} w-full`} disabled={!readyText}
               onClick={()=>void prepare({roomId:room,identity,body:{kind:'free',text:text.trim()}})}>预览原话</button>

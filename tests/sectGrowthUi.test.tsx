@@ -54,7 +54,7 @@ it.each([360,1440])('shows live rank, treasury and countdown, with priced and ex
     expect(header?.textContent).toContain('不入流');
     expect(header?.textContent).toContain('灵石 450 枚');
     expect(header?.textContent).toContain('余 5 月');
-    expect(host.querySelector('[aria-label="仙盟考核"]')?.textContent).toContain('距首次仙盟年考约 11 月');
+    expect(host.querySelector('[aria-label="仙盟考核"]')?.textContent).toContain('距初次仙盟年考还有约 11 月');
     const disclose=[...host.querySelectorAll('details')].find(row=>row.querySelector('summary')?.textContent==='山门营造');
     if(!disclose)throw Error('Missing buildings disclosure');
     expect(disclose.open).toBe(false);disclose.open=true;

@@ -70,7 +70,7 @@ const DATABASE_VERSION = 2;
 const storageError = () => new WorldSaveError('storage', '无法访问浏览器存档。存储可能被禁用或已满，已有存档未清除。');
 const conflictError = () => new WorldSaveError('slot_conflict', '此槽已在另一操作中变化，未执行。请刷新后重新选择。');
 const limitError = () => new WorldSaveError('slot_limit', '存档位已满。');
-const readOnlyError = () => new WorldSaveError('storage_read_only', '当前后端只能读取旧档；不能安全覆盖、删除或建立恢复点。可使用 JSON 文件。');
+const readOnlyError = () => new WorldSaveError('storage_read_only', '当前存档方式只能读取旧档，无法覆盖、删除或建立恢复点。可以用 JSON 文件备份。');
 const integrityError = () => new WorldSaveError('integrity', '此存档版本无法通过完整性校验。不会自动改读其他版本或替换当前世界。');
 const blockedError = () => new WorldSaveError('storage_blocked', '浏览器存档正在切换版本；请关闭其他旧游戏标签后刷新重试。');
 const rightId = (id: unknown): id is string => typeof id === 'string' && /^[a-zA-Z0-9_-]{1,32}$/.test(id);

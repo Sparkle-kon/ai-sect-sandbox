@@ -132,6 +132,8 @@ it('labels a failed joint duty honestly and keeps its loss separate from the exc
     expect(scene?.querySelectorAll('blockquote')).toHaveLength(2);
     expect(scene?.querySelector('[aria-label="同办得失"]')?.textContent).toContain('看守山门：同办未成');
     expect(scene?.querySelector('[aria-label="同办得失"]')?.textContent).toContain('交情 −2');
-    expect(stage.querySelector('[aria-label="所得与折损"]')?.textContent).toContain('没有可记的收获或折损');
+    const individual=stage.querySelector('[aria-label="所得与折损"]');
+    expect(individual?.querySelector('li')).toBeNull();
+    expect(individual?.textContent).toContain('这一趟账上没记下得失');
   }finally{await cleanup();}
 });

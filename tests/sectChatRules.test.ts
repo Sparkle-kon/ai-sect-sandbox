@@ -37,6 +37,26 @@ describe('宗门传音离线话本与封口边界',()=>{
     expect(market?.posts).toMatchObject([{senderId:speaker.id,sourceEventId:valid.id,text:expect.stringContaining(valid.title)}]);
   });
 
+  it('润色规则生成的旧告示，而不重写模型的角色发言或原卷',()=>{
+    const {world,previous,managed,speaker}=scene();
+    // Simulate a public title in an older save using the same wording as the old granary ledger.
+    const title='实付灵石入义仓';
+    const event:WorldEvent={tick:world.tick,year:world.year,month:world.month,locationId:'loc-market',
+      description:'有人捐灵石入义仓。',category:'diplomacy',id:'evt-recorded-market-gift',title,actorIds:[speaker.id]};
+    world.events.push(event);
+    settleSectChatMonth(world,previous,[event]);
+    const read=()=>projectSectChat(world).find(room=>room.id==='market')?.posts.find(post=>post.sourceEventId===event.id);
+    expect(read()?.text).toContain('实际支付灵石入义仓');
+    expect(read()?.text).not.toContain(title);
+    const latest=managed.chat?.months.at(-1),rawSpeech='我就说句「实付」罢，掌柜且听。';
+    const card=read();
+    if(!latest||!card)throw Error('Expected the recorded room and post');
+    managed.chat={months:[{...latest,posts:latest.posts.map(post=>post.id===card.id?
+      {...post,source:'llm',text:rawSpeech}:post)}]};
+    expect(read()).toMatchObject({text:rawSpeech,source:'llm',sourceEventId:event.id});
+    expect(world.events.find(row=>row.id===event.id)?.title).toBe(title);
+  });
+
   it('工作趣谈只进本门密语，借用安全语气不转发真实未公开结果，换门后原密语仍归原读者',()=>{
     const {world,previous,managed,speaker}=scene();
     const templateId='work-gather-lost-windfall';

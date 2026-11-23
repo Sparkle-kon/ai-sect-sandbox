@@ -53,7 +53,7 @@ export function SectLivePanel({world,busy,onAction}:{world:WorldState;busy:boole
       const ok=await onAction(expected,command);
       if(!mounted.current||current.current.showId!==command.showId)return;
       if(!ok){
-        if(current.current.world===expected)setNotice('这次没有送达，请看看是否仍在开播。');
+        if(current.current.world===expected)setNotice('这回没送到，且看看天机阁是否还开着镜。');
         return;
       }
       if(command.kind==='danmaku')setDraft(value=>value.trim()===command.text?'':value);
@@ -89,7 +89,7 @@ export function SectLivePanel({world,busy,onAction}:{world:WorldState;busy:boole
     <div className="grid min-w-0 gap-2 min-[1800px]:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
       <div className="min-w-0" aria-label="直播画面" role="group">
         {scene?.kind==='arena'?<VisualDuelArena frame={scene.frame}/>:scene?<SceneStageCanvas frame={scene.frame}/>:
-          <p className="rounded-md bg-stone-900/75 p-3 text-sm text-stone-300">画面已收镜，场里的话还留着。</p>}
+          <p className="rounded-md bg-stone-900/75 p-3 text-sm text-stone-300">这一场的画面已收起，场里的话还留着。</p>}
       </div>
       <div className="min-w-0 rounded-md border border-stone-700 bg-stone-900/70 px-2 pb-2">
         <div className="flex items-center justify-between gap-1">

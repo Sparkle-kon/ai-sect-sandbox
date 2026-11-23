@@ -109,9 +109,9 @@ function StarterSelection({seed,busy,onStart}:Pick<SectManagementHomeProps,'busy
     finally{if(!applied){committed.current=false;setError(true);}}
   };
   return <>
-    <p className="text-sm leading-6 text-slate-200">两家小宗都缺个掌门。你挑一家，弟子已经在山门等着了。</p>
+    <p className="text-sm leading-6 text-slate-200">两座山门都等着新掌门。先看看弟子名册，再决定往哪家走。</p>
     <fieldset className="min-w-0">
-      <legend className="mb-2 text-sm font-semibold text-amber-100">哪一家交给你</legend>
+      <legend className="mb-2 text-sm font-semibold text-amber-100">接掌哪一门</legend>
       <div className="grid min-w-0 gap-2 sm:grid-cols-2">
         {roster.map(row=><label key={row.id} className={`${card} block cursor-pointer focus-within:outline focus-within:outline-2 focus-within:outline-amber-300 ${starter===row.id?'border-amber-300/75':''}`}>
           <span className="flex min-h-[44px] items-center gap-2 text-base font-semibold text-amber-50">
@@ -139,8 +139,8 @@ function StarterSelection({seed,busy,onStart}:Pick<SectManagementHomeProps,'busy
         </li>)}
       </ul>
       <div className="mt-2"><BuildingList levels={current.buildings}/></div>
-      {error&&<p role="status" className="mt-2 text-sm text-amber-200">这一回没接成，眼下的进度还在。</p>}
-      <p className="mt-3 text-xs leading-5 text-slate-300">接任会开启新局。若想留下旧进度，先从「更多」进去存档。</p>
+      {error&&<p role="status" className="mt-2 text-sm text-amber-200">这一回没能接任，旧局还在。</p>}
+      <p className="mt-3 text-xs leading-5 text-slate-300">接掌便另开一局。想留住眼下这局，可先去「更多」存档。</p>
       <button type="button" className={`${button} mt-2 bg-amber-300 font-semibold text-slate-950`} disabled={busy} onClick={start}>
         确认接掌{current.name}
       </button>
@@ -195,14 +195,14 @@ function ManagedCourtyard({world,busy,onTick,onConfirmJobs,onSkipFirstMeeting,ob
         {plan?<LocalCourtyardCanvas plan={plan} embedded reaction={courtReaction}/>:<p className="text-sm text-slate-300">此刻未见山门内的景象。</p>}
         {buildings}
       </section>
-      <Suspense fallback={<p role="status" className="order-first text-sm text-slate-300 lg:order-none">弟子们正在整理回话…</p>}>
+      <Suspense fallback={<p role="status" className="order-first text-sm text-slate-300 lg:order-none">且等片刻，弟子就来回话…</p>}>
         <SectJobReportStage world={world} report={report} present={presentIds} comic={currentComic} drama={drama} onDramaVisibility={updateDramaVisibility}
           onReaction={showReaction} onDismiss={closing=>{
           if(closing!==report)return;
           setDismissedReport(closing);onDismissReport?.(closing);
         }}/>
       </Suspense>
-    </div>:onConfirmJobs?<Suspense fallback={<p role="status" className="text-sm text-slate-300">正在摆放晨会差事牌…</p>}>
+    </div>:onConfirmJobs?<Suspense fallback={<p role="status" className="text-sm text-slate-300">晨会的差事牌正在摆开…</p>}>
       <SectMorningBoard world={world} busy={busy} plan={plan} moving={courtyard?.moving} onConfirmJobs={onConfirmJobs} observations={observations}
         buildings={buildings} reaction={courtReaction} onSkipFirstMeeting={onSkipFirstMeeting}/>
     </Suspense>:<>
@@ -280,7 +280,7 @@ export function SectManagementHome({world,busy=false,onStart,onOpen,onTick,onCon
               <TianjiGazetteLauncher world={world} viewer={newsViewer} scopeKey={chatKey} historical={false}/>
             </Suspense>}
           </div>
-          {chatKey&&<Suspense fallback={<p role="status" className="text-sm text-stone-300">正在翻看群聊…</p>}>
+          {chatKey&&<Suspense fallback={<p role="status" className="text-sm text-stone-300">群里的传音还未展开…</p>}>
             <SectChatPanel key={chatKey} scope={chatKey} world={world} busy={busy} onOpenSource={onOpenChatSource} model={chatModel} posting={chatPosting} momentsAction={momentsAction} liveAction={liveAction}/>
           </Suspense>}
         </div>:<StarterSelection key={world.random.seed} seed={world.random.seed} busy={busy} onStart={onStart}/>}

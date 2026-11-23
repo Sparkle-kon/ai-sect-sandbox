@@ -4,10 +4,11 @@ import {createRoot} from 'react-dom/client';
 import {expect,it,vi} from 'vitest';
 import {SectManagementHome} from '../src/components/SectManagementHome';
 import {projectSectComicMoment} from '../src/engine/sectComedy';
-import {projectSectRecurring} from '../src/engine/sectRecurring';
+import {projectSectRecurring,settleSectRecurringMonth} from '../src/engine/sectRecurring';
+import {ensureSectRecurringCast} from '../src/engine/sectRecurringCast';
 import {createManagedSectWorld} from '../src/engine/starterSectWorld';
 import {advanceWorldTick} from '../src/engine/worldEngine';
-import type {LLMDecisionPayload,WorldState} from '../src/types/world';
+import type {LLMDecisionPayload,WorldEvent,WorldState} from '../src/types/world';
 
 const quiet:LLMDecisionPayload={chosenAction:'REST',innerMonologue:'在原处听山风。'};
 function next(source:WorldState){
@@ -93,5 +94,30 @@ it('uses only a real living spirit beast for the cat portrait and never gives it
     original.id+='-namesake';
     await render(detached);
     expect(catCard()).toBeNull();
+  }finally{await cleanup();}
+});
+
+it('reads a witnessed older-style headline in plain words without rewriting the source event',async()=>{
+  const {world:prev}=managed();
+  const world=structuredClone(prev);
+  world.tick++;
+  world.month++;
+  if(!ensureSectRecurringCast(world))throw Error('Expected the recurring cast to be present');
+  const actor=world.cultivators.find(person=>person.id==='elder-tianji-1');
+  if(!actor)throw Error('Expected the true Tianji host');
+  const headline='坊市本月未实付二十枚灵石';
+  const event:WorldEvent={id:'evt-recurring-copy-fixture',tick:world.tick,year:world.year,month:world.month,
+    title:headline,description:'坊市这笔买卖还没有付清。',actorIds:[actor.id],locationId:actor.locationId,category:'diplomacy'};
+  world.events.unshift(event);
+  world.events.unshift(...settleSectRecurringMonth(world,prev,[event]));
+  const visit=projectSectRecurring(world).find(row=>row.role==='host');
+  expect(visit?.sourceEventId).toBe(event.id);
+  const {host,render,cleanup}=mount();
+  try{
+    await render(world);
+    const news=host.querySelector('[data-sect-recurring-visit="host"]');
+    expect(news?.textContent).toContain('坊市本月尚未支付二十枚灵石');
+    expect(news?.textContent).not.toContain(headline);
+    expect(world.events.find(row=>row.id===event.id)?.title).toBe(headline);
   }finally{await cleanup();}
 });

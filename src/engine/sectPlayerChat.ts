@@ -1,3 +1,4 @@
+import {sectPlayerFactCopy} from '../data/sectPlayerFactCopy';
 import {
   SECT_PLAYER_CHAT_IDENTITIES, SECT_PLAYER_CHAT_IDENTITY_LABELS, SECT_PLAYER_CHAT_MONTH_LIMIT, SECT_PLAYER_CHAT_POST_LIMIT,
   SECT_PLAYER_CHAT_PRESETS, SECT_PLAYER_CHAT_ROOMS, isSectPlayerChatText, sectPlayerChatExposureRoll, sectPlayerChatPostId,
@@ -120,7 +121,7 @@ export function quoteSectPlayerChatOptions(world:WorldState,roomId:SectPlayerCha
     if(people.size&&sect.reputation<100){
       const source=world.events.find(event=>event.actorIds.some(id=>people.has(id))&&knownPublicSource(world,leader,event.id));
       const intent:SectPlayerChatIntent=source?{kind:'hype',eventId:source.id}:{kind:'hype'};
-      options.push(quick('hype',intent,'为本门说句公道话，宗门名声 +1。',source?.id,source&&clip(source.title)));
+      options.push(quick('hype',intent,'为本门说句公道话，宗门名声 +1。',source?.id,source&&clip(sectPlayerFactCopy(source.title))));
     }
   }
   if(!used.has('beg')){

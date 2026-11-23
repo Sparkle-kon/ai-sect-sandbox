@@ -1,3 +1,4 @@
+import {sectPlayerFactCopy} from '../data/sectPlayerFactCopy';
 import {
   TIANJI_TABLOID_HISTORY,tianjiTabloidIssueId,type TianjiGazetteSource,type TianjiTabloidIssue,
 } from '../types/tianjiGazette';
@@ -57,11 +58,11 @@ export function publishTianjiTabloid(before:WorldState,world:WorldState,complete
 }
 
 const columns=[
-  ['headline','头条','本季未有可核实的大事登头版。山门照常开，茶照常煮。'],
-  ['embarrassment','丢人榜','没听见哪桩公开失手说得准。空榜也是好消息。'],
-  ['dark_horse','黑马','本季未见可核对签位的逆风胜局。'],
-  ['rivalry','恩怨','旧话不当新仇；本季暂无两度交手的确据。'],
-  ['advertisement','广告位','本季没有经核实的山门告示。'],
+  ['headline','头条','这一季没有大事上头版。山门照常开，茶照常煮。'],
+  ['embarrassment','丢人榜','这季没有传得准的当众失手。空榜也是好消息。'],
+  ['dark_horse','黑马','这一季没听闻哪位道友在擂台上以弱胜强。'],
+  ['rivalry','恩怨','旧话不当新仇。这季没听闻哪两位道友再度交锋。'],
+  ['advertisement','广告位','这块地方还空着，等山门递来告示。'],
 ] as const;
 export interface TianjiTabloidColumnView {
   readonly kind:typeof columns[number][0];
@@ -123,7 +124,7 @@ export function projectTianjiTabloid(world:WorldState,scope:TianjiGazetteReadSco
     const topic=issue.hotTopic,from=Math.max(1,(world.sectManagement?.foundedTick??0)+1,issue.tick-2);
     const topicHeadline=topic&&world.events.find(event=>event.id===topic.sourceEventId)?.title;
     const hotspot=topic&&topicHeadline&&venue(topic.siteId)&&isTabloidHotspotProven(world,topic,from,issue.tick)?
-      {title:'群聊热议',text:`${topic.roomId==='market'?'坊市群':'九州群'}里，有 ${topic.speakerCount} 位道友谈及「${clean(topicHeadline)}」。这里只记几人说过，不把闲话当实情。`}:undefined;
+      {title:'群聊热议',text:`${topic.roomId==='market'?'坊市群':'九州群'}里，有 ${topic.speakerCount} 位道友谈及「${clean(sectPlayerFactCopy(topicHeadline))}」。这里只记几人说过，不把闲话当实情。`}:undefined;
     return {id:issue.id,tick:issue.tick,year:issue.year,month:issue.month,quiet:articles.size===0&&!hotspot,
       columns:columns.map(([kind,title,emptyText])=>{
         const article=articles.get(kind);

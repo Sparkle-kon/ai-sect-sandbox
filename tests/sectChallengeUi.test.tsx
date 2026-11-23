@@ -71,7 +71,7 @@ it('opens a compact opt-in composer with exact disciple, venue and consent befor
     const venuePicker=host.querySelectorAll('select')[1];
     if(!venuePicker)throw Error('Missing target field');
     await select(venuePicker,rival.id);
-    expect(host.textContent).toContain(`约在${venue.name}，请${outsider.name}应战。回帖应允后才动身。`);
+    expect(host.textContent).toContain(`约在${venue.name}，请${outsider.name}应战。等对方应帖，弟子再动身。`);
     expect(send).not.toHaveBeenCalled();
     await click(button(host,'送出踢馆帖'));
     expect(send).toHaveBeenCalledTimes(1);

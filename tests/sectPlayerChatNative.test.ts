@@ -119,6 +119,15 @@ function retained(world: WorldState) {
   return restored;
 }
 
+it('keeps the exact player-authored wording when the sect leader sends a quiet public message',()=>{
+  const {world}=starter();
+  const rawSpeech='「托管」二字是我说的，不妨照录。';
+  const draft=free('leader',rawSpeech);
+  const next=publish(world,draft);
+  expect(projectSectPlayerChat(next)).toContainEqual(expect.objectContaining({roomId:'jiuzhou',text:rawSpeech}));
+  expect(sect(next).spiritStones).toBe(sect(world).spiritStones);
+});
+
 describe('掌门传音按真实世界结算', () => {
   it('辟的是本人确实听到的那一句假话，不动私语、未闻消息与真账', () => {
     const { ready, leader, young, rumorId, privateReceipt } = genuineRumor();

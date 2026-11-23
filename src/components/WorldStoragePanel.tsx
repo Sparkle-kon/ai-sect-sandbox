@@ -2,14 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import {copyWorldSeed,drawWorldSeed} from './worldSeedDraw';
 import type { WorldgenProfileId, WorldState } from '../types/world';
 import {
-  decodeWorldSave, encodeWorldSave, decodeEraWorldSave, encodeEraWorldSave, WORLD_SAVE_MAX_BYTES, WORLD_SAVE_MAX_SLOTS, worldSaveStore,
+  decodeWorldSave, encodeWorldSave, decodeEraWorldSave, encodeEraWorldSave, WORLD_SAVE_MAX_BYTES, WORLD_SAVE_MAX_SLOTS, WorldSaveError, worldSaveStore,
 } from '../engine/storageEngine';
 import type {
   SaveBranchSource, SavePointInfo, SaveResumeAddress, SaveResumePairReview, SaveSlotInspection, SaveSlotSummary,
 } from '../engine/storageEngine';
 import { SaveResumeComparison } from './SaveResumeComparison';
 import { EraCheckpointControls, EraCheckpointSummary, type EraCheckpointFileChoice } from './EraCheckpointControls';
-import { prepareEraCheckpoint, verifyEraCheckpoint, type PreparedEraCheckpoint, type VerifiedEraCheckpoint } from '../engine/eraCheckpointEngine';
+import { EraCheckpointError, prepareEraCheckpoint, verifyEraCheckpoint, type PreparedEraCheckpoint, type VerifiedEraCheckpoint } from '../engine/eraCheckpointEngine';
 
 import { measureSaveCapacity, prepareArchiveOptimization, type NarrativeArchivePlan, type SaveCapacityReport } from '../engine/saveCapacityEngine';
 import {
@@ -64,6 +64,16 @@ const profileIds = Object.keys(WORLDGEN_PROFILES) as WorldgenProfileId[];
 const profileName = (id: WorldgenProfileId | undefined) => id ? WORLDGEN_PROFILES[id].label : '谱系未记录';
 const fileLimitMb = WORLD_SAVE_MAX_BYTES / (1024 * 1024);
 
+// Typed errors carry authored guidance; do not print raw browser errors or internal field paths.
+function storageNotice(error: unknown): string {
+  if (error instanceof WorldSaveError) {
+    if (error.code === 'invalid_world') return '这份世界存档未通过校验。请换一份完整的存档。';
+    return error.message;
+  }
+  return error instanceof EraCheckpointError ? error.message : '存档操作未能完成，当前世界未被替换。';
+}
+
+
 export function parseWorldSeed(value: string): number | undefined {
   const trimmed = value.trim();
   const seed = Number(trimmed);
@@ -76,7 +86,7 @@ export function stageWorldCreation(seedText: string, profileId: unknown, expecte
 }
 
 export async function importWorldFile(file: Pick<File, 'size' | 'text'>): Promise<WorldState> {
-  if (file.size <= 0 || file.size > WORLD_SAVE_MAX_BYTES) throw new Error(`文件须大于 0 且不超过 ${fileLimitMb} MiB。`);
+  if (file.size <= 0 || file.size > WORLD_SAVE_MAX_BYTES) throw new WorldSaveError('size', `文件须大于 0 且不超过 ${fileLimitMb} MiB。`);
   return decodeWorldSave(await file.text());
 }
 
@@ -221,7 +231,7 @@ export function WorldStoragePanel({ world, busy, readOnly = false, eraBlocked = 
   useEffect(() => {
     if (staged && !confirmation) {
       setStaged(undefined);
-      setStatus('当前世界或分支已变化；旧确认失效，请重新核验。');
+      setStatus('当前世界或分支已经变了，请重新核对后再确认。');
     }
   }, [staged, confirmation]);
 
@@ -240,7 +250,7 @@ export function WorldStoragePanel({ world, busy, readOnly = false, eraBlocked = 
     setWorking(true);
     setStatus('');
     try { await operation(); }
-    catch (error) { setStatus(error instanceof Error ? error.message : '操作失败，当前世界未替换。'); }
+    catch (error) { setStatus(storageNotice(error)); }
     finally { inFlight.current = false; setWorking(false); }
   };
 
@@ -281,7 +291,7 @@ export function WorldStoragePanel({ world, busy, readOnly = false, eraBlocked = 
     }
     // Head absence is verified again by the storage transaction; never overwrite a racing insert.
     if (reviewed.current || reviewed.previous || reviewed.currentDamaged || reviewed.previousDamaged) {
-      setStatus('此槽没有可写的已核验修订，未保存。请先导出游戏 JSON。');
+      setStatus('这个存档位没有可供覆盖的版本，未保存。请先导出游戏 JSON。');
       return;
     }
     void work(async () => {
@@ -344,7 +354,7 @@ export function WorldStoragePanel({ world, busy, readOnly = false, eraBlocked = 
       } else if (action.kind === 'import') incoming = action.world;
       else if (action.kind === 'import_era') {
         if (observed.current.eraBlocked || observed.current.timeline !== action.timeline || !(canUseEraContext?.(stamp.world,stamp.version)??true)) {
-          setStatus('检查点核验已与当前上下文不符；原世界未改变。');return;
+          setStatus('核对检查点后，当前世界或分支有变。原世界未改动。');return;
         }
         incoming = action.checkpoint.world;
       }
@@ -352,11 +362,16 @@ export function WorldStoragePanel({ world, busy, readOnly = false, eraBlocked = 
         setResumeReview(undefined);
         const candidate = action.review[action.side];
         if (candidate.status !== 'available' || !store.loadReviewedResume) return;
-        const compared = await store.loadReviewedResume(action.review, action.side);
+        const staleComparison = '刚才比过的存档有变，未载入。请重新对照两份存档。';
+        const compared = await store.loadReviewedResume(action.review, action.side).catch((error: unknown) => {
+          if (error instanceof WorldSaveError && error.code === 'slot_conflict') return undefined;
+          throw error;
+        });
+        if (!compared) { setStatus(staleComparison); return; }
         if (compared.selection.seal !== candidate.info.selection.seal ||
             compared.selection.headRevision !== candidate.info.selection.headRevision ||
             compared.selection.slotId !== candidate.info.selection.slotId || compared.selection.point !== candidate.info.selection.point) {
-          setStatus('档位校验凭据已变化，未载入。请重新对照。');
+          setStatus(staleComparison);
           return;
         }
         incoming = compared.world;
@@ -442,7 +457,7 @@ export function WorldStoragePanel({ world, busy, readOnly = false, eraBlocked = 
       const manifests=files.filter(({name})=>name.toLowerCase().endsWith('.era'));
       const parts=files.filter(({name})=>/\.(?:era-part|json)$/i.test(name));
       if (manifests.length!==1 || manifests.length+parts.length!==files.length)
-        throw new Error('请选择一份 .era 清单及它对应的全部分块，不混入其他文件。');
+        throw new EraCheckpointError('format', '请选择一份 .era 清单及它对应的全部分块，不混入其他文件。');
       const checkpoint=await verifyEraCheckpoint(manifests[0],parts,eraCodec,{signal});
       if (signal.aborted || !authority(stamp) || observed.current.timeline!==timeline || observed.current.eraBlocked ||
         !(canUseEraContext?.(stamp.world,stamp.version)??true)) return;
@@ -470,7 +485,7 @@ export function WorldStoragePanel({ world, busy, readOnly = false, eraBlocked = 
 
   const downloadJson = (payload: string, filename: string, reviewedBytes?: number) => {
     const blob = new Blob([payload], { type: 'application/json' });
-    if (reviewedBytes !== undefined && blob.size !== reviewedBytes) throw new Error('JSON 大小已变化，未下载。请重新预检。');
+    if (reviewedBytes !== undefined && blob.size !== reviewedBytes) throw new WorldSaveError('integrity', 'JSON 大小已变化，未下载。请重新预检。');
     downloadBlob(blob,filename);
   };
   const downloadBlob = (blob:Blob,filename:string) => {
@@ -616,7 +631,7 @@ export function WorldStoragePanel({ world, busy, readOnly = false, eraBlocked = 
           </label>
         </div>
         {chosen && <p className="break-words text-xs text-slate-400">
-          列表元数据（未核验）：{chosen.label} · 种子 {chosen.seed} · {profileName(chosen.profileId)} · 仙历 {chosen.year} 年 {chosen.month} 月 · Tick #{chosen.tick}
+          存档一览（尚未核对）：{chosen.label} · 种子 {chosen.seed} · {profileName(chosen.profileId)} · 仙历 {chosen.year} 年 {chosen.month} 月 · Tick #{chosen.tick}
         </p>}
         <div className="flex flex-wrap gap-1.5">
           <button type="button" className={button} onClick={verifySlot}>核验此槽</button>
@@ -785,7 +800,7 @@ export function ShareSavePrivacyConfirmation({ review, onConfirm, onCancel }: {
     <h4 className="font-semibold">脱敏副本预览（不显示原文）</h4>
     <p className="break-words">第 {review.tick} 轮 · 原档 {bytes(review.originalBytes)} · 脱敏副本 {bytes(review.redactedBytes)} · 上限 {bytes(review.limitBytes)}。</p>
     {ready ? <>
-      <p>已校验人物、地点、宗门、村镇计数，以及化身绑定、待执行指令和仍在托管的款物均未改变。</p>
+      <p>已核对：人物、地点、宗门、村镇的数目都没变。化身归属、待办指令和仍由第三方保管的款物也照旧。</p>
       <p>{protectedCounts.cultivators} 人（在世 {protectedCounts.livingCultivators}） · {protectedCounts.locations} 处地点 · {protectedCounts.sects} 个宗门 · {protectedCounts.settlements} 个村镇。</p>
       <p>化身绑定：{protectedCounts.avatarBound ? '有' : '无'} · 待执行指令：{protectedCounts.avatarOrderPending ? '有' : '无'}。</p>
       <p>只下载新副本到本机，不上传，也不更改当前世界、存档槽或分支。</p>
@@ -809,7 +824,7 @@ export function ArchiveOptimizationReview({ plan, onApply, onCancel }: { plan: N
     <p className="break-words">JSON：{bytes(plan.beforeBytes)} → {bytes(plan.afterBytes)}。
       {measured && plan.beforeBytes === plan.afterBytes && ' 导出大小不变。'}
       {plan.afterBytes !== null && plan.afterBytes > plan.limitBytes && ' 移动后仍超过单个 JSON 文件上限。'}</p>
-    <p>只把旧公开章节移到当前分支的远纪档案。不会删除章节、人物或原始凭据，也不会载入或重置世界。</p>
+    <p>只把旧公开章节移到当前分支的远纪档案。不会删除章节、人物或原始记录，也不会载入或重置世界。</p>
     <div className="flex flex-wrap gap-1.5">
       {measured && plan.movedCount > 0 && <button type="button" className={confirmButton} onClick={onApply}>确认仅迁移旧章</button>}
       <button type="button" className={button} onClick={onCancel}>关闭预览</button>
@@ -827,7 +842,7 @@ export function SavePointRows({ review, recoverySupported, readOnly, onLoad, onE
       const damaged = point === 'current' ? review.currentDamaged : review.previousDamaged;
       const title = pointLabel(point);
       return <section key={point} className="min-w-0 space-y-1 rounded border border-slate-800 p-2 text-xs text-slate-300">
-        <h4 className="font-semibold text-sky-100">{title} · {info ? '已校验' : damaged ? '完整性校验失败' : point === 'previous' && !recoverySupported ? '后端不提供' : '未保存'}</h4>
+        <h4 className="font-semibold text-sky-100">{title} · {info ? '已校验' : damaged ? '完整性校验失败' : point === 'previous' && !recoverySupported ? '当前存档方式不支持' : '未保存'}</h4>
         {info ? <>
           <p className="break-words">{info.summary.label} · Tick #{info.summary.tick} · 种子 {info.summary.seed} · {profileName(info.summary.profileId)}</p>
           <p className="break-words">来源分支：{branchName(info.selection.sourceBranch)}</p>

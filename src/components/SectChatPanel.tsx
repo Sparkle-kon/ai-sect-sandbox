@@ -67,7 +67,7 @@ function SectChatModelSettings({config,onChange,busy}:SectChatModelControls&{bus
     <div id={form} hidden={!expanded}>
       {expanded&&<fieldset disabled={busy} className="min-w-0 space-y-1.5 rounded-md bg-stone-900/80 p-2 disabled:opacity-70">
         <legend className="sr-only">群聊模型设置</legend>
-        <p id={notice} className="text-xs leading-5 text-stone-300">只把九州群与坊市群的公开见闻和相关角色资料发给所填服务。本宗群和掌门私聊留在游戏里。模型只写对白，不改结算；可能产生 API 费用。刷新页面后需重新设置。</p>
+        <p id={notice} className="text-xs leading-5 text-stone-300">模型服务只会收到九州群、坊市群的公开见闻和发言人物资料。本宗群和掌门私聊留在游戏里。模型只写对白，不会改动灵石、伤势等游戏结果。服务可能收费；刷新页面后须重新填写。</p>
         <label className="flex min-h-11 items-center gap-2 rounded border border-stone-700 px-2 text-sm text-amber-100">
           <input type="checkbox" checked={enabled} className="size-4 shrink-0 accent-amber-300" aria-describedby={notice}
             onChange={event=>onChange({...config,sectChatEnabled:event.currentTarget.checked})}/>
@@ -204,7 +204,7 @@ export function SectChatPanel({world,scope,busy,onOpenSource,model,posting,momen
         })}
       </div>
       <h3 id={roomTitle} className="font-serif text-sm font-semibold text-amber-100">{selected.label}</h3>
-      {selected.posts.length===0?<p className="rounded-md bg-stone-900/75 p-2 text-sm text-stone-300">这处还没人开口。</p>:
+      {selected.posts.length===0?<p className="rounded-md bg-stone-900/75 p-2 text-sm text-stone-300">群里还没人开口，且听下一轮传音。</p>:
         <ol ref={list} aria-labelledby={roomTitle}
           className="max-h-[min(54dvh,30rem)] min-w-0 space-y-2 overflow-y-auto overscroll-contain pr-1">
           {selected.posts.map((post,index)=>{

@@ -29,13 +29,13 @@ const festivalCard=(id:typeof SECT_FESTIVALS[number]['jobId']):SectJobDefinition
 export const SECT_JOB_DEFINITIONS:Readonly<Record<SectJobId,SectJobDefinition>>={
   gather:card('gather','下山采药','有灵草便采，身边没有就先寻药圃。'),
   explore:card('explore','外出历练','挑一处认得的地方走走。机缘有没有，到了才知。'),
-  cultivate:card('cultivate','闭关修炼','在脚下这处静坐吐纳。'),
+  cultivate:card('cultivate','闭关修炼','就地静坐，吐纳炼气。'),
   stall:card('stall','坊市摆摊','带货到坊市，挂价等买主；空手先问行市。'),
   kitchen:card('kitchen','饭堂掌勺','在本门用一份药材煮汤，让在场同门润一润气。'),
   guard:card('guard','看守山门','回本门巡一班；若已有守令，先到岗。'),
   deliver:card('deliver','跑腿送货','已有信件、货约或救济才接办；没货先去坊市问一问。'),
   recruit:card('recruit','下山招新','先去有村社的地方访人。入门要对方也愿意。'),
-  challenge:card('challenge','去别宗踢馆','在场才能请人切磋，还得对方肯接这招。'),
+  challenge:card('challenge','去别宗踢馆','登门邀人切磋。对方肯接招，才有一场比试。'),
   matchmaking:card('matchmaking','参加联谊','与现场道友说说话，结不结缘不由一席话定。'),
   'festival-review':festivalCard('festival-review'),
   'festival-recruit':festivalCard('festival-recruit'),
@@ -117,7 +117,7 @@ export function planSectJob(world:WorldState,actor:Cultivator,jobId:SectJobId):S
 }
 
 function planSectJobForTick(world:WorldState,actor:Cultivator,jobId:SectJobId,actionTick:number):SectJobPlan {
-  if(!SECT_JOB_IDS.includes(jobId)||!eligibleSectDisciples(world).includes(actor))return unavailable('此人不在本宗这次晨会的名册上。');
+  if(!SECT_JOB_IDS.includes(jobId)||!eligibleSectDisciples(world).includes(actor))return unavailable('这位不在本门晨会的名册上。');
   const here=unique(world.locations,actor.locationId);
   if(!here||!holdable(world,actor,here))return unavailable('此人另有要事在身，这次差事先搁下。');
   const seasonal=sectFestivalForJob(jobId);
@@ -137,7 +137,7 @@ function planSectJobForTick(world:WorldState,actor:Cultivator,jobId:SectJobId,ac
         const volunteer=availableSettlementActions(actor,world,actionTick).find(row=>row.action==='RECRUIT_SETTLER');
         if(volunteer)return native({chosenAction:'RECRUIT_SETTLER',targetSettlementId:volunteer.targetSettlementId,
           targetVolunteerId:volunteer.targetVolunteerId,innerMonologue:'春招先问本人的心意。'},here.id);
-        return unavailable('这里暂无可自愿入门的人，或领事弟子不能办入门礼。');
+        return unavailable('此地暂无人愿入门，或这位弟子眼下办不了入门礼。');
       }
       return travel(known().find(calm))??unavailable('没有走得通的安稳村社。');
     }
@@ -145,15 +145,15 @@ function planSectJobForTick(world:WorldState,actor:Cultivator,jobId:SectJobId,ac
     case 'festival-market':{
       const date=actionTick===world.tick?world:{...world,tick:actionTick};
       const open=(site:LocationNode)=>site.type==='market'&&!marketClosureReason(world,site.id)&&!marketClosureReason(date,site.id);
-      if(!open(here))return travel(known().find(open))??unavailable('眼下没有认得路的开市坊间。');
-      if(jobId==='festival-social')return localTalk(true)??unavailable('这处没有可当面论道的外门道友。');
+      if(!open(here))return travel(known().find(open))??unavailable('眼下找不到走得通的开市坊间。');
+      if(jobId==='festival-social')return localTalk(true)??unavailable('此地没有别门道友可以当面论道。');
       const order=availableMarketActions(actor,world).find(row=>row.action==='PLACE_MARKET_SELL'&&
         world.markets.orders.some(bid=>bid.side==='buy'&&bid.status==='open'&&bid.actorId!==actor.id&&
           bid.locationId===here.id&&bid.good===row.marketGood&&bid.expiresTick>actionTick&&bid.remaining>=1&&
           bid.limitPrice>=row.marketLimitPrice&&bid.escrowStones>=row.marketLimitPrice));
       if(order?.action==='PLACE_MARKET_SELL')return native({chosenAction:'PLACE_MARKET_SELL',marketGood:order.marketGood,
         marketQuantity:order.marketQuantity,marketLimitPrice:order.marketLimitPrice,innerMonologue:'对照同地买价，再挂一份货。'},here.id,'on_route');
-      return unavailable('带来的货暂无合适的同地买价。');
+      return unavailable('带来的货，在这里还没遇上合意的买价。');
     }
     case 'festival-review':{
       const active=authority(world);

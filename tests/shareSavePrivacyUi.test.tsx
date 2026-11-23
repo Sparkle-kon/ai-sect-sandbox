@@ -53,7 +53,8 @@ describe('counts-only share privacy inside existing JSON file preflight', () => 
     const review = prepareShareSavePrivacy(world);
     expect(canDownloadShareSave(review)).toBe(true);
     const confirm = renderToStaticMarkup(<ShareSavePrivacyConfirmation review={review} onConfirm={onConfirm} onCancel={onCancel} />);
-    expect(confirm).toContain('已校验人物、地点、宗门、村镇计数');
+    expect(confirm).toContain('已核对：人物、地点、宗门、村镇的数目都没变');
+    expect(confirm).toContain('仍由第三方保管的款物也照旧');
     expect(confirm).toContain('化身绑定：无 · 待执行指令：无');
     expect(confirm).toContain('只下载新副本到本机，不上传');
     expect(confirm).toContain('确认并下载脱敏副本');

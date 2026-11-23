@@ -819,7 +819,8 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
         <h1 ref={managerSavesHeading} tabIndex={-1} className="font-serif text-xl text-amber-100">读档与存档</h1>
         <button type="button" className={`${action} bg-slate-800 text-amber-100`} onClick={returnManager}>回掌门台</button>
       </header>
-      <React.Suspense fallback={<p role="status">正在翻找存档…</p>}>
+      <p className="text-sm leading-6 text-slate-300">先存下眼前这段修行，再放心去翻旧卷。</p>
+      <React.Suspense fallback={<p role="status">正在翻检旧卷…</p>}>
         <WorldStoragePanel world={world} busy={managerBlocked} sourceBranch={simulation.sourceBranch} timeline={timeline}
           contextVersion={managerRevision} canUseContext={simulation.canUseSaveContext}
           canUseEraContext={(candidate,version)=>!fastForwardRun.current&&simulation.canUseSaveContext(candidate,version)}

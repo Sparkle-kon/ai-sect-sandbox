@@ -59,12 +59,12 @@ export function SectChallengePanel({world,busy,onRequest,onAnswer}:{
       const ok=await call();
       if(!mounted.current)return;
       if(!ok){
-        if(current.current===expected)setNotice('这封帖子没送成，且再核一遍。');
+        if(current.current===expected)setNotice('这封帖没递成，请再看看山门来帖。');
         return;
       }
       setNotice(success);setExpanded(false);setDisciple('');setTarget('');
     }catch{
-      if(mounted.current&&current.current===expected)setNotice('这封帖子没送成，且再核一遍。');
+      if(mounted.current&&current.current===expected)setNotice('这封帖没递成，请再看看山门来帖。');
     }finally{
       inFlight.current=false;
       if(mounted.current)setWaiting(false);
@@ -86,7 +86,7 @@ export function SectChallengePanel({world,busy,onRequest,onAnswer}:{
       <p className="break-words text-sm text-stone-200">{duelNames.challenger} 对 {duelNames.defender} · 约在{duelNames.site}</p>
       <p className="text-xs text-stone-300">
         {pending.phase==='traveling'?(
-          '双方已应约，须在约定山门会合，尚未比试。'
+          '两边都应了帖，尚未比试。等到了约定的山门再分高下。'
         ):pending.direction==='inbound'?'对方等候回帖。':'对方尚未回帖。'}
         {world.tick<pending.expiresTick?` 还余 ${pending.expiresTick-world.tick} 月。`:' 帖上期限已到。'}
       </p>
@@ -117,7 +117,7 @@ export function SectChallengePanel({world,busy,onRequest,onAnswer}:{
               {targets.map(row=><option key={row.sectId} value={row.sectId}>{row.sectName}</option>)}
             </select>
           </label>}
-          {target&&<p className="break-words text-sm text-stone-200">约在{target.siteName}，请{target.defenderName}应战。回帖应允后才动身。</p>}
+          {target&&<p className="break-words text-sm text-stone-200">约在{target.siteName}，请{target.defenderName}应战。等对方应帖，弟子再动身。</p>}
           <button type="submit" className={accent} disabled={!disciple||!target||!onRequest||disabled}>送出踢馆帖</button>
         </form>}
     </div>}
@@ -131,7 +131,7 @@ export function SectChallengePanel({world,busy,onRequest,onAnswer}:{
         {arena&&watching===latest.id&&<VisualDuelArena frame={arena}/>}
       </>:<p className="text-sm text-stone-300">{latest.outcome==='refused'?'这封帖已回绝，未有比试。':'帖子过期，未有比试。'}</p>}
     </article>}
-    {!pending&&!latest&&!expanded&&<p className="text-xs text-stone-300">尚无来帖。也可派弟子递帖比试。</p>}
+    {!pending&&!latest&&!expanded&&<p className="text-xs text-stone-300">山门还没收到战帖，也可让弟子先去递一封。</p>}
     {notice&&<p role="status" className="text-xs text-amber-200">{notice}</p>}
   </section>;
 }

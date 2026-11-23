@@ -12,7 +12,7 @@ const tierCopy:Readonly<Record<SectJobTier,{label:string;order:number;ink:string
 };
 export function reportTier(row:SectJobReportRow) {
   return row.phase==='performed'&&row.tier?tierCopy[row.tier]:
-    row.phase==='on_route'?{label:'差事进行中',order:4,ink:'text-sky-200'}:
+    row.phase==='on_route'?{label:'差事尚未办完',order:4,ink:'text-sky-200'}:
       row.phase==='unavailable'?{label:'这回未办',order:5,ink:'text-slate-300'}:tierCopy.success;
 }
 

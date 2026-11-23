@@ -89,7 +89,7 @@ it('keeps the phone foldout collapsed, uses four usable rooms and counts local u
     await click(toggle);
     expect(getButton(panel,'坊市二手群').getAttribute('aria-pressed')).toBe('true');
     await click(getButton(panel,'掌门私聊'));
-    expect(panel.textContent).toContain('这处还没人开口。');
+    expect(panel.textContent).toContain('群里还没人开口，且听下一轮传音。');
     expect(panel.querySelector('input,textarea')).toBeNull();
   }finally{await cleanup();}
 });
@@ -176,7 +176,8 @@ it('keeps chat model opt-in collapsed and independent from world decisions and l
     expect(toggle.labels?.[0].textContent).toContain('让大模型代写群聊');
     expect(panel.querySelector('input[type="password"]')).not.toBeNull();
     expect(panel.textContent).toContain('本宗群和掌门私聊留在游戏里');
-    expect(panel.textContent).toContain('可能产生 API 费用');
+    expect(panel.textContent).toContain('服务可能收费');
+    expect(panel.textContent).toContain('模型只写对白，不会改动灵石、伤势等游戏结果');
     expect(onConfig).not.toHaveBeenCalled();
     await act(async()=>toggle.click());
     expect(onConfig).toHaveBeenLastCalledWith({...config,sectChatEnabled:true});

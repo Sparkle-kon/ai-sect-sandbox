@@ -82,7 +82,7 @@ it('reuses the scene canvas in the drawer and reads new chat messages only after
     expect(button(host,'朋友圈').className).toContain('min-h-11');
     await draw(next);
     expect(toggle.textContent).toContain('1 条未读');
-    expect(host.querySelector('[aria-label="修仙朋友圈"]')?.textContent).toContain('还没有道友');
+    expect(host.querySelector('[aria-label="修仙朋友圈"]')?.textContent).toContain('朋友圈还空着');
     await click(button(host,'群聊'));
     expect(toggle.textContent).not.toContain('未读');
     expect(host.querySelector('[aria-label="修仙朋友圈"]')).toBeNull();

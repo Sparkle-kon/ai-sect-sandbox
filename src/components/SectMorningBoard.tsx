@@ -130,7 +130,7 @@ export function SectMorningBoard({world,busy,plan,moving,onConfirmJobs,buildings
     const assignments:SectJobAssignment[]=[];
     for(const [discipleId,jobId] of draftOrders){
       const member=memberById.get(discipleId);
-      if(!member||!usable(member,jobId)){setNotice({world,text:'差事单有变，请重新点选。'});return;}
+      if(!member||!usable(member,jobId)){setNotice({world,text:'这件差事如今派不了了，请另挑一件。'});return;}
       assignments.push({discipleId,jobId});
     }
     const attempt={world,accepted:false};
@@ -144,7 +144,7 @@ export function SectMorningBoard({world,busy,plan,moving,onConfirmJobs,buildings
       if(flight.current===attempt&&!attempt.accepted)flight.current=undefined;
       if(latest.current===world){
         setPending(undefined);
-        if(!attempt.accepted)setNotice({world,text:'晨会没能开成，差事还留着，可以再试。'});
+        if(!attempt.accepted)setNotice({world,text:'晨会没开成，差事牌还在原处，可以再试。'});
       }
     }
   };
@@ -202,7 +202,7 @@ export function SectMorningBoard({world,busy,plan,moving,onConfirmJobs,buildings
         </ul>
       </details>}
       <p aria-live="polite" className="my-1.5 text-sm text-slate-200">
-        {actor?<>{actor.name}：{selectedJob?SECT_JOB_DEFINITIONS[selectedJob].label:'还没领差事'}{selectedPlan?.kind==='native'&&selectedPlan.phase==='on_route'&&(selectedPlan.decision.chosenAction==='EXPLORE'?' · 先赶路':' · 先办前一程')}</>:
+        {actor?<>{actor.name}：{selectedJob?SECT_JOB_DEFINITIONS[selectedJob].label:'还没领差事'}{selectedPlan?.kind==='native'&&selectedPlan.phase==='on_route'&&(selectedPlan.decision.chosenAction==='EXPLORE'?' · 先赶路':' · 先办头一步')}</>:
           members.length?'先点弟子，再点差事牌。':'眼下没有可派工的弟子。'}
         {!actor&&members.length>0&&<span className="hidden lg:inline">也可把弟子拖到差事牌上。</span>}
       </p>

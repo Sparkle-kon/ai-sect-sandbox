@@ -66,7 +66,7 @@ describe('explicit two native slots and point choices with no implied winner', (
     const review = await store.reviewResumePair(left, right);
     expect(review.right.status).toBe('absent');
     for (const [status, wording] of [
-      ['absent', '此版位无副本'], ['damaged', '此版完整性校验失败'], ['unsupported', '存储后端不支持核验此版位'],
+      ['absent', '这里没有存档'], ['damaged', '此版完整性校验失败'], ['unsupported', '当前存档方式无法核对这一版'],
     ] as const) {
       const test = { ...review, right: { status, address: right } } satisfies SaveResumePairReview;
       const output = view({ left, right, review: test });

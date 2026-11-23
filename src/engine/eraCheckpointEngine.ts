@@ -206,13 +206,13 @@ export async function prepareEraCheckpoint(world: WorldState, source: SaveBranch
   try { raw = codec.encode(world); }
   catch (error) {
     abort(signal);
-    if (isRecord(error) && error.code === 'size') return fail('size', '原生世界超过年代检查点字节限额。');
+    if (isRecord(error) && error.code === 'size') return fail('size', '当前世界太大，无法打包为年代检查点。');
     return fail('invalid_world', '当前世界未通过完整存档校验。');
   }
   abort(signal);
-  if (raw.length < 1 || raw.length > ERA_CHECKPOINT_MAX_BYTES) return fail('size', '原生世界超过年代检查点字节限额。');
+  if (raw.length < 1 || raw.length > ERA_CHECKPOINT_MAX_BYTES) return fail('size', '当前世界太大，无法打包为年代检查点。');
   const payload = utf8(raw);
-  if (!int(payload.byteLength, 1, ERA_CHECKPOINT_MAX_BYTES)) return fail('size', '原生世界超过年代检查点字节限额。');
+  if (!int(payload.byteLength, 1, ERA_CHECKPOINT_MAX_BYTES)) return fail('size', '当前世界太大，无法打包为年代检查点。');
   const payloadSha256 = await sha256(payload, signal);
   const parts: EraPartInfo[] = [];
   const chunks: Uint8Array[] = [];
@@ -250,10 +250,10 @@ async function verifiedNativePayload(manifest:EraManifest,payload:Uint8Array,cod
   const text = decodeUTF8(payload, 'invalid_world');
   let world: WorldState;
   try { world = codec.decode(text); }
-  catch { abort(signal); return fail('invalid_world', '原生世界未通过完整存档校验。'); }
+  catch { abort(signal); return fail('invalid_world', '检查点里的世界存档未通过完整校验。'); }
   abort(signal);
   if (world.tick !== manifest.tick || world.year !== manifest.year || world.month !== manifest.month) {
-    return fail('integrity', '年代清单与原生世界的实际日期不符。');
+    return fail('integrity', '年代清单与其中存档的实际日期不符。');
   }
   return {manifest, world};
 }

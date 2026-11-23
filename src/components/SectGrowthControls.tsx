@@ -23,8 +23,8 @@ export function SectGrowthNotices({view,tick,busy,command}:{
     aria-label="山门近况">
     <p aria-label="仙盟考核">
       {review?<>仙盟年考：{review.year} 年 · {review.previousRating===review.rating?review.rating:`${review.previousRating} → ${review.rating}`}
-        {review.stipend>0&&` · 补助 ${review.stipend} 枚灵石`}；下回约余 {until} 月。</>:
-        <>距首次仙盟年考约 {until} 月 · 本门弟子 {view.livingDisciples} 人</>}
+        {review.stipend>0&&` · 补助 ${review.stipend} 枚灵石`}；离下回还有约 {until} 月。</>:
+        <>距初次仙盟年考还有约 {until} 月 · 本门弟子 {view.livingDisciples} 人</>}
     </p>
     {debt&&<div className="flex flex-wrap items-center gap-2">
       {debt.notice&&debt.monthsRemaining<=2&&<p className="text-amber-200">{debt.notice}</p>}
@@ -37,7 +37,7 @@ export function SectGrowthNotices({view,tick,busy,command}:{
 export function SectBuildingUpgrades({view,busy,command}:{view:SectGrowthView;busy:boolean;command?:(command:SectGrowthCommand)=>void}){
   return <details className="mt-2 rounded-md border border-amber-300/25 bg-slate-950/80">
     <summary className="min-h-11 cursor-pointer content-center px-2.5 text-sm text-amber-100 focus-visible:outline focus-visible:outline-amber-300">山门营造</summary>
-    {command&&<p className="px-2.5 pb-1 text-xs text-slate-300">营造或还款后，未交的差事单须重新安排。</p>}
+    {command&&<p className="px-2.5 pb-1 text-xs text-slate-300">动工或还债后，还没定下的差事要重新派。</p>}
     <ul className="space-y-1 px-2.5 pb-2" aria-label="宗门建筑">
       {view.buildings.map(entry=><li key={entry.id} className="flex min-w-0 flex-wrap items-center justify-between gap-1 rounded-md bg-slate-900/70 px-2 py-1.5">
         <p className="min-w-0 text-sm text-amber-100">{entry.name} <span className="text-xs text-slate-300">{entry.level?`${entry.level} 级`:'未建'}</span></p>
@@ -61,7 +61,7 @@ export function SectFailurePanel({view,busy,onRestart}:{view:SectGrowthView;busy
     aria-label="宗门终局">
     <h2 className="font-serif text-lg text-rose-100">这一回，山门歇了</h2>
     <p className="my-2 text-sm">{failureCopy[view.failure.reason]}</p>
-    <p className="mb-2 text-xs">这份旧进度还在，可以从「更多」进去存档。</p>
+    <p className="mb-2 text-xs">旧局还在。想留个念想，可去「更多」存档。</p>
     {onRestart&&<button type="button" className={smallButton} disabled={busy} onClick={onRestart}>东山再起</button>}
   </section>;
 }

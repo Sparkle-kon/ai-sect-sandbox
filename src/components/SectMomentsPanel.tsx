@@ -50,7 +50,7 @@ export function SectMomentsPanel({world,busy,onAction}:{world:WorldState;busy:bo
       const ok=await onAction(expected,command);
       if(!mounted.current)return;
       if(!ok){
-        if(currentWorld.current===expected)setNotice('这一笔没有记下，请再试一次。');
+        if(currentWorld.current===expected)setNotice('这回没能记下，请再试一次。');
         return;
       }
       if(command.kind==='comment')setDraft(value=>value.trim()===command.text?'':value);
@@ -58,7 +58,7 @@ export function SectMomentsPanel({world,busy,onAction}:{world:WorldState;busy:bo
         setHiddenOpen(true);setOpened(undefined);setDraft('');
       }
     }catch{
-      if(mounted.current&&currentWorld.current===expected)setNotice('这一笔没有记下，请再试一次。');
+      if(mounted.current&&currentWorld.current===expected)setNotice('这回没能记下，请再试一次。');
     }finally{
       inFlight.current=false;
       if(mounted.current)setPending(false);
@@ -66,7 +66,7 @@ export function SectMomentsPanel({world,busy,onAction}:{world:WorldState;busy:bo
   }
 
   return <section aria-label="修仙朋友圈" className="min-w-0 space-y-2">
-    {view.posts.length===0&&<p className="rounded-md bg-stone-900/75 p-3 text-sm text-stone-300">这会儿还没有道友晒新鲜事。</p>}
+    {view.posts.length===0&&<p className="rounded-md bg-stone-900/75 p-3 text-sm text-stone-300">朋友圈还空着，等道友带点新鲜见闻回来。</p>}
     {notice&&<p className="px-1 text-xs text-amber-200" role="status">{notice}</p>}
     {view.posts.length>0&&<ol aria-label="朋友圈动态" className="max-h-[min(58dvh,36rem)] min-w-0 space-y-2 overflow-y-auto overscroll-contain pr-1">
       {view.posts.slice(0,limit).map(({post,authorName,caption,likes,comments})=>{

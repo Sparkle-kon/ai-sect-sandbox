@@ -93,7 +93,7 @@ describe('manual JSON preflight and move-only archive review', () => {
     expect(markup).toContain('近期章目 6 → 4 章 · 远纪档案 1 → 3 章');
     expect(markup).toContain('导出大小不变');
     expect(markup).toContain('确认仅迁移旧章');
-    expect(markup).toContain('不会删除章节、人物或原始凭据，也不会载入或重置世界');
+    expect(markup).toContain('不会删除章节、人物或原始记录，也不会载入或重置世界');
     expect(markup).not.toMatch(/private-chapter-|private-anchor-|实录原稿/);
     expect(onApply).not.toHaveBeenCalled();
     const noMoves = capacity.prepareArchiveOptimization(createInitialWorld(83175));

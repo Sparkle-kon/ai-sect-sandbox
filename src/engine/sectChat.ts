@@ -1,3 +1,4 @@
+import {sectPlayerFactCopy} from '../data/sectPlayerFactCopy';
 import {isSectChallengeCut,matchSectChallengeResult} from './sectChallengeProof';
 import {CHALLENGE_RESULT_VOICES,LABELS,GREETINGS,COMIC_NEUTRAL,WITNESS_VOICES,RUMOR_VOICES,GRAVE_VOICES,type Greeting} from '../data/sectChatVoices';
 import {SECT_COMEDY_TEMPLATES} from '../data/sectComedy';
@@ -339,7 +340,7 @@ export function projectSectChat(world:WorldState):readonly SectChatRoomView[]{
           }
           const line=event.category==='death'?GRAVE_VOICES[about.knowledge]:
             (about.knowledge==='witness'?WITNESS_VOICES:RUMOR_VOICES)[post.variant];
-          text=line.replace('{title}',()=>escapeTitle(event.title));
+          text=line.replace('{title}',()=>escapeTitle(sectPlayerFactCopy(event.title)));
           sourceEventId=event.id;
           break;
         }

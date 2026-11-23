@@ -4,6 +4,7 @@ import type {SectRecurringRole} from '../types/sectRecurring';
 import type {SpiritBeast,WorldState} from '../types/world';
 import {CultivatorPortrait} from './CultivatorPortrait';
 import {projectCultivatorPortrait} from './cultivatorPortraitModel';
+import {sectPlayerFactCopy} from '../data/sectPlayerFactCopy';
 import {BEAST_COLORS,isLivingBeast} from './spiritBeastView';
 
 export type SectRecurringViews=ReturnType<typeof projectSectRecurring>;
@@ -35,7 +36,7 @@ export function SectRecurringRead({world,visits}:{world:WorldState;visits:SectRe
         {beasts.length===1&&<SpiritCat beast={beasts[0]}/>}
         <div className="min-w-0 flex-1 space-y-1 text-sm leading-6 text-stone-200">
           <h3 className="font-serif text-amber-100">{visit.name} <span className="text-xs text-stone-400">{roles[visit.role]}</span></h3>
-          <p>{visit.report}</p>
+          <p>{visit.outcome==='public_news'&&visit.sourceEventId?sectPlayerFactCopy(visit.report):visit.report}</p>
           {speech&&<blockquote className="border-l border-amber-300/35 pl-2 font-serif">「{speech}」</blockquote>}
           {visit.recall&&<p className="text-xs text-stone-300"><span className="font-semibold text-amber-100">提起旧事：</span>{visit.recall}</p>}
           {visit.pill&&<p aria-label="丹药折损" className="text-xs text-rose-200">{ALCHEMY_RECIPES[visit.pill.id].name} −{visit.pill.count} 枚</p>}
