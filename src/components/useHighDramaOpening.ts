@@ -1,5 +1,6 @@
 import {useRef} from 'react';
-import type {useWorldSimulationController} from '../controllers/useWorldSimulationController';
+import {DEFAULT_PLAYABLE_STORYTELLER,type useWorldSimulationController} from '../controllers/useWorldSimulationController';
+import {configureStoryteller} from '../engine/storytellerDirector';
 import {highDramaPreset} from '../engine/highDramaPresetTerms';
 import type {BuiltinScenarioPresetId,WorldState} from '../types/world';
 
@@ -31,7 +32,8 @@ export function useHighDramaOpening(simulation:Simulation,onFocus:(id:string)=>v
       const {buildHighDramaPreset}=await import('../engine/highDramaPresetEngine');
       if(!current())return false;
       const prepared=buildHighDramaPreset(id);
-      if(!prepared||!current()||!latest.current.replaceWorld(prepared.world,expected.world,expected.revision))return false;
+      if(!prepared||!current()||!configureStoryteller(prepared.world,DEFAULT_PLAYABLE_STORYTELLER,prepared.focusActorId)||
+        !latest.current.replaceWorld(prepared.world,expected.world,expected.revision))return false;
       if(prepared.focusActorId)onFocus(prepared.focusActorId);
       return true;
     }catch{return false;}

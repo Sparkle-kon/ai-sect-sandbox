@@ -58,6 +58,8 @@ import { beastDuelContactForParticipant, availableBeastDuelChoices } from '../be
 import { beastDuelCommand, exactBeastDuelResponse } from '../beastDuelCognition';
 import { availableFurnaceEmergencyActions } from '../furnaceEmergency';
 import { furnaceEmergencyCommand, exactFurnaceEmergencyDecision } from '../furnaceEmergencyCognition';
+import { availableStorytellerActions } from '../storytellerDirector';
+import { storytellerCommand } from './storytellerDecision';
 import { activeBellWatchForActor, availableBellWatchActions } from '../bellWatch';
 import { bellWatchCommand } from './bellWatchDecision';
 import { availableNightDoorActions } from '../nightDoor';
@@ -587,12 +589,15 @@ export function quoteNativeDecision(
   const bellOptions=mayOfferLocalStory?availableBellWatchActions(cultivator,world,requestTick):[];
   const bellGuide=bellOptions.length?'若选钟楼差事，只原样抄写本人确在现场的一项许可。不写脚程、灾情或收信结果：'+
     JSON.stringify(bellOptions.map(bellWatchCommand)):'';
+  const storytellerOptions=mayOfferLocalStory&&world.storyteller?.focusActorId!==cultivator.id ? availableStorytellerActions(cultivator,world,requestTick) : [];
+  const storytellerGuide=storytellerOptions.length?'若愿赴眼前这一场机缘，只照抄自己的一项选择，不声称事情已经发生：'+
+    JSON.stringify(storytellerOptions.map(storytellerCommand)):'';
   return {
     handled: false,
     quotes: {
       activeVow, rescueOnly, boundaryReliefOnly, boundaryReliefOptions, rescueOptions, rescuePause, onPilgrimagePath,
       pilgrimageOptions, forkGuide, mealOptions, routeWarningOptions, routeWarningGuide, banquetGuide, afterSectGuide,
-      afterSect, banquet, forkOptions, rescueEffect, bellOptions, bellGuide,
+      afterSect, banquet, forkOptions, rescueEffect, bellOptions, bellGuide, storytellerOptions, storytellerGuide,
     },
   } as const;
 }

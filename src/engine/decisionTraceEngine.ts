@@ -120,6 +120,7 @@ export function recordDecisionTrace(world: WorldState, actorId: string, candidat
     decision.chosenAction==='APPRENTICESHIP_REUNION'||decision.apprenticeshipReunionMove!==undefined||decision.targetApprenticeshipReunionId!==undefined||
     decision.chosenAction==='LAST_ROSTER'||decision.lastRosterMove!==undefined||decision.targetLastRosterId!==undefined||
     decision.chosenAction==='BANQUET_SEAT'||decision.banquetSeatMove!==undefined||decision.targetBanquetSeatId!==undefined||
+    decision.chosenAction==='STORYTELLER_CHOICE'||decision.storytellerOfferId!==undefined||decision.storytellerMove!==undefined||
     decision.chosenAction==='BELL_WATCH'||decision.bellWatchMove!==undefined||decision.targetBellWatchId!==undefined||
     decision.chosenAction==='NIGHT_DOOR'||decision.nightDoorMove!==undefined||decision.targetNightDoorId!==undefined||
     decision.chosenAction==='BOUNDARY_GAP'||decision.boundaryGapMove!==undefined||decision.targetBoundaryGapId!==undefined||
@@ -192,6 +193,7 @@ export function createDecisionReplayTape(base: WorldState, councilMode: ReplayCo
 }
 
 const MECHANICAL_FIELDS = [
+  'storytellerOfferId', 'storytellerMove',
   'targetHeartDemonAftermathId','lastRosterMove','targetLastRosterId','banquetSeatMove','targetBanquetSeatId','nightDoorMove','targetNightDoorId','boundaryGapMove','targetBoundaryGapId','abandonedQuarterMove','targetAbandonedQuarterId','furnaceEmergencyMove','targetFurnaceEmergencyId','apprenticeshipReunionMove','targetApprenticeshipReunionId','pilgrimageForkMove','targetPilgrimageForkId','battlefieldAftermathMove','targetBattlefieldAftermathId','villageReunionMove','targetVillageReunionId','vacantGateMove','targetVacantGateSiegeId','wildMigrationMove','targetWildMigrationId','farewellLandingMove','targetFarewellDeceasedId', 'targetCampaignAssemblySiegeId','pavilionFireMove','targetPavilionFireId','duelMercy','mercyReunionMove','targetMercyReunionId',
   'targetLocationId', 'targetCultivatorId', 'rumorIntent', 'proposedScheme', 'targetTuitionId', 'targetOathId', 'oathTerm', 'marketGood',
   'marketQuantity', 'marketLimitPrice', 'targetMarketOrderId', 'targetSettlementId', 'civicMemorialMove', 'targetCivicDeedId', 'targetCivicMemorialId', 'targetVolunteerId', 'targetWitnessEventId',

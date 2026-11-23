@@ -2,6 +2,8 @@ import { availableLastRosterActions, recordLastRosterClosure, resolveLastRosterA
 import {exactLastRosterDecision} from './lastRosterCognition';
 import { availableBanquetSeatActions, resolveBanquetSeatAction } from './banquetSeats';
 import {exactBanquetSeatDecision} from './banquetSeatCognition';
+import { completeStorytellerChoice, planStorytellerChoice } from './storytellerDirector';
+import { storytellerActionApplied } from './cognition/storytellerDecision';
 import { activeBellWatchForActor, availableBellWatchActions, bellWatchActedThisTick, resolveBellWatchAction } from './bellWatch';
 import { exactBellWatchDecision } from './cognition/bellWatchDecision';
 import { availableNightDoorActions, resolveNightDoorAction } from './nightDoor';
@@ -834,6 +836,17 @@ export function applyCultivatorBrainDecision(
       });
       if(result){cultivator.currentAction='BANQUET_SEAT';cultivator.innerMonologue=exact.innerMonologue;}
       return result;
+    }
+    case 'STORYTELLER_CHOICE': {
+      if((activeAvatar(world)===cultivator||world.storyteller?.focusActorId===cultivator.id)&&
+          (modelInput||isProviderPersonaDecision(decision)))return null;
+      const story=planStorytellerChoice(world,cultivator,decision);
+      if(!story)return null;
+      const origin=cultivator.locationId;
+      const actual=applyCultivatorBrainDecision(world,cultivator,story.native,rng,authorizedBountyTargetId,emit,
+        explicitAvatarDecision,modelInput,allowForbiddenDuel);
+      completeStorytellerChoice(world,cultivator,story,storytellerActionApplied(cultivator,story.native,origin,actual));
+      return actual;
     }
     case 'BELL_WATCH': {
       if(activeAvatar(world)===cultivator&&decision!==explicitAvatarDecision)return null;

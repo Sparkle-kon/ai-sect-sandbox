@@ -1,4 +1,6 @@
 import { availableBellWatchActions } from '../bellWatch';
+import { availableStorytellerActions } from '../storytellerDirector';
+import { exactStorytellerDecision } from './storytellerDecision';
 import { exactBellWatchDecision } from './bellWatchDecision';
 import { activeAvatar } from '../avatarEngine';
 import { exactLastRosterDecision } from '../lastRosterCognition';
@@ -32,7 +34,7 @@ export function decodeOrdinaryDecision(snapshot: CognitiveSnapshot, quotes: Nati
   const { cultivator, world, requestTick } = snapshot;
   const {
     afterSect, banquet, forkOptions, boundaryReliefOnly, rescueOnly, rescuePause, rescueEffect, mealOptions,
-    activeVow, onPilgrimagePath, bellOptions
+    activeVow, onPilgrimagePath, bellOptions, storytellerOptions
   } = quotes;
   const {
     apprenticeshipOptions, ownRecovery, ordinaryHistory, ordinaryOptions, unverifiedTrail,
@@ -50,6 +52,11 @@ export function decodeOrdinaryDecision(snapshot: CognitiveSnapshot, quotes: Nati
     return exactBanquetSeatDecision(parsed,availableBanquetSeatActions(cultivator,world,requestTick));
   }
   if(parsed&&(Object.hasOwn(parsed,'banquetSeatMove')||Object.hasOwn(parsed,'targetBanquetSeatId')))return undefined;
+  if(parsed?.chosenAction==='STORYTELLER_CHOICE'){
+    if(requestTick!==world.tick+1||activeAvatar(world)===cultivator||world.storyteller?.focusActorId===cultivator.id||!exactStorytellerDecision(parsed,storytellerOptions))return undefined;
+    return exactStorytellerDecision(parsed,availableStorytellerActions(cultivator,world,requestTick));
+  }
+  if(parsed&&(Object.hasOwn(parsed,'storytellerOfferId')||Object.hasOwn(parsed,'storytellerMove')))return undefined;
   if(parsed?.chosenAction==='BELL_WATCH'){
     if(requestTick!==world.tick+1||activeAvatar(world)===cultivator||!exactBellWatchDecision(parsed,bellOptions))return undefined;
     return exactBellWatchDecision(parsed,availableBellWatchActions(cultivator,world,requestTick));

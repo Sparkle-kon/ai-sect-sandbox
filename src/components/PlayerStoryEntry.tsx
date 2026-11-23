@@ -11,6 +11,7 @@ export interface PlayerStoryEntryProps {
   onBack: () => void;
   onTools: () => void;
   openings?:ReactNode;
+  storySettings?:ReactNode;
   onFollow?: () => boolean;
   onEnter?: () => boolean;
   onOrder?: (action: AvatarOrder) => boolean;
@@ -20,7 +21,7 @@ const action = 'min-h-11 min-w-0 max-w-full rounded-lg border border-slate-700 b
 const primary = 'min-h-11 min-w-0 max-w-full rounded-lg bg-amber-300 px-3 py-2 text-sm font-semibold text-amber-950 [overflow-wrap:anywhere] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300 disabled:opacity-50';
 const ORDERS = { REST: '调息', CULTIVATE: '修炼' } as const;
 
-export function PlayerStoryEntry({role,revision,busy=false,titleRef,onEnter,onFollow,onOrder,onBack,onTools,openings}: PlayerStoryEntryProps) {
+export function PlayerStoryEntry({role,revision,busy=false,titleRef,onEnter,onFollow,onOrder,onBack,onTools,openings,storySettings}: PlayerStoryEntryProps) {
   const [review,setReview]=useState<{revision:object}>();
   const [notice,setNotice]=useState<{revision:object;text:string}>();
   const tried=useRef<typeof review>();
@@ -94,6 +95,7 @@ export function PlayerStoryEntry({role,revision,busy=false,titleRef,onEnter,onFo
       <details className="group min-w-0 rounded-lg border border-slate-800 px-3 text-sm text-slate-300 [overflow-wrap:anywhere]">
         <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300">更多工具<span aria-hidden="true" className="shrink-0 group-open:rotate-90">›</span></summary>
         <button type="button" className={`${action} mb-3`} disabled={busy} onClick={onTools}>查看地图、纪事与存档</button>
+        {storySettings}
       </details>
     </section>
   );

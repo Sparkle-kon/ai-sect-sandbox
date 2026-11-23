@@ -1,3 +1,4 @@
+import {StorytellerStyleSetting,useStorytellerScene} from './components/useStorytellerScene';
 import {useBellWatchStory} from './components/useBellWatchStory';
 import {SoundscapeToggle,useSoundscape} from './components/useSoundscape';
 import {useLastRosterStory} from './components/useLastRosterStory';
@@ -329,6 +330,8 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
     onClearAvatarNotice:()=>setAvatarNotice(undefined),
   });
   const {card:featuredStoryCard,pending:storyDecisionPending}=useFeaturedStoryDecision(simulation);
+  const directorScene=useStorytellerScene(simulation,(!dashboardOpen||cockpitOpen)&&!storyEntryOpen,storyDecisionPending,
+    cockpitOpen?'cockpit':'story',cockpitOpen?cockpitHeading:storyMoreRef);
   const bellStoryViewer=cockpitOpen?selectedCultivator:
     activeAvatar(world)??world.cultivators.find(({id})=>id===storyHome?.lead?.id)??selectedCultivator;
   const bellWatch=useBellWatchStory(simulation,!storyEntryOpen&&(!dashboardOpen||cockpitOpen),
@@ -702,7 +705,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
     viewer:soundViewer,siteId:!soundViewer?soundFact?.locationId:undefined,sourceId:!soundViewer?soundFact?.id:undefined,
     historical:Boolean(preview),fog:soundViewer?true:undefined});
   const soundToggle=<SoundscapeToggle sound={sound}/>;
-  if(cockpitOpen)return <PanoramicCockpitView world={visibleWorld} stageViewer={selectedCultivator} titleRef={cockpitHeading} exit={<div className="flex flex-wrap justify-end gap-2">{soundToggle}{cockpitSwitch}</div>} statusStrip={pulseStrip} stageOverride={featuredStoryCard} subplot={guidance.subplot} branchScene={furnaceEmergency??bellWatch??vacantGate??nightDoor??lastRoster??boundaryGap??abandonedQuarter??pavilionFire??pilgrimageFork??battlefieldAftermath??apprenticeshipReunion??villageReunion??wildMigration??mercyReunion??farewellLanding??frontierGorge??schoolFormDuel??flightCard??passageScene??banquetStory??campaignAssembly??anomalyRelay}
+  if(cockpitOpen)return <PanoramicCockpitView world={visibleWorld} stageViewer={selectedCultivator} titleRef={cockpitHeading} exit={<div className="flex flex-wrap justify-end gap-2">{soundToggle}{cockpitSwitch}</div>} statusStrip={pulseStrip} stageOverride={featuredStoryCard} stageAfterOverride={directorScene} subplot={guidance.subplot} branchScene={directorScene??furnaceEmergency??bellWatch??vacantGate??nightDoor??lastRoster??boundaryGap??abandonedQuarter??pavilionFire??pilgrimageFork??battlefieldAftermath??apprenticeshipReunion??villageReunion??wildMigration??mercyReunion??farewellLanding??frontierGorge??schoolFormDuel??flightCard??passageScene??banquetStory??campaignAssembly??anomalyRelay}
     time={{historical:Boolean(preview),running:isRunning,busy:cockpitBusy||storyDecisionPending,onStep:()=>void handleStepTick(),
       onToggleAutoplay:toggleStoryAutoplay,onReturnLive:()=>handleTimelinePreview(null),onOpenTimeline:()=>{
         openWorkspace('chronicle');rememberFold('chronicle','timeline');setStoryEntryOpen(false);
@@ -727,7 +730,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
         resolvePublicDialogue={publicRead?.dialogue.event} category={chronicleFilter} onCategoryChange={setChronicleFilter}/>
     </React.Suspense>}/>;
 
-  const activeReadingScene=furnaceEmergency??bellWatch??vacantGate??nightDoor??lastRoster??boundaryGap??abandonedQuarter??pavilionFire??dungeonFork??pilgrimageFork??battlefieldAftermath??apprenticeshipReunion??villageReunion??wildMigration??mercyReunion??farewellLanding??frontierGorge??nightHunt??schoolFormDuel??calamityArray??battlefieldRevisit??witnessInquiry??campaignAssembly??
+  const activeReadingScene=directorScene??furnaceEmergency??bellWatch??vacantGate??nightDoor??lastRoster??boundaryGap??abandonedQuarter??pavilionFire??dungeonFork??pilgrimageFork??battlefieldAftermath??apprenticeshipReunion??villageReunion??wildMigration??mercyReunion??farewellLanding??frontierGorge??nightHunt??schoolFormDuel??calamityArray??battlefieldRevisit??witnessInquiry??campaignAssembly??
     flightCard??passageScene??banquetStory??anomalyRelay;
   const isUrgentPublicScene=storyHome?.scene&&!storyHome.scene.earlier&&world.events.some(event=>event.id===storyHome.scene?.eventId&&
     (event.category==='combat'||event.category==='death'||event.category==='breakthrough'));
@@ -743,9 +746,12 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
       {soundToggle}{cockpitSwitch}
       {!storyEntryOpen&&<DesktopSandboxEntrance onOpen={openDashboard} disabled={isStepping||fastForwardLocked}/>}
     </div>
-    {featuredStoryCard??(storyEntryOpen?<PlayerStoryEntry titleRef={storyEntryHeading} role={projectStoryPlayerRole(world,storyHome.lead)}
+    {featuredStoryCard && directorScene?<>{featuredStoryCard}
+      <div className="mx-auto my-3 w-full max-w-lg px-4 sm:px-6">{directorScene}</div></>:featuredStoryCard??(storyEntryOpen?<PlayerStoryEntry titleRef={storyEntryHeading} role={projectStoryPlayerRole(world,storyHome.lead)}
       revision={world} busy={isStepping||fastForwardLocked} onBack={()=>setStoryEntryOpen(false)} onTools={openDashboard}
       openings={<HighDramaPresetPicker scopeKey={viewScopeKey} revision={world} disabled={dramaticOpening.disabled} onStart={dramaticOpening.start}/>}
+      storySettings={<StorytellerStyleSetting style={world.storyteller?.style} busy={isRunning||isStepping||fastForwardLocked}
+        onChange={style=>storyEntryCurrent()&&simulation.changeStorytellerStyle(style,world,timeline,storyEntryRevision)}/>}
       onFollow={storyHome.lead?followCurrentLead:undefined} onEnter={enterCurrentLead} onOrder={orderCurrentStoryAvatar} />:
       <StoryFirstHome stageWorld={world} stageViewer={activeAvatar(world)} leadId={storyHome.lead?.id} recapContext={world.chronicleArchive.chapters.length||world.coldHistory?.chapters.length?
         {world,scopeKey:viewScopeKey,viewer:activeAvatar(world)}:undefined} scene={storyHome.scene} reliefHomecoming={reliefHomecoming} reliefHomecomingFocus={reliefHomecomingLead?.actorName} subplot={guidance.subplot} nextGuide={nextGuide?.kind==='heart'?undefined:nextGuide} branchScene={activeReadingScene??<DeferredGrandSiegeMapScene world={world} viewer={activeAvatar(world)} fog personalOnly visible witnessScopeKey={viewScopeKey}/>} leadName={storyHome.lead?.name} playerName={activeAvatar(world)?.name}

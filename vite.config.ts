@@ -130,6 +130,7 @@ export default defineConfig({
           'local-scene-schemas': ['./src/engine/apprenticeshipReunionSchema.ts','./src/engine/furnaceEmergencySchema.ts','./src/engine/abandonedQuarterSchema.ts','./src/engine/boundaryGapSchema.ts','./src/engine/reliefHomecomingSchema.ts','./src/engine/nightDoorSchema.ts','./src/engine/banquetSeatSchema.ts','./src/engine/lastRosterSchema.ts'],
           'village-lamp-proof': ['./src/engine/reliefHomecomingProof.ts'],
           'bell-watch-save-proof': ['./src/engine/storage/bellWatchValidation.ts'],
+          'storyteller-save-proof': ['./src/engine/storage/storytellerValidation.ts'],
           'pavilion-save-proof': ['./src/engine/storagePavilionLoanValidation.ts'],
           'grand-siege-proof': ['./src/engine/grandSiegeProof.ts', './src/engine/grandSiegeWitnessView.ts', './src/engine/storageGrandSiegeValidation.ts', './src/types/grandSiege.ts'],
           // The game seed depends only on trace state; keep the optional replay rules separate.

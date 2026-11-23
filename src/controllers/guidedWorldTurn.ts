@@ -1,3 +1,5 @@
+import { availableStorytellerActions } from '../engine/storytellerDirector';
+import { storytellerCommand, exactStorytellerDecision } from '../engine/cognition/storytellerDecision';
 import { availableBellWatchActions } from '../engine/bellWatch';
 import { bellWatchCommand, exactBellWatchDecision } from '../engine/cognition/bellWatchDecision';
 import type { BellWatchOption } from '../types/bellWatch';
@@ -50,11 +52,29 @@ export function resolveGuidedBellWatchTurn(order: GuidedBellWatchTurn, world: Wo
   return decision ? { actorId: order.actorId, decision } : undefined;
 }
 
-export type GuidedWorldTurn=GuidedBellWatchTurn|GuidedDungeonTurn|GuidedHeavenlyAlchemyTurn|GuidedDaoPathTurn|GuidedImmortalAuctionTurn|GuidedCultivationClanTurn|GuidedAscensionTurn|GuidedProtagonistFlightTurn|GuidedHeartDemonRecoveryTurn|GuidedBattlefieldRevisitTurn|GuidedCalamityArrayTurn|GuidedSchoolFormDuelTurn|GuidedFrontierNightHuntTurn|GuidedWitnessInquiryTurn|GuidedCampaignAssemblyTurn|GuidedPavilionFireTurn|GuidedFrontierGorgeTurn|GuidedMercyReunionTurn|GuidedFarewellLandingTurn|GuidedWildMigrationTurn|GuidedVacantGateTurn|GuidedVillageReunionTurn|GuidedBattlefieldAftermathTurn|GuidedPilgrimageForkTurn|GuidedApprenticeshipReunionTurn|GuidedFurnaceEmergencyTurn|GuidedAbandonedQuarterTurn|GuidedBoundaryGapTurn|GuidedNightDoorTurn|GuidedBanquetSeatTurn|GuidedLastRosterTurn;
+export interface GuidedStorytellerTurn {
+  readonly kind: 'storyteller-choice';
+  readonly world: WorldState;
+  readonly branchId: string;
+  readonly revision: number;
+  readonly actorId: string;
+  readonly option: ReturnType<typeof availableStorytellerActions>[number];
+}
+
+export function resolveGuidedStorytellerTurn(order: GuidedStorytellerTurn, world: WorldState, branchId: string, revision: number) {
+  if (order.world !== world || order.branchId !== branchId || order.revision !== revision || order.option.chosenAction !== 'STORYTELLER_CHOICE') return undefined;
+  const bodies = world.cultivators.filter(actor => actor.id === order.actorId);
+  if (bodies.length !== 1) return undefined;
+  const decision = exactStorytellerDecision(storytellerCommand(order.option), availableStorytellerActions(bodies[0], world, world.tick + 1));
+  return decision ? { actorId: order.actorId, decision } : undefined;
+}
+
+export type GuidedWorldTurn=GuidedStorytellerTurn|GuidedBellWatchTurn|GuidedDungeonTurn|GuidedHeavenlyAlchemyTurn|GuidedDaoPathTurn|GuidedImmortalAuctionTurn|GuidedCultivationClanTurn|GuidedAscensionTurn|GuidedProtagonistFlightTurn|GuidedHeartDemonRecoveryTurn|GuidedBattlefieldRevisitTurn|GuidedCalamityArrayTurn|GuidedSchoolFormDuelTurn|GuidedFrontierNightHuntTurn|GuidedWitnessInquiryTurn|GuidedCampaignAssemblyTurn|GuidedPavilionFireTurn|GuidedFrontierGorgeTurn|GuidedMercyReunionTurn|GuidedFarewellLandingTurn|GuidedWildMigrationTurn|GuidedVacantGateTurn|GuidedVillageReunionTurn|GuidedBattlefieldAftermathTurn|GuidedPilgrimageForkTurn|GuidedApprenticeshipReunionTurn|GuidedFurnaceEmergencyTurn|GuidedAbandonedQuarterTurn|GuidedBoundaryGapTurn|GuidedNightDoorTurn|GuidedBanquetSeatTurn|GuidedLastRosterTurn;
 
 export function resolveGuidedWorldTurn(order:GuidedWorldTurn,world:WorldState,branch:string,revision:number){
   if(!('kind' in order))return resolveGuidedDungeonTurn(order,world,branch,revision);
   switch(order.kind){
+    case 'storyteller-choice':return resolveGuidedStorytellerTurn(order,world,branch,revision);
     case 'bell-watch':return resolveGuidedBellWatchTurn(order,world,branch,revision);
     case 'vacant-gate':return resolveGuidedVacantGateTurn(order,world,branch,revision);
     case 'battlefield-aftermath':return resolveGuidedBattlefieldAftermathTurn(order,world,branch,revision);

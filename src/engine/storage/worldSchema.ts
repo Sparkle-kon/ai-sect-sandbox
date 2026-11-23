@@ -1,4 +1,5 @@
-import { structure } from './primitives';
+import { storytellerShape } from './storytellerSchema';
+import { optional, structure } from './primitives';
 import { worldRulesActors } from './worldRulesActors';
 import { worldRulesInstitutions } from './worldRulesInstitutions';
 import { worldRulesSettlements } from './worldRulesSettlements';
@@ -12,4 +13,5 @@ export const shape = structure({
   ...worldRulesSettlements,
   ...worldRulesFrontier,
   ...worldRulesAvatars,
+  storyteller: optional(storytellerShape),
 });

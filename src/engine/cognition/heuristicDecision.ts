@@ -105,6 +105,8 @@ import { exactPavilionFireDecision, pavilionFireCommand } from '../pavilionFireC
 import { utilityAscensionDecision, utilityExpeditionRescueDecision } from './decisionFactsEarly';
 import { availableFrontierProviderActions, availableUpperArrayFieldProviderActions, holdsUpperPassageBody, upperPassageDecision, upperPassageRest, utilityCourierHandoffOffer, utilityHeartDemonDecision, dungeonDecisionOccasion, utilityDungeonDecision, utilityRouteWarning, PAIRED_OBSERVATORY_INTERVAL, PAIRED_OBSERVATORY_DAY, pairedObservatoryStation, preferredWorkshopWork, chooseLinkedToolConsent, urgentOrdinaryRefuge, urgentOrdinaryRecovery } from './decisionFactsLate';
 import { grandSiegeHeroReservedForPlayer, toMentorTransferDecision, toHousingDecision, possessedForWorkshopRelease, workshopReleaseDecision } from './decisionCommands';
+import { availableStorytellerActions } from '../storytellerDirector';
+import { exactStorytellerDecision, storytellerCommand } from './storytellerDecision';
 import { bellWatchCommand, exactBellWatchDecision } from './bellWatchDecision';
 import { completeHeuristicDecision, utilityDoctrineFoundingDecision } from './heuristicDecisionTail';
 
@@ -240,6 +242,19 @@ export function computeHeuristicDecision(
     if(choice)return exactFurnaceEmergencyDecision(furnaceEmergencyCommand(choice),emergency)??
       {chosenAction:'REST',innerMonologue:'先留在实处，不捏造援手。'};
     return {chosenAction:'REST',innerMonologue:'未肯应下援手这一问。'};
+  }
+  const story=world.storyteller;
+  if(story?.offer?.actorId===cultivator.id&&story.focusActorId!==cultivator.id&&activeAvatar(world)!==cultivator){
+    const options=availableStorytellerActions(cultivator,world);
+    const founding=options.length?utilityDoctrineFoundingDecision(cultivator,world):undefined;
+    if(founding)return founding;
+    const intent=cultivator.hp<cultivator.maxHp*.62?'rest':
+      story.offer.storyletId==='storm-watch'?'cultivate':
+      cultivator.personality==='逍遥'||cultivator.personality==='狂傲'?'travel':'talk';
+    const selected=options.find(row=>row.storytellerMove===intent)??
+      options.find(row=>row.storytellerMove==='cultivate')??options[0];
+    const exact=selected&&exactStorytellerDecision(storytellerCommand(selected),options);
+    if(exact)return exact;
   }
   const door=availableNightDoorActions(cultivator,world,world.tick);
   if(door.length){

@@ -1,3 +1,4 @@
+import type { StorytellerDirectorState, StorytellerMove } from './storytellerDirector';
 import type { BellWatchMove, BellWatchState } from './bellWatch';
 import type {ApprenticeshipReunionMove,ApprenticeshipReunionState} from './apprenticeshipReunion';
 import type {BanquetSeatMove,BanquetSeatState} from './banquetSeat';
@@ -251,6 +252,7 @@ export type ActionType =
   | 'BANQUET_SEAT'
   | 'NIGHT_DOOR'
   | 'BELL_WATCH'
+  | 'STORYTELLER_CHOICE'
   | 'BOUNDARY_GAP'
   | 'ABANDONED_QUARTER'
   | 'FURNACE_EMERGENCY'
@@ -620,6 +622,8 @@ export interface LLMConfig {
 }
 
 export interface LLMDecisionPayload {
+  storytellerOfferId?: string;
+  storytellerMove?: StorytellerMove;
   bellWatchMove?: BellWatchMove;
   targetBellWatchId?: string;
   targetHeartTrialId?: string;
@@ -3724,6 +3728,7 @@ export interface NorthWellRevisitReviewState {
 }
 
 export interface WorldState {
+  storyteller?: StorytellerDirectorState;
   roguelikeEncounters?:RoguelikeEncounterRecord[];
   forbiddenDuels?: ForbiddenDuelContact[];
   beastDuelContacts?:BeastDuelContact[];

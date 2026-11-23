@@ -1,3 +1,4 @@
+import { advanceStorytellerDirector } from '../storytellerDirector';
 import { recordBanquetSeatInvitation } from '../banquetSeats';
 import { recordPilgrimageForkArrival } from '../pilgrimageFork';
 import { recordBattlefieldAftermathTerminal } from '../battlefieldAftermath';
@@ -91,6 +92,7 @@ export function runChronicleAndPostTurn(context: WorldTickContext): void {
   recordEraHistoryTurn(prevState,nextState,completedEvents);
   publishTianjiGazette(prevState,nextState,completedEvents);
   recordRegionalTurnRegistry(nextState);
+  advanceStorytellerDirector(nextState,completedEvents);
   traceOptions?.onCompletedEvents?.(completedEvents);
   nextState.mapPresentation = traceOptions?.capturePresentation === false
     ? { tick: nextState.tick, trails: [], effects: [] }

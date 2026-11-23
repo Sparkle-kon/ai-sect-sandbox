@@ -1,5 +1,6 @@
 import { validateBattlefieldAftermathSave } from '../battlefieldAftermath';
 import { validateBellWatches } from './bellWatchValidation';
+import { validateStoryteller } from './storytellerValidation';
 import { validateVillageReunionSave } from '../villageReunion';
 import { validateAnomalyRelaySave } from '../anomalyRelay';
 import { validateVacantGateSave } from '../vacantGate';
@@ -229,5 +230,6 @@ export function verifyWorld(value: unknown): WorldState {
   validateFrontier(w);
   w.coldHistory = freezeColdHistory(w.coldHistory);
   validateBellWatches(w, fail);
+  validateStoryteller(w, actor, locations, fail);
   return w;
 }

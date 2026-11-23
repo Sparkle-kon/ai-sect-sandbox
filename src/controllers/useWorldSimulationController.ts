@@ -1,3 +1,5 @@
+import {configureStoryteller} from '../engine/storytellerDirector';
+import {cloneWorldWithColdHistory} from '../engine/coldHistoryEngine';
 import {resolveGuidedWorldTurn,type GuidedWorldTurn} from './guidedWorldTurn';
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {createInitialWorld} from '../data/initialWorld';
@@ -45,6 +47,14 @@ const saveTimelineIdentity = (): string | undefined => {
 };
 function observe<T>(ref:{readonly current:T}):{readonly current:T}{return ref;}
 
+export const DEFAULT_PLAYABLE_STORYTELLER = 'wandering_jianghu';
+
+function createPlayableWorld(...args: Parameters<typeof createInitialWorld>): WorldState {
+  const world = createInitialWorld(...args);
+  configureStoryteller(world, DEFAULT_PLAYABLE_STORYTELLER);
+  return world;
+}
+
 interface WorldSimulationControllerOptions {
   playbackEnabled:boolean;
   inspectCampaign:boolean;
@@ -57,7 +67,7 @@ interface WorldSimulationControllerOptions {
 export function useWorldSimulationController({
   playbackEnabled,inspectCampaign,onPreviewContextChange,onHistoricalPreview,onActivate,
 }:WorldSimulationControllerOptions){
-  const [world, setWorld] = useState<WorldState>(() => createInitialWorld());
+  const [world, setWorld] = useState<WorldState>(() => createPlayableWorld());
   const [viewEpoch, setViewEpoch] = useState(0);
   const saveContextVersion = useRef(0);
   const fastForwardSerial = useRef(0);
@@ -298,14 +308,22 @@ export function useWorldSimulationController({
     return true;
   };
 
+  const changeStorytellerStyle = (style: Parameters<typeof configureStoryteller>[1], expected: WorldState,
+    expectedTimeline: WorldTimeline, revision: number): boolean => {
+    if (isRunning || fastForwardRun.current || campaignGuard.current || history.current !== expectedTimeline ||
+      !canUseSaveContext(expected, revision) || expected.storyteller?.style === style) return false;
+    const next = cloneWorldWithColdHistory(expected);
+    return configureStoryteller(next, style, expected.storyteller?.focusActorId) && updateWorld(current => current === expected ? next : current) === next;
+  };
+
   const newWorldFromSeed = (seed: number, profileId: WorldgenProfileId, expected: WorldState, expectedContextVersion?: number): boolean =>
     isWorldSeed(seed) && isWorldgenProfileId(profileId) && canUseSaveContext(expected, expectedContextVersion) &&
-    replaceWorld(createInitialWorld(seed, profileId), expected, expectedContextVersion);
+    replaceWorld(createPlayableWorld(seed, profileId), expected, expectedContextVersion);
 
   const handleReset = () => {
     if (browsing.current) return;
     const active = authority.current;
-    const next = createInitialWorld(active.random.seed, active.worldgen?.profileId ?? 'classic');
+    const next = createPlayableWorld(active.random.seed, active.worldgen?.profileId ?? 'classic');
     replayTapes.current.clear();
     fairTurns.current.clear();
     setRestoredReadingOrigin(undefined);
@@ -506,7 +524,7 @@ export function useWorldSimulationController({
     ...freshness,
     world,visibleWorld,timeline,saveTimelineId,restoredReadingOrigin,
     viewEpoch,viewScopeKey,sourceBranch,preview,activateTimeline,restoreHistoricalFrame,clearPreview,
-    updateWorld,replaceWorld,newWorldFromSeed,canUseSaveContext,archiveCurrentNarrative,handleReset,
+    updateWorld,replaceWorld,newWorldFromSeed,changeStorytellerStyle,canUseSaveContext,archiveCurrentNarrative,handleReset,
     isRunning,setIsRunning,isStepping,tryBeginInteraction,endInteraction,tickIntervalMs,setTickIntervalMs,
     llmConfig,changeLlmConfig,handleStepTick,toggleAutoplay,compareDecision,fairModelCoverage,
     handleTimelinePreview,handleTimelineSelectBranch,handleTimelineFork,timelineNotice,

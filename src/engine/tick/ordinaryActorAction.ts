@@ -9,6 +9,8 @@ import { exactLastRosterDecision } from '../lastRosterCognition';
 import { availableLastRosterActions, isPrivateLastRosterEvent } from '../lastRoster';
 import { exactBanquetSeatDecision } from '../banquetSeatCognition';
 import { availableBanquetSeatActions, isPrivateBanquetSeatEvent } from '../banquetSeats';
+import { availableStorytellerActions, completeStorytellerChoice, planStorytellerChoice } from '../storytellerDirector';
+import { exactStorytellerDecision, storytellerActionApplied } from '../cognition/storytellerDecision';
 import { availableBellWatchActions } from '../bellWatch';
 import { exactBellWatchDecision } from '../cognition/bellWatchDecision';
 import { exactNightDoorDecision } from '../nightDoorCognition';
@@ -129,6 +131,14 @@ export function runOrdinaryActorAction(
     if(!prior||activeAvatar(prevState)===prior||!exactBanquetSeatDecision(modelProposal,
       availableBanquetSeatActions(prior,prevState,nextState.tick),true)){
       provided=undefined;
+      modelOrdinaryReplaced=true;
+    }
+  }
+  if(modelProposal?.chosenAction==='STORYTELLER_CHOICE'&&!avatarDecision){
+    const prior=prevState.cultivators.find(row=>row.id===cultivator.id);
+    if(!prior||activeAvatar(prevState)===prior||prevState.storyteller?.focusActorId===prior.id||!exactStorytellerDecision(modelProposal,
+      availableStorytellerActions(prior,prevState,nextState.tick),true)){
+      provided={chosenAction:'REST',innerMonologue:'先在原处歇息。'};
       modelOrdinaryReplaced=true;
     }
   }
@@ -506,12 +516,20 @@ export function runOrdinaryActorAction(
   // Invalid/declined online output may leave no order. Record the actual quiet fallback, never a new private signature.
   const unresolvedModelConsent=!expeditionOrder&&!provided&&!fieldNegotiation&&
     (traceOptions?.suppressAutoClanConsent?.has(cultivator.id)||modelProposal!==undefined);
-  const decision:LLMDecisionPayload=unresolvedModelConsent&&planned.chosenAction==='CULTIVATION_CLAN'?waitForOwnClanChoice():
+  const selectedDecision:LLMDecisionPayload=unresolvedModelConsent&&planned.chosenAction==='CULTIVATION_CLAN'?waitForOwnClanChoice():
     unresolvedModelConsent&&(planned.chosenAction==='VILLAGE_REUNION'&&(planned.villageReunionMove==='offer'||planned.villageReunionMove==='accept')||
       planned.chosenAction==='BATTLEFIELD_AFTERMATH'&&(planned.battlefieldAftermathMove==='offer_care'||planned.battlefieldAftermathMove==='accept_care')||
       planned.chosenAction==='FURNACE_EMERGENCY'&&planned.furnaceEmergencyMove==='accept_rescue')?
       {chosenAction:'REST',innerMonologue:'未曾应下旧交所问，先让这句话留在原处。'}:planned;
 
+  const story=selectedDecision.chosenAction==='STORYTELLER_CHOICE'
+    ? planStorytellerChoice(nextState,cultivator,selectedDecision) : undefined;
+  if(selectedDecision.chosenAction==='STORYTELLER_CHOICE'&&!story){
+    if(supplied)recordDecisionEffect?.(cultivator.id,false);
+    traceOptions?.onActor?.(cultivator.id,[],false);
+    return;
+  }
+  const decision=story?.native??selectedDecision;
   const captureTrace = traceOptions?.captureTrace !== false;
   const candidates = (captureTrace || traceOptions?.onActor) && decision.chosenAction !== 'EXPEDITION_DUNGEON' &&
     decision.chosenAction !== 'HEAVENLY_ALCHEMY' && decision.chosenAction !== 'DAO_PATH' &&
@@ -520,7 +538,7 @@ export function runOrdinaryActorAction(
     !activeProtagonistFlight(nextState,cultivator) && decision.targetHeartDemonAftermathId===undefined ?
     legalTraceCandidates(nextState, cultivator) : [];
   const chosenByModel = Boolean(modelProposal && !modelOrdinaryReplaced && !modelStoryChoiceReplaced && !expeditionModelReplaced);
-  if (traceOptions?.tape) rememberReplayDecision(traceOptions.tape, cultivator.id, decision, decisionDraws, chosenByModel, false, false, nextState);
+  if (traceOptions?.tape) rememberReplayDecision(traceOptions.tape, cultivator.id, story ? selectedDecision : decision, decisionDraws, chosenByModel, false, false, nextState);
   if(decision.chosenAction==='VACANT_GATE'){
     const exact=exactVacantGateDecision(decision,availableVacantGateActions(cultivator,nextState,nextState.tick),true);
     const applied=Boolean(exact&&(!(modelProposal||isProviderPersonaDecision(decision))||activeAvatar(nextState)!==cultivator)&&
@@ -567,6 +585,8 @@ export function runOrdinaryActorAction(
   const validEffect = decision.chosenAction === cultivator.currentAction && (evt !== null ||
     (decision.chosenAction === 'REST' && decision.targetHeartDemonAftermathId===undefined) || decision.chosenAction === 'CULTIVATE' ||
     (decision.chosenAction === 'EXPLORE' && previousLocation !== cultivator.locationId));
+  if(story)completeStorytellerChoice(nextState,cultivator,story,
+    validEffect&&storytellerActionApplied(cultivator,story.native,previousLocation,evt));
   recordOrdinaryActionEvidence(cultivator,nextState.tick,decision,ordinaryBefore,
     {applied:validEffect,avatar:avatarOrder?.actorId===cultivator.id,event:evt});
   if (recordDecisionEffect && supplied) recordDecisionEffect(cultivator.id, !avatarDecision && !modelOrdinaryReplaced && !modelStoryChoiceReplaced && !expeditionModelReplaced && validEffect);
