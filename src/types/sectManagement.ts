@@ -1,3 +1,4 @@
+import type { SectJobReport } from './sectJobs';
 export const STARTER_SECT_IDS = ['qingyun-odd-jobs','drunken-sword-hermitage'] as const;
 export type StarterSectId = typeof STARTER_SECT_IDS[number];
 export type StarterDraw = 0|1;
@@ -31,6 +32,7 @@ export interface SectManagementState {
   readonly foundingDiscipleIds:string[];
   buildings:ManagementBuildings;
   debt?:ManagementDebt;
+  latestReport?:SectJobReport;
 }
 
 /** Stable genesis namespace; a new draw is a new lineage, not a changed live roster. */

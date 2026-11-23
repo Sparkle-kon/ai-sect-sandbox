@@ -1,3 +1,4 @@
+import { sectJobReportShape, validateSectJobReport } from './sectJobReportValidation';
 import { STARTER_SECT_IDS, starterSectIdentity } from '../../types/sectManagement';
 import type { WorldState } from '../../types/world';
 import { arr, id, num, one, optional, structure, tick, wealth } from './primitives';
@@ -14,6 +15,7 @@ export const sectManagementShape = structure({
   foundingDiscipleIds: arr(5,id),
   buildings: structure({ hall:building, kitchen:building, furnace:building, trainingGround:building, gate:building, library:building }),
   debt: optional(structure({ creditorId:id, principal:wealth, dueTick:tick })),
+  latestReport: optional(sectJobReportShape),
 });
 
 export function validateSectManagement(world: WorldState, fail: (field:string)=>never): void {
@@ -62,4 +64,5 @@ export function validateSectManagement(world: WorldState, fail: (field:string)=>
   if(world.tick===state.foundedTick&&(state.starterId==='qingyun-odd-jobs'?
       state.debt?.principal!==80||state.debt?.dueTick!==state.foundedTick+6:state.debt!==undefined))
     return fail('sectManagement.debt');
+  if(state.latestReport)validateSectJobReport(world,state.latestReport,fail);
 }

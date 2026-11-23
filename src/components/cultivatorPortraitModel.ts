@@ -22,7 +22,7 @@ interface PortraitFace {
 }
 type PortraitHalo = { kind: 'gold-wheel' | 'dharma' | 'blood-moon'; color: string };
 type HairStyle=0|1|2|3|4|5|6|7|8|9|10|11;
-export type PortraitExpression='calm'|'joy'|'fight'|'wounded'|'demon';
+export type PortraitExpression='calm'|'joy'|'fight'|'wounded'|'demon'|'surprise'|'dismay'|'concern';
 export interface PortraitProjectionOptions {
   readonly viewer?:Cultivator;
   readonly historical?:boolean;

@@ -1,4 +1,5 @@
 import {openSectMeetingTurn,readSettledSectMeeting} from '../sectMeetingOrders';
+import {settleSectJobReportRow} from '../sectJobReportRules';
 import type { WorldState } from '../../types/world';
 import { cloneWorldWithColdHistory } from '../coldHistoryEngine';
 import { worldRandom } from '../worldRandom';
@@ -52,8 +53,17 @@ export function runTickStagePipeline(inputs: TickInputs, ports: TickActionPorts)
   const preTurnContext = preTurn.run(context);
   const turnContext = movement.run(preTurnContext);
   actions.run(turnContext, ports);
+  const observed=sectMeeting&&readSettledSectMeeting(sectMeeting,nextState.tick);
+  const managed=nextState.sectManagement;
+  if(managed&&observed?.length){
+    // Dice belong to a dated native meeting, not to portrait order, UI skips or optional model prose.
+    const resolved=new Map([...observed].sort((a,b)=>a.discipleId<b.discipleId?-1:a.discipleId>b.discipleId?1:0)
+      .map(row=>[row.discipleId,settleSectJobReportRow(nextState,row,rng)]));
+    managed.latestReport={openedTick:inputs.prevState.tick,settledTick:nextState.tick,sectId:managed.sectId,leaderId:managed.leaderId,
+      rows:observed.map(row=>resolved.get(row.discipleId)!)};
+  }
   institutions.run(turnContext, ports);
   chronicle.run(turnContext);
-  if(sectMeeting)inputs.traceOptions?.onSectJobsSettled?.(readSettledSectMeeting(sectMeeting,nextState.tick));
+  if(observed)inputs.traceOptions?.onSectJobsSettled?.(observed);
   return turnContext.nextState;
 }

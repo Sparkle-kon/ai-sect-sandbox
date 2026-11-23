@@ -78,8 +78,16 @@ it('runs an actual monthly assignment from the default board and does not advanc
     await act(async()=>{commit.click();commit.click();});
     await when(()=>!!host.textContent?.includes('仙历 1001 年 2 月'));
     expect(host.textContent).not.toContain('仙历 1001 年 3 月');
-    expect(host.textContent).toContain('静修后增长');
+    await when(()=>!!host.querySelector('[data-sect-report]'));
+    expect(host.querySelector('[data-sect-report]')?.textContent).toContain('闭关修炼');
+    await press(host,'跳过汇报');
+    await when(()=>!!host.querySelector('[data-sect-morning]'));
     expect(host.textContent).toContain('已派 0 人');
+    await press(host,'更多','summary');
+    await press(host,'故事书卷');
+    await press(host,'回掌门台');
+    expect(host.querySelector('[data-sect-report]')).toBeNull();
+    expect(host.textContent).toContain('仙历 1001 年 2 月');
   }finally{
     await act(async()=>root.unmount());host.remove();vi.restoreAllMocks();vi.unstubAllGlobals();
   }

@@ -184,6 +184,9 @@ const expressions={
  joy:{eye:'M-8 .1Q-2-6.3 4-3.7L8 .3Q2 2.5-8 .1Z',lid:'M-8 .1Q-2-6.3 4-3.7L8 .3',brow:'M-8-8q7-5 15-2',ry:2.03,cy:-.86,lips:'M52 72q8 3 16-.4-5.3 9.8-11.5 6.1Z',mouth:'M53.5 73.2q6 1.5 13 0'},
  fight:{eye:'M-8-.4Q-1-3.5 3.8-.5L8 1.5Q1 3.3-8-.4Z',lid:'M-8-.4Q-1-3.5 3.8-.5L8 1.5',brow:'M-8-8Q-2-8 7-4',ry:1.43,cy:.44,lips:'M53 73l6.7-.8 7.3.8-6.2 2.1Z',mouth:'M53.5 73q5.3-1.7 12.3.3'},
  wounded:{eye:'M-8 .5Q-2-2.4 4-1L8 1Q2 2.6-8 .5Z',lid:'M-8 .5Q-2-2.4 4-1L8 1',brow:'M-8-4q7-1.3 15-5',ry:.91,cy:.45,lips:'M54 75.3q5-4.6 12-1.5-5.9 2.7-12 1.5Z',mouth:'M54.5 75q6.2-3 10.7-1.1'},
+ surprise:{eye:'M-7 0Q-5-6 1-5.2 6-4.4 7 .1 1 5-7 0Z',lid:'M-7 0Q-5-6 1-5.2 6-4.4 7 .1',brow:'M-7-10q7-4 14-1',ry:2.4,cy:-.66,lips:'M57 75q.5-5 4-5 4 0 4 4-3 6-8 1Z',mouth:'M58 75q2-4 5.5-1.7'},
+ dismay:{eye:'M-8 .2Q-3-2.2 4-1.4L8 .5Q3 2.6-8 .2Z',lid:'M-8 .2Q-3-2.2 4-1.4L8 .5',brow:'M-7-6q5-1 13 1.6',ry:1.07,cy:.25,lips:'M53 75q6-4 14-1.3-7 3.2-14 1.3Z',mouth:'M54 74.8q5.2-2 11.6-.7'},
+ concern:{eye:'M-8 .4Q-2-3.1 3.8-2L8 .6Q2 3.1-8 .4Z',lid:'M-8 .4Q-2-3.1 3.8-2L8 .6',brow:'M-8-4.8q6 0 15-3.4',ry:1.52,cy:.26,lips:'M53 75q7-4.2 14.4-1.4-7 3.5-14.4 1.4Z',mouth:'M54 74.5q5.8-2.2 12-.6'},
  demon:{eye:'M-8-.1Q-3-5 3-2.6L8 1.4Q.5 4.1-8-.1Z',lid:'M-8-.1Q-3-5 3-2.6L8 1.4',brow:'M-8-9q4-.2 15 5',ry:1.95,cy:-.24,lips:'M52 74q9 1 16-3.6-3.5 7.2-9.6 6.6Z',mouth:'M53 74.5q8 1.7 14-3.1'},
 } as const;
 
@@ -211,6 +214,8 @@ export function PortraitEyes({portrait}:Portrayed){
   </g>)}
   <path d={e.lips} fill={demon?'#a95073':wounded?chroma(face.skin,'#815360',.38):chroma(face.skin,'#a45464',.56)}/>
   <path d={e.mouth} fill="none" stroke={demon?'#852b59':'#714052'} strokeWidth={wounded?.65:.84} strokeLinecap="round"/>
+  {state==='dismay'&&<path d="m80 38 1.5 6m2.8-7 1.5 6m2.8-7 1.5 6" fill="none" stroke={face.ink} strokeWidth="1.4" strokeLinecap="round"/>}
+  {state==='surprise'&&<path d="m88 42 2.2 4.3 4.9 1.7-4.5 2.2-2 4.7-1.8-4.5-5-2.2 5-1.7Z" fill="#f6d899"/>}
   {joy&&<path d="M56 74.35q4.6.65 9-.15l-1.7 1.3h-5.8Z" fill="#fff0d2"/>}
   {fight&&<path d="m58 45 1 4m3-4-1 4" fill="none" stroke={skinShade} strokeWidth=".79"/>}
   {wounded&&<g><path d="M82 61q-4 5-1.5 8 3 1 3-2Z" fill="#eaf3df" opacity=".84"/><path d="M66 74.5q2 2.3.6 3.4" fill="none" stroke="#ab5262" strokeWidth="1.2" strokeLinecap="round"/></g>}

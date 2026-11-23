@@ -3,7 +3,7 @@ import {previewStarterSect} from '../engine/starterSectWorld';
 import {MANAGEMENT_BUILDING_IDS,STARTER_SECT_IDS,
   type ManagementBuildings,type StarterDraw,type StarterSectId} from '../types/sectManagement';
 import type {WorldState} from '../types/world';
-import type {SectJobObservation} from '../types/sectJobs';
+import type {SectJobObservation,SectJobReport} from '../types/sectJobs';
 import {CultivatorPortrait} from './CultivatorPortrait';
 import {projectCultivatorPortrait} from './cultivatorPortraitModel';
 import {LocalCourtyardCanvas} from './LocalCourtyardCanvas';
@@ -15,6 +15,7 @@ import {SectQuirkBadges} from './SectQuirkBadges';
 import {sectQuirkLabels} from './sectQuirkLabels';
 import type {ConfirmSectJobs} from './SectMorningBoard';
 
+const SectJobReportStage=lazy(async()=>({default:(await import('./SectJobReportStage')).SectJobReportStage}));
 const SectMorningBoard=lazy(async()=>({default:(await import('./SectMorningBoard')).SectMorningBoard}));
 
 type HomeView='story'|'cockpit'|'sandbox'|'saves';
@@ -26,6 +27,8 @@ export interface SectManagementHomeProps {
   onTick?:()=>void;
   onConfirmJobs?:ConfirmSectJobs;
   observations?:readonly SectJobObservation[];
+  report?:SectJobReport;
+  onDismissReport?:(report:SectJobReport)=>void;
   titleRef?:RefObject<HTMLHeadingElement>;
 }
 
@@ -116,7 +119,7 @@ function StarterSelection({world,busy,onStart}:Omit<SectManagementHomeProps,'onO
   </>;
 }
 
-function ManagedCourtyard({world,busy,onTick,onConfirmJobs,observations}:Pick<SectManagementHomeProps,'world'|'onTick'|'onConfirmJobs'|'observations'>&{busy:boolean}){
+function ManagedCourtyard({world,busy,onTick,onConfirmJobs,observations,report,onDismissReport}:Pick<SectManagementHomeProps,'world'|'onTick'|'onConfirmJobs'|'observations'|'report'|'onDismissReport'>&{busy:boolean}){
   const state=world.sectManagement;
   const sect=world.sects.find(row=>row.id===state?.sectId);
   const leader=world.cultivators.find(row=>row.id===state?.leaderId);
@@ -128,6 +131,10 @@ function ManagedCourtyard({world,busy,onTick,onConfirmJobs,observations}:Pick<Se
     return {plan:buildLocalCourtyard(world,view,siteId),moving};
   },[world,siteId]);
   const plan=courtyard?.plan;
+  const [dismissedReport,setDismissedReport]=useState<SectJobReport>();
+  const presentIds=useMemo(()=>new Set(plan?.actors.map(actor=>actor.id)),[plan]);
+  const reportIsCurrent=report!==undefined&&report===state?.latestReport&&report!==dismissedReport&&report.rows.length>0&&
+    report.settledTick===world.tick&&report.sectId===state.sectId&&report.leaderId===state.leaderId;
   if(!state||!sect)return null;
   const roster=world.cultivators.filter(row=>row.alive&&row.id!==state.leaderId&&row.sectId===state.sectId);
   const creditor=state.debt&&world.cultivators.find(row=>row.id===state.debt?.creditorId)?.name;
@@ -139,7 +146,18 @@ function ManagedCourtyard({world,busy,onTick,onConfirmJobs,observations}:Pick<Se
       <span>{state.debt&&state.debt.principal>0
         ?`欠${creditor??'债主'} ${state.debt.principal} 枚 · ${due?`余 ${due} 月`:'还款日已到'}`:'暂无欠款'}</span>
     </p>
-    {onConfirmJobs?<Suspense fallback={<p role="status" className="text-sm text-slate-300">正在摆放晨会差事牌…</p>}>
+    {reportIsCurrent?<div className="grid min-w-0 items-start gap-3 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+      <section className={card} aria-label="宗门庭院">
+        {plan?<LocalCourtyardCanvas plan={plan} embedded/>:<p className="text-sm text-slate-300">此刻未见山门内的景象。</p>}
+        <BuildingList levels={state.buildings}/>
+      </section>
+      <Suspense fallback={<p role="status" className="order-first text-sm text-slate-300 lg:order-none">弟子们正在整理回话…</p>}>
+        <SectJobReportStage world={world} report={report} present={presentIds} onDismiss={closing=>{
+          if(closing!==report)return;
+          setDismissedReport(closing);onDismissReport?.(closing);
+        }}/>
+      </Suspense>
+    </div>:onConfirmJobs?<Suspense fallback={<p role="status" className="text-sm text-slate-300">正在摆放晨会差事牌…</p>}>
       <SectMorningBoard world={world} busy={busy} plan={plan} moving={courtyard?.moving} onConfirmJobs={onConfirmJobs} observations={observations}
         buildings={<BuildingList levels={state.buildings}/>}/>
     </Suspense>:<>
@@ -169,7 +187,7 @@ function ManagedCourtyard({world,busy,onTick,onConfirmJobs,observations}:Pick<Se
   </>;
 }
 
-export function SectManagementHome({world,busy=false,onStart,onOpen,onTick,onConfirmJobs,observations,titleRef}:SectManagementHomeProps){
+export function SectManagementHome({world,busy=false,onStart,onOpen,onTick,onConfirmJobs,observations,report,onDismissReport,titleRef}:SectManagementHomeProps){
   const sect=world.sects.find(row=>row.id===world.sectManagement?.sectId);
   return <main className="xianxia-shell min-h-dvh bg-slate-950 px-3 pb-8 pt-[max(.75rem,env(safe-area-inset-top))] text-slate-100 sm:px-6">
     <div className="mx-auto max-w-6xl space-y-3">
@@ -180,7 +198,7 @@ export function SectManagementHome({world,busy=false,onStart,onOpen,onTick,onCon
         </div>
         <More busy={busy} onOpen={onOpen}/>
       </header>
-      {sect?<ManagedCourtyard world={world} busy={busy} onTick={onTick} onConfirmJobs={onConfirmJobs} observations={observations}/>:
+      {sect?<ManagedCourtyard world={world} busy={busy} onTick={onTick} onConfirmJobs={onConfirmJobs} observations={observations} report={report} onDismissReport={onDismissReport}/>:
         <StarterSelection key={world.random.seed} world={world} busy={busy} onStart={onStart}/>}
     </div>
   </main>;

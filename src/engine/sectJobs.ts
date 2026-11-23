@@ -1,4 +1,4 @@
-import type {SectJobAssignment,SectJobDefinition,SectJobEvidence,SectJobObservation,SectJobPlan} from '../types/sectJobs';
+import type {SectJobAssignment,SectJobDefinition,SectJobEvidence,SectJobObservation,SectJobPlan,SectJobReportEffect} from '../types/sectJobs';
 import type {Cultivator,HerbId,LLMDecisionPayload,LocationNode,WorldEvent,WorldState} from '../types/world';
 import {availableAlchemy} from './alchemyEngine';
 import {activeAvatar} from './avatarEngine';
@@ -17,7 +17,7 @@ import {isRetiredFromService} from './serviceRetirementEngine';
 import {SECT_JOB_IDS,type SectJobId} from './sectQuirkCatalog';
 
 export {SECT_JOB_IDS,type SectJobId} from './sectQuirkCatalog';
-export type {SectJobAssignment,SectJobDefinition,SectJobEvidence,SectJobObservation,SectJobPlan} from '../types/sectJobs';
+export type {SectJobAssignment,SectJobDefinition,SectJobEvidence,SectJobObservation,SectJobPlan,SectJobReportEffect} from '../types/sectJobs';
 
 const card=(id:SectJobId,label:string,intent:string):SectJobDefinition=>({id,label,intent});
 export const SECT_JOB_DEFINITIONS:Readonly<Record<SectJobId,SectJobDefinition>>={
@@ -157,7 +157,9 @@ export function planSectJob(world:WorldState,actor:Cultivator,jobId:SectJobId):S
 }
 
 export function snapshotSectJobEvidence(world:WorldState,actor:Cultivator):SectJobEvidence {
-  return {tick:world.tick,discipleId:actor.id,siteId:actor.locationId,qi:actor.qiProgress,herbs:{...actor.herbs}};
+  const site=unique(world.locations,actor.locationId);
+  return {tick:world.tick,discipleId:actor.id,siteId:actor.locationId,qi:actor.qiProgress,herbs:{...actor.herbs},
+    contribution:actor.contribution,...(site?{siteHerbs:{...site.herbs}}:{})};
 }
 
 function choreId(world:WorldState,actor:Cultivator,chore:'kitchen'|'guard'){
@@ -247,11 +249,23 @@ export function observeSectJob(world:WorldState,actor:Cultivator,assignment:Sect
     (event.actorIds.includes(actor.id)||plan.decision.chosenAction==='SEALED_COURIER'&&
       world.couriers.dispatches.some(row=>row.id===plan.decision.targetDispatchId&&row.courierId===actor.id&&
         row.acceptedTick===world.tick&&event.id===`evt-${row.id}-accepted-${world.tick}`))?event:undefined;
-  const result=(phase:'performed'|'on_route',line:string):SectJobObservation=>({...base,phase,line,siteId:actor.locationId,
-    ...(validEvent?{sourceEventId:validEvent.id}:{})});
+  const result=(phase:'performed'|'on_route',line:string,nativeEffects?:readonly SectJobReportEffect[]):SectJobObservation=>
+    ({...base,phase,line,siteId:actor.locationId,...(validEvent?{sourceEventId:validEvent.id}:{}),
+      ...(nativeEffects?.length?{nativeEffects}:{} )});
+  const contribution=actor.contribution>before.contribution?
+    [{kind:'contribution' as const,amount:actor.contribution-before.contribution,stage:'native' as const}]:[];
   if(plan.kind==='chore'){
-    return validEvent?.id===choreId(world,actor,plan.chore)&&actor.locationId===plan.siteId?
-      result('performed',validEvent.description):blocked('这回没能完成山上的差事。');
+    if(validEvent?.id!==choreId(world,actor,plan.chore)||actor.locationId!==plan.siteId)
+      return blocked('这回没能完成山上的差事。');
+    if(plan.chore==='guard')return result('performed',validEvent.description,contribution);
+    const site=unique(world.locations,plan.siteId);
+    const costs=(['earth_root','jade_leaf'] as const).flatMap((herbId):SectJobReportEffect[]=>{
+      if(!site||!before.siteHerbs||site.herbs[herbId]-before.siteHerbs[herbId]!==-1)return [];
+      return [{kind:'herb',herbId,amount:-1,stage:'native'}];
+    });
+    const restored=actor.qiProgress-before.qi;
+    if(costs.length===1&&restored>0&&restored<=3)costs.push({kind:'qi',amount:restored,stage:'native'});
+    return result('performed',validEvent.description,costs);
   }
   const decision=plan.decision;
   if(decision.chosenAction==='EXPLORE'){
@@ -263,11 +277,12 @@ export function observeSectJob(world:WorldState,actor:Cultivator,assignment:Sect
   if(actor.locationId!==plan.siteId)return blocked('人已不在原处，这回没办成。');
   if(decision.chosenAction==='CULTIVATE'){
     const delta=actor.qiProgress-before.qi;
-    return delta>0?result('performed',`静修后增长${Math.round(delta*10)/10}点灵气。`):blocked('坐了一回关，灵气未见精进。');
+    return delta>0?result('performed',`静修后增长${Math.round(delta*10)/10}点灵气。`,[{kind:'qi',amount:delta,stage:'native'}]):blocked('坐了一回关，灵气未见精进。');
   }
   if(decision.chosenAction==='GATHER_HERBS'&&decision.targetHerbId){
     const delta=actor.herbs[decision.targetHerbId]-before.herbs[decision.targetHerbId];
-    return delta>0&&validEvent?.id===`evt-${world.tick}-${actor.id}-alchemy`?result('performed',`采得${delta}份${herbNames[decision.targetHerbId]}。`):blocked('这回没采到灵草。');
+    return delta>0&&validEvent?.id===`evt-${world.tick}-${actor.id}-alchemy`?result('performed',`采得${delta}份${herbNames[decision.targetHerbId]}。`,
+      [{kind:'herb',herbId:decision.targetHerbId,amount:delta,stage:'native'}]):blocked('这回没采到灵草。');
   }
   const receipt=validEvent&&workReceipt(world,actor,decision,validEvent);
   if(!receipt)return blocked('这回没有办成。');
@@ -275,5 +290,5 @@ export function observeSectJob(world:WorldState,actor:Cultivator,assignment:Sect
   const action=decision.chosenAction;
   const preliminary=action==='PLACE_MARKET_SELL'||action==='SEALED_COURIER'||action==='SPARRING'||
     action==='SOCIALIZE'&&assignment.jobId!=='matchmaking';
-  return result(preliminary?'on_route':'performed',workLine(assignment.jobId,action));
+  return result(preliminary?'on_route':'performed',workLine(assignment.jobId,action),action==='GUARD_DUTY'?contribution:undefined);
 }
