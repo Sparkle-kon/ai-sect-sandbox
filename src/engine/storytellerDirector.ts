@@ -7,6 +7,7 @@ import {
 } from '../types/storytellerDirector';
 import type { Cultivator, LLMDecisionPayload, LocationNode, MapTile, WorldEvent, WorldState } from '../types/world';
 import { activeAvatar } from './avatarEngine';
+import type { HighlightKind } from './director/highlight';
 import { activeBellWatchForActor } from './bellWatchPresence';
 import { isChronicleStoryFact } from './chronicleLead';
 import { isGrandSiegeFighterPresent } from './grandSiegePresence';
@@ -84,7 +85,7 @@ const settled=(world:WorldState,actor:Cultivator|undefined,siteId=actor?.locatio
   !!actor&&siteId!==undefined&&actor.hp>0&&
   !activeBellWatchForActor(world,actor)&&isGrandSiegeFighterPresent(world,actor,siteId);
 
-function canonicalFocus(world:WorldState,state:StorytellerDirectorState){
+export function canonicalStorytellerFocus(world:WorldState,state:StorytellerDirectorState){
   const canLead=(actor:Cultivator|undefined):actor is Cultivator=>settled(world,actor)&&openSite(siteAt(world,actor.locationId));
   const arc=world.protagonistSuccession.arcs.filter(row=>row.endedTick===undefined).at(-1);
   const byPreference=[actorAt(world,state.focusActorId),activeAvatar(world),actorAt(world,arc?.actorId)];
@@ -231,7 +232,7 @@ function scheduleStorylet(world:WorldState,state:StorytellerDirectorState,cadenc
   const due=world.tick-state.lastOfferTick>=cadence;
   if(!due&&(!current||usable))return undefined;
   if(current&&!usable&&!due)delete state.offer;
-  const actor=canonicalFocus(world,state);
+  const actor=canonicalStorytellerFocus(world,state);
   const site=actor&&siteAt(world,actor.locationId);
   if(!actor||!openSite(site)){
     if(current&&!usable)delete state.offer;
@@ -259,14 +260,19 @@ function scheduleStorylet(world:WorldState,state:StorytellerDirectorState,cadenc
 }
 
 /** Sample an actual completed month and choose one invitation without drawing from the world's RNG. */
-export function advanceStorytellerDirector(world:WorldState,recentEvents:readonly WorldEvent[]=world.events):void{
+export function advanceStorytellerDirector(world:WorldState,recentEvents:readonly WorldEvent[]=world.events,
+  native?:HighlightKind):void{
   const state=world.storyteller;
   if(!state||world.tick<=state.configuredTick||world.tick<=(state.lastAdvancedTick??-1))return;
   const style=styleOf(state.style);
   if(!style)return;
   state.lastAdvancedTick=world.tick;
   const worldBeat=advanceTension(world,state,recentEvents);
-  const chosen=scheduleStorylet(world,state,style.cadence);
+  if(state.offer && state.offer.expiresTick<world.tick)delete state.offer;
+  // The old quiet scene remains a normal playable fallback; it is never entered in the high-point ledger.
+  const quiet=scheduleStorylet(world,state,style.cadence);
+  const chosen=native ? {offeredTone:native==='heart_demon'||native==='forbidden_art'?'crisis' as const:'journey' as const,
+    reason:'cadence' as const} : quiet;
   state.pulse=[...(state.pulse??[]).slice(-(STORYTELLER_PULSE_LIMIT-1)),
     {tick:world.tick,tension:state.tension,worldBeat,...chosen}];
 }

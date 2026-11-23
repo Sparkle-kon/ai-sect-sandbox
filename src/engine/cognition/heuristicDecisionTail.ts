@@ -24,7 +24,7 @@ import { availableDoctrineActions } from '../doctrineEngine';
 import { availableMarketActions, marketClosureReason } from '../marketEngine';
 import { availableOathActions } from '../oathEngine';
 import { availableMentorshipActions } from '../mentorshipEngine';
-import { availableOccasionJoins } from '../occasionEngine';
+import { availableAutonomousOccasionJoins } from '../occasionEngine';
 import { availableDiplomacyActions } from '../diplomacyEngine';
 import { availableBountyHunts } from '../bountyEngine';
 import { availableSectEconomyActions } from '../sectEconomyEngine';
@@ -73,6 +73,7 @@ import { exactBattlefieldRevisitDecision, battlefieldRevisitCommand } from '../b
 import { activeHeartDemonAftermath, availableHeartDemonRecovery } from '../heartDemonAftermathEngine';
 import { exactHeartDemonRecoveryDecision, heartDemonRecoveryCommand } from '../heartDemonRecoveryCognition';
 import { voluntaryHeartDemonChoiceEffect, preferredHeartDemonSocialTarget } from '../heartDemonChoicePolicy';
+import { directorNpcAcceptanceDelta,directorRoll,utilityDirectorTravel } from '../director/nudgeIntegrations';
 import { knownMapLocations } from '../terrainEngine';
 import { knownRumorLead } from '../rumorEngine';
 import { utilityCeasefireDecision } from './decisionFactsEarly';
@@ -337,8 +338,18 @@ export function completeHeuristicDecision({
 
   const mayTeach = world.tick % 4 === 2 && !cultivator.guardAssignment;
   const learning = availableMentorshipActions(cultivator, world, mayTeach);
-  const tuition = learning.find((option) => option.action === (cultivator.personality === '狂傲' ||
-    (cultivator.personality === '苟道' && cultivator.hp < cultivator.maxHp * 0.75) ? 'DECLINE_TUITION' : 'ACCEPT_TUITION'));
+  const defaultTuition = cultivator.personality === '狂傲' ||
+    (cultivator.personality === '苟道' && cultivator.hp < cultivator.maxHp * 0.75) ? 'DECLINE_TUITION' : 'ACCEPT_TUITION';
+  const tuition = learning.find(option => {
+    if(option.action==='TEACH')return false;
+    if(!world.storyteller?.nudges?.length)return option.action===defaultTuition;
+    const offer=world.mentorship.offers.find(row=>row.id===option.targetTuitionId);
+    const delta=offer?directorNpcAcceptanceDelta(world,cultivator,offer.mentorId):0;
+    if(delta===0)return option.action===defaultTuition;
+    const preferred=directorRoll(world,world.tick,[cultivator.id,offer?.id??'', 'tuition'])<
+      (defaultTuition==='ACCEPT_TUITION'?100:0)+delta?'ACCEPT_TUITION':'DECLINE_TUITION';
+    return option.action===preferred;
+  });
   if (tuition) return { ...tuition, chosenAction: tuition.action, innerMonologue: tuition.action === 'ACCEPT_TUITION'
     ? '同门愿传授见解，我且请益。' : '功法须切合自身，今日先谢过师门。' };
   if (mayTeach) {
@@ -346,7 +357,7 @@ export function completeHeuristicDecision({
     if (lesson) return { ...lesson, chosenAction: lesson.action, innerMonologue: '此时正可推演经意，且请同门来听。' };
   }
 
-  const pendingOccasion = availableOccasionJoins(cultivator, world)[0];
+  const pendingOccasion = availableAutonomousOccasionJoins(cultivator, world)[0];
   if (pendingOccasion && !cultivator.guardAssignment && cultivator.hp >= cultivator.maxHp * 0.65 &&
       (cultivator.personality !== '苟道' || world.occasions.find((item) => item.id === pendingOccasion.targetOccasionId)?.kind === 'tournament')) {
     return { ...pendingOccasion, chosenAction: 'JOIN_OCCASION', innerMonologue: '盛会机缘难得，我愿一试。' };
@@ -819,6 +830,8 @@ export function completeHeuristicDecision({
       if(settle)return settle;
     }
   }
+  const betterRoute=utilityDirectorTravel(world,cultivator);
+  if(betterRoute)return betterRoute;
   if(ordinary)return ordinary;
 
   // 5. Socialize; trust in fellowship makes seeking a partner more attractive.

@@ -240,7 +240,7 @@ export const locationKind = one('sect_hq','spirit_vein','secret_realm','market',
 
 export const roguelikeRecord=structure({
   id,actorId:id,fromSiteId:id,siteId:id,openedTick:tick,kind:one(...ROGUELIKE_ENCOUNTER_KINDS),
-  guided:bool,witnessId:oid,status:one('offered','resolved','expired'),resolvedTick:otick,
+  guided:bool,directorTicketUntil:otick,directorChoice:optional((value,path)=>{if(value!==true)fail(path);}),witnessId:oid,status:one('offered','resolved','expired'),resolvedTick:otick,
   choice:optional(one(...ROGUELIKE_ENCOUNTER_CHOICES)),
   outcome:optional(structure({success:bool,qiDelta:num(-100,100),hpDelta:num(-1_000_000_000,1_000_000_000),
     karmaDelta:num(-200,200),lifespanDelta:num(-1_000_000_000,1_000_000_000),affinityDelta:num(-200,200),
@@ -286,7 +286,7 @@ export const heartEvidence:Validator=(value,path)=>{
 };
 export const heartFrame=structure({id,actorId:id,siteId:id,openedTick:tick,finalWaveEventId:id,evidence:heartEvidence,
   queued:optional(structure({choice:heartChoice,queuedTick:tick})),releasedTick:otick,cancelledTick:otick,
-  result:optional(structure({choice:heartChoice,origin:one('player','utility','model'),resolvedTick:tick,
+  result:optional(structure({choice:heartChoice,origin:one('player','utility','model','director'),resolvedTick:tick,
     outcome:one('passed','failed','died'),damage:wealth,karmaDelta:num(-200,200),masteryDelta:num(-100,100),
     personalityBefore:optional(heartPersonality),personalityAfter:optional(heartPersonality)})),
 });

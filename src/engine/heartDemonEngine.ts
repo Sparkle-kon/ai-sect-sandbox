@@ -148,6 +148,15 @@ export function prepareHeartDemonResolution(world:WorldState,actor:Cultivator,tr
     if(!replaced(world,guide))return {kind:'waiting'};
     frame.releasedTick=world.tick;
   }
+  const selected=world.storyteller?.pendingHighlightChoice;
+  const row=world.storyteller?.highlights?.at(-1);
+  if(!guide && selected?.key.kind==='heart_demon' && selected.key.actorId===actor.id && selected.key.siteId===frame.siteId &&
+      selected.key.sourceId===frame.id && selected.key.openedTick===frame.openedTick && frame.openedTick===world.tick-1 &&
+      row?.kind==='heart_demon' && row.tick===frame.openedTick && row.actorId===actor.id && row.sourceId===frame.id &&
+      row.chosen===selected.optionId && (selected.optionId==='face'||selected.optionId==='sever'||selected.optionId==='wrath')) {
+    if(world.storyteller) delete world.storyteller.pendingHighlightChoice;
+    return {kind:'ready',frame,choice:selected.optionId,origin:'director'};
+  }
   if(modelInput&&decision?.chosenAction==='FACE_TRIBULATION'&&decision.targetHeartTrialId===trial.id&&isChoice(decision.heartDemonChoice)&&
     Object.entries(decision).every(([key,value])=>value===undefined||privateKeys.has(key))){
     return {kind:'ready',frame,choice:decision.heartDemonChoice,origin:'model'};
@@ -194,6 +203,13 @@ export function recordHeartDemonResult(world:WorldState,actor:Cultivator,frame:H
   if(outcome==='failed'&&alive(actor)&&choice==='wrath')actor.personality='嗜血';
   frame.result={choice,origin,resolvedTick:world.tick,outcome,damage,karmaDelta:actor.karma-karma,
     masteryDelta:actor.techniqueMastery-mastery,...(before!==actor.personality?{personalityBefore:before,personalityAfter:actor.personality}:{})};
+  if(origin==='director'){
+    const row=world.storyteller?.highlights?.at(-1);
+    if(row?.kind==='heart_demon'&&row.sourceId===frame.id&&row.actorId===actor.id&&row.chosen===choice){
+      row.resolutionTick=world.tick;
+      row.resolutionEventId=heartDemonResultEventId(frame.id);
+    }
+  }
   const title=outcome==='passed'?'照破心魔':outcome==='failed'?'心魔反噬':'幻境未尽，道途已止';
   const ending=outcome==='passed'?'幻象散去，道心重新握在手中。':
     outcome==='failed'?before!==actor.personality?'幻象虽散，杀意却没有退去。':'幻象散开时，反噬已落在此身。':'未及走出幻境，道途便在这里断绝。';

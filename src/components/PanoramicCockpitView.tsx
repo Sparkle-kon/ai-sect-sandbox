@@ -1,3 +1,4 @@
+import type {SceneStageFrame} from './sceneStageModel';
 import {highDramaPreset} from '../engine/highDramaPresetTerms';
 import type {PublicBondArc} from './DramaticBondRead';
 import type {ReactNode,Ref} from 'react';
@@ -46,9 +47,10 @@ interface PanoramicCockpitViewProps extends Omit<PanoramicCockpitProps,'timeCont
   stageAfterOverride?:ReactNode;
   subplot?:PublicBondArc;
   branchScene?:ReactNode;
+  highlightStage?:SceneStageFrame;
 }
 
-export function PanoramicCockpitView({world,stageViewer,titleRef,time,exit,statusStrip,stageOverride,stageAfterOverride,subplot,branchScene,...slots}:PanoramicCockpitViewProps){
+export function PanoramicCockpitView({world,stageViewer,titleRef,time,exit,statusStrip,stageOverride,stageAfterOverride,subplot,branchScene,highlightStage,...slots}:PanoramicCockpitViewProps){
   const opening=highDramaPreset(world.builtinScenarioOrigin?.id);
   return <main data-panoramic-cockpit data-cockpit-tick={world.tick}
     className="xianxia-shell min-h-dvh bg-slate-950 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
@@ -60,7 +62,7 @@ export function PanoramicCockpitView({world,stageViewer,titleRef,time,exit,statu
       {exit}
     </header>
     {statusStrip&&<div className="mx-auto mb-2 w-full max-w-[192rem] px-2.5 sm:px-4">{statusStrip}</div>}
-    <PanoramicCockpit {...slots} stage={stageOverride?<>{stageOverride}{stageAfterOverride}</>:<CockpitStoryStage world={world} viewer={stageViewer} historical={time.historical} subplot={subplot} branchScene={branchScene}/>}
+    <PanoramicCockpit {...slots} stage={stageOverride?<>{stageOverride}{stageAfterOverride}</>:<CockpitStoryStage world={world} viewer={stageViewer} historical={time.historical} subplot={subplot} branchScene={branchScene} highlightStage={highlightStage}/>}
       timeControls={<CockpitTimeControls {...time} date={world}/>}/>
   </main>;
 }

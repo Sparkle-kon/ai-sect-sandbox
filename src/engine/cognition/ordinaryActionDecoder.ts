@@ -10,7 +10,7 @@ import { isTribulationActive, availableAmbushTargets } from '../tribulationEngin
 import { availableLeadershipActions } from '../sectPoliticsEngine';
 import { availableBeastTames } from '../spiritBeastEngine';
 import { availableBountyHunts } from '../bountyEngine';
-import { availableOccasionJoins } from '../occasionEngine';
+import { availableAutonomousOccasionJoins } from '../occasionEngine';
 import { availableDiplomacyActions } from '../diplomacyEngine';
 import { availableSectEconomyActions } from '../sectEconomyEngine';
 import { availableArtifactActions } from '../artifactEngine';
@@ -536,7 +536,7 @@ export function decodeOrdinaryAction(
   if (chosenAction === 'TAME_BEAST' && !legalBeast) return undefined;
   const legalHunt = chosenAction === 'PURSUE_BOUNTY' ? availableBountyHunts(cultivator, world).find((item) => item.targetBountyId === parsed.targetBountyId) : undefined;
   if (chosenAction === 'PURSUE_BOUNTY' && !legalHunt) return undefined;
-  const legalOccasion = chosenAction === 'JOIN_OCCASION' ? availableOccasionJoins(cultivator, world,requestTick).find((item) => item.targetOccasionId === parsed.targetOccasionId) : undefined;
+  const legalOccasion = chosenAction === 'JOIN_OCCASION' ? availableAutonomousOccasionJoins(cultivator, world,requestTick).find((item) => item.targetOccasionId === parsed.targetOccasionId) : undefined;
   if (chosenAction === 'JOIN_OCCASION' && !legalOccasion) return undefined;
   const foreign = chosenAction === 'OFFER_ALLIANCE' || chosenAction === 'DECLARE_WAR' || chosenAction === 'DEMAND_TRIBUTE' || chosenAction === 'LAUNCH_SIEGE';
   const legalForeign = foreign ? availableDiplomacyActions(cultivator, world)

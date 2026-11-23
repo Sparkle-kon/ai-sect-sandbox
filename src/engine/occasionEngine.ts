@@ -12,6 +12,7 @@ import { recordMemory } from './memoryEngine';
 import { rewardContribution } from './sectPoliticsEngine';
 import { dropInheritance } from './techniqueEngine';
 import { isTribulationActive } from './tribulationEngine';
+import {consumeDirectorNudge,directorSiteIsSafe,DIRECTOR_TOURNAMENT_TITLE,liveDirectorNudges} from './director/nudgeIntegrations';
 import { advanceExpeditionRescues, expireOccasionRescues, hasOpenExpeditionRescue, rescueHoldsExpeditionRoll,
   rescuedMemberOutOfOccasion } from './expeditionRescueEngine';
 
@@ -40,6 +41,20 @@ export function availableOccasionJoins(actor: Cultivator, world: WorldState, exe
     .map(({ id }) => ({ action: 'JOIN_OCCASION', targetOccasionId: id }));
 }
 
+/** A local director tournament is never allowed to sign for the player's actor. */
+export function availableAutonomousOccasionJoins(actor: Cultivator, world: WorldState, executionTick=world.tick):
+  ReturnType<typeof availableOccasionJoins> {
+  return availableOccasionJoins(actor,world,executionTick).filter(({targetOccasionId})=>{
+    const occasion=world.occasions.find(item=>item.id===targetOccasionId);
+    if(occasion?.title!==DIRECTOR_TOURNAMENT_TITLE||occasion.kind!=='tournament')return true;
+    const state=world.storyteller,lease=world.playerAvatar;
+    if(state?.focusActorId===actor.id||lease.possessedId===actor.id&&(lease.possessionUntilTick??0)>world.tick)
+      return false;
+    return !state?.highlights?.some(row=>row.kind==='tournament'&&row.actorId===actor.id&&row.sourceId===occasion.id&&
+      (row.chosen===undefined||row.chosen==='pass'));
+  });
+}
+
 function event(world: WorldState, occasion: WorldOccasion, token: string, title: string, description: string,
   actors: string[] = occasion.participantIds, category: WorldEvent['category'] = 'heavenly', locationId = occasion.locationId): WorldEvent {
   return { id: `evt-${world.tick}-${occasion.id}-${token}`, tick: world.tick, year: world.year, month: world.month,
@@ -56,12 +71,12 @@ export function joinOccasion(world: WorldState, actor: Cultivator, decision: LLM
   return event(world, occasion, `join-${actor.id}`, '修士报名盛会', `${actor.name}报名参加${occasion.title}，开场时启程。`, [actor.id], 'diplomacy', actor.locationId);
 }
 
-function startTournament(world: WorldState, rng: () => number): WorldEvent | undefined {
-  const stage = world.locations.find(({ type }) => type === 'market') ?? world.locations.find(({ ownerSectId }) => !ownerSectId) ?? world.locations[0];
-  if (!stage || rng() >= .5) return undefined;
+function startTournament(world: WorldState, rng: () => number, preferred?: WorldState['locations'][number]): WorldEvent | undefined {
+  const stage = preferred ?? world.locations.find(({ type }) => type === 'market') ?? world.locations.find(({ ownerSectId }) => !ownerSectId) ?? world.locations[0];
+  if (!stage || (!preferred && rng() >= .5)) return undefined;
   const kind = 'tournament';
   const id = `occasion-${world.tick}-${kind}`;
-  const title = '诸宗百年大比';
+  const title = preferred ? DIRECTOR_TOURNAMENT_TITLE : '诸宗百年大比';
   const occasion: WorldOccasion = { id, kind, title, locationId: stage.id, startedTick: world.tick, registrationClosesTick: world.tick + 3,
     expiresTick: world.tick + 12, status: 'registration', participantIds: [], remainingIds: [], bouts: [], expeditions: [], round: 0 };
   world.occasions.push(occasion);
@@ -85,6 +100,8 @@ function startLinkedExpedition(world: WorldState): WorldEvent | undefined {
     round: 0, omenId: row.id, anchorSiteId: site.id };
   world.occasions.push(occasion);
   recordExpeditionOpening(world, selected, occasion);
+  const omen=liveDirectorNudges(world).find(item=>item.kind==='omen_bias'&&item.reason==='dungeon'&&item.siteId===site.id);
+  if(omen)consumeDirectorNudge(world,omen);
   const witnesses=[row.operatorId,...(row.relay?[row.relay.recipientId]:[])].filter(id=>{
     const actor=world.cultivators.find(person=>person.id===id);
     return !!actor&&presentAtExpeditionAnchor(world,actor,site.id);
@@ -152,6 +169,15 @@ export function advanceOccasions(world: WorldState, rng: () => number): WorldEve
     const opened = startTournament(world, rng);
     if (opened) results.push(opened);
   }
+  if (!world.occasions.some(occasion=>occasion.kind==='tournament'&&(active(occasion)||occasion.startedTick===world.tick))) {
+    const nudge=liveDirectorNudges(world).find(row=>row.kind==='omen_bias'&&row.reason==='tournament');
+    const siteId=nudge?.kind==='omen_bias'?nudge.siteId:undefined;
+    const site=siteId&&world.locations.find(row=>row.id===siteId&&row.type==='market'&&directorSiteIsSafe(world,row));
+    if(nudge&&site){
+      const opened=startTournament(world,rng,site);
+      if(opened){results.push(opened);consumeDirectorNudge(world,nudge);}
+    }
+  }
   const openedExpedition = startLinkedExpedition(world);
   if (openedExpedition) results.push(openedExpedition);
   advanceExpeditionOmenRetention(world);
@@ -173,7 +199,7 @@ export function advanceOccasions(world: WorldState, rng: () => number): WorldEve
       occasion.remainingIds = entrants.sort((a, b) => power(b) - power(a) || a.id.localeCompare(b.id)).map(({ id }) => id);
       for (const person of entrants) person.locationId = occasion.locationId;
       const commenced=event(world, occasion, 'commence', `${occasion.title}正式开始`, `${entrants.length}名修士已到场。`);
-      openTournamentArena(world,occasion,commenced);
+      if(occasion.title!==DIRECTOR_TOURNAMENT_TITLE)openTournamentArena(world,occasion,commenced);
       results.push(commenced);
       continue;
     }

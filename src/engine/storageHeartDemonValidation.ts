@@ -1,3 +1,4 @@
+import {DIRECTOR_HIGHLIGHT_LIMIT} from './director/highlight';
 import type {HeartDemonFrame,HeartDemonEvidence,HeartDemonResult} from '../types/heartDemon';
 import type {Cultivator,WorldEvent,WorldState} from '../types/world';
 import {matchesWitnessedPersonalScene,witnessedPersonalSceneKind} from './witnessedPersonalStory';
@@ -72,6 +73,17 @@ function resultNumbers(world:WorldState,actor:Cultivator,frame:HeartDemonFrame,r
   const mastery=outcome==='passed'?effect.masteryDelta:outcome==='died'?0:choice==='wrath'?-4:choice==='sever'?-2:0;
   return personalityOK&&(damage>0)===(outcome!=='passed')&&damage<=480_000_000&&
     signed(result.karmaDelta,outcome==='died'?0:effect.karmaDelta)&&signed(result.masteryDelta,mastery);
+}
+
+function matchesDirectorResolution(world:WorldState,frame:HeartDemonFrame,result:HeartDemonResult):boolean{
+  const history=world.storyteller?.highlights;
+  if(frame.queued||result.resolvedTick!==frame.openedTick+1||!history?.length)return false;
+  const shown=history.filter(row=>row.tick===frame.openedTick);
+  if(!shown.length)return history.length===DIRECTOR_HIGHLIGHT_LIMIT&&history[0].tick>frame.openedTick;
+  const row=shown[0];
+  return shown.length===1&&row.kind==='heart_demon'&&row.sourceId===frame.id&&row.actorId===frame.actorId&&
+    row.chosen===result.choice&&row.resolutionTick===result.resolvedTick&&
+    (row.resolutionEventId===undefined||row.resolutionEventId===heartDemonResultEventId(frame.id));
 }
 
 /** Stable source stamps, not mutable relationship prose, establish the native trial checkpoint. */
@@ -170,7 +182,8 @@ export function validateHeartDemonTrials(world:WorldState,actorIds:ReadonlySet<s
         (releasedTick??0)>result.resolvedTick||(result.outcome==='passed')!==(stage==='passed')||stage==='heart_demon'||
         (result.outcome==='died'&&(actor.alive||actor.hp!==0))||
         (result.origin==='player'?(!queued||queued.choice!==result.choice||queued.queuedTick+1!==result.resolvedTick):
-          !!queued||!!guide&&releasedTick===undefined)||!resultNumbers(world,actor,frame,result))
+          !!queued||!!guide&&releasedTick===undefined)||
+        result.origin==='director'&&(!!guide||!matchesDirectorResolution(world,frame,result))||!resultNumbers(world,actor,frame,result))
         return fail('cultivators.tribulation.heartDemon.result');
       expected.set(heartDemonResultEventId(id),frame);
     }else{

@@ -1,4 +1,5 @@
-import { advanceStorytellerDirector } from '../storytellerDirector';
+import { advanceStorytellerDirector, canonicalStorytellerFocus, STORYTELLER_STYLES } from '../storytellerDirector';
+import { advanceDirectorHighlights } from '../director/directorHighlights';
 import { recordBanquetSeatInvitation } from '../banquetSeats';
 import { recordPilgrimageForkArrival } from '../pilgrimageFork';
 import { recordBattlefieldAftermathTerminal } from '../battlefieldAftermath';
@@ -92,7 +93,11 @@ export function runChronicleAndPostTurn(context: WorldTickContext): void {
   recordEraHistoryTurn(prevState,nextState,completedEvents);
   publishTianjiGazette(prevState,nextState,completedEvents);
   recordRegionalTurnRegistry(nextState);
-  advanceStorytellerDirector(nextState,completedEvents);
+  const director=nextState.storyteller;
+  const directorStyle=director&&STORYTELLER_STYLES.find(row=>row.id===director.style);
+  const highlight=director&&directorStyle&&nextState.tick>director.configuredTick&&nextState.tick>(director.lastAdvancedTick??-1)
+    ? advanceDirectorHighlights(nextState,director,canonicalStorytellerFocus(nextState,director),directorStyle.cadence) : undefined;
+  advanceStorytellerDirector(nextState,completedEvents,highlight);
   traceOptions?.onCompletedEvents?.(completedEvents);
   nextState.mapPresentation = traceOptions?.capturePresentation === false
     ? { tick: nextState.tick, trails: [], effects: [] }

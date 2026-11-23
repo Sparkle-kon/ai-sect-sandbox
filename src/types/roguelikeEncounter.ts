@@ -28,6 +28,8 @@ export interface RoguelikeEncounterRecord {
   openedTick:number;
   kind:RoguelikeEncounterKind;
   guided:boolean;
+  directorTicketUntil?:number;
+  directorChoice?:true;
   witnessId?:string;
   sectGate?:SectGateTrialStamp;
   status:'offered'|'resolved'|'expired';

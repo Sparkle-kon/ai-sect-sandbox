@@ -11,6 +11,7 @@ import {boundaryReliefCheckpoint} from './boundaryReliefCheckpoint';
 import {courierCheckpoint} from './sealedCourierEngine';
 import {pilgrimageCheckpoint} from './pilgrimageEngine';
 import {recordMemory} from './memoryEngine';
+import {consumeDirectorNudge,directorSiteIsSafe,liveDirectorNudges} from './director/nudgeIntegrations';
 import {regionForPoint} from './simulationRegionGeometry';
 import {ROGUELIKE_ENCOUNTER_CATALOG,admitRoguelikeStorylet,resolveRoguelikeStorylet,roguelikeEncounterChoiceIds,
   roguelikeStoryletCanUseWitness,selectRoguelikeStorylet} from './roguelikeEncounterCatalog';
@@ -81,6 +82,11 @@ function event(world:WorldState,row:RoguelikeEncounterRecord,phase:'open'|'settl
     description,category:'intrigue',actorIds:[row.actorId],locationId:row.siteId,witnessScope:'participants'};
 }
 
+export function canSeedRoguelikeEncounter(world:WorldState,actor:Cultivator):boolean {
+  return stationary(world,actor,actor.locationId) && !openRows(world).some(row=>row.actorId===actor.id &&
+    (row.status==='offered'||world.tick+1-row.openedTick<ROGUELIKE_ENCOUNTER_ACTOR_COOLDOWN));
+}
+
 /** Only the caller's independently successful movement step may open a new local encounter. */
 export function maybeOpenRoguelikeEncounter(world:WorldState,actor:Cultivator,originId:string):WorldEvent|undefined{
   if(actor.currentAction!=='EXPLORE'||!stationary(world,actor,actor.locationId)||
@@ -96,7 +102,10 @@ export function maybeOpenRoguelikeEncounter(world:WorldState,actor:Cultivator,or
     return event(world,row,'open');
   }
   if(!roguelikeEncounterRoute(world,originId,actor.locationId))return undefined;
-  if(!guided&&roguelikeEncounterRoll(world,stamp,'opening')>=ROGUELIKE_ENCOUNTER_NPC_OPENING_THRESHOLD)return undefined;
+  const destination=exactSite(world,stamp.siteId);
+  const ticket=destination&&directorSiteIsSafe(world,destination)?liveDirectorNudges(world).find(row=>
+    row.kind==='encounter_ticket'&&row.actorId===actor.id&&row.targetSiteId===stamp.siteId):undefined;
+  if(!guided&&!ticket&&roguelikeEncounterRoll(world,stamp,'opening')>=ROGUELIKE_ENCOUNTER_NPC_OPENING_THRESHOLD)return undefined;
   const aim=roguelikeEncounterRoll(world,stamp,'kind');
   const witness=roguelikeStoryletCanUseWitness(aim)?world.cultivators.filter(other=>other.id!==actor.id&&other.hp/other.maxHp<.45&&
     stationary(world,other,stamp.siteId)).sort((a,b)=>a.hp/a.maxHp-b.hp/b.maxHp||compare(a.id,b.id))[0]:undefined;
@@ -104,8 +113,9 @@ export function maybeOpenRoguelikeEncounter(world:WorldState,actor:Cultivator,or
   if(!selected)return undefined;
   const {roles,definition}=selected;
   const row:RoguelikeEncounterRecord={id:`roguelike-encounter-${world.tick}-${actor.id}`,...stamp,kind:definition.id,guided,
-    ...(roles.witness?{witnessId:roles.witness}:{}),status:'offered'};
+    ...(roles.witness?{witnessId:roles.witness}:{}),...(ticket?{directorTicketUntil:ticket.expiresTick}:{}),status:'offered'};
   (world.roguelikeEncounters??=[]).push(row);
+  if(ticket)consumeDirectorNudge(world,ticket);
   return event(world,row,'open');
 }
 
@@ -147,16 +157,16 @@ function earnAffinity(world:WorldState,actor:Cultivator,witness:Cultivator,delta
 }
 
 function settle(world:WorldState,actor:Cultivator,encounterId:string,choice:RoguelikeEncounterChoice,
-  explicitGuide:boolean):WorldEvent|null{
+  authority:'native'|'possessed'|'director'):WorldEvent|null{
   if(!isChoice(choice))return null;
   const row=activeRoguelikeEncounter(world,actor);
   if(!row||row.id!==encounterId)return null;
   if(world.tick===row.openedTick){
-    if(!explicitGuide||!row.guided||activeAvatar(world)!==actor)return null;
-  }else if(explicitGuide||row.guided&&choice!=='leave')return null;
+    if(authority==='native'||authority==='possessed'&&(!row.guided||activeAvatar(world)!==actor))return null;
+  }else if(authority!=='native'||row.guided&&choice!=='leave')return null;
 
   if(row.kind==='sect-gate'){
-    if(!explicitGuide)return null;
+    if(authority==='native'||!row.guided||activeAvatar(world)!==actor)return null;
     const sect=currentSectGateTrialAuthority(world,actor,row,stationary);
     if(!sect)return null;
     const sectReputationDelta=sectGateReputationDelta(sect.alignment,choice,sect.reputation);
@@ -177,6 +187,7 @@ function settle(world:WorldState,actor:Cultivator,encounterId:string,choice:Rogu
   if(effect.years)actor.lifespan=clamp(years+effect.years,effect.years<0?Math.min(years,actor.age+1):0,1_000_000_000);
   const affinityDelta=witness&&resolved.roles.witness===witness.id?earnAffinity(world,actor,witness,effect.affinity):0;
   row.status='resolved';row.resolvedTick=world.tick;row.choice=choice;
+  if(authority==='director'&&!row.guided)row.directorChoice=true;
   row.outcome={success,qiDelta:actor.qiProgress-qi,hpDelta:actor.hp-hp,karmaDelta:actor.karma-karma,
     lifespanDelta:actor.lifespan-years,affinityDelta};
   const receipt=event(world,row,'settled');
@@ -185,14 +196,24 @@ function settle(world:WorldState,actor:Cultivator,encounterId:string,choice:Rogu
 }
 
 export function settleRoguelikeEncounter(world:WorldState,actor:Cultivator,encounterId:string,choice:RoguelikeEncounterChoice):WorldEvent|null{
-  return settle(world,actor,encounterId,choice,false);
+  return settle(world,actor,encounterId,choice,'native');
 }
+export function resolveDirectorRoguelikeChoice(world:WorldState,actor:Cultivator,encounterId:string,
+  choice:RoguelikeEncounterChoice):WorldEvent|null{
+  const notable=world.storyteller?.highlightOffer;
+  const lease=world.playerAvatar;
+  if(!notable||notable.kind!=='encounter'||notable.sourceId!==encounterId||notable.actorId!==actor.id||
+      notable.siteId!==actor.locationId||notable.openedTick!==world.tick||
+      lease.possessedId!==undefined&&(lease.possessionUntilTick??0)>world.tick&&lease.possessedId!==actor.id)return null;
+  return settle(world,actor,encounterId,choice,'director');
+}
+
 export function resolveGuidedRoguelikeChoice(world:WorldState,encounterId:string,choice:RoguelikeEncounterChoice):WorldState{
   const avatar=activeAvatar(world),offering=avatar&&activeRoguelikeEncounter(world,avatar);
   if(!offering?.guided||offering.id!==encounterId||offering.openedTick!==world.tick||!isChoice(choice))return world;
   const next=cloneWorldWithColdHistory(world),nextAvatar=activeAvatar(next);
   if(!nextAvatar)return world;
-  const settled=settle(next,nextAvatar,encounterId,choice,true);
+  const settled=settle(next,nextAvatar,encounterId,choice,'possessed');
   if(!settled)return world;
   next.events=[settled,...next.events].slice(0,120);
   return next;

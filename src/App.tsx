@@ -1,3 +1,4 @@
+import {useDirectorHighlight} from './components/useDirectorHighlight';
 import {selectReadingOpportunity} from './components/StoryReadingOpportunity';
 import {projectStorytellerPulse} from './engine/storytellerDirector';
 import {StorytellerStyleSetting,useStorytellerScene} from './components/useStorytellerScene';
@@ -332,8 +333,11 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
     onClearAvatarNotice:()=>setAvatarNotice(undefined),
   });
   const {card:featuredStoryCard,pending:storyDecisionPending}=useFeaturedStoryDecision(simulation);
-  const directorScene=useStorytellerScene(simulation,(!dashboardOpen||cockpitOpen)&&!storyEntryOpen,storyDecisionPending,
-    cockpitOpen?'cockpit':'story',cockpitOpen?cockpitHeading:storyMoreRef);
+  const directorVisible=(!dashboardOpen||cockpitOpen)&&!storyEntryOpen;
+  const directorMode=cockpitOpen?'cockpit':'story',directorFocus=cockpitOpen?cockpitHeading:storyMoreRef;
+  const highlight=useDirectorHighlight(simulation,directorVisible,storyDecisionPending,directorMode,directorFocus);
+  const highlightScene=highlight?.card;
+  const directorScene=useStorytellerScene(simulation,directorVisible&&!highlightScene,storyDecisionPending,directorMode,directorFocus);
   const bellStoryViewer=cockpitOpen?selectedCultivator:
     activeAvatar(world)??world.cultivators.find(({id})=>id===storyHome?.lead?.id)??selectedCultivator;
   const bellWatch=useBellWatchStory(simulation,!storyEntryOpen&&(!dashboardOpen||cockpitOpen),
@@ -710,9 +714,9 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   const soundToggle=<SoundscapeToggle sound={sound}/>;
   const battlefieldAftermath=battlefieldAftermathRead?.card;
   const apprenticeshipReunion=apprenticeshipReunionRead?.card;
-  const readingOpportunity=selectReadingOpportunity([battlefieldAftermathRead,apprenticeshipReunionRead],directorScene);
+  const readingOpportunity=highlightScene??selectReadingOpportunity([battlefieldAftermathRead,apprenticeshipReunionRead],directorScene);
   const afterFeaturedScene=storyDecisionPending?undefined:readingOpportunity;
-  if(cockpitOpen)return <PanoramicCockpitView world={visibleWorld} stageViewer={selectedCultivator} titleRef={cockpitHeading} exit={<div className="flex flex-wrap justify-end gap-2">{soundToggle}{cockpitSwitch}</div>} statusStrip={pulseStrip} stageOverride={featuredStoryCard} stageAfterOverride={afterFeaturedScene} subplot={guidance.subplot} branchScene={readingOpportunity??furnaceEmergency??bellWatch??vacantGate??nightDoor??lastRoster??boundaryGap??abandonedQuarter??pavilionFire??pilgrimageFork??battlefieldAftermath??apprenticeshipReunion??villageReunion??wildMigration??mercyReunion??farewellLanding??frontierGorge??schoolFormDuel??flightCard??passageScene??banquetStory??campaignAssembly??anomalyRelay}
+  if(cockpitOpen)return <PanoramicCockpitView world={visibleWorld} stageViewer={selectedCultivator} titleRef={cockpitHeading} exit={<div className="flex flex-wrap justify-end gap-2">{soundToggle}{cockpitSwitch}</div>} statusStrip={pulseStrip} stageOverride={featuredStoryCard} stageAfterOverride={afterFeaturedScene} highlightStage={highlight?.stage} subplot={guidance.subplot} branchScene={readingOpportunity??furnaceEmergency??bellWatch??vacantGate??nightDoor??lastRoster??boundaryGap??abandonedQuarter??pavilionFire??pilgrimageFork??battlefieldAftermath??apprenticeshipReunion??villageReunion??wildMigration??mercyReunion??farewellLanding??frontierGorge??schoolFormDuel??flightCard??passageScene??banquetStory??campaignAssembly??anomalyRelay}
     time={{historical:Boolean(preview),running:isRunning,busy:cockpitBusy||storyDecisionPending,onStep:()=>void handleStepTick(),
       onToggleAutoplay:toggleStoryAutoplay,onReturnLive:()=>handleTimelinePreview(null),onOpenTimeline:()=>{
         openWorkspace('chronicle');rememberFold('chronicle','timeline');setStoryEntryOpen(false);
@@ -761,7 +765,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
         onChange={style=>storyEntryCurrent()&&simulation.changeStorytellerStyle(style,world,timeline,storyEntryRevision)}/>}
       onFollow={storyHome.lead?followCurrentLead:undefined} onEnter={enterCurrentLead} onOrder={orderCurrentStoryAvatar} />:
       <StoryFirstHome stageWorld={world} stageViewer={activeAvatar(world)} leadId={storyHome.lead?.id} recapContext={world.chronicleArchive.chapters.length||world.coldHistory?.chapters.length?
-        {world,scopeKey:viewScopeKey,viewer:activeAvatar(world)}:undefined} scene={storyHome.scene} reliefHomecoming={reliefHomecoming} reliefHomecomingFocus={reliefHomecomingLead?.actorName} subplot={guidance.subplot} nextGuide={nextGuide?.kind==='heart'?undefined:nextGuide} branchScene={activeReadingScene??<DeferredGrandSiegeMapScene world={world} viewer={activeAvatar(world)} fog personalOnly visible witnessScopeKey={viewScopeKey}/>} leadName={storyHome.lead?.name} playerName={activeAvatar(world)?.name}
+        {world,scopeKey:viewScopeKey,viewer:activeAvatar(world)}:undefined} scene={storyHome.scene} reliefHomecoming={reliefHomecoming} reliefHomecomingFocus={reliefHomecomingLead?.actorName} subplot={guidance.subplot} nextGuide={nextGuide?.kind==='heart'?undefined:nextGuide} currentChoice={highlightScene} highlightStage={highlight?.stage} branchScene={highlightScene?undefined:activeReadingScene??<DeferredGrandSiegeMapScene world={world} viewer={activeAvatar(world)} fog personalOnly visible witnessScopeKey={viewScopeKey}/>} leadName={storyHome.lead?.name} playerName={activeAvatar(world)?.name}
         busy={isStepping} moreRef={storyMoreRef} notice={storyNotice} calendar={storyHome.calendar} opening={dramaticOpening.opening}
         outcome={storyOutcome?.world===world?storyOutcome.text:undefined} onContinue={advanceStory} onMore={openStoryEntry} />)}
   </main>;

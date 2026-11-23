@@ -140,3 +140,8 @@ export function projectSceneStage(world:WorldState, options?:SceneStageOptions):
       historical:frameDate.historical,season:frameDate.season}),
     ...(event?{sourceId:event.id}:{}),...(establishing?{establishing:true as const}:{}),cast,...(portrait?{portrait}:{})};
 }
+
+export function keepUrgentStage(world:WorldState,frame:SceneStageFrame|undefined):boolean{
+  return !!frame?.sourceId&&!frame.historical&&world.events.some(row=>row.id===frame.sourceId&&row.tick===world.tick&&
+    (row.category==='combat'||row.category==='breakthrough'||row.category==='death'));
+}

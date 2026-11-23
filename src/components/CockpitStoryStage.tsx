@@ -3,7 +3,7 @@ import {projectVisualDuelArena} from './visualDuelArenaModel';
 import {createTerrainMapView} from './terrainMapView';
 import {SceneStageCanvas} from './SceneStageCanvas';
 import {StoryStageDialogue} from './StoryStageDialogue';
-import {projectSceneStage} from './sceneStageModel';
+import {keepUrgentStage,projectSceneStage,type SceneStageFrame} from './sceneStageModel';
 import {PublicBondAside,type PublicBondArc} from './DramaticBondRead';
 import {useId, useMemo,type ReactNode} from 'react';
 import {publicChronicleSceneEvents} from '../engine/chronicleLead';
@@ -47,12 +47,13 @@ export function projectCockpitStoryStage(world:WorldState) {
   return {...home,...(currentScene?{currentLabel:highlights[currentScene.category].label}:{}),focus};
 }
 
-export function CockpitStoryStage({world,viewer,historical=false,onFocus,subplot,branchScene}:{
+export function CockpitStoryStage({world,viewer,historical=false,onFocus,subplot,branchScene,highlightStage}:{
   world:WorldState;
   viewer?:Cultivator;
   historical?:boolean;
   subplot?:PublicBondArc;
   branchScene?:ReactNode;
+  highlightStage?:SceneStageFrame;
   /** The parent rechecks the current frame and opens this exact public event if still authorized. */
   onFocus?:(eventId:string)=>void;
 }){
@@ -64,6 +65,7 @@ export function CockpitStoryStage({world,viewer,historical=false,onFocus,subplot
   const duel=useMemo(()=>stageFrame.sourceId?projectVisualDuelArena(world,
     createTerrainMapView(world,viewer,viewer!==undefined),{kind:'duel',eventId:stageFrame.sourceId},
     {viewer,historical:stageFrame.historical}):undefined,[world,viewer,stageFrame]);
+  const presented=highlightStage&&!duel&&!historical&&!keepUrgentStage(world,stageFrame)?highlightStage:stageFrame;
   const eventTitle='min-h-11 w-full rounded-lg text-left font-serif font-semibold text-amber-100 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-200 [overflow-wrap:anywhere]';
   return <section aria-labelledby={stage} className="min-w-0 space-y-3 [overflow-wrap:anywhere]">
     <header className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
@@ -78,8 +80,8 @@ export function CockpitStoryStage({world,viewer,historical=false,onFocus,subplot
         <h3 className="font-serif text-2xl font-semibold leading-tight text-amber-50">{view.lead?`主角：${view.lead.name}`:'主角未定'}</h3>
         {!view.lead&&<p className="text-sm leading-relaxed text-slate-300">此时仍是群像，尚无人走成主角。</p>}
       </div>
-      {duel?<VisualDuelArena frame={duel}/>:<SceneStageCanvas frame={stageFrame}/>}
-      <StoryStageDialogue portrait={duel?undefined:stageFrame.portrait}>
+      {duel?<VisualDuelArena frame={duel}/>:<SceneStageCanvas frame={presented}/>}
+      <StoryStageDialogue portrait={duel?undefined:presented.portrait}>
       <div className="space-y-1.5">
         <p className="text-xs font-medium text-amber-200">{scene?.earlier?'本月暂无新见闻 · 上一幕':view.currentLabel?`本月公开一幕 · ${view.currentLabel}`:'本月公开一幕'}</p>
         <h4 className="font-serif text-xl font-semibold leading-snug text-amber-50">

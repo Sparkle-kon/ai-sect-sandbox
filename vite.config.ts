@@ -33,7 +33,9 @@ export default defineConfig({
           'react-runtime': ['react', 'react-dom', 'react-dom/client', 'react/jsx-runtime'],
           'interface-icons': ['lucide-react'],
           'resource-journal': ['./src/engine/resourceFlowEngine.ts'],
-          'scripture-circulation': ['./src/engine/pavilionLoanEngine.ts','./src/engine/scriptureEngine.ts','./src/engine/techniqueEngine.ts'],
+          'scripture-circulation': ['./src/engine/pavilionLoanEngine.ts','./src/engine/techniqueEngine.ts'],
+          // Read-only editions are also used by combat and storage without opening the lending bundle.
+          'scripture-editions': ['./src/engine/scriptureEngine.ts'],
           'pavilion-fire-scenes': ['./src/engine/pavilionFire.ts'],
           'village-supply-rules': ['./src/engine/villageGranaryEngine.ts', './src/engine/villageSupplyAccounting.ts',
             './src/engine/villageSupplyEngine.ts'],
@@ -105,6 +107,8 @@ export default defineConfig({
           'immortal-auction-proof': ['./src/types/immortalAuction.ts','./src/engine/immortalAuctionTerms.ts','./src/engine/storageImmortalAuctionValidation.ts'],
           'dao-path-proof': ['./src/types/daoPath.ts','./src/engine/daoPathTerms.ts','./src/engine/storageDaoPathValidation.ts'],
           'character-records-proof': ['./src/engine/storageWitnessedPersonalStoryValidation.ts','./src/engine/storageProtagonistValidation.ts'],
+          // The portable storylet registry and encounter definitions carry no live tick or provider dependencies.
+          'storylet-catalog': ['./src/engine/storyletEngine.ts', './src/engine/roguelikeEncounterCatalog.ts', './src/engine/director/highlight.ts'],
           'story-encounter-proof': ['./src/engine/storageRoguelikeValidation.ts'],
           'protagonist-flight-proof': ['./src/types/protagonistFlight.ts','./src/engine/storageProtagonistFlightValidation.ts'],
           'heavenly-alchemy-proof': ['./src/types/heavenlyAlchemy.ts','./src/engine/heavenlyAlchemyTerms.ts','./src/engine/storageHeavenlyAlchemyValidation.ts'],

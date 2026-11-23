@@ -7,6 +7,8 @@ import { activeSiegeForActor } from './diplomacyEngine';
 import { isTribulationActive } from './tribulationEngine';
 import { localQiWeather } from './weatherEngine';
 import { terrainTileAt } from './terrainEngine';
+import { directorSiteIsSafe, liveDirectorNudges, directorRoll } from './director/nudgeIntegrations';
+import { activeAvatar } from './avatarEngine';
 import { isScopedExpeditionGate, expeditionOmenNativeRun as nativeRun, expeditionOmenLearnedAt as learnedAt, expeditionOmenAt as rowAt } from './expeditionOmenTerms';
 
 export const EXPEDITION_OMEN_QI = 70;
@@ -33,8 +35,34 @@ const viableSite = (world: WorldState, site: LocationNode) => {
     !world.mapHazards.some(hazard => hazard.tileId === tile.id && hazard.createdTick <= world.tick &&
       world.tick < hazard.expiresTick && hazard.intensity >= 2);
 };
+/** A director schedules a future survey where the seeded weather actually supports an opening.
+ * At funding and measurement, the native observer still decides, takes the action and pays. */
+export function directorDungeonOmenViable(world: WorldState, site: LocationNode, fundingTick: number): boolean {
+  if(!viableSite(world,site)||!directorSiteIsSafe(world,site,fundingTick))return false;
+  const measurement=fundingTick+2;
+  return sign(localQiWeather(world,site,measurement),EXPEDITION_OMEN_MEASURE_INTENSITY)&&
+    Array.from({length:EXPEDITION_OMEN_WINDOW_LAST},(_,i)=>measurement+i+1)
+      .some(tick=>sign(localQiWeather(world,site,tick),EXPEDITION_OMEN_OPEN_INTENSITY));
+}
+
+export function directorPrioritizesOmenSurvey(world:WorldState,actor:Cultivator,tick=world.tick):boolean{
+  if(!liveDirectorNudges(world,tick).some(row=>row.kind==='omen_bias'&&row.reason==='dungeon'&&row.siteId===actor.locationId)||
+    activeAvatar(world)===actor||world.playerAvatar.possessedId===actor.id&&(world.playerAvatar.possessionUntilTick??0)>world.tick)return false;
+  const site=anchor(world,actor.locationId);
+  if(!site||!directorDungeonOmenViable(world,site,tick)||world.expeditionOmens.rows.some(row=>row.siteId===site.id&&liveRegistrationClue(row,tick)))return false;
+  const candidates=world.cultivators.filter(person=>person.spiritStones>=5&&person.hp>=person.maxHp*.6&&
+    world.playerAvatar.possessedId!==person.id&&!person.guardAssignment&&presentAtExpeditionAnchor(world,person,site.id,tick)&&
+    !world.occasions.some(row=>active(row)&&row.participantIds.includes(person.id))&&
+    !world.fieldObservatories.byActor[person.id]?.runs.some(row=>row.status==='pending'))
+    .sort((a,b)=>Number(b.id===world.storyteller?.focusActorId)-Number(a.id===world.storyteller?.focusActorId)||
+      directorRoll(world,tick,[site.id,a.id,'fund'])-directorRoll(world,tick,[site.id,b.id,'fund'])||
+      (a.id<b.id?-1:a.id>b.id?1:0));
+  return candidates[0]===actor;
+}
+
 /** A modest autonomous investigation; the actual paid due reading alone can reveal a clue. */
 export function canInvestigateExpeditionOmen(world:WorldState,actor:Cultivator):boolean {
+  if(directorPrioritizesOmenSurvey(world,actor))return true;
   if(world.tick<6||(world.tick+actor.id.charCodeAt(actor.id.length-1))%4!==0)return false;
   const site=anchor(world,actor.locationId);
   return !!site&&viableSite(world,site)&&presentAtExpeditionAnchor(world,actor,site.id)&&
@@ -88,7 +116,9 @@ export function eligibleExpeditionOmen(world: WorldState): { row: ExpeditionOmen
     const reading = read(world, site);
     if (sign(reading, EXPEDITION_OMEN_OPEN_INTENSITY)) candidates.push({ row, site, reading });
   }
-  return candidates.sort((a, b) => a.row.windowEndsTick - b.row.windowEndsTick || b.reading.intensity - a.reading.intensity ||
+  const preferred=new Set(liveDirectorNudges(world).flatMap(item=>item.kind==='omen_bias'&&item.reason==='dungeon'?[item.siteId]:[]));
+  return candidates.sort((a, b) => Number(preferred.has(b.site.id))-Number(preferred.has(a.site.id))||
+    a.row.windowEndsTick - b.row.windowEndsTick || b.reading.intensity - a.reading.intensity ||
     (a.row.id < b.row.id ? -1 : a.row.id > b.row.id ? 1 : 0))[0];
 }
 
@@ -120,6 +150,17 @@ export function canJoinOmenExpedition(world: WorldState, actor: Cultivator, occa
   const known = row && learnedAt(row, actor.id, executionTick);
   return !!row && known !== undefined && !!nativeRun(world, row) && executionTick < occasion.registrationClosesTick &&
     liveRegistrationClue(row, executionTick) && !!anchor(world, row.siteId) && presentAtExpeditionAnchor(world, actor, row.siteId, executionTick);
+}
+
+/** A measured clue supports its holder's future choice, not the director's consent on their behalf. */
+export function directorExpeditionRegistration(world:WorldState,actor:Cultivator,tick=world.tick):WorldOccasion|undefined{
+  const state=world.storyteller,lease=world.playerAvatar;
+  if(!state||actor.hp<actor.maxHp*.6||actor.positionPlane!==undefined||actor.guardAssignment||
+    lease.possessedId===actor.id&&(lease.possessionUntilTick??0)>world.tick||
+    world.occasions.some(row=>active(row)&&row.participantIds.includes(actor.id)))return undefined;
+  return world.occasions.find(row=>row.kind==='expedition'&&row.omenId&&row.status==='registration'&&row.participantIds.length<8&&
+    canJoinOmenExpedition(world,actor,row,tick)&&!state.highlights?.some(highlight=>
+      highlight.kind==='dungeon'&&highlight.sourceId===row.id&&highlight.actorId===actor.id&&highlight.chosen==='pass'));
 }
 
 export function canSeeOccasion(world: WorldState, viewer: Cultivator | undefined, occasion: WorldOccasion): boolean {

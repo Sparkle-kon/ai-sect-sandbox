@@ -1,3 +1,5 @@
+import type { ConsequenceTag, HighlightKind, HighlightOfferKey } from '../engine/director/highlight';
+import type { DirectorNudge } from '../engine/director/nudge';
 export const STORYTELLER_STYLES = [
   {id:'still_water',label:'静水流深',cadence:3},
   {id:'wandering_jianghu',label:'江湖风波',cadence:2},
@@ -63,6 +65,22 @@ export interface StorytellerOutcome {
   tick: number;
 }
 
+export interface HighlightHistoryRow {
+  tick: number;
+  kind: HighlightKind;
+  sourceId: string;
+  actorId: string;
+  chosen?: string;
+  resolutionTick?: number;
+  resolutionEventId?: string;
+  consequences?: ConsequenceTag[];
+}
+
+export interface PendingHighlightChoice {
+  key: HighlightOfferKey;
+  optionId: string;
+}
+
 export interface StorytellerDirectorState {
   style: StorytellerStyle;
   focusActorId?: string;
@@ -73,6 +91,11 @@ export interface StorytellerDirectorState {
   pulse?: StorytellerPulsePoint[];
   offer?: StorytellerOffer;
   lastOutcome?: StorytellerOutcome;
+  lastHighlightTick?: number;
+  highlightOffer?: HighlightOfferKey;
+  pendingHighlightChoice?: PendingHighlightChoice;
+  highlights?: HighlightHistoryRow[];
+  nudges?: DirectorNudge[];
 }
 
 export interface StorytellerOption {

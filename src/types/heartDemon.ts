@@ -2,7 +2,7 @@ import type { MemoryEntry, PersonalityTrait, ReflectionTheme } from './world';
 
 export const HEART_DEMON_CHOICES = ['sever', 'wrath', 'face'] as const;
 export type HeartDemonChoice = typeof HEART_DEMON_CHOICES[number];
-export type HeartDemonOrigin = 'player' | 'utility' | 'model';
+export type HeartDemonOrigin = 'player' | 'utility' | 'model' | 'director';
 export type HeartDemonOutcome = 'passed' | 'failed' | 'died';
 
 export interface HeartDemonGuide {

@@ -5,6 +5,7 @@ import { activeRoguelikeEncounter, roguelikeEncounterRoll, roguelikeEncounterRou
 import { roguelikeNominalEffect, selectRoguelikeStorylet } from './roguelikeEncounterCatalog';
 import { isSectGatePublicSite, sectGateNominalReputation, sectGateReceiptText } from './sectGateTrialEngine';
 import { SHARE_SAVE_REDACTED_TEXT } from './shareSaveRedactionText';
+import { DIRECTOR_NUDGE_MAX_MONTHS } from './director/nudge';
 
 type Fail = (field:string)=>never;
 
@@ -45,6 +46,7 @@ export function validateRoguelikeEncounterHistory(world:WorldState,actorIds:Read
     const hosts=gate&&seal?world.sects.filter(sect=>sect.id===seal.sectId):[];
     const host=hosts.length===1?hosts[0]:undefined;
     if(gate){
+      if(row.directorTicketUntil!==undefined||row.directorChoice)return fail('roguelikeEncounters.sectGate.variant');
       const from=siteAt(fromSiteId),venue=siteAt(siteId);
       if(!row.guided||!seal||!host||seal.leaderId===actorId||!actorIds.has(seal.leaderId)||
         seal.possessionUntilTick<=openedTick||seal.possessionUntilTick>openedTick+5||
@@ -77,11 +79,15 @@ export function validateRoguelikeEncounterHistory(world:WorldState,actorIds:Read
       // Stored ownership is independently checked above; past posture/HP is not a live role.
       const kind=selectRoguelikeStorylet(aim,actorId,witnessId)?.definition.id;
       if(row.kind!==kind)return fail('roguelikeEncounters.kind');
-      if(!row.guided&&roguelikeEncounterRoll(world,row,'opening')>=ROGUELIKE_ENCOUNTER_NPC_OPENING_THRESHOLD)
+      const ticket=row.directorTicketUntil;
+      if(ticket!==undefined&&(!world.storyteller||openedTick<=world.storyteller.configuredTick||
+        ticket<openedTick||ticket-openedTick>=DIRECTOR_NUDGE_MAX_MONTHS))return fail('roguelikeEncounters.directorTicket');
+      if(!row.guided&&ticket===undefined&&roguelikeEncounterRoll(world,row,'opening')>=ROGUELIKE_ENCOUNTER_NPC_OPENING_THRESHOLD)
         return fail('roguelikeEncounters.openingRoll');
     }
     seen.add(id);latest.set(actorId,openedTick);lastOpened=openedTick;
     stamps.set(`evt-${id}-open`,{tick:openedTick,actorId,siteId,...(gate?{gate:{}}:{})});
+    if(status!=='resolved'&&row.directorChoice)return fail('roguelikeEncounters.directorChoice');
     if(status==='offered'){
       const person=body.get(actorId);
       const releasedGate=gate&&world.playerAvatar.possessedId!==actorId;
@@ -98,8 +104,15 @@ export function validateRoguelikeEncounterHistory(world:WorldState,actorIds:Read
       if(choice!==undefined||outcome!==undefined)return fail('roguelikeEncounters.phase');
       continue;
     }
-    if(choice===undefined||outcome===undefined||(!row.guided&&resolvedTick!==openedTick+1)||
+    if(choice===undefined||outcome===undefined||(!row.guided&&!row.directorChoice&&resolvedTick!==openedTick+1)||
       (row.guided&&resolvedTick!==openedTick&&choice!=='leave'))return fail('roguelikeEncounters.phase');
+    if(row.directorChoice){
+      const history=world.storyteller?.highlights;
+      const command=history?.find(item=>item.tick===openedTick);
+      const hasChoice=command?.kind==='encounter'&&command.sourceId===id&&command.actorId===actorId&&command.chosen===choice;
+      const beyondHistory=history?.length===120&&openedTick<history[0].tick;
+      if(row.guided||resolvedTick!==openedTick||!hasChoice&&!beyondHistory)return fail('roguelikeEncounters.directorChoice');
+    }
     if(row.kind==='sect-gate'){
       if(!host||resolvedTick!==openedTick)return fail('roguelikeEncounters.sectGate.phase');
       const nominal=sectGateNominalReputation(host.alignment,choice),paid=outcome.sectReputationDelta;

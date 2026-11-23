@@ -1,3 +1,4 @@
+import { takeDirectorHighlightDecision } from '../director/directorHighlights';
 import type { Cultivator, DecisionTraceCandidate, LLMDecisionPayload, WorldEvent } from '../../types/world';
 import type { TickActionPorts, WorldTickContext } from './tickContext';
 import { onLowerPlane } from '../upperPassageIsolation';
@@ -74,6 +75,28 @@ export function runEarlyActorAction(
       newEvents.push(death);
       witnessEvent(nextState, death);
       return 'handled';
+    }
+  }
+
+  if (avatarOrder?.actorId !== cultivator.id && !ascensionDutyActive(nextState, cultivator) &&
+      !isTribulationActive(cultivator) && !finishedDuelActors.has(cultivator.id)) {
+    const directed = takeDirectorHighlightDecision(nextState, cultivator);
+    if (directed) {
+      const publish = (event: WorldEvent) => {
+        newEvents.push(event);
+        if (event.witnessScope === undefined) witnessEvent(nextState, event);
+        renewRegionalProtectionAfterEvent(regionalTurn);
+      };
+      const event = applyCultivatorBrainDecision(nextState,cultivator,directed.decision,rng,undefined,publish,directed.decision);
+      if (event) {
+        publish(event);
+        directed.row.resolutionTick = nextState.tick;
+        directed.row.resolutionEventId = event.id;
+        if (precomputedDecisions?.[cultivator.id]) recordDecisionEffect?.(cultivator.id,false);
+        traceOptions?.onActor?.(cultivator.id,[],true);
+        if (traceOptions?.captureTrace !== false) recordDecisionTrace(nextState,cultivator.id,[],directed.decision,'avatar',true);
+        return 'handled';
+      }
     }
   }
 

@@ -54,7 +54,7 @@ import { availableGuardianActions } from '../householdEngine';
 import { isRetiredFromService, availableServiceRetirementActions } from '../serviceRetirementEngine';
 import { availableTerrainRecoveryActions } from '../terrainSuccessionEngine';
 import { SEASON_REVIEW_WINDOW, availableSeasonReviewActions } from '../seasonReviewEngine';
-import { canInvestigateExpeditionOmen } from '../expeditionOmenEngine';
+import { canInvestigateExpeditionOmen,directorExpeditionRegistration } from '../expeditionOmenEngine';
 import { availableShortShiftActions } from '../shortShiftEngine';
 import { availableMentorTransferActions } from '../mentorTransferEngine';
 import { availableSeasonalHousingActions, seasonalHousingTravelTarget } from '../seasonalHousingEngine';
@@ -861,6 +861,9 @@ export function computeHeuristicDecision(
       spokenLine: '天地灵气，入我丹田，破！',
     };
   }
+  const surveyedGate=directorExpeditionRegistration(world,cultivator);
+  if(surveyedGate)return {chosenAction:'JOIN_OCCASION',targetOccasionId:surveyedGate.id,
+    innerMonologue:'亲眼见过这道星光，今日愿入门探一探。'};
   return completeHeuristicDecision({
     cultivator,
     world,

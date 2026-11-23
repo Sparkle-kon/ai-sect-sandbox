@@ -10,7 +10,7 @@ import { useId, type ReactNode, type Ref } from 'react';
 import {SceneStageCanvas} from './SceneStageCanvas';
 import {StoryStageDialogue} from './StoryStageDialogue';
 import {XianxiaInkScene} from './XianxiaInkScene';
-import {projectSceneStage} from './sceneStageModel';
+import {keepUrgentStage,projectSceneStage,type SceneStageFrame} from './sceneStageModel';
 
 const StoryHomeRecap=lazy(()=>import('./StoryHomeRecap'));
 
@@ -32,6 +32,8 @@ interface StoryFirstHomeProps {
   reliefHomecomingFocus?:string;
   subplot?:PublicBondArc;
   branchScene?:ReactNode;
+  highlightStage?:SceneStageFrame;
+  currentChoice?:ReactNode;
   nextGuide?:NextStoryGuidance;
   recapContext?:{world:WorldState;scopeKey:string;viewer?:Cultivator};
   leadName?: string;
@@ -46,7 +48,7 @@ interface StoryFirstHomeProps {
   onMore: () => void;
 }
 
-export function StoryFirstHome({ scene, stageWorld, stageViewer, leadId, reliefHomecoming, reliefHomecomingFocus, subplot, branchScene, nextGuide, recapContext, leadName, playerName, busy = false, notice, outcome, calendar, moreRef, opening, onContinue, onMore }: StoryFirstHomeProps) {
+export function StoryFirstHome({ scene, stageWorld, stageViewer, leadId, reliefHomecoming, reliefHomecomingFocus, subplot, branchScene, currentChoice, highlightStage, nextGuide, recapContext, leadName, playerName, busy = false, notice, outcome, calendar, moreRef, opening, onContinue, onMore }: StoryFirstHomeProps) {
   const nextDescription = useId();
   const storyReader=useRef<HTMLElement>(null);
   const leadHeading=useId();
@@ -61,6 +63,7 @@ export function StoryFirstHome({ scene, stageWorld, stageViewer, leadId, reliefH
     createTerrainMapView(stageWorld,stageViewer,stageViewer!==undefined),
     {kind:'duel',eventId:stage.sourceId},{viewer:stageViewer,historical:stage.historical}):undefined,
     [stageWorld,stageViewer,stage]);
+  const presented=highlightStage&&!duel&&stageWorld&&!keepUrgentStage(stageWorld,stage)?highlightStage:stage;
   return (
     <section ref={storyReader} aria-label="故事主页" className="mx-auto w-full min-w-0 max-w-lg px-4 pb-[calc(8rem+env(safe-area-inset-bottom))] pt-4 text-slate-100 sm:px-6 sm:pb-8 sm:pt-8">
       <header className="xianxia-header flex min-w-0 items-center justify-between gap-2 border-b border-slate-800 pb-3">
@@ -89,9 +92,9 @@ export function StoryFirstHome({ scene, stageWorld, stageViewer, leadId, reliefH
         </section>
         <article aria-label={primary?.earlier ? '上一幕' : '当前故事'}
           className="xianxia-frame min-w-0 space-y-2 rounded-xl border border-slate-800 bg-slate-900/65 px-3.5 py-3.5 [overflow-wrap:anywhere] sm:px-5 sm:py-5">
-          {duel?<VisualDuelArena frame={duel}/>:stage?<SceneStageCanvas frame={stage}/>:
+          {duel?<VisualDuelArena frame={duel}/>:presented?<SceneStageCanvas frame={presented}/>:
             <div className="xianxia-masthead overflow-hidden rounded-lg"><XianxiaInkScene variant="story" className="xianxia-masthead-art"/></div>}
-          <StoryStageDialogue portrait={duel?undefined:stage?.portrait}>
+          <StoryStageDialogue portrait={duel?undefined:presented?.portrait}>
           <p className="text-xs font-medium text-amber-200">{quiet?<>{quiet.siteName}{reliefHomecomingFocus&&` · 随${reliefHomecomingFocus}所见`}</>:primary?.earlier ? '本月暂无新见闻 · 上一幕' : '本月见闻'}</p>
           <h2 data-chronicle-reader-heading className="font-serif text-xl font-semibold leading-snug text-amber-50 sm:text-2xl">{primary?.title ?? '暂无新的公开见闻'}</h2>
           {primary && primary.paragraph !== primary.title && <p className="xianxia-parchment font-serif text-base leading-7"><span data-chronicle-paragraph-text>{primary.paragraph}</span></p>}
@@ -100,6 +103,7 @@ export function StoryFirstHome({ scene, stageWorld, stageViewer, leadId, reliefH
           </StoryStageDialogue>
         </article>
       </div>
+      {currentChoice&&<div className="mt-3">{currentChoice}</div>}
       {!quiet&&recapContext&&<Suspense fallback={null}><StoryHomeRecap {...recapContext} readerRef={storyReader}/></Suspense>}
       {!quiet&&branchScene&&<div className="mt-3 empty:hidden">{branchScene}</div>}
       {!quiet&&subplot&&<div className="mt-3"><PublicBondAside arc={subplot}/></div>}

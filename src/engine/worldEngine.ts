@@ -1,3 +1,4 @@
+import { recordAuxiliaryActionEvent } from './recordAuxiliaryActionEvent';
 import { availableLastRosterActions, recordLastRosterClosure, resolveLastRosterAction } from './lastRoster';
 import {exactLastRosterDecision} from './lastRosterCognition';
 import { availableBanquetSeatActions, resolveBanquetSeatAction } from './banquetSeats';
@@ -27,7 +28,7 @@ import { availableWildMigrationActions, resolveWildMigrationAction } from './wil
 import {exactWildMigrationDecision} from './wildMigrationCognition';
 import { availableFarewellLandingActions, resolveFarewellLandingAction } from './farewellLanding';
 import {exactFarewellLandingDecision} from './farewellLandingCognition';
-import { availableMercyReunionActions, isPrivateMercyReunionEvent, recordMercySpared, resolveMercyReunionAction } from './mercyReunion';
+import { availableMercyReunionActions, recordMercySpared, resolveMercyReunionAction } from './mercyReunion';
 import { exactStoryMercyDecision, lawfulConditionalMercy } from './mercyReunionCognition';
 import { availableFrontierGorgeActions, resolveFrontierGorgeAction } from './frontierGorge';
 import { exactFrontierGorgeDecision } from './frontierGorgeCognition';
@@ -243,13 +244,6 @@ export function adjustRelationship(
 
 function closeInterruptedTrial(actor: Cultivator, tick: number): void {
   interruptStoryChoicesOnDeath(actor, tick, '应劫者已先行陨落，本次天劫中断。');
-}
-
-function recordAuxiliaryActionEvent(world: WorldState, event: WorldEvent, emit?: (value: WorldEvent) => void): void {
-  if (emit) { emit(event); return; }
-  if(!isPrivateMercyReunionEvent(event))witnessEvent(world,event);
-  archiveChronicleEvents(world,[event]);
-  world.events = [event, ...world.events].slice(0, 120);
 }
 
 function applyUpperPassageDecision(world:WorldState,cultivator:Cultivator,decision:LLMDecisionPayload,
