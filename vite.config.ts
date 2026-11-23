@@ -121,7 +121,8 @@ export default defineConfig({
           // Truce and storage need the typed siege proof, not the active combat graph.
           // Keep physical witness checks and their read-only scenes outside the scripture action bundle.
           'local-witness-scenes': ['./src/engine/vacantGate.ts','./src/engine/grandSiegePresence.ts','./src/engine/anomalyRelay.ts','./src/engine/villageReunion.ts','./src/engine/battlefieldAftermath.ts'],
-          'grand-siege-proof': ['./src/engine/grandSiegeProof.ts', './src/engine/storageGrandSiegeValidation.ts', './src/types/grandSiege.ts'],
+          'apprenticeship-save-shape': ['./src/engine/apprenticeshipReunionSchema.ts'],
+          'grand-siege-proof': ['./src/engine/grandSiegeProof.ts', './src/engine/grandSiegeWitnessView.ts', './src/engine/storageGrandSiegeValidation.ts', './src/types/grandSiege.ts'],
           // The game seed depends only on trace state; keep the optional replay rules separate.
           'decision-replay': ['./src/engine/decisionTraceEngine.ts'],
           // Read-only chapters must not pull the live forbidden-art and heart-demon simulation graph into history.
@@ -133,7 +134,7 @@ export default defineConfig({
             './src/engine/disasterShelterCheckpoint.ts','./src/engine/marketFreightCheckpoint.ts'],
           'journey-rules': ['./src/engine/terrainEngine.ts', './src/engine/simulationRegionGeometry.ts', './src/engine/mapMotionEngine.ts', './src/engine/roadEngine.ts',
             './src/engine/sealedCourierEngine.ts', './src/engine/escortEngine.ts', './src/engine/pilgrimageEngine.ts', './src/engine/expeditionRescueEngine.ts',
-            './src/engine/boundaryReliefEngine.ts','./src/engine/pilgrimageFork.ts','./src/engine/pilgrimageForkPresence.ts','./src/engine/routeWarningProof.ts','./src/engine/routeWarningEngine.ts'],
+            './src/engine/boundaryReliefEngine.ts','./src/engine/pilgrimageFork.ts','./src/engine/pilgrimageForkPresence.ts','./src/engine/apprenticeshipPresence.ts','./src/engine/routeWarningProof.ts','./src/engine/routeWarningEngine.ts'],
           'workspace-shell': ['./src/components/SandboxWorkspace.tsx', './src/components/workspacePreferences.ts'],
           'map-controls': ['./src/components/mapCamera.ts', './src/components/mapKeyboard.ts', './src/components/mapActorClusters.ts',
             './src/components/mapBrushView.ts', './src/components/mapTouchGesture.ts'],

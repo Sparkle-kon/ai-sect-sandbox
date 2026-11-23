@@ -1,3 +1,6 @@
+import {availableApprenticeshipReunionActions,isPrivateApprenticeshipReunionEvent,recordApprenticeshipReunionMovement,
+  recordApprenticeshipReunionQuiet,recordApprenticeshipReunionRounds,resolveApprenticeshipReunionAction} from './apprenticeshipReunion';
+import {exactApprenticeshipReunionDecision} from './apprenticeshipReunionCognition';
 import {advancePilgrimageForks,availablePilgrimageForkActions,isPrivatePilgrimageForkEvent,
   recordPilgrimageForkArrival,resolvePilgrimageForkAction} from './pilgrimageFork';
 import {pilgrimageForkActedThisTick,pilgrimageForkTravelLocked} from './pilgrimageForkPresence';
@@ -923,6 +926,15 @@ export function applyCultivatorBrainDecision(
         return cultivator.alive&&cultivator.locationId===siteId&&before!==siteId&&cultivator.currentAction==='EXPLORE';
       });
     }
+    case 'APPRENTICESHIP_REUNION': {
+      if((modelInput||isProviderPersonaDecision(decision))&&activeAvatar(world)===cultivator)return null;
+      const exact=exactApprenticeshipReunionDecision(decision,availableApprenticeshipReunionActions(cultivator,world,world.tick),true);
+      const rows=exact?resolveApprenticeshipReunionAction(world,cultivator,exact,rng):[];
+      for(const original of rows.slice(0,-1))emit?.(original);
+      const own=rows.at(-1);
+      if(own&&exact){cultivator.currentAction='APPRENTICESHIP_REUNION';cultivator.innerMonologue=exact.innerMonologue;}
+      return own??null;
+    }
     case 'VILLAGE_REUNION': {
       if((modelInput||isProviderPersonaDecision(decision))&&activeAvatar(world)===cultivator)return null;
       const exact=exactVillageReunionDecision(decision,availableVillageReunionActions(cultivator,world,world.tick),true);
@@ -1721,6 +1733,14 @@ export function advanceWorldTick(
         modelOrdinaryReplaced=true;
       }
     }
+    if(modelProposal?.chosenAction==='APPRENTICESHIP_REUNION'&&!avatarDecision){
+      const prior=prevState.cultivators.find(row=>row.id===cultivator.id);
+      if(!prior||activeAvatar(prevState)===prior||!exactApprenticeshipReunionDecision(modelProposal,
+        availableApprenticeshipReunionActions(prior,prevState,nextState.tick),true)){
+        provided=undefined;
+        modelOrdinaryReplaced=true;
+      }
+    }
     if(modelProposal?.chosenAction==='PILGRIMAGE_FORK'&&!avatarDecision){
       const prior=prevState.cultivators.find(row=>row.id===cultivator.id);
       if(!prior||activeAvatar(prevState)===prior||!exactPilgrimageForkDecision(modelProposal,
@@ -2085,7 +2105,9 @@ export function advanceWorldTick(
       const villageMeeting=recordVillageReunionMovement(nextState,cultivator,previousLocation);
       if(villageMeeting)newEvents.push(villageMeeting);
       recordBattlefieldAftermathApproach(nextState,cultivator,previousLocation);
+      recordApprenticeshipReunionMovement(nextState,cultivator,previousLocation);
     }
+    if(evt&&decision.chosenAction==='SOCIALIZE')recordApprenticeshipReunionQuiet(nextState,evt);
     if (evt && (decision.chosenAction === 'DUEL' || decision.chosenAction === 'SOCIALIZE' || decision.chosenAction === 'BREAKTHROUGH' ||
       decision.chosenAction==='MERCY_REUNION'&&evt.duelWinnerId!==undefined))
       captureWitnessedPersonalScene(nextState, evt);
@@ -2120,7 +2142,7 @@ export function advanceWorldTick(
         if (receipt && evt.id === `evt-${receipt.id}`) recordReliefCompetition(nextState, receipt);
       }
       newEvents.push(evt);
-      if(!isBattlefieldRevisitEvent(evt)&&!isPrivateCalamityArrayEvent(evt)&&!isTaughtSwordPracticeEvent(evt)&&!isPrivateSchoolFormEvent(evt)&&!isPrivateWitnessInquiryEvent(evt)&&!isPrivatePavilionFireEvent(evt)&&!isPrivateMercyReunionEvent(evt)&&!isPrivateWildMigrationEvent(evt)&&!isPrivateVillageReunionEvent(evt)&&!isPrivateBattlefieldAftermathEvent(evt)&&!isPrivatePilgrimageForkEvent(evt)&&!(evt.witnessScope==='participants'&&evt.id.endsWith('-study-technique-fire')))witnessEvent(nextState, evt);
+      if(!isBattlefieldRevisitEvent(evt)&&!isPrivateCalamityArrayEvent(evt)&&!isTaughtSwordPracticeEvent(evt)&&!isPrivateSchoolFormEvent(evt)&&!isPrivateWitnessInquiryEvent(evt)&&!isPrivatePavilionFireEvent(evt)&&!isPrivateMercyReunionEvent(evt)&&!isPrivateWildMigrationEvent(evt)&&!isPrivateVillageReunionEvent(evt)&&!isPrivateBattlefieldAftermathEvent(evt)&&!isPrivatePilgrimageForkEvent(evt)&&!isPrivateApprenticeshipReunionEvent(evt)&&!(evt.witnessScope==='participants'&&evt.id.endsWith('-study-technique-fire')))witnessEvent(nextState, evt);
       if(decision.chosenAction==='SOCIALIZE'&&cultivator.currentAction==='SOCIALIZE'){
         const after=recordTournamentBanquetAfterTalk(nextState,evt);
         if(after&&!newEvents.some(row=>row.id===after.id))newEvents.push(after);
@@ -2208,6 +2230,9 @@ export function advanceWorldTick(
   for (const event of reconcileAscensionInterruptions(nextState)) {
     newEvents.push(event);
     witnessEvent(nextState, event);
+  }
+  for(const publicPractice of recordApprenticeshipReunionRounds(nextState,newEvents)){
+    newEvents.push(publicPractice);witnessEvent(nextState,publicPractice);
   }
   recordRegionalLatePromotions(nextState,prevState,newEvents);
   advanceCivicMemorials(nextState);

@@ -175,6 +175,7 @@ export function advanceSparring(world: WorldState): WorldEvent[] {
   const closed = state.agreements.filter(row => !open(row))
     .sort((a,b) => (b.closedTick ?? -1) - (a.closedTick ?? -1) || Number(b.id.slice(9))-Number(a.id.slice(9)));
   const keep = new Set(closed.slice(0,SPARRING_HISTORY_LIMIT).map(row=>row.id));
+  for(const entry of world.apprenticeshipReunions?.cases??[])if(entry.sparring)keep.add(entry.sparring.sparringId);
   state.agreements = state.agreements.filter(row => open(row) || row.closedTick === world.tick || keep.has(row.id));
   return events;
 }

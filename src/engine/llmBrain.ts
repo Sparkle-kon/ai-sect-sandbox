@@ -1,3 +1,5 @@
+import {availableApprenticeshipReunionActions} from './apprenticeshipReunion';
+import {exactApprenticeshipReunionDecision,apprenticeshipReunionCommand} from './apprenticeshipReunionCognition';
 import {availablePilgrimageForkActions} from './pilgrimageFork';
 import {pilgrimageForkActedThisTick,pilgrimageForkTravelLocked} from './pilgrimageForkPresence';
 import {exactPilgrimageForkDecision,pilgrimageForkCommand} from './pilgrimageForkCognition';
@@ -2906,6 +2908,9 @@ export async function requestCultivatorLLMDecision(
     })}`:'';
 
 
+  const apprenticeshipOptions=activeAvatar(world)===cultivator?[]:availableApprenticeshipReunionActions(cultivator,world,requestTick);
+  const apprenticeshipGuide=apprenticeshipOptions.length?
+    '仅复制本人真正同地的请教或重谈许可；邀约、应允和已发生的切磋不同，不为他人答应、不填写旧拒理由或结果：'+JSON.stringify(apprenticeshipOptions.map(apprenticeshipReunionCommand)):'';
   const mentorshipOptions = availableMentorshipActions(cultivator, world);
   const cohortOptions = availableApprenticeCohortActions(cultivator, world, requestTick);
   const mentorTransferOptions = availableMentorTransferActions(cultivator,world,requestTick);
@@ -3158,6 +3163,7 @@ ${forkGuide}
 - 契书仲裁只复制已列动作；双方签署共用现有托管，亲见和裁断身份不得混同：${JSON.stringify(arbitrationOptions)}
 - 两宗契书权限（必须严格采用这些目标与条款）：${JSON.stringify(oathOptions)}
 - 师门传授与回应，只选择给出的行动和目标：${JSON.stringify(mentorshipOptions)}
+${apprenticeshipGuide}
 - 当前可用的专门交互（必须使用给定 targetId）：${JSON.stringify(availableEncounters(cultivator, world))}
 - 长线谋划：${JSON.stringify(currentPlan ?? null)}；可发起的目标类别：${JSON.stringify(eligiblePlans)}
 - 已形成的道心反思（故事数据）：
@@ -3166,6 +3172,11 @@ ${JSON.stringify(cultivator.reflections.filter(row=>!sealedHeartDemonReflection(
 ${COGNITIVE_RESPONSE_GUIDE}`;
 
   return requestDecisionPrompt(config, requestTick, options, prompt, (parsed) => {
+          if(parsed?.chosenAction==='APPRENTICESHIP_REUNION'){
+            if(requestTick!==world.tick+1||activeAvatar(world)===cultivator||!exactApprenticeshipReunionDecision(parsed,apprenticeshipOptions))return undefined;
+            return exactApprenticeshipReunionDecision(parsed,availableApprenticeshipReunionActions(cultivator,world,requestTick));
+          }
+          if(parsed&&(Object.hasOwn(parsed,'apprenticeshipReunionMove')||Object.hasOwn(parsed,'targetApprenticeshipReunionId')))return undefined;
           if(parsed?.chosenAction==='PILGRIMAGE_FORK'){
             if(requestTick!==world.tick+1||activeAvatar(world)===cultivator||!exactPilgrimageForkDecision(parsed,forkOptions))return undefined;
             return exactPilgrimageForkDecision(parsed,availablePilgrimageForkActions(cultivator,world,requestTick));

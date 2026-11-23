@@ -1,3 +1,4 @@
+import {projectApprenticeshipReunion} from '../engine/apprenticeshipReunion';
 import {projectBattlefieldAftermath} from '../engine/battlefieldAftermath';
 import {projectVillageReunion} from '../engine/villageReunion';
 import {formatAnomalyRelayMark,visibleAnomalyRelayMarks} from './anomalyRelayMapView';
@@ -66,6 +67,8 @@ export function projectMapEntitySiteDetails(world:WorldState,view:TerrainView,si
     if(lease)add('地契',`${lease.role==='owner'?'本宗为出让方':'本宗为承租方'} · 尚余 ${lease.remaining} 份采集额度`);
   }
   if(!here)return details;
+  const ownLesson=projectApprenticeshipReunion(world,here);
+  if(ownLesson?.siteId===site.id&&ownLesson.receipt)add('本人同地旧课','这里只能查本人实际参与的一次当面话。');
   const localAftermath=projectBattlefieldAftermath(world,here);
   if(localAftermath?.siteId===site.id)add('战后拾愿','本人在此处亲历同一场已经结算的战事。');
   const localReunion=projectVillageReunion(world,here);
