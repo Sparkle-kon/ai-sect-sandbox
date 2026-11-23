@@ -1,4 +1,7 @@
-import {openSectMeetingTurn,readSettledSectMeeting} from '../sectMeetingOrders';
+import {finishSectPairChores,openSectMeetingTurn,readSettledSectMeeting} from '../sectMeetingOrders';
+import {planSectPairDrama,settleSectPairDrama} from '../sectPairDrama';
+import {witnessEvent} from '../rumorEngine';
+import type {WorldEvent} from '../../types/world';
 import {settleSectJobReportRow} from '../sectJobReportRules';
 import type { WorldState } from '../../types/world';
 import { cloneWorldWithColdHistory } from '../coldHistoryEngine';
@@ -51,8 +54,11 @@ export function runTickStagePipeline(inputs: TickInputs, ports: TickActionPorts)
   const context: TickBaseContext = { ...inputs, precomputedDecisions, nextState, rng, sectMeeting };
   const [preTurn, movement, actions, institutions, chronicle] = tickStagePipeline;
   const preTurnContext = preTurn.run(context);
-  const turnContext = movement.run(preTurnContext);
-  actions.run(turnContext, ports);
+  const turnContext=movement.run(preTurnContext);
+  const publish=(event:WorldEvent)=>{turnContext.newEvents.push(event);witnessEvent(nextState,event);};
+  if(sectMeeting&&sectMeeting.byDisciple.size>=2)sectMeeting.pairDrama=planSectPairDrama(inputs.prevState,sectMeeting.byDisciple);
+  actions.run(turnContext,ports);
+  const actualAbortedBlame=!!sectMeeting&&finishSectPairChores(nextState,sectMeeting,publish);
   const observed=sectMeeting&&readSettledSectMeeting(sectMeeting,nextState.tick);
   const managed=nextState.sectManagement;
   if(managed&&observed?.length){
@@ -61,6 +67,11 @@ export function runTickStagePipeline(inputs: TickInputs, ports: TickActionPorts)
       .map(row=>[row.discipleId,settleSectJobReportRow(nextState,row,rng)]));
     managed.latestReport={openedTick:inputs.prevState.tick,settledTick:nextState.tick,sectId:managed.sectId,leaderId:managed.leaderId,
       rows:observed.map(row=>resolved.get(row.discipleId)!)};
+    if(sectMeeting?.pairDrama){
+      const event=settleSectPairDrama(nextState,sectMeeting.pairDrama,managed.latestReport,actualAbortedBlame);
+      // Pair memory is read from the scoped report; it is not generic public rumor material.
+      if(event)turnContext.newEvents.push(event);
+    }
   }
   institutions.run(turnContext, ports);
   chronicle.run(turnContext);

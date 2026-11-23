@@ -1,3 +1,4 @@
+import {adjustRelationship} from './relationships';
 import {ensureManagedSectQuirks} from './sectQuirkAssignment';
 import {createInitialWorld,REALM_BASE_POWER,REALM_LIFESPAN} from '../data/initialWorld';
 import {SECT_QUIRK_IDS,STARTER_SECT_IDS,starterSectIdentity,type ManagementBuildings,type SectQuirkId,type StarterDraw,type StarterSectId} from '../types/sectManagement';
@@ -125,6 +126,14 @@ export function createManagedSectWorld(seed:number,profileId:WorldgenProfileId,s
   world.sects.push(sect);
   lot.tile.ownerSectId=sectId;
   world.cultivators.push(...newPeople);
+  const adults=disciples.filter(person=>person.age>=18);
+  for(let i=0;i<adults.length;i++)for(let j=i+1;j<adults.length;j++){
+    const rivals=starterId==='drunken-sword-hermitage'&&i===0&&j===1;
+    const friends=starterId==='drunken-sword-hermitage'&&i===1&&j===2;
+    adjustRelationship(world,adults[i].id,adults[j].id,rivals?6:friends?22:18,rivals?'竞争':friends?'挚友':'同门',
+      rivals?'同在醉剑小筑习剑，彼此存着一分较量的心思。':friends?'两人同在醉剑小筑，是说得来的一对同门。':
+        '同在这座山门领功课，彼此是同门。');
+  }
   for(const person of newPeople)noteTerrainVisit(world,person);
   world.sectManagement={version:1,starterId,sectId,leaderId,homeSiteId,foundedTick:world.tick,draw,
     foundingDiscipleIds:disciples.map(person=>person.id),buildings:{...starter.buildings},

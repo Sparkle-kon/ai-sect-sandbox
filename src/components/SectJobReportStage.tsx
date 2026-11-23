@@ -1,8 +1,10 @@
-import {useEffect,useId,useMemo,useRef,useState} from 'react';
+import {useEffect,useId,useLayoutEffect,useMemo,useRef,useState} from 'react';
 import {projectSectReportReaction} from '../engine/sectReaction';
 import type {SectReactionCue} from '../types/sectReaction';
 import {SectReactionGlyph,useSectReactionShake} from './SectReactionGlyph';
 import {SECT_JOB_DEFINITIONS} from '../engine/sectJobs';
+import type {SectPairDramaView} from '../engine/sectPairDrama';
+import {associatedPairDramaRow,SectPairDramaRead} from './SectPairDramaRead';
 import type {SectJobReport} from '../types/sectJobs';
 import type {WorldState} from '../types/world';
 import {CultivatorPortrait} from './CultivatorPortrait';
@@ -12,8 +14,9 @@ import {reportEffectLine,reportExpression,reportTier,reportVoice} from './sectJo
 
 const control='min-h-11 min-w-0 rounded-md border border-amber-300/45 px-3 py-1.5 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300';
 
-export function SectJobReportStage({world,report,present,comic,onDismiss,onReaction}:{
-  world:WorldState;report:SectJobReport;present?:ReadonlySet<string>;comic?:SectComicView;onDismiss:(report:SectJobReport)=>void;onReaction?:(cue:SectReactionCue|undefined)=>void;
+export function SectJobReportStage({world,report,present,comic,drama,onDismiss,onReaction,onDramaVisibility}:{
+  world:WorldState;report:SectJobReport;present?:ReadonlySet<string>;comic?:SectComicView;drama?:SectPairDramaView;onDismiss:(report:SectJobReport)=>void;onReaction?:(cue:SectReactionCue|undefined)=>void;
+  onDramaVisibility?:(visible:boolean)=>void;
 }){
   const title=useId();
   const heading=useRef<HTMLHeadingElement>(null),scene=useRef<HTMLElement>(null);
@@ -24,6 +27,8 @@ export function SectJobReportStage({world,report,present,comic,onDismiss,onReact
   const comicRow=associatedComicRow(comic,report);
   const rows=useMemo(()=>[...report.rows].sort((a,b)=>reportTier(a).order-reportTier(b).order),[report]);
   const row=rows[index];
+  const dramaVisible=!!row&&row===associatedPairDramaRow(drama,report,rows);
+  useLayoutEffect(()=>{onDramaVisibility?.(dramaVisible);},[dramaVisible,onDramaVisibility]);
   const reaction=useMemo(()=>row?projectSectReportReaction(world,report,row):undefined,[world,report,row]);
   useSectReactionShake(visual,reaction);
   useEffect(()=>{
@@ -92,6 +97,7 @@ export function SectJobReportStage({world,report,present,comic,onDismiss,onReact
         </ul>:!sceneComic?.effects.length&&<p>这一单没有可记的收获或折损。</p>}
         {sceneComic&&<SectComicEffects effects={sceneComic.effects}/>}
       </section>
+      {drama&&dramaVisible&&<SectPairDramaRead drama={drama}/>}
     </article>
     <div className="grid grid-cols-2 gap-2">
       <button type="button" className={`${control} bg-amber-200 font-semibold text-stone-950`} onClick={next}>{final?'听完，回晨会':'下一位'}</button>

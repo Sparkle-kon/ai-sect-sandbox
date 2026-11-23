@@ -1,3 +1,4 @@
+import {deferSectPairChore} from '../sectMeetingOrders';
 import {observeSectJob,planSectJob,settleSectJobChore,snapshotSectJobEvidence} from '../sectJobs';
 import type {SectJobPlan} from '../../types/sectJobs';
 import type { Cultivator, LLMDecisionPayload, WorldEvent, WorldState } from '../../types/world';
@@ -611,10 +612,13 @@ export function runOrdinaryActorAction(
     (decision.chosenAction === 'REST' && decision.targetHeartDemonAftermathId===undefined) || decision.chosenAction === 'CULTIVATE' ||
     (decision.chosenAction === 'EXPLORE' && previousLocation !== cultivator.locationId));
   if(job&&sectMeeting&&plannedJob&&jobBefore){
-    const choreEvent=validEffect&&plannedJob.kind==='chore'?settleSectJobChore(nextState,cultivator,plannedJob):undefined;
-    if(choreEvent){newEvents.push(choreEvent);witnessEvent(nextState,choreEvent);}
-    sectMeeting.observations.set(cultivator.id,
-      observeSectJob(nextState,cultivator,job,plannedJob,jobBefore,choreEvent??evt??undefined,validEffect));
+    const deferred=validEffect&&plannedJob.kind==='chore'&&deferSectPairChore(sectMeeting,cultivator,job,plannedJob,jobBefore);
+    if(!deferred){
+      const choreEvent=validEffect&&plannedJob.kind==='chore'?settleSectJobChore(nextState,cultivator,plannedJob):undefined;
+      if(choreEvent){newEvents.push(choreEvent);witnessEvent(nextState,choreEvent);}
+      sectMeeting.observations.set(cultivator.id,
+        observeSectJob(nextState,cultivator,job,plannedJob,jobBefore,choreEvent??evt??undefined,validEffect));
+    }
   }
   if(story)completeStorytellerChoice(nextState,cultivator,story,
     validEffect&&storytellerActionApplied(cultivator,story.native,previousLocation,evt));

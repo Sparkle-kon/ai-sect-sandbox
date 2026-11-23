@@ -1,3 +1,5 @@
+import type {SectPairDramaView} from '../engine/sectPairDrama';
+import {SectPairDramaRead} from './SectPairDramaRead';
 import type {WorldState} from '../types/world';
 import {SectRecurringRead,type SectRecurringViews} from './SectRecurringRead';
 import type {projectSectComicMoment} from '../engine/sectComedy';
@@ -28,7 +30,7 @@ export function SectComicEffects({effects}:{effects:readonly SectComicAppliedEff
   </ul>;
 }
 
-export function SectComicAside({world,comic,speaks,visits}:{world:WorldState;comic?:SectComicView;speaks:boolean;visits:SectRecurringViews}){
+export function SectComicAside({world,comic,speaks,visits,drama}:{world:WorldState;comic?:SectComicView;speaks:boolean;visits:SectRecurringViews;drama?:SectPairDramaView}){
   return <details data-sect-comic-aside="" className="rounded-lg border border-amber-300/25 bg-stone-950/80 px-3">
     <summary className="min-h-11 cursor-pointer content-center font-serif text-sm text-amber-100 focus-visible:outline focus-visible:outline-amber-300">
       本月小插曲
@@ -38,6 +40,7 @@ export function SectComicAside({world,comic,speaks,visits}:{world:WorldState;com
       {speaks&&<blockquote className="border-l border-amber-400/40 pl-2 font-serif leading-6">{comic.speakerName}：「{comic.quote}」</blockquote>}
       <SectComicEffects effects={comic.effects}/>
     </div>}
+    {drama&&<div className="pb-2"><SectPairDramaRead drama={drama}/></div>}
     <SectRecurringRead world={world} visits={visits}/>
   </details>;
 }

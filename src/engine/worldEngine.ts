@@ -1,3 +1,4 @@
+import {adjustRelationship} from './relationships';
 import { recordAuxiliaryActionEvent } from './recordAuxiliaryActionEvent';
 import { availableLastRosterActions, recordLastRosterClosure, resolveLastRosterAction } from './lastRoster';
 import {exactLastRosterDecision} from './lastRosterCognition';
@@ -162,7 +163,6 @@ import { recordFlightPursuit } from './protagonistFlightTape';
 import {
   Cultivator,
   LLMDecisionPayload,
-  RelationType,
   WorldEvent,
   WorldState,
 } from '../types/world';
@@ -208,39 +208,7 @@ function clamp(val: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, val));
 }
 
-export function adjustRelationship(
-  world: WorldState,
-  fromId: string,
-  toId: string,
-  delta: number,
-  fallbackType: RelationType,
-  noteUpdate?: string
-): void {
-  const existing = world.relationships.find(
-    (r) =>
-      (r.fromId === fromId && r.toId === toId) ||
-      (r.fromId === toId && r.toId === fromId)
-  );
-  if (existing) {
-    existing.affinity = clamp(existing.affinity + delta, -100, 100);
-    if (existing.affinity <= -60) {
-      existing.type = '血仇';
-    } else if (existing.affinity >= 80 && existing.type === '竞争') {
-      existing.type = '挚友';
-    }
-    if (noteUpdate) {
-      existing.note = noteUpdate;
-    }
-  } else {
-    world.relationships.push({
-      fromId,
-      toId,
-      type: fallbackType,
-      affinity: clamp(delta, -100, 100),
-      note: noteUpdate ?? '修仙界因果交集',
-    });
-  }
-}
+export {adjustRelationship} from './relationships';
 
 function closeInterruptedTrial(actor: Cultivator, tick: number): void {
   interruptStoryChoicesOnDeath(actor, tick, '应劫者已先行陨落，本次天劫中断。');

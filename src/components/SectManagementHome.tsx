@@ -2,6 +2,7 @@ import {projectSectFurnaceReaction} from '../engine/sectReaction';
 import type {SectReactionCue} from '../types/sectReaction';
 import {lazy,Suspense,useCallback,useId,useMemo,useRef,useState,type RefObject} from 'react';
 import {projectSectRecurring} from '../engine/sectRecurring';
+import {projectSectPairDrama} from '../engine/sectPairDrama';
 import {projectSectComicMoment} from '../engine/sectComedy';
 import {associatedComicRow,SectComicAside} from './SectComicRead';
 import {projectSectGrowth,quoteSectGrowthCommand} from '../engine/sectGrowth';
@@ -142,12 +143,18 @@ function ManagedCourtyard({world,busy,onTick,onConfirmJobs,observations,report,o
   },[world,siteId]);
   const plan=courtyard?.plan;
   const [dismissedReport,setDismissedReport]=useState<SectJobReport>();
+  const [stagedDrama,setStagedDrama]=useState<SectJobReport>();
+  const updateDramaVisibility=useCallback((visible:boolean)=>setStagedDrama(visible?report:undefined),[report]);
   const [reactionRead,setReactionRead]=useState<{report:SectJobReport;cue:SectReactionCue}>();
   const furnaceReaction=useMemo(()=>projectSectFurnaceReaction(world),[world]);
   const showReaction=useCallback((cue:SectReactionCue|undefined)=>{
     setReactionRead(previous=>cue&&report?{report,cue}:previous?.report===report?undefined:previous);
   },[report]);
   const visits=useMemo(()=>projectSectRecurring(world),[world]);
+  const drama=useMemo(()=>{
+    const projected=projectSectPairDrama(world);
+    return projected?.tick===world.tick?projected:undefined;
+  },[world]);
   const comic=useMemo(()=>projectSectComicMoment(world),[world]);
   const comicSpeaker=comic?world.cultivators.filter(actor=>actor.id===comic.speakerId):[];
   const canSpeakComic=comicSpeaker.length===1&&comicSpeaker[0].alive&&comicSpeaker[0].hp>0;
@@ -162,15 +169,18 @@ function ManagedCourtyard({world,busy,onTick,onConfirmJobs,observations,report,o
   const linked=state.latestReport?.sectId===sect.id&&state.latestReport.leaderId===state.leaderId&&
     associatedComicRow(currentComic,state.latestReport)!==undefined;
   const asideComic=linked?undefined:currentComic;
+  const asideDrama=reportIsCurrent&&stagedDrama===report?undefined:drama;
   return <>
-    {(asideComic||visits.length>0)&&<SectComicAside key={world.tick} world={world} comic={asideComic} speaks={canSpeakComic} visits={visits}/>}
+    {(asideComic||asideDrama||visits.length>0)&&<SectComicAside key={world.tick} world={world} comic={asideComic}
+      speaks={canSpeakComic} visits={visits} drama={asideDrama}/>}
     {reportIsCurrent?<div className="grid min-w-0 items-start gap-3 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
       <section className={card} aria-label="宗门庭院">
         {plan?<LocalCourtyardCanvas plan={plan} embedded reaction={courtReaction}/>:<p className="text-sm text-slate-300">此刻未见山门内的景象。</p>}
         {buildings}
       </section>
       <Suspense fallback={<p role="status" className="order-first text-sm text-slate-300 lg:order-none">弟子们正在整理回话…</p>}>
-        <SectJobReportStage world={world} report={report} present={presentIds} comic={currentComic} onReaction={showReaction} onDismiss={closing=>{
+        <SectJobReportStage world={world} report={report} present={presentIds} comic={currentComic} drama={drama} onDramaVisibility={updateDramaVisibility}
+          onReaction={showReaction} onDismiss={closing=>{
           if(closing!==report)return;
           setDismissedReport(closing);onDismissReport?.(closing);
         }}/>
