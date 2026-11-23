@@ -1,3 +1,4 @@
+import {resolveGuidedVillageReunionTurn,type GuidedVillageReunionTurn} from './guidedVillageReunionTurn';
 import {resolveGuidedVacantGateTurn,type GuidedVacantGateTurn} from './guidedVacantGateTurn';
 import {resolveGuidedWildMigrationTurn,type GuidedWildMigrationTurn} from './guidedWildMigrationTurn';
 import {resolveGuidedFarewellLandingTurn,type GuidedFarewellLandingTurn} from './guidedFarewellLandingTurn';
@@ -20,12 +21,13 @@ import {resolveGuidedHeavenlyAlchemyTurn,type GuidedHeavenlyAlchemyTurn} from '.
 import {resolveGuidedImmortalAuctionTurn,type GuidedImmortalAuctionTurn} from './guidedImmortalAuctionTurn';
 import type {WorldState} from '../types/world';
 
-export type GuidedWorldTurn=GuidedDungeonTurn|GuidedHeavenlyAlchemyTurn|GuidedDaoPathTurn|GuidedImmortalAuctionTurn|GuidedCultivationClanTurn|GuidedAscensionTurn|GuidedProtagonistFlightTurn|GuidedHeartDemonRecoveryTurn|GuidedBattlefieldRevisitTurn|GuidedCalamityArrayTurn|GuidedSchoolFormDuelTurn|GuidedFrontierNightHuntTurn|GuidedWitnessInquiryTurn|GuidedCampaignAssemblyTurn|GuidedPavilionFireTurn|GuidedFrontierGorgeTurn|GuidedMercyReunionTurn|GuidedFarewellLandingTurn|GuidedWildMigrationTurn|GuidedVacantGateTurn;
+export type GuidedWorldTurn=GuidedDungeonTurn|GuidedHeavenlyAlchemyTurn|GuidedDaoPathTurn|GuidedImmortalAuctionTurn|GuidedCultivationClanTurn|GuidedAscensionTurn|GuidedProtagonistFlightTurn|GuidedHeartDemonRecoveryTurn|GuidedBattlefieldRevisitTurn|GuidedCalamityArrayTurn|GuidedSchoolFormDuelTurn|GuidedFrontierNightHuntTurn|GuidedWitnessInquiryTurn|GuidedCampaignAssemblyTurn|GuidedPavilionFireTurn|GuidedFrontierGorgeTurn|GuidedMercyReunionTurn|GuidedFarewellLandingTurn|GuidedWildMigrationTurn|GuidedVacantGateTurn|GuidedVillageReunionTurn;
 
 export function resolveGuidedWorldTurn(order:GuidedWorldTurn,world:WorldState,branch:string,revision:number){
   if(!('kind' in order))return resolveGuidedDungeonTurn(order,world,branch,revision);
   switch(order.kind){
     case 'vacant-gate':return resolveGuidedVacantGateTurn(order,world,branch,revision);
+    case 'village-reunion':return resolveGuidedVillageReunionTurn(order,world,branch,revision);
     case 'wild-migration':return resolveGuidedWildMigrationTurn(order,world,branch,revision);
     case 'farewell-landing':return resolveGuidedFarewellLandingTurn(order,world,branch,revision);
     case 'mercy-reunion':return resolveGuidedMercyReunionTurn(order,world,branch,revision);

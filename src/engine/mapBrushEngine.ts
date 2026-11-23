@@ -1,3 +1,4 @@
+import {advanceVillageReunions} from './villageReunion';
 import { openPavilionFire } from './pavilionFire';
 import { resolveCalamityArrayProtection } from './calamityArray';
 import {reconcileAscensionInterruptions} from './ascensionEngine';
@@ -139,7 +140,7 @@ export function applyMapBrush(prev: WorldState, kind: GodBrushKind, points: MapP
     const fire=strike&&openPavilionFire(world,strike,event);
     if(fire)brushEvents.push(fire);
   }
-  brushEvents.push(...advanceSanctuaries(world), ...advanceResearch(world), ...advancePilgrimages(world), ...reconcileCourierDeaths(world), ...reconcileDisasterShelterDeaths(world), ...advanceHouseholds(world), ...advanceWorkshops(world), ...advanceRelicExhibits(world), ...advanceProbation(world), ...advanceToolLoans(world), ...advanceEstates(world));
+  brushEvents.push(...advanceSanctuaries(world), ...advanceResearch(world), ...advancePilgrimages(world), ...reconcileCourierDeaths(world), ...reconcileDisasterShelterDeaths(world), ...advanceHouseholds(world), ...advanceWorkshops(world), ...advanceRelicExhibits(world), ...advanceProbation(world), ...advanceToolLoans(world), ...advanceVillageReunions(world), ...advanceEstates(world));
   reconcileRelicCustody(world);
   brushEvents.push(...reconcileAscensionInterruptions(world));
   recordNewDeathsForReincarnation(prev, world, brushEvents);

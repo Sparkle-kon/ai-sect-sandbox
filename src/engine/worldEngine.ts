@@ -1,3 +1,5 @@
+import {advanceVillageReunions,availableVillageReunionActions,isPrivateVillageReunionEvent,recordVillageReunionMovement,resolveVillageReunionAction} from './villageReunion';
+import {exactVillageReunionDecision} from './villageReunionCognition';
 import {availableVacantGateActions,isPrivateVacantGateEvent,stageVacantGateAction} from './vacantGate';
 import {exactVacantGateDecision} from './vacantGateCognition';
 import {availableWildMigrationActions,isPrivateWildMigrationEvent,resolveWildMigrationAction} from './wildMigration';
@@ -888,6 +890,11 @@ export function applyCultivatorBrainDecision(
       // The native attack round, not this individual turn, owns actual array and resource settlement.
       return null;
     case 'VACANT_GATE': return null; // The actual opposing round applies the independently staged response.
+    case 'VILLAGE_REUNION': {
+      if((modelInput||isProviderPersonaDecision(decision))&&activeAvatar(world)===cultivator)return null;
+      const exact=exactVillageReunionDecision(decision,availableVillageReunionActions(cultivator,world,world.tick),true);
+      return exact?resolveVillageReunionAction(world,cultivator,exact):null;
+    }
     case 'WILD_MIGRATION': {
       if(modelInput&&activeAvatar(world)===cultivator)return null;
       const exact=exactWildMigrationDecision(decision,availableWildMigrationActions(cultivator,world,world.tick),true);
@@ -1681,6 +1688,14 @@ export function advanceWorldTick(
         modelOrdinaryReplaced=true;
       }
     }
+    if(modelProposal?.chosenAction==='VILLAGE_REUNION'&&!avatarDecision){
+      const prior=prevState.cultivators.find(row=>row.id===cultivator.id);
+      if(!prior||activeAvatar(prevState)===prior||!exactVillageReunionDecision(modelProposal,
+        availableVillageReunionActions(prior,prevState,nextState.tick),true)){
+        provided=undefined;
+        modelOrdinaryReplaced=true;
+      }
+    }
     if(modelProposal?.chosenAction==='WILD_MIGRATION'&&!avatarDecision){
       const prior=prevState.cultivators.find(row=>row.id===cultivator.id);
       if(!prior||activeAvatar(prevState)===prior||!exactWildMigrationDecision(modelProposal,
@@ -1963,7 +1978,8 @@ export function advanceWorldTick(
     }
     if(!liveEncounter&&!liveDestiny&&expeditionOrder?.chosenAction!=='EXPEDITION_DUNGEON'&&deferRegionalActorTurn(nextState,regionalTurn,cultivator,expeditionOrder??provided??supplied??fieldNegotiation,
       ()=>!!requiredBeforeOrdinaryDecision(cultivator,nextState)||
-        availableVacantGateActions(cultivator,nextState,nextState.tick).length>0))continue;
+        availableVacantGateActions(cultivator,nextState,nextState.tick).length>0||
+        availableVillageReunionActions(cultivator,nextState,nextState.tick).some(row=>row.villageReunionMove==='accept')))continue;
 
     let decisionDraws = 0;
     if (provided && traceOptions?.replayDraws) {
@@ -1973,9 +1989,11 @@ export function advanceWorldTick(
     const planned = expeditionOrder ?? provided ?? fieldNegotiation ??
       computeHeuristicDecision(cultivator, nextState, () => { decisionDraws++; return rng(); });
     // Invalid/declined online output may leave no order. Record the actual quiet fallback, never a new private signature.
-    const decision = !expeditionOrder && !provided && !fieldNegotiation &&
-      (traceOptions?.suppressAutoClanConsent?.has(cultivator.id) || modelProposal !== undefined) &&
-      planned.chosenAction === 'CULTIVATION_CLAN' ? waitForOwnClanChoice() : planned;
+    const unresolvedModelConsent=!expeditionOrder&&!provided&&!fieldNegotiation&&
+      (traceOptions?.suppressAutoClanConsent?.has(cultivator.id)||modelProposal!==undefined);
+    const decision:LLMDecisionPayload=unresolvedModelConsent&&planned.chosenAction==='CULTIVATION_CLAN'?waitForOwnClanChoice():
+      unresolvedModelConsent&&planned.chosenAction==='VILLAGE_REUNION'&&(planned.villageReunionMove==='offer'||planned.villageReunionMove==='accept')?
+        {chosenAction:'REST',innerMonologue:'未曾应下旧交所问，先让这句话留在原处。'}:planned;
 
     const captureTrace = traceOptions?.captureTrace !== false;
     const candidates = (captureTrace || traceOptions?.onActor) && decision.chosenAction !== 'EXPEDITION_DUNGEON' &&
@@ -2013,6 +2031,8 @@ export function advanceWorldTick(
       if(scarReturn)newEvents.push(scarReturn);
       const mercyMeeting=recordMercyReunionMovement(nextState,cultivator,previousLocation);
       if(mercyMeeting)newEvents.push(mercyMeeting);
+      const villageMeeting=recordVillageReunionMovement(nextState,cultivator,previousLocation);
+      if(villageMeeting)newEvents.push(villageMeeting);
     }
     if (evt && (decision.chosenAction === 'DUEL' || decision.chosenAction === 'SOCIALIZE' || decision.chosenAction === 'BREAKTHROUGH' ||
       decision.chosenAction==='MERCY_REUNION'&&evt.duelWinnerId!==undefined))
@@ -2048,7 +2068,7 @@ export function advanceWorldTick(
         if (receipt && evt.id === `evt-${receipt.id}`) recordReliefCompetition(nextState, receipt);
       }
       newEvents.push(evt);
-      if(!isBattlefieldRevisitEvent(evt)&&!isPrivateCalamityArrayEvent(evt)&&!isTaughtSwordPracticeEvent(evt)&&!isPrivateSchoolFormEvent(evt)&&!isPrivateWitnessInquiryEvent(evt)&&!isPrivatePavilionFireEvent(evt)&&!isPrivateMercyReunionEvent(evt)&&!isPrivateWildMigrationEvent(evt)&&!(evt.witnessScope==='participants'&&evt.id.endsWith('-study-technique-fire')))witnessEvent(nextState, evt);
+      if(!isBattlefieldRevisitEvent(evt)&&!isPrivateCalamityArrayEvent(evt)&&!isTaughtSwordPracticeEvent(evt)&&!isPrivateSchoolFormEvent(evt)&&!isPrivateWitnessInquiryEvent(evt)&&!isPrivatePavilionFireEvent(evt)&&!isPrivateMercyReunionEvent(evt)&&!isPrivateWildMigrationEvent(evt)&&!isPrivateVillageReunionEvent(evt)&&!(evt.witnessScope==='participants'&&evt.id.endsWith('-study-technique-fire')))witnessEvent(nextState, evt);
       if(decision.chosenAction==='SOCIALIZE'&&cultivator.currentAction==='SOCIALIZE'){
         const after=recordTournamentBanquetAfterTalk(nextState,evt);
         if(after&&!newEvents.some(row=>row.id===after.id))newEvents.push(after);
@@ -2115,9 +2135,9 @@ export function advanceWorldTick(
         result.origin==='player'?'avatar':result.origin,true);
     },
   }), ...advanceOccasions(nextState, rng), ...advanceOaths(nextState), ...advanceMarkets(nextState), ...advanceWitnesses(nextState), ...advanceSeasonReviews(nextState, (state, seasonId) =>
-    publicCompetitionStandings(state, seasonId).find(({ rank }) => rank === 1)), ...maintainSectPolitics(nextState), ...advanceDoctrineFoundings(nextState), ...advanceDoctrineMaturity(nextState,prevState), ...advanceBounties(nextState), ...advanceResearch(nextState), ...advanceWorkshops(nextState), ...advanceCraftTraining(nextState), ...advanceScribeCommissions(nextState), ...advanceDamageAssurance(nextState), ...advanceRelicExhibits(nextState), ...advanceProbation(nextState), ...advanceToolLoans(nextState), ...advanceWaypostMeals(nextState), ...advanceImmortalAuctions(nextState), ...advanceEstates(nextState), ...advanceDoctrines(nextState), ...advanceSectCredit(nextState), ...advanceSanctuaries(nextState), ...advancePilgrimages(nextState), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceCareFollowups(nextState), ...advanceDanxiaShortages(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...reconcileCourierDeaths(nextState), ...advanceHouseholds(nextState), ...advanceHouseholdNames(nextState), ...advanceCultivationClans(nextState)]) {
+    publicCompetitionStandings(state, seasonId).find(({ rank }) => rank === 1)), ...maintainSectPolitics(nextState), ...advanceDoctrineFoundings(nextState), ...advanceDoctrineMaturity(nextState,prevState), ...advanceBounties(nextState), ...advanceResearch(nextState), ...advanceWorkshops(nextState), ...advanceCraftTraining(nextState), ...advanceScribeCommissions(nextState), ...advanceDamageAssurance(nextState), ...advanceRelicExhibits(nextState), ...advanceProbation(nextState), ...advanceToolLoans(nextState), ...advanceWaypostMeals(nextState), ...advanceImmortalAuctions(nextState), ...advanceVillageReunions(nextState), ...advanceEstates(nextState), ...advanceDoctrines(nextState), ...advanceSectCredit(nextState), ...advanceSanctuaries(nextState), ...advancePilgrimages(nextState), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceCareFollowups(nextState), ...advanceDanxiaShortages(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...reconcileCourierDeaths(nextState), ...advanceHouseholds(nextState), ...advanceHouseholdNames(nextState), ...advanceCultivationClans(nextState)]) {
     newEvents.push(event);
-    if(!isPrivateTournamentBanquetEvent(event)&&!isPrivateVacantGateEvent(event))witnessEvent(nextState, event);
+    if(!isPrivateTournamentBanquetEvent(event)&&!isPrivateVacantGateEvent(event)&&!isPrivateVillageReunionEvent(event))witnessEvent(nextState, event);
   }
   if(pendingGateEffects.size){
     const executed=new Set(newEvents.filter(event=>event.actorIds.length===1&&isPrivateVacantGateEvent(event)).flatMap(event=>[...event.actorIds]));

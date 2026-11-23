@@ -1,3 +1,4 @@
+import {villageReunionBeforeRecruit,villageReunionAfterRecruit,villageReunionPinnedRecruitmentIds} from './villageReunion';
 import {fictionalGenderFor} from './fictionalPersonMetadata';
 import {disasterShelterPinnedRecordIds} from './disasterShelterCheckpoint';
 import { finishVillageEvolution, noteVillageEvolutionSettlement, observeVillageEvolution, planVillageEvolutionMigration, recordVillageEvolutionMigration, villageEvolutionBlocksMigration, villageEvolutionLocalObserverIds, villageEvolutionPinnedSettlementIds } from './villageEvolutionEngine';
@@ -119,6 +120,7 @@ function log(world: WorldState, village: MortalSettlement, row: Omit<SettlementR
     for(const id of villageEvolutionPinnedSettlementIds(world))pinned.add(id);
     for(const id of disasterShelterPinnedRecordIds(world))pinned.add(id);
     for(const id of civicMemorialPinnedReliefIds(world))pinned.add(id);
+    for(const id of villageReunionPinnedRecruitmentIds(world))pinned.add(id);
     world.settlements.records=world.settlements.records.filter((entry,index)=>index>=tail||pinned.has(entry.id));
   }
   if (actual.kind === 'relief') {
@@ -170,6 +172,7 @@ export function resolveSettlementAction(world: WorldState, actor: Cultivator, de
   openVillageCensusPeriod(world);
   const person = village.volunteers.find(({ id }) => id === option.targetVolunteerId)!;
   initializeHouseholds(world);
+  const overlap=villageReunionBeforeRecruit(world,village,person);
   const recruit = enlist(person, actor, village);
   sect.spiritStones -= SETTLEMENT_RECRUIT_STIPEND;
   village.population--;
@@ -183,6 +186,7 @@ export function resolveSettlementAction(world: WorldState, actor: Cultivator, de
     cultivatorId: recruit.id, people: 1, stones: SETTLEMENT_RECRUIT_STIPEND, herbs: 0,
     description: `${village.name}成年志愿者${person.name}自愿加入${sect.name}，坊籍减一；宗门发放${SETTLEMENT_RECRUIT_STIPEND}灵石安置费。` },
   person.id, '凡人自愿入门');
+  villageReunionAfterRecruit(world,village,person,recruit,actor,overlap);
   closeVillageCensusPeriod(world);
   return receipt;
 }

@@ -1,3 +1,4 @@
+import {projectVillageReunion} from '../engine/villageReunion';
 import {drawAnomalyRelaySeal,formatAnomalyRelayMark,visibleAnomalyRelayMarks} from './anomalyRelayMapView';
 import {buildSchoolFormMapStrokes,drawSchoolFormMapStrokes} from './schoolFormMapStroke';
 import {buildCalamityMapFlows,calamityFlowSummary,drawCalamityMapFlows} from './calamityArrayMapFlow';
@@ -430,6 +431,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const escortedCaravan = useMemo(() => visibleMapEscort(world, mapView, selected), [world, mapView, selected]);
   const hazards = useMemo(() => getVisibleHazards(world, mapView), [world, mapView]);
   const beastsByLocation = useMemo(() => visibleBeastsByLocation(world,mapView,selected),[world,mapView,selected]);
+  const localVillageReunion=useMemo(()=>selected?projectVillageReunion(world,selected):undefined,[world,selected]);
   const anomalyRelayMarks=useMemo(()=>visibleAnomalyRelayMarks(world,mapView,selected),[world,mapView,selected]);
   const wildMigrants=useMemo(()=>currentVisibleWildMigrants(world,beastsByLocation),[world,beastsByLocation]);
   const armedBrush = toolsExpanded && !fog && onBrushStroke && brush !== 'browse' ? brush : undefined;
@@ -1572,6 +1574,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                 {fog && (visibleActorsAtSite.get(location.id) ?? 0) > 0 &&
                   <span className="text-slate-300">· 可见修士 {visibleActorsAtSite.get(location.id)} 位（山河索引可查）</span>}
                 {ascensionMarks.some(mark=>mark.kind==='gate'&&mark.siteId===location.id)&&<span className="text-amber-200">· 仙门接引已实成</span>}
+                {localVillageReunion?.siteId===location.id&&selected?.locationId===location.id&&
+                  <span className="text-amber-200">· 亲到此地重逢旧村人</span>}
                 {relayMark&&<span className="text-amber-200">· 兽潮获讯 · {formatAnomalyRelayMark(relayMark)}</span>}
                 {clanCeremonies.has(location.id)&&<span className="text-amber-200">· 本月实有结契大典</span>}
                 {auctionMark?.siteId===location.id&&<span className="text-amber-200">· 万宝会 · 实有拍品 {auctionMark.count} 件</span>}

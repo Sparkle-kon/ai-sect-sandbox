@@ -1,3 +1,4 @@
+import {projectVillageReunion} from '../engine/villageReunion';
 import {formatAnomalyRelayMark,visibleAnomalyRelayMarks} from './anomalyRelayMapView';
 import {projectLocalAlignedWeather} from '../engine/alignedWeatherEngine';
 import {projectLocalCareFollowupCapacity} from '../engine/careFollowupEngine';
@@ -64,6 +65,8 @@ export function projectMapEntitySiteDetails(world:WorldState,view:TerrainView,si
     if(lease)add('地契',`${lease.role==='owner'?'本宗为出让方':'本宗为承租方'} · 尚余 ${lease.remaining} 份采集额度`);
   }
   if(!here)return details;
+  const localReunion=projectVillageReunion(world,here);
+  if(localReunion?.siteId===site.id)add('旧村重逢','此处有本人确实重逢的旧村一幕。');
 
   const desk=matches(projectLocalPavilionDesk(world,here));
   if(desk&&(desk.staffed||desk.availableCopies>0||desk.heldCopies>0))

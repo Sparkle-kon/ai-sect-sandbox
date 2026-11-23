@@ -1,3 +1,5 @@
+import {availableVillageReunionActions} from './villageReunion';
+import {exactVillageReunionDecision,villageReunionCommand} from './villageReunionCognition';
 import {availableVacantGateActions} from './vacantGate';
 import {exactVacantGateDecision,vacantGateCommand} from './vacantGateCognition';
 import {availableWildMigrationActions} from './wildMigration';
@@ -1429,6 +1431,13 @@ export function computeHeuristicDecision(
       if (exact) return exact;
     }
   }
+  if(activeAvatar(world)!==cultivator&&world.villageReunions?.pairs.length){
+    const choices=availableVillageReunionActions(cultivator,world,world.tick);
+    // Merely meeting does not interrupt an established ordinary habit. A real pending gift is an independent choice.
+    const offered=choices.find(row=>row.villageReunionMove==='accept');
+    const exact=offered&&exactVillageReunionDecision(villageReunionCommand(offered),choices);
+    if(exact)return exact;
+  }
   if(activeAvatar(world)!==cultivator&&world.wildMigrations?.records.length){
     const nearby=availableWildMigrationActions(cultivator,world,world.tick);
     const desired=cultivator.personality==='嗜血'?'drive':cultivator.personality==='诡诈'?'track':'let_pass';
@@ -2633,6 +2642,14 @@ export async function requestCultivatorLLMDecision(
         exactBeastDuelResponse(parsed,beastContact.id,availableBeastDuelChoices(world,cultivator)):undefined,160);
   }
 
+  const village=availableVillageReunionActions(cultivator,world,requestTick);
+  if(village.length){
+    if(requestTick!==world.tick+1||activeAvatar(world)===cultivator)return undefined;
+    return requestDecisionPrompt(config,requestTick,options,
+      '只原样抄写本人当下可做的一项同村旧事回应；不填写姓氏、亲缘、同窗、承诺、灵石数或旁人立场：'+JSON.stringify(village.map(villageReunionCommand)),
+      parsed=>requestTick===world.tick+1&&activeAvatar(world)!==cultivator&&exactVillageReunionDecision(parsed,village)
+        ?exactVillageReunionDecision(parsed,availableVillageReunionActions(cultivator,world,requestTick)):undefined,160);
+  }
   const migration=availableWildMigrationActions(cultivator,world,requestTick);
   if(migration.length){
     if(requestTick!==world.tick+1||activeAvatar(world)===cultivator)return undefined;
