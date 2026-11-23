@@ -118,6 +118,7 @@ export function recordDecisionTrace(world: WorldState, actorId: string, candidat
     decision.chosenAction === 'BEAST_DUEL_RESPONSE' || decision.targetBeastDuelId !== undefined || decision.beastDuelChoice !== undefined ||
     decision.chosenAction==='VACANT_GATE'||decision.vacantGateMove!==undefined||decision.targetVacantGateSiegeId!==undefined||
     decision.chosenAction==='APPRENTICESHIP_REUNION'||decision.apprenticeshipReunionMove!==undefined||decision.targetApprenticeshipReunionId!==undefined||
+    decision.chosenAction==='FURNACE_EMERGENCY'||decision.furnaceEmergencyMove!==undefined||decision.targetFurnaceEmergencyId!==undefined||
     decision.chosenAction==='PILGRIMAGE_FORK'||decision.pilgrimageForkMove!==undefined||decision.targetPilgrimageForkId!==undefined||
     decision.chosenAction==='BATTLEFIELD_AFTERMATH'||decision.battlefieldAftermathMove!==undefined||decision.targetBattlefieldAftermathId!==undefined||
     decision.chosenAction==='VILLAGE_REUNION'||decision.villageReunionMove!==undefined||decision.targetVillageReunionId!==undefined||
@@ -185,7 +186,7 @@ export function createDecisionReplayTape(base: WorldState, councilMode: ReplayCo
 }
 
 const MECHANICAL_FIELDS = [
-  'targetHeartDemonAftermathId','apprenticeshipReunionMove','targetApprenticeshipReunionId','pilgrimageForkMove','targetPilgrimageForkId','battlefieldAftermathMove','targetBattlefieldAftermathId','villageReunionMove','targetVillageReunionId','vacantGateMove','targetVacantGateSiegeId','wildMigrationMove','targetWildMigrationId','farewellLandingMove','targetFarewellDeceasedId', 'targetCampaignAssemblySiegeId','pavilionFireMove','targetPavilionFireId','duelMercy','mercyReunionMove','targetMercyReunionId',
+  'targetHeartDemonAftermathId','furnaceEmergencyMove','targetFurnaceEmergencyId','apprenticeshipReunionMove','targetApprenticeshipReunionId','pilgrimageForkMove','targetPilgrimageForkId','battlefieldAftermathMove','targetBattlefieldAftermathId','villageReunionMove','targetVillageReunionId','vacantGateMove','targetVacantGateSiegeId','wildMigrationMove','targetWildMigrationId','farewellLandingMove','targetFarewellDeceasedId', 'targetCampaignAssemblySiegeId','pavilionFireMove','targetPavilionFireId','duelMercy','mercyReunionMove','targetMercyReunionId',
   'targetLocationId', 'targetCultivatorId', 'rumorIntent', 'proposedScheme', 'targetTuitionId', 'targetOathId', 'oathTerm', 'marketGood',
   'marketQuantity', 'marketLimitPrice', 'targetMarketOrderId', 'targetSettlementId', 'civicMemorialMove', 'targetCivicDeedId', 'targetCivicMemorialId', 'targetVolunteerId', 'targetWitnessEventId',
   'targetWitnessClaimId', 'targetEstateId', 'targetTechniqueId', 'targetHerbId', 'seedMove', 'targetSeedLotId', 'targetSeedPlotId', 'targetPillId', 'targetArtifactId', 'forgeTier',

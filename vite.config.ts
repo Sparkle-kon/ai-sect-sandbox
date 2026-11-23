@@ -43,6 +43,7 @@ export default defineConfig({
             './src/engine/sanctuaryEngine.ts'],
           'cognitive-protocol': ['./src/engine/llmCognitiveResponseGuide.ts', './src/engine/llmScheduler.ts', './src/engine/fairModelTurnEngine.ts'],
           'furnace-rules': ['./src/engine/furnaceReservationEngine.ts'],
+
           // Shared leaf callbacks never put historical custody into the native action chunks.
           'heritage-capture': ['./src/engine/eraHeritageCapture.ts'],
           'cold-water-rules': ['./src/engine/waterVeinTerms.ts'],
@@ -121,7 +122,9 @@ export default defineConfig({
           // Truce and storage need the typed siege proof, not the active combat graph.
           // Keep physical witness checks and their read-only scenes outside the scripture action bundle.
           'local-witness-scenes': ['./src/engine/vacantGate.ts','./src/engine/grandSiegePresence.ts','./src/engine/anomalyRelay.ts','./src/engine/villageReunion.ts','./src/engine/battlefieldAftermath.ts'],
-          'apprenticeship-save-shape': ['./src/engine/apprenticeshipReunionSchema.ts'],
+          // Portable validators stay outside the general save-loader size budget.
+          'local-scene-schemas': ['./src/engine/apprenticeshipReunionSchema.ts','./src/engine/furnaceEmergencySchema.ts'],
+          'pavilion-save-proof': ['./src/engine/storagePavilionLoanValidation.ts'],
           'grand-siege-proof': ['./src/engine/grandSiegeProof.ts', './src/engine/grandSiegeWitnessView.ts', './src/engine/storageGrandSiegeValidation.ts', './src/types/grandSiege.ts'],
           // The game seed depends only on trace state; keep the optional replay rules separate.
           'decision-replay': ['./src/engine/decisionTraceEngine.ts'],

@@ -79,6 +79,7 @@ function compactCases(world:WorldState) {
   const cited = new Set([
     ...world.workshops.orders.flatMap(order=>order.capacityOffer?[order.capacityOffer.caseId]:[]),
     ...world.damageAssurance.claims.map(claim=>claim.sourceCaseId),
+    ...(world.furnaceEmergencies?.cases??[]).map(scene=>scene.safetyId),
   ]);
   const firstCited=new Map<string,number>();
   for(const row of state.cases)if(cited.has(row.id))

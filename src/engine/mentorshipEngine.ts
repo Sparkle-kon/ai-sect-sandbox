@@ -157,6 +157,7 @@ export function maintainMentorship(world: WorldState): void {
   const open = state.offers.filter(({ status }) => status === 'pending');
   const pinned = new Set(world.mentorTransfers.releases.map(({sourceTuitionId}) => sourceTuitionId));
   const reunionPinned=new Set((world.apprenticeshipReunions?.cases??[]).flatMap(entry=>entry.teaching?[entry.teaching.tuitionId]:[]));
+  for(const scene of world.furnaceEmergencies?.cases??[])pinned.add(scene.tuitionId);
   const learned = new Map(state.lineage.map(row => [row.studentId,row]));
   const retained = state.offers.filter(row => {
     if(reunionPinned.has(row.id)&&row.status!=='pending')return true;

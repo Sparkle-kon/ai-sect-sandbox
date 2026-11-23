@@ -92,6 +92,9 @@ export function writeChronicleScene(fact: ChronicleSceneFact): ChronicleSceneTex
     }
   }
   if (fact.category === 'heavenly') {
+    if (title === '两人已在相邻避难处落脚' && text === '两人确实越过相邻一段路，在避难处落脚。炉口没有因此重开。') {
+      return {title:'在避难处歇下',paragraph:'两人走完相邻的一段路，终于有了落脚处。丹炉仍封着，等兽潮退了，那边还有事要料理。'};
+    }
     if (title === '兽潮实损，炉事暂止' && text === '兽潮损伤实有丹炉，本炉停用；装炉品阶与已有凭据不改。') {
       return {title:'兽潮之后，炉火暂歇',
         paragraph:'兽潮伤了原有的丹炉，炉火只得暂歇。旧炉的品阶没有跌，过去已经结清的炉事也还在账上；眼下，这座炉子确实不能再开。'};

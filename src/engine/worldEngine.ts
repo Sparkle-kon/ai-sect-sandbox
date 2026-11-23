@@ -1,3 +1,6 @@
+import {advanceFurnaceEmergencies,availableFurnaceEmergencyActions,furnaceEmergencyCrossingLocked,
+  isPrivateFurnaceEmergencyEvent,resolveFurnaceEmergencyAction} from './furnaceEmergency';
+import {exactFurnaceEmergencyDecision} from './furnaceEmergencyCognition';
 import {availableApprenticeshipReunionActions,isPrivateApprenticeshipReunionEvent,recordApprenticeshipReunionMovement,
   recordApprenticeshipReunionQuiet,recordApprenticeshipReunionRounds,resolveApprenticeshipReunionAction} from './apprenticeshipReunion';
 import {exactApprenticeshipReunionDecision} from './apprenticeshipReunionCognition';
@@ -555,6 +558,11 @@ export function applyCultivatorBrainDecision(
     cultivator.innerMonologue = '已经在本处停歇分茶，这月没有迈过下一个关口。';
     return null;
   }
+  if(furnaceEmergencyCrossingLocked(world,cultivator)){
+    cultivator.currentAction='FURNACE_EMERGENCY';
+    cultivator.innerMonologue='先走应下的这一段路，不在险处另办事务。';
+    return null;
+  }
   if(pilgrimageForkTravelLocked(world,cultivator)||pilgrimageForkActedThisTick(world,cultivator)){
     cultivator.currentAction='PILGRIMAGE_FORK';
     cultivator.innerMonologue='岔路各走各的，不在旧地另办事务。';
@@ -833,6 +841,13 @@ export function applyCultivatorBrainDecision(
       return resolveRelicExhibitAction(world, cultivator, decision);
     case 'WORKSHOP':
       return resolveWorkshopAction(world, cultivator, decision, rng);
+    case 'FURNACE_EMERGENCY': {
+      if((modelInput||isProviderPersonaDecision(decision))&&activeAvatar(world)===cultivator)return null;
+      const exact=exactFurnaceEmergencyDecision(decision,availableFurnaceEmergencyActions(cultivator,world,world.tick),true);
+      const event=exact?resolveFurnaceEmergencyAction(world,cultivator,exact):null;
+      if(event&&exact){cultivator.currentAction='FURNACE_EMERGENCY';cultivator.innerMonologue=exact.innerMonologue;}
+      return event;
+    }
     case 'FURNACE_SAFETY':
       return resolveFurnaceSafetyAction(world,cultivator,decision);
     case 'DAMAGE_ASSURANCE':
@@ -1733,6 +1748,14 @@ export function advanceWorldTick(
         modelOrdinaryReplaced=true;
       }
     }
+    if(modelProposal?.chosenAction==='FURNACE_EMERGENCY'&&!avatarDecision){
+      const prior=prevState.cultivators.find(row=>row.id===cultivator.id);
+      if(!prior||activeAvatar(prevState)===prior||!exactFurnaceEmergencyDecision(modelProposal,
+        availableFurnaceEmergencyActions(prior,prevState,nextState.tick),true)){
+        provided=undefined;
+        modelOrdinaryReplaced=true;
+      }
+    }
     if(modelProposal?.chosenAction==='APPRENTICESHIP_REUNION'&&!avatarDecision){
       const prior=prevState.cultivators.find(row=>row.id===cultivator.id);
       if(!prior||activeAvatar(prevState)===prior||!exactApprenticeshipReunionDecision(modelProposal,
@@ -2048,6 +2071,7 @@ export function advanceWorldTick(
     if(!liveEncounter&&!liveDestiny&&expeditionOrder?.chosenAction!=='EXPEDITION_DUNGEON'&&deferRegionalActorTurn(nextState,regionalTurn,cultivator,expeditionOrder??provided??supplied??fieldNegotiation,
       ()=>!!requiredBeforeOrdinaryDecision(cultivator,nextState)||
         availableVacantGateActions(cultivator,nextState,nextState.tick).length>0||
+        availableFurnaceEmergencyActions(cultivator,nextState,nextState.tick).length>0||
         availableVillageReunionActions(cultivator,nextState,nextState.tick).some(row=>row.villageReunionMove==='accept')||
         availableBattlefieldAftermathActions(cultivator,nextState,nextState.tick).some(row=>row.battlefieldAftermathMove==='accept_care')))continue;
 
@@ -2063,7 +2087,8 @@ export function advanceWorldTick(
       (traceOptions?.suppressAutoClanConsent?.has(cultivator.id)||modelProposal!==undefined);
     const decision:LLMDecisionPayload=unresolvedModelConsent&&planned.chosenAction==='CULTIVATION_CLAN'?waitForOwnClanChoice():
       unresolvedModelConsent&&(planned.chosenAction==='VILLAGE_REUNION'&&(planned.villageReunionMove==='offer'||planned.villageReunionMove==='accept')||
-        planned.chosenAction==='BATTLEFIELD_AFTERMATH'&&(planned.battlefieldAftermathMove==='offer_care'||planned.battlefieldAftermathMove==='accept_care'))?
+        planned.chosenAction==='BATTLEFIELD_AFTERMATH'&&(planned.battlefieldAftermathMove==='offer_care'||planned.battlefieldAftermathMove==='accept_care')||
+        planned.chosenAction==='FURNACE_EMERGENCY'&&planned.furnaceEmergencyMove==='accept_rescue')?
         {chosenAction:'REST',innerMonologue:'未曾应下旧交所问，先让这句话留在原处。'}:planned;
 
     const captureTrace = traceOptions?.captureTrace !== false;
@@ -2142,7 +2167,7 @@ export function advanceWorldTick(
         if (receipt && evt.id === `evt-${receipt.id}`) recordReliefCompetition(nextState, receipt);
       }
       newEvents.push(evt);
-      if(!isBattlefieldRevisitEvent(evt)&&!isPrivateCalamityArrayEvent(evt)&&!isTaughtSwordPracticeEvent(evt)&&!isPrivateSchoolFormEvent(evt)&&!isPrivateWitnessInquiryEvent(evt)&&!isPrivatePavilionFireEvent(evt)&&!isPrivateMercyReunionEvent(evt)&&!isPrivateWildMigrationEvent(evt)&&!isPrivateVillageReunionEvent(evt)&&!isPrivateBattlefieldAftermathEvent(evt)&&!isPrivatePilgrimageForkEvent(evt)&&!isPrivateApprenticeshipReunionEvent(evt)&&!(evt.witnessScope==='participants'&&evt.id.endsWith('-study-technique-fire')))witnessEvent(nextState, evt);
+      if(!isBattlefieldRevisitEvent(evt)&&!isPrivateCalamityArrayEvent(evt)&&!isTaughtSwordPracticeEvent(evt)&&!isPrivateSchoolFormEvent(evt)&&!isPrivateWitnessInquiryEvent(evt)&&!isPrivatePavilionFireEvent(evt)&&!isPrivateMercyReunionEvent(evt)&&!isPrivateWildMigrationEvent(evt)&&!isPrivateVillageReunionEvent(evt)&&!isPrivateBattlefieldAftermathEvent(evt)&&!isPrivatePilgrimageForkEvent(evt)&&!isPrivateApprenticeshipReunionEvent(evt)&&!isPrivateFurnaceEmergencyEvent(evt)&&!(evt.witnessScope==='participants'&&evt.id.endsWith('-study-technique-fire')))witnessEvent(nextState, evt);
       if(decision.chosenAction==='SOCIALIZE'&&cultivator.currentAction==='SOCIALIZE'){
         const after=recordTournamentBanquetAfterTalk(nextState,evt);
         if(after&&!newEvents.some(row=>row.id===after.id))newEvents.push(after);
@@ -2230,6 +2255,10 @@ export function advanceWorldTick(
   for (const event of reconcileAscensionInterruptions(nextState)) {
     newEvents.push(event);
     witnessEvent(nextState, event);
+  }
+  for(const actual of advanceFurnaceEmergencies(nextState)){
+    newEvents.push(actual);
+    if(!isPrivateFurnaceEmergencyEvent(actual))witnessEvent(nextState,actual);
   }
   for(const publicPractice of recordApprenticeshipReunionRounds(nextState,newEvents)){
     newEvents.push(publicPractice);witnessEvent(nextState,publicPractice);

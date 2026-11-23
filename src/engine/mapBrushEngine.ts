@@ -6,6 +6,7 @@ import { interruptStoryChoicesOnDeath } from './interruptedStoryChoices';
 import {disasterShelterCheckpoint} from './disasterShelterCheckpoint';
 import {reconcileDisasterShelterDeaths} from './disasterShelterEngine';
 import { advanceProbation } from './probationEngine';
+import { applyFurnaceEmergencyBrace,recordFurnaceEmergency } from './furnaceEmergency';
 import { damageFurnacesFromBeastTide } from './furnaceSafetyEngine';
 import { advanceRelicExhibits } from './relicExhibitEngine';
 import { advanceWorkshops } from './workshopEngine';
@@ -182,7 +183,8 @@ export function advanceMapHazards(world: WorldState): WorldEvent[] {
       (hazard.kind === 'beast_tide' ? .06 + intensity * .025 : .035 + intensity * .022)));
     const ward = hazard.kind === 'cursed_miasma' && intensity >= 2
       ? resolveCalamityArrayProtection(world, hazard, people, nominal) : undefined;
-    const damage = hurt(world, people, person => ward?.damage.get(person.id) ?? nominal(person), BRUSH_TITLES[hazard.kind],
+    const damage = hurt(world, people, person => hazard.kind==='beast_tide'?
+      applyFurnaceEmergencyBrace(world,hazard,person,nominal(person)):ward?.damage.get(person.id) ?? nominal(person), BRUSH_TITLES[hazard.kind],
       hazard.kind === 'beast_tide');
     if (ward) events.push(...ward.events);
     if (!damage.length) continue;
@@ -192,5 +194,7 @@ export function advanceMapHazards(world: WorldState): WorldEvent[] {
       category: defeated ? 'death' : 'heavenly', actorIds: damage.map(({ cultivatorId }) => cultivatorId),
       damage, locationId });
   }
-  return [...events, ...structuralEvents];
+  const actual = [...events,...structuralEvents];
+  if(structuralEvents.length)recordFurnaceEmergency(world,actual);
+  return actual;
 }

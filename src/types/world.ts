@@ -1,4 +1,5 @@
 import type {ApprenticeshipReunionMove,ApprenticeshipReunionState} from './apprenticeshipReunion';
+import type { FurnaceEmergencyMove,FurnaceEmergencyState } from './furnaceEmergency';
 import type {PilgrimageForkMove,PilgrimageForkState} from './pilgrimageFork';
 import type {BattlefieldAftermathMove,BattlefieldAftermathState} from './battlefieldAftermath';
 import type {VillageReunionMove,VillageReunionState} from './villageReunion';
@@ -239,6 +240,7 @@ export type ActionType =
   | 'WORKSHOP_RELEASE'
   | 'WORKSHOP'
   | 'FURNACE_RESERVATION'
+  | 'FURNACE_EMERGENCY'
   | 'FURNACE_SAFETY'
   | 'DAMAGE_ASSURANCE'
   | 'SPARRING'
@@ -814,6 +816,8 @@ export interface LLMDecisionPayload {
   targetWorkshopReleaseId?: string;
   furnaceMove?: 'reserve' | 'cancel';
   furnaceSafetyMove?: FurnaceSafetyMove;
+  furnaceEmergencyMove?: FurnaceEmergencyMove;
+  targetFurnaceEmergencyId?: string;
   damageAssuranceMove?: DamageAssuranceMove;
   targetDamageAssuranceId?: string;
   targetFurnaceSafetyId?: string;
@@ -3737,6 +3741,7 @@ export interface WorldState {
   workshopDisbandments: WorkshopDisbandmentState;
   furnaceReservations: FurnaceReservationState;
   furnaceSafety: FurnaceSafetyState;
+  furnaceEmergencies?: FurnaceEmergencyState;
   damageAssurance: DamageAssuranceState;
   sparring: SparringState;
   expeditionRescues: ExpeditionRescueState;

@@ -1,3 +1,5 @@
+import { availableFurnaceEmergencyActions,furnaceEmergencyCrossingLocked } from './furnaceEmergency';
+import { exactFurnaceEmergencyDecision,furnaceEmergencyCommand } from './furnaceEmergencyCognition';
 import {availableApprenticeshipReunionActions} from './apprenticeshipReunion';
 import {exactApprenticeshipReunionDecision,apprenticeshipReunionCommand} from './apprenticeshipReunionCognition';
 import {availablePilgrimageForkActions} from './pilgrimageFork';
@@ -931,6 +933,19 @@ export function computeHeuristicDecision(
         innerMonologue: '伤势累进，在可实走退回时由本人撤回，不虚报已到岗。' };
       return { chosenAction: 'REST', innerMonologue: '换防途中仅按实际关口推进，不在旧站另行办事。' };
     }
+  }
+  if(furnaceEmergencyCrossingLocked(world,cultivator))return {chosenAction:'REST',innerMonologue:'先走自己已应下的那段路。'};
+  const emergency = availableFurnaceEmergencyActions(cultivator,world,world.tick);
+  if (emergency.length) {
+    if (activeAvatar(world)===cultivator) return {chosenAction:'REST',innerMonologue:'炉前这一念，由身在这里的人自己择定。'};
+    const preferred=cultivator.hp<cultivator.maxHp*.58?'retreat':
+      cultivator.personality==='刚正'||cultivator.personality==='痴情'?'brace':'request_rescue';
+    const choice=emergency.find(row=>row.furnaceEmergencyMove==='accept_rescue'&&cultivator.hp>=cultivator.maxHp*.7)??
+      emergency.find(row=>row.furnaceEmergencyMove===preferred)??emergency.find(row=>row.furnaceEmergencyMove==='retreat')??
+      emergency.find(row=>row.furnaceEmergencyMove==='brace');
+    if(choice)return exactFurnaceEmergencyDecision(furnaceEmergencyCommand(choice),emergency)??
+      {chosenAction:'REST',innerMonologue:'先留在实处，不捏造援手。'};
+    return {chosenAction:'REST',innerMonologue:'未肯应下援手这一问。'};
   }
   const rescue = utilityExpeditionRescueDecision(cultivator, world);
   if (rescue) return rescue;
@@ -2657,6 +2672,14 @@ export async function requestCultivatorLLMDecision(
         exactBeastDuelResponse(parsed,beastContact.id,availableBeastDuelChoices(world,cultivator)):undefined,160);
   }
 
+  const furnaceEmergency=availableFurnaceEmergencyActions(cultivator,world,requestTick);
+  if(furnaceEmergency.length){
+    if(requestTick!==world.tick+1||activeAvatar(world)===cultivator)return undefined;
+    return requestDecisionPrompt(config,requestTick,options,
+      '只原样抄写本人确在现场的护炉、撤出、求援或应援许可。求援不等于应允，应允不等于抵达。不得填写伤亡、炉损、路线、物资或他人决定：'+JSON.stringify(furnaceEmergency.map(furnaceEmergencyCommand)),
+      parsed=>requestTick===world.tick+1&&activeAvatar(world)!==cultivator&&exactFurnaceEmergencyDecision(parsed,furnaceEmergency)
+        ?exactFurnaceEmergencyDecision(parsed,availableFurnaceEmergencyActions(cultivator,world,requestTick)):undefined,160);
+  }
   const aftermath=availableBattlefieldAftermathActions(cultivator,world,requestTick);
   if(aftermath.length){
     if(requestTick!==world.tick+1||activeAvatar(world)===cultivator)return undefined;
@@ -3172,6 +3195,7 @@ ${JSON.stringify(cultivator.reflections.filter(row=>!sealedHeartDemonReflection(
 ${COGNITIVE_RESPONSE_GUIDE}`;
 
   return requestDecisionPrompt(config, requestTick, options, prompt, (parsed) => {
+          if(parsed&&(Object.hasOwn(parsed,'furnaceEmergencyMove')||Object.hasOwn(parsed,'targetFurnaceEmergencyId')))return undefined;
           if(parsed?.chosenAction==='APPRENTICESHIP_REUNION'){
             if(requestTick!==world.tick+1||activeAvatar(world)===cultivator||!exactApprenticeshipReunionDecision(parsed,apprenticeshipOptions))return undefined;
             return exactApprenticeshipReunionDecision(parsed,availableApprenticeshipReunionActions(cultivator,world,requestTick));
