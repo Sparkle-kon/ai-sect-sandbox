@@ -19,6 +19,7 @@ import type {DestinyTraitId} from '../types/destinyTrait';
 import type {RoguelikeEncounterChoice} from '../types/roguelikeEncounter';
 import {DestinyTraitCard} from './DestinyTraitCard';
 import {RoguelikeEncounterCard} from './RoguelikeEncounterCard';
+import {projectRoguelikeEncounterStage} from './roguelikeEncounterStage';
 
 type Simulation=ReturnType<typeof useWorldSimulationController>;
 export function useFeaturedStoryDecision(simulation:Simulation){
@@ -132,9 +133,12 @@ export function useFeaturedStoryDecision(simulation:Simulation){
     if(heartCard||forbiddenCard||beast.card||siege.card||!encounterPending||!encounter||!stillCurrent())return;
     updateWorld(current=>current===world?resolveGuidedRoguelikeChoice(current,encounter.id,choice):current);
   };
-  const encounterCard=encounter&&actor&&at&&encounterScope!==dismissedEncounter?
+  const showEncounter=encounter&&actor&&at&&encounterScope!==dismissedEncounter;
+  const encounterStage=showEncounter&&encounter&&actor&&!heartCard&&!forbiddenCard&&!beast.card&&!siege.card&&stillCurrent()
+    ?projectRoguelikeEncounterStage(world,actor,encounter):undefined;
+  const encounterCard=showEncounter&&encounter&&actor&&at?
     <RoguelikeEncounterCard key={encounterScope} encounter={encounter} actorName={actor.name} siteName={at.name}
-      witnessName={witness?.name} busy={busy} onChoose={chooseEncounter} onContinue={()=>setDismissedEncounter(encounterScope)}/>:undefined;
+      witnessName={witness?.name} stage={encounterStage} busy={busy} onChoose={chooseEncounter} onContinue={()=>setDismissedEncounter(encounterScope)}/>:undefined;
   const chooseTrait=(trait:DestinyTraitId)=>{
     if(heartCard||forbiddenCard||beast.card||siege.card||encounterCard||!actor||!traitOffer?.options.includes(trait)||!stillCurrent()||activeDestinyTraitOffer(world,actor)!==traitOffer)return;
     const changed=updateWorld(current=>current===world?resolveGuidedDestinyTrait(current,traitOffer.id,trait):current);

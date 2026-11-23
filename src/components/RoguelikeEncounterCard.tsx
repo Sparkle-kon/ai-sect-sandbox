@@ -1,3 +1,6 @@
+import {SceneStageCanvas} from './SceneStageCanvas';
+import {StoryStageDialogue} from './StoryStageDialogue';
+import type {SceneStageFrame} from './sceneStageModel';
 import {useEffect,useId,useRef} from 'react';
 import {BookOpen,Flame,HandHeart,Mountain} from 'lucide-react';
 import {ROGUELIKE_ENCOUNTER_CATALOG} from '../engine/roguelikeEncounterCatalog';
@@ -30,12 +33,13 @@ export interface RoguelikeEncounterCardProps {
   actorName:string;
   siteName:string;
   witnessName?:string;
+  stage?:SceneStageFrame;
   busy:boolean;
   onChoose:(choice:RoguelikeEncounterChoice)=>void;
   onContinue:()=>void;
 }
 
-export function RoguelikeEncounterCard({encounter,actorName,siteName,witnessName,busy,onChoose,onContinue}:RoguelikeEncounterCardProps){
+export function RoguelikeEncounterCard({encounter,actorName,siteName,witnessName,stage,busy,onChoose,onContinue}:RoguelikeEncounterCardProps){
   const title=useId(),intro=useId();
   const heading=useRef<HTMLHeadingElement>(null);
   const gate=encounter.kind==='sect-gate';
@@ -59,8 +63,11 @@ export function RoguelikeEncounterCard({encounter,actorName,siteName,witnessName
       <span className="text-slate-400">{siteName} · {actorName}</span>
     </div>
     <h2 id={title} ref={heading} tabIndex={-1} className={`mt-1.5 rounded-sm font-serif text-xl font-semibold text-amber-50 sm:text-2xl ${focus}`}>{scene.title}</h2>
+    {!gate&&stage&&<div data-roguelike-stage className="mt-3"><SceneStageCanvas frame={stage}/></div>}
     {offered?<>
-      <p id={intro} className="mt-2 font-serif text-base leading-7 text-slate-200">{scene.scene}{encounter.kind==='wounded-traveler'&&witnessName&&<span className="block text-xs text-amber-100">伤者：{witnessName}</span>}</p>
+      <div className="mt-2"><StoryStageDialogue portrait={gate?undefined:stage?.portrait}>
+      <p id={intro} className="font-serif text-base leading-7 text-slate-200">{scene.scene}{encounter.kind==='wounded-traveler'&&witnessName&&<span className="block text-xs text-amber-100">伤者：{witnessName}</span>}</p>
+      </StoryStageDialogue></div>
       <div role="group" aria-label="这一步如何走" aria-describedby={intro} className="mt-3 grid gap-1.5">
         {scene.choices.map(({choice,label,risk:hint})=>{
           return <button type="button" key={choice} disabled={busy}

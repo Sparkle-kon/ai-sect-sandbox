@@ -191,7 +191,7 @@ import { worldRandom } from './worldRandom';
 import { activeAvatar, consumeAvatarOrder, maintainPlayerAvatar } from './avatarEngine';
 import {activeRoguelikeEncounter,chooseRoguelikeEncounterDecision,finalizeRoguelikeEncounters,
   maybeOpenRoguelikeEncounter,settleRoguelikeEncounter} from './roguelikeEncounterEngine';
-import {ROGUELIKE_ENCOUNTER_CHOICES} from '../types/roguelikeEncounter';
+import {roguelikeEncounterChoiceIds} from './roguelikeEncounterCatalog';
 import { activeDestinyTraitOffer, chooseDestinyTraitDecision, destinyCultivationDetox, destinyCultivationMultiplier,
   finalizeDestinyTraitOffers, maybeOpenDestinyTrait, settleDestinyTrait } from './destinyTraitEngine';
 import { archiveChronicleEvents } from './novelGenerator';
@@ -2167,7 +2167,7 @@ export function advanceWorldTick(
     let modelStoryChoiceReplaced=false;
     if(liveEncounter){
       const allowed=provided?.chosenAction==='ROGUELIKE_ENCOUNTER'&&provided.targetRoguelikeEncounterId===liveEncounter.id&&
-        !!provided.roguelikeEncounterChoice&&ROGUELIKE_ENCOUNTER_CHOICES.includes(provided.roguelikeEncounterChoice);
+        !!provided.roguelikeEncounterChoice&&roguelikeEncounterChoiceIds(liveEncounter.kind).includes(provided.roguelikeEncounterChoice);
       if(!allowed||liveEncounter.guided){
         const local=chooseRoguelikeEncounterDecision(nextState,cultivator);
         if(local){provided=local;modelStoryChoiceReplaced=Boolean(modelProposal);}

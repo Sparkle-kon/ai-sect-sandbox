@@ -12,7 +12,8 @@ import {courierCheckpoint} from './sealedCourierEngine';
 import {pilgrimageCheckpoint} from './pilgrimageEngine';
 import {recordMemory} from './memoryEngine';
 import {regionForPoint} from './simulationRegionGeometry';
-import {ROGUELIKE_ENCOUNTER_CATALOG,roguelikeNominalEffect} from './roguelikeEncounterCatalog';
+import {ROGUELIKE_ENCOUNTER_CATALOG,admitRoguelikeStorylet,resolveRoguelikeStorylet,roguelikeEncounterChoiceIds,
+  roguelikeStoryletCanUseWitness,selectRoguelikeStorylet} from './roguelikeEncounterCatalog';
 import {currentSectGateTrialAuthority,openSectGateTrialStamp,sectGateReceiptText,sectGateReputationDelta} from './sectGateTrialEngine';
 
 export const ROGUELIKE_ENCOUNTER_HISTORY=96;
@@ -97,11 +98,13 @@ export function maybeOpenRoguelikeEncounter(world:WorldState,actor:Cultivator,or
   if(!roguelikeEncounterRoute(world,originId,actor.locationId))return undefined;
   if(!guided&&roguelikeEncounterRoll(world,stamp,'opening')>=ROGUELIKE_ENCOUNTER_NPC_OPENING_THRESHOLD)return undefined;
   const aim=roguelikeEncounterRoll(world,stamp,'kind');
-  const witness=aim>=34&&aim<67?world.cultivators.filter(other=>other.id!==actor.id&&other.hp/other.maxHp<.45&&
+  const witness=roguelikeStoryletCanUseWitness(aim)?world.cultivators.filter(other=>other.id!==actor.id&&other.hp/other.maxHp<.45&&
     stationary(world,other,stamp.siteId)).sort((a,b)=>a.hp/a.maxHp-b.hp/b.maxHp||compare(a.id,b.id))[0]:undefined;
-  const kind=witness?'wounded-traveler':aim<50?'sword-cave':'sealed-scroll';
-  const row:RoguelikeEncounterRecord={id:`roguelike-encounter-${world.tick}-${actor.id}`,...stamp,kind,guided,
-    ...(witness?{witnessId:witness.id}:{}),status:'offered'};
+  const selected=selectRoguelikeStorylet(aim,actor.id,witness?.id);
+  if(!selected)return undefined;
+  const {roles,definition}=selected;
+  const row:RoguelikeEncounterRecord={id:`roguelike-encounter-${world.tick}-${actor.id}`,...stamp,kind:definition.id,guided,
+    ...(roles.witness?{witnessId:roles.witness}:{}),status:'offered'};
   (world.roguelikeEncounters??=[]).push(row);
   return event(world,row,'open');
 }
@@ -110,7 +113,8 @@ export function activeRoguelikeEncounter(world:WorldState,actor:Cultivator):Rogu
   const rows=openRows(world).filter(row=>row.actorId===actor.id&&row.status==='offered'&&row.openedTick<=world.tick&&
     world.tick<=row.openedTick+1&&stationary(world,actor,row.siteId)&&
     (row.kind==='sect-gate'?!!currentSectGateTrialAuthority(world,actor,row,stationary):
-      roguelikeEncounterRoute(world,row.fromSiteId,row.siteId)&&(row.kind!=='wounded-traveler'||!!witnessFor(world,row))));
+      roguelikeEncounterRoute(world,row.fromSiteId,row.siteId)&&
+      !!admitRoguelikeStorylet(row.kind,actor.id,row.kind==='wounded-traveler'?witnessFor(world,row)?.id:undefined)));
   return rows.length===1?rows[0]:undefined;
 }
 export function chooseRoguelikeEncounterDecision(world:WorldState,actor:Cultivator):LLMDecisionPayload|undefined{
@@ -122,6 +126,7 @@ export function chooseRoguelikeEncounterDecision(world:WorldState,actor:Cultivat
   else if(actor.personality==='狂傲'||actor.personality==='嗜血'||actor.personality==='逍遥'&&condition>=.8||
     actor.personality==='痴情'&&row.kind==='wounded-traveler'&&condition>=.6)choice='bold';
   else if(actor.personality==='诡诈'&&row.kind==='wounded-traveler')choice='leave';
+  if(!roguelikeEncounterChoiceIds(row.kind).includes(choice))return undefined;
   return {chosenAction:'ROGUELIKE_ENCOUNTER',targetRoguelikeEncounterId:row.id,roguelikeEncounterChoice:choice,
     innerMonologue:choice==='leave'?'不必为陌生的机缘押上性命。':choice==='bold'?'此刻若退，往后未必还有这一线。':'先看清，再伸手。'};
 }
@@ -161,14 +166,16 @@ function settle(world:WorldState,actor:Cultivator,encounterId:string,choice:Rogu
     return event(world,row,'settled');
   }
 
-  const {success,effect}=roguelikeNominalEffect(row.kind,choice,roguelikeEncounterRoll(world,row,choice));
+  const witness=row.kind==='wounded-traveler'?witnessFor(world,row):undefined;
+  const resolved=resolveRoguelikeStorylet(row.kind,choice,roguelikeEncounterRoll(world,row,choice),actor.id,witness?.id);
+  if(!resolved)return null;
+  const {success,effect}=resolved.result;
   const qi=actor.qiProgress,hp=actor.hp,karma=actor.karma,years=actor.lifespan;
   if(effect.qi)actor.qiProgress=clamp(qi+effect.qi,0,100);
   if(effect.hpRate)actor.hp=clamp(hp+Math.round(actor.maxHp*effect.hpRate),Math.min(1,hp),actor.maxHp);
   if(effect.karma)actor.karma=clamp(karma+effect.karma,-100,100);
   if(effect.years)actor.lifespan=clamp(years+effect.years,effect.years<0?Math.min(years,actor.age+1):0,1_000_000_000);
-  const witness=witnessFor(world,row);
-  const affinityDelta=witness?earnAffinity(world,actor,witness,effect.affinity):0;
+  const affinityDelta=witness&&resolved.roles.witness===witness.id?earnAffinity(world,actor,witness,effect.affinity):0;
   row.status='resolved';row.resolvedTick=world.tick;row.choice=choice;
   row.outcome={success,qiDelta:actor.qiProgress-qi,hpDelta:actor.hp-hp,karmaDelta:actor.karma-karma,
     lifespanDelta:actor.lifespan-years,affinityDelta};
@@ -197,7 +204,8 @@ export function finalizeRoguelikeEncounters(world:WorldState):void{
     if(row.status!=='offered')continue;
     const actor=byActor(world,row.actorId);
     if(world.tick>=row.openedTick+1||!stationary(world,actor,row.siteId)||
-      row.kind==='wounded-traveler'&&!witnessFor(world,row)||
+      row.kind!=='sect-gate'&&!admitRoguelikeStorylet(row.kind,row.actorId,
+        row.kind==='wounded-traveler'?witnessFor(world,row)?.id:undefined)||
       row.kind==='sect-gate'&&(!actor||!currentSectGateTrialAuthority(world,actor,row,stationary))){
       row.status='expired';row.resolvedTick=world.tick;
     }

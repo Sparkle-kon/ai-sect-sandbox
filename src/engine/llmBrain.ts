@@ -77,7 +77,8 @@ import {activeDestinyTraitOffer, chooseDestinyTraitDecision, destinyDuelAppetite
 import {activeAvatar} from './avatarEngine';
 import type {DestinyTraitOffer} from '../types/destinyTrait';
 import {activeRoguelikeEncounter, chooseRoguelikeEncounterDecision} from './roguelikeEncounterEngine';
-import {ROGUELIKE_ENCOUNTER_CHOICES} from '../types/roguelikeEncounter';
+import type {RoguelikeEncounterChoice} from '../types/roguelikeEncounter';
+import {roguelikeEncounterChoiceIds} from './roguelikeEncounterCatalog';
 import {availableDoctrineMaturityActions} from './doctrineMaturityEngine';
 import {availableDoctrineFoundingActions} from './doctrineFoundingEngine';
 import {availableDanxiaMedicineActions} from './danxiaMedicineEngine';
@@ -2431,12 +2432,13 @@ function decodeCourierHandoff(parsed: Partial<LLMDecisionPayload>, choices: Retu
 
 const encounterDecisionFields = ['chosenAction', 'targetRoguelikeEncounterId', 'roguelikeEncounterChoice'] as const;
 
-function decodeRoguelikeEncounterDecision(parsed: Partial<LLMDecisionPayload>, exactId: string): LLMDecisionPayload | undefined {
+function decodeRoguelikeEncounterDecision(parsed: Partial<LLMDecisionPayload>, exactId: string,
+  allowed: readonly RoguelikeEncounterChoice[]): LLMDecisionPayload | undefined {
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) ||
       Object.keys(parsed).length !== encounterDecisionFields.length ||
       !encounterDecisionFields.every(key => Object.hasOwn(parsed, key)) ||
       parsed.chosenAction !== 'ROGUELIKE_ENCOUNTER' || parsed.targetRoguelikeEncounterId !== exactId) return undefined;
-  const choice = ROGUELIKE_ENCOUNTER_CHOICES.find(id => id === parsed.roguelikeEncounterChoice);
+  const choice = allowed.find(id => id === parsed.roguelikeEncounterChoice);
   if (!choice) return undefined;
   return { chosenAction: 'ROGUELIKE_ENCOUNTER', targetRoguelikeEncounterId: exactId, roguelikeEncounterChoice: choice,
     innerMonologue: '亲到才有此机缘，眼下只依已见的抉择行事。' };
@@ -2657,8 +2659,10 @@ export async function requestCultivatorLLMDecision(
   if (encounter) {
     // This exact choice replaces the usual prompt and consumes only the existing fair Decision slot.
     // Never send player-owned choices or reopen the menu after this opportunity's real next turn.
-    if (encounter.guided || encounter.openedTick !== world.tick || requestTick !== world.tick + 1) return undefined;
-    const candidates = ROGUELIKE_ENCOUNTER_CHOICES.map(roguelikeEncounterChoice => ({
+    if (encounter.kind === 'sect-gate' || encounter.guided || encounter.openedTick !== world.tick || requestTick !== world.tick + 1) return undefined;
+    const allowed = roguelikeEncounterChoiceIds(encounter.kind);
+    if (!allowed.length) return undefined;
+    const candidates = allowed.map(roguelikeEncounterChoice => ({
       chosenAction: 'ROGUELIKE_ENCOUNTER', targetRoguelikeEncounterId: encounter.id, roguelikeEncounterChoice,
     }));
     const prompt = `实际到达后眼前的奇遇：${encounter.kind}。cautious 谨慎试探，bold 冒险深入，leave 不参与。
@@ -2666,7 +2670,7 @@ export async function requestCultivatorLLMDecision(
       `只原样复制下列一个完整 JSON 对象；不补充独白、人物、地点、收益、代价或结果。许可：${JSON.stringify(candidates)}`;
     return requestDecisionPrompt(config, requestTick, options, prompt, parsed =>
       requestTick === world.tick + 1 && activeRoguelikeEncounter(world, cultivator) === encounter && !encounter.guided
-        ? decodeRoguelikeEncounterDecision(parsed, encounter.id) : undefined, 160);
+        ? decodeRoguelikeEncounterDecision(parsed, encounter.id, allowed) : undefined, 160);
   }
 
   const destiny = activeDestinyTraitOffer(world, cultivator);

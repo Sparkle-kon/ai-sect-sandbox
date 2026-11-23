@@ -2,7 +2,7 @@ import type { WorldState } from '../types/world';
 import type { RoguelikeEncounterChoice } from '../types/roguelikeEncounter';
 import { activeRoguelikeEncounter, roguelikeEncounterRoll, roguelikeEncounterRoute, ROGUELIKE_ENCOUNTER_ACTOR_COOLDOWN,
   ROGUELIKE_ENCOUNTER_HISTORY, ROGUELIKE_ENCOUNTER_NPC_OPENING_THRESHOLD } from './roguelikeEncounterEngine';
-import { roguelikeNominalEffect } from './roguelikeEncounterCatalog';
+import { roguelikeNominalEffect, selectRoguelikeStorylet } from './roguelikeEncounterCatalog';
 import { isSectGatePublicSite, sectGateNominalReputation, sectGateReceiptText } from './sectGateTrialEngine';
 import { SHARE_SAVE_REDACTED_TEXT } from './shareSaveRedactionText';
 
@@ -74,7 +74,8 @@ export function validateRoguelikeEncounterHistory(world:WorldState,actorIds:Read
       return fail('roguelikeEncounters.order');
     if(!gate){
       const aim=roguelikeEncounterRoll(world,row,'kind');
-      const kind=row.kind==='wounded-traveler'&&aim>=34&&aim<67?'wounded-traveler':aim<50?'sword-cave':'sealed-scroll';
+      // Stored ownership is independently checked above; past posture/HP is not a live role.
+      const kind=selectRoguelikeStorylet(aim,actorId,witnessId)?.definition.id;
       if(row.kind!==kind)return fail('roguelikeEncounters.kind');
       if(!row.guided&&roguelikeEncounterRoll(world,row,'opening')>=ROGUELIKE_ENCOUNTER_NPC_OPENING_THRESHOLD)
         return fail('roguelikeEncounters.openingRoll');
