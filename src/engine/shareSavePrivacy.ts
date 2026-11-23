@@ -1,3 +1,4 @@
+import type { SectMomentsState } from '../types/sectMoments';
 import { SECT_PLAYER_CHAT_ALIASES, type SectPlayerChatState } from '../types/sectPlayerChat';
 import type { SectChatState } from '../types/sectChat';
 import type { DialogueExchange,WorldState } from '../types/world';
@@ -19,6 +20,8 @@ export interface ShareSavePrivacyCounts {
   readonly privateSectChatPosts:number;
   readonly privateSectPlayerChatPosts:number;
   readonly privateSectPlayerChatAliases:number;
+  readonly privateSectMomentsPosts:number;
+  readonly privateSectMomentsBlocks:number;
   readonly eventDialogueBlocks:number;
   readonly archiveDialogueBlocks:number;
   readonly chapterProseFields:number;
@@ -61,6 +64,7 @@ const sensitivePlayerPost=(playerChat:SectPlayerChatState,post:SectPlayerChatSta
 
 function countsFor(world:WorldState):ShareSavePrivacyCounts{
   const playerChat=world.sectManagement?.playerChat;
+  const moments=world.sectManagement?.moments;
   return {
     privateNotes:world.annotations.notes.length,
     avatarTranscriptFields:world.playerAvatar.transcript.reduce((sum,row)=>sum+presentCount([row.message,row.reply,row.effect]),0)+
@@ -77,6 +81,8 @@ function countsFor(world:WorldState):ShareSavePrivacyCounts{
       month.posts.filter(row=>sensitivePlayerPost(playerChat,row)).length,0)??0,
     privateSectPlayerChatAliases:playerChat?SECT_PLAYER_CHAT_ALIASES.filter(alias=>
       playerChat.aliases[alias]!==undefined&&playerChat.aliases[alias]?.exposure===undefined).length:0,
+    privateSectMomentsPosts:moments?.posts.filter(post=>post.kind==='food'||post.audience!==undefined).length??0,
+    privateSectMomentsBlocks:moments?.blockedAuthorIds?.length??0,
     eventDialogueBlocks:dialogueCount(world.events),
     archiveDialogueBlocks:dialogueCount(world.chronicleArchive.anchors)+
       [...world.chronicleArchive.chapters,...world.coldHistory.chapters].reduce((sum,row)=>sum+dialogueCount(row.anchors),0),
@@ -128,6 +134,12 @@ function redactedClone(world:WorldState,practiceRedactions:ReadonlySet<string>):
     for(const identity of SECT_PLAYER_CHAT_ALIASES)if(!aliases[identity]?.exposure)delete aliases[identity];
     copy.sectManagement.playerChat={...playerChat,aliases,months:playerChat.months.map(month=>({...month,
       posts:month.posts.filter(post=>!sensitivePlayerPost(playerChat,post))}))};
+  }
+  const moments=copy.sectManagement?.moments;
+  if(copy.sectManagement&&moments){
+    const posts=moments.posts.filter(post=>post.kind!=='food'&&post.audience===undefined);
+    if(posts.length)copy.sectManagement.moments={posts};
+    else delete copy.sectManagement.moments;
   }
   for(const site of copy.locations)delete site.bellWatch;
   copy.events=copy.events.filter(event=>!isSealedBellMarker(event));
@@ -218,6 +230,12 @@ function protectedEqual(a:unknown,b:unknown,practiceRedactions:ReadonlySet<strin
     const expected={...playerChat,aliases:exposed,months:playerChat.months.map(month=>({...month,posts:month.posts.filter(post=>
       post.roomId==='jiuzhou'&&(post.identity==='leader'||playerChat.aliases[post.identity]?.exposure!==undefined))}))};
     return protectedEqual(expected,b,practiceRedactions);
+  }
+  if(pathIs(path,['sectManagement','moments'])&&a!==undefined){
+    const moments=a as SectMomentsState;
+    const posts=moments.posts.filter(post=>
+      post.audience===undefined&&(post.kind==='breakthrough'||post.kind==='artifact'||post.kind==='travel'));
+    return protectedEqual(posts.length?{posts}:undefined,b,practiceRedactions);
   }
   if(Array.isArray(a)||Array.isArray(b))return Array.isArray(a)&&Array.isArray(b)&&a.length===b.length&&
     a.every((entry,index)=>protectedEqual(entry,b[index],practiceRedactions,[...path,index],a,b));

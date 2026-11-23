@@ -1,4 +1,5 @@
 import {settleSectChatMonth} from '../sectChat';
+import {settleSectMomentsMonth} from '../sectMoments';
 import {ensureSectRecurringCast} from '../sectRecurringCast';
 import {settleSectRecurringMonth} from '../sectRecurring';
 import {settleSectComedyMonth} from '../sectComedy';
@@ -107,6 +108,7 @@ export function runChronicleAndPostTurn(context: WorldTickContext): void {
     }
     // Native witnesses and the dated rumor spread have already run. A message is speech, not a new world event.
     settleSectChatMonth(nextState,prevState,completedEvents.filter(event=>event.witnessScope===undefined));
+    settleSectMomentsMonth(nextState,prevState,completedEvents);
   }
   expireRingAudiences(nextState);
   finalizeDestinyTraitOffers(nextState);

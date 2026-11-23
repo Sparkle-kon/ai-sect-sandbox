@@ -1,3 +1,4 @@
+import { sectMomentsShape, validateSectMoments } from './sectMomentsValidation';
 import { sectPlayerChatShape, validateSectPlayerChat } from './sectPlayerChatValidation';
 import { sectChatShape, validateSectChat } from './sectChatValidation';
 import { sectPairDramaShape, validateSectPairDrama } from './sectPairDramaValidation';
@@ -28,6 +29,7 @@ export const sectManagementShape = structure({
   pairDrama: optional(sectPairDramaShape),
   chat: optional(sectChatShape),
   playerChat: optional(sectPlayerChatShape),
+  moments: optional(sectMomentsShape),
 });
 
 export function validateSectManagement(world: WorldState, fail: (field:string)=>never): void {
@@ -84,4 +86,5 @@ export function validateSectManagement(world: WorldState, fail: (field:string)=>
   validateSectPairDrama(world,state,fail);
   if(state.chat)validateSectChat(world,state,state.chat,fail);
   if(state.playerChat)validateSectPlayerChat(world,state,state.playerChat,fail);
+  if(state.moments)validateSectMoments(world,state,state.moments,fail);
 }

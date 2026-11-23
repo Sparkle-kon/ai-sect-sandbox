@@ -1,4 +1,4 @@
-import {useEffect,useId,useMemo,useRef,useState,useSyncExternalStore} from 'react';
+import {lazy,Suspense,useEffect,useId,useMemo,useRef,useState,useSyncExternalStore} from 'react';
 import {SectPlayerChatComposer,type SectPlayerChatControls} from './SectPlayerChatComposer';
 import {projectSectPlayerChat} from '../engine/sectPlayerChat';
 import {projectSectChat,type SectChatMessageView} from '../engine/sectChat';
@@ -7,6 +7,10 @@ import {SECT_PLAYER_CHAT_MONTH_LIMIT,SECT_PLAYER_CHAT_POST_LIMIT} from '../types
 import type {LLMConfig,WorldState} from '../types/world';
 import {CultivatorPortrait} from './CultivatorPortrait';
 import {projectCultivatorPortrait} from './cultivatorPortraitModel';
+
+import type {SectMomentsAction} from './SectMomentsPanel';
+
+const SectMomentsPanel=lazy(async()=>({default:(await import('./SectMomentsPanel')).SectMomentsPanel}));
 
 const WIDE='(min-width: 1440px)';
 const isWide=()=>typeof window!=='undefined'&&window.matchMedia?.(WIDE)?.matches===true;
@@ -85,16 +89,18 @@ function SectChatModelSettings({config,onChange,busy}:SectChatModelControls&{bus
   </div>;
 }
 
-export function SectChatPanel({world,scope,busy,onOpenSource,model,posting}:{
+export function SectChatPanel({world,scope,busy,onOpenSource,model,posting,momentsAction}:{
   world:WorldState;scope:string;busy:boolean;onOpenSource?:(expectedWorld:WorldState,postId:string)=>boolean;
   model?:SectChatModelControls;
   posting?:SectPlayerChatControls;
+  momentsAction?:SectMomentsAction;
 }){
   const panelId=useId(),roomTitle=useId(),list=useRef<HTMLOListElement>(null);
   const failure=useRef<HTMLParagraphElement>(null);
   const previousRoom=useRef<SectChatRoomId>();
   const wide=useSyncExternalStore(watchWide,isWide,()=>false);
   const [open,setOpen]=useState(false);
+  const [tab,setTab]=useState<'chat'|'moments'>('chat');
   const storageKey=`sect-chat-read:${scope}`;
   const [read,setRead]=useState<LocalChatRead>(()=>readLocal(storageKey));
   const [failed,setFailed]=useState<{world:WorldState;postId:string}>();
@@ -114,22 +120,23 @@ export function SectChatPanel({world,scope,busy,onOpenSource,model,posting}:{
   },[world]);
   const selected=rooms.find(room=>room.id===read.room)??rooms[0];
   const shown=wide||open;
+  const chatShown=shown&&tab==='chat';
   const seen=useMemo(()=>new Set(read.seen),[read.seen]);
   const unread=(posts:readonly {id:string;player:boolean}[])=>posts.filter(post=>!post.player&&!seen.has(post.id)).length;
   const total=rooms.reduce((count,room)=>count+unread(room.posts),0);
   const latest=selected?.posts.at(-1)?.id;
   const portraits=useMemo(()=>{
     const projected=new Map<string,ReturnType<typeof projectCultivatorPortrait>>();
-    if(shown)for(const post of selected?.posts??[]){
+    if(chatShown)for(const post of selected?.posts??[]){
       if(projected.has(post.senderId))continue;
       const candidates=world.cultivators.filter(actor=>actor.id===post.senderId&&(actor.name===post.name||post.player&&actor.id===world.sectManagement?.leaderId));
       projected.set(post.senderId,projectCultivatorPortrait(world,candidates.length===1?candidates[0]:undefined));
     }
     return projected;
-  },[world,shown,selected]);
+  },[world,chatShown,selected]);
 
   useEffect(()=>{
-    if(!shown||!selected)return;
+    if(!chatShown||!selected)return;
     const ids=selected.posts.map(post=>post.id);
     const retained=new Set(rooms.flatMap(room=>room.posts.map(post=>post.id)));
     setRead(previous=>{
@@ -138,17 +145,17 @@ export function SectChatPanel({world,scope,busy,onOpenSource,model,posting}:{
       if(known.size===previous.seen.length&&previous.seen.every(id=>known.has(id)))return previous;
       return {...previous,seen:[...known]};
     });
-  },[shown,selected,rooms]);
+  },[chatShown,selected,rooms]);
   useEffect(()=>{
     try{window.sessionStorage.setItem(storageKey,JSON.stringify(read));}
     catch{/* Browsing still works with local storage turned off. */}
   },[storageKey,read]);
   useEffect(()=>{
     const node=list.current;
-    if(!shown||!node||!selected){previousRoom.current=undefined;return;}
+    if(!chatShown||!node||!selected){previousRoom.current=undefined;return;}
     if(previousRoom.current!==selected.id||node.scrollHeight-node.scrollTop-node.clientHeight<96)node.scrollTop=node.scrollHeight;
     previousRoom.current=selected.id;
-  },[shown,selected?.id,latest]);
+  },[chatShown,selected?.id,latest]);
   useEffect(()=>{if(failed?.world===world)failure.current?.focus({preventScroll:true});},[failed,world]);
   if(!selected)return null;
 
@@ -165,6 +172,16 @@ export function SectChatPanel({world,scope,busy,onOpenSource,model,posting}:{
     </button>
     <div id={panelId} hidden={!shown} className="space-y-2">
       <h2 className="hidden font-serif text-lg font-semibold text-amber-100 min-[1440px]:block">仙门群聊</h2>
+      {momentsAction&&<div role="group" aria-label="选择江湖见闻" className="grid grid-cols-2 gap-1 rounded-md bg-stone-900/75 p-0.5">
+        <button type="button" aria-pressed={tab==='chat'} className="min-h-11 rounded px-2 text-sm text-stone-300 aria-pressed:bg-amber-950/60 aria-pressed:text-amber-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300"
+          onClick={()=>setTab('chat')}>群聊</button>
+        <button type="button" aria-pressed={tab==='moments'} className="min-h-11 rounded px-2 text-sm text-stone-300 aria-pressed:bg-amber-950/60 aria-pressed:text-amber-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300"
+          onClick={()=>{setTab('moments');setFailed(undefined);}}>朋友圈</button>
+      </div>}
+      {shown&&tab==='moments'&&<Suspense fallback={<p className="px-2 py-3 text-sm text-stone-300">正翻开众友见闻…</p>}>
+        <SectMomentsPanel world={world} busy={busy} onAction={momentsAction}/>
+      </Suspense>}
+      <div hidden={tab==='moments'} className="space-y-2">
       <div role="group" aria-label="选择群聊" className="grid min-w-0 grid-cols-2 gap-1">
         {rooms.map(room=>{
           const count=unread(room.posts);
@@ -214,6 +231,7 @@ export function SectChatPanel({world,scope,busy,onOpenSource,model,posting}:{
         world={world} room={selected.id} roomLabel={selected.label} busy={busy} posting={posting}
         modelReady={model?.config.sectChatEnabled===true&&!!sectChatModelEndpoint(model.config.apiBaseUrl)&&!!model.config.apiKey.trim()}/>}
       {shown&&model&&<SectChatModelSettings {...model} busy={busy}/>}
+      </div>
     </div>
   </aside>;
 }
