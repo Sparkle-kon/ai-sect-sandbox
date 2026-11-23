@@ -64,7 +64,7 @@
   - 将 `worldEngine.ts` 中硬编码串联的 110+ 个子系统调用重构为清晰的五阶段 `TickStagePipeline`（`PreTurn -> MovementAndEncounter -> ActionAndCombat -> InstitutionAndWorld -> ChronicleAndPostTurn`），让新系统通过标准插件接口挂载。
 - [x] **[SV3-4] 视觉一致性与 UI 卡片国风纹理全面精修 (`XianxiaVisualIdentityAudit`)**：
   - 为全站面板、按钮、弹窗与页签统一赋予极具辨识度的东方仙侠美术风格（玄墨底纹、暗金边角纹饰、宣纸卷轴卡片、清晰的角色小头像徽章），确保无论在「故事首页」、「全息大盘」还是「五大工作区」中，每一屏都有丰富的图形、立绘与场景视觉元素，绝无单调的黑底纯文字页。
-- [ ] **[SV3-5] 全量性能基准测试与线上试玩站 (`chatgpt.site`) 最新视觉版发布验收 (`PerformanceAudit & LivePreviewDeploy`)**：
+- [x] **[SV3-5] 全量性能基准测试与线上试玩站 (`chatgpt.site`) 最新视觉版发布验收 (`PerformanceAudit & LivePreviewDeploy`)**：
   - 运行全套 `npm run verify` 与 Canvas 渲染性能测试，确保 2D 小人 Sprite、彩绘瓦片地图、全彩立绘与实地庭院在桌面端与移动端均流畅运行；**立即构建并将这套带星露谷式 2D 场景与全彩立绘的最新版本部署发布到线上预览站 (`https://ai-sect-sandbox-mobile-20261121.spazzzz.chatgpt.site/`)**！
 
 ---
