@@ -138,6 +138,7 @@ export default defineConfig({
           'sect-management-proof': ['./src/engine/storage/sectManagementValidation.ts', './src/types/sectManagement.ts'],
           'sect-growth-controls': ['./src/components/SectGrowthControls.tsx'],
           'sect-reaction-art': ['./src/components/SectReactionGlyph.tsx'],
+          'sect-player-posting-control': ['./src/controllers/useSectPlayerPosting.ts'],
           'sect-chat-voices': ['./src/data/sectChatVoices.ts'],
           'sect-comedy-catalog': ['./src/data/sectComedy/index.ts', './src/data/sectComedy/recurring.ts'],
           'pavilion-save-proof': ['./src/engine/storagePavilionLoanValidation.ts'],

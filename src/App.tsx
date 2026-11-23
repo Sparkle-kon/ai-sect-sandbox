@@ -791,7 +791,8 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   if(managerView==='opening')return <SectManagementHome world={world} titleRef={managerHeading} busy={managerBlocked}
     onStart={startManagedSect} onOpen={openFromManager} onConfirmJobs={confirmSectJobs} observations={simulation.sectJobObservations}
     report={currentSectReport} onDismissReport={dismissSectReport} onManagementAction={manageGrowth} onRestart={restartManaged} restartSeed={restartSeed}
-    chatScope={viewScopeKey} onOpenChatSource={openChatSource} chatModel={{config:llmConfig,onChange:simulation.changeLlmConfig}}/>;
+    chatScope={viewScopeKey} onOpenChatSource={openChatSource} chatModel={{config:llmConfig,onChange:simulation.changeLlmConfig}}
+    chatPosting={simulation.sectPlayerPosting}/>;
   if(managerView==='saves')return <main className="xianxia-shell min-h-dvh bg-slate-950 text-slate-100 px-4 py-3">
     <div className="mx-auto max-w-3xl space-y-3">
       <header className="flex items-center justify-between gap-2">

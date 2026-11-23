@@ -3,6 +3,7 @@ import type {Cultivator,WorldEvent,WorldState} from '../types/world';
 import {starterSectIdentity} from '../types/sectManagement';
 import {SECT_RECURRING_LIMIT,SECT_RECURRING_MEMORY_TEXT as memoryText,sectRecurringEventId,sectRecurringIdentity,type SectRecurringEncounter,type SectRecurringOutcome} from '../types/sectRecurring';
 import {isChronicleStoryFact} from './chronicleLead';
+import {projectSectAliasRivalReply} from './sectPlayerChatMemory';
 import {directorSiteIsSafe} from './director/nudgeIntegrations';
 import {isGrandSiegeFighterPresent} from './grandSiegePresence';
 import {activeBellWatchForActor} from './bellWatchPresence';
@@ -147,7 +148,13 @@ export function projectSectRecurring(world:WorldState):readonly SectRecurringVie
     };
     const lines=SECT_RECURRING_VOICES[row.outcome==='public_news'&&!news?'host_cue':row.outcome];
     const {every}=SECT_RECURRING_PROFILES[row.role];
-    const quote=lines[Math.floor((row.tick-state.openedTick)/every)%lines.length];
+    const rivalActor=row.role==='rival'?unique(world.cultivators,row.entityId):undefined;
+    const marker=rivalActor&&unique(world.events,sectRecurringEventId(row.tick,m.sectId,'rival'));
+    const aliasReply=rivalActor&&marker?.tick===row.tick&&marker.category==='diplomacy'&&marker.witnessScope==='participants'&&
+      marker.locationId===undefined&&marker.dialogue===undefined&&
+      marker.actorIds.length===2&&marker.actorIds[0]===rivalActor.id&&marker.actorIds[1]===m.leaderId?
+      projectSectAliasRivalReply(world,rivalActor,row.tick):undefined;
+    const quote=aliasReply??lines[Math.floor((row.tick-state.openedTick)/every)%lines.length];
     const old=row.recalled&&state.encounters.find(candidate=>candidate.role===row.role&&candidate.tick===row.recalled?.tick&&
       candidate.tick<row.tick&&candidate.memory?.id===row.recalled.memory.id&&candidate.memory.actorId===row.recalled.memory.actorId);
     const owner=old?.memory&&unique(world.cultivators,old.memory.actorId);

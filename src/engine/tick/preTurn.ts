@@ -14,6 +14,13 @@ import type { PreTurnContext, TickBaseContext } from './tickContext';
 import { defineTickPlugins, runTickPlugins } from './tickPlugins';
 
 const preTurnMaintenance = defineTickPlugins<TickBaseContext>([
+  { id: 'expireSectRecruitAd', run: ({nextState})=>{
+    const managed=nextState.sectManagement,chat=managed?.playerChat;
+    if(managed&&chat?.recruitAd&&chat.recruitAd.targetTick<nextState.tick){
+      const {recruitAd:_expired,...rest}=chat;
+      managed.playerChat=rest;
+    }
+  } },
   { id: 'ensureManagedSectQuirks', run: ({ nextState }) => ensureManagedSectQuirks(nextState) },
   { id: 'advanceProtagonistSuccession', run: ({ nextState, prevState }) => advanceProtagonistSuccession(nextState, prevState) },
   { id: 'trackFlightTurn', run: ({ nextState }) => trackFlightTurn(nextState) },

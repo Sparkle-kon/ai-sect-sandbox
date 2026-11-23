@@ -1,3 +1,5 @@
+import {isSectActive} from './sectActivity';
+import {onLowerPlane} from './upperPassageIsolation';
 import {reliefHomecomingPinnedSettlementIds} from './reliefHomecomingProof';
 import {villageReunionBeforeRecruit,villageReunionAfterRecruit,villageReunionPinnedRecruitmentIds} from './villageReunion';
 import {fictionalGenderFor} from './fictionalPersonMetadata';
@@ -80,9 +82,9 @@ export function visibleSettlements(world: WorldState, actor?: Cultivator): Morta
   return world.settlements.villages.filter((village) => locations.has(village.locationId)).sort(byId);
 }
 
-function consenting(village: MortalSettlement, person: MortalVolunteer): boolean {
+function consenting(village: MortalSettlement, person: MortalVolunteer, outreach: number): boolean {
   return !person.enlistedCultivatorId && person.age >= 18 && person.age <= 47 &&
-    person.aptitude >= 58 && person.willingness - Math.floor(village.stress / 4) >= 62;
+    person.aptitude >= 58 && person.willingness + outreach - Math.floor(village.stress / 4) >= 62;
 }
 
 function sponsor(world: WorldState, actor: Cultivator) {
@@ -90,7 +92,18 @@ function sponsor(world: WorldState, actor: Cultivator) {
   return world.sects.find((sect) => sect.id === actor.sectId && sect.spiritStones >= SETTLEMENT_RECRUIT_STIPEND);
 }
 
-export function availableSettlementActions(actor: Cultivator, world: WorldState): SettlementOption[] {
+/** Only the exact following month: ads modestly improve interest, and never change the volunteer record. */
+export function sectRecruitAdBonus(world:WorldState,actor:Cultivator,asOf=world.tick):number {
+  const managed=world.sectManagement, notice=managed?.playerChat?.recruitAd;
+  if(!notice||!managed||managed.growth?.failure||!live(actor)||!onLowerPlane(actor)||actor.sectId!==managed.sectId||
+      (asOf!==world.tick&&asOf!==world.tick+1)||notice.targetTick!==asOf||notice.postedTick!==asOf-1||
+      notice.postedTick<managed.foundedTick)return 0;
+  const sects=world.sects.filter(sect=>sect.id===managed.sectId),heads=world.cultivators.filter(person=>person.id===managed.leaderId);
+  return sects.length===1&&isSectActive(sects[0])&&sects[0].leaderId===managed.leaderId&&heads.length===1&&
+    live(heads[0])&&onLowerPlane(heads[0])&&heads[0].sectId===managed.sectId&&heads[0].sectRank==='掌门'?4:0;
+}
+
+export function availableSettlementActions(actor: Cultivator, world: WorldState, recruitmentTick=world.tick): SettlementOption[] {
   if (!live(actor) || world.cultivators.find(({ id }) => id === actor.id) !== actor) return [];
   if (!world.locations.some(({ id }) => id === actor.locationId)) return [];
   const village = world.settlements.villages.find(({ locationId }) => locationId === actor.locationId);
@@ -102,7 +115,8 @@ export function availableSettlementActions(actor: Cultivator, world: WorldState)
   }
   if (village.stress < SETTLEMENT_STRESS_LIMIT && adultCount(village) > 0 && sponsor(world, actor) &&
       village.lastRecruitTick !== world.tick) {
-    choices.push(...village.volunteers.filter((person) => consenting(village, person) &&
+    const outreach=sectRecruitAdBonus(world,actor,recruitmentTick);
+    choices.push(...village.volunteers.filter((person) => consenting(village, person, outreach) &&
       !world.cultivators.some(({ id }) => id === `recruit-${person.id}`)).map((person): SettlementOption =>
       ({ action: 'RECRUIT_SETTLER', targetSettlementId: village.id, targetVolunteerId: person.id })));
   }

@@ -169,7 +169,7 @@ export function collectDecisionFacts({ cultivator, world, requestTick }: Cogniti
   const villageFairPromptOptions = villageFairOptions.map(({ villageFairMove, targetSettlementId, targetVillageFairId, targetMarketOrderId }) =>
     ({ villageFairMove, targetSettlementId, targetVillageFairId, targetMarketOrderId }));
   const restitutionOptions = availableCaravanRestitutionActions(cultivator, world, requestTick);
-  const settlementOptions = availableSettlementActions(cultivator, world);
+  const settlementOptions = availableSettlementActions(cultivator, world, requestTick);
   const granaryOptions = availableVillageGranaryActions(cultivator, world, requestTick);
   const villageSupplyOptions = availableVillageSupplyActions(cultivator, world, requestTick)
     .map(({ villageSupplyMove, targetSettlementId, targetVillageSupplyId }) => ({ villageSupplyMove, targetSettlementId, targetVillageSupplyId }));

@@ -742,6 +742,8 @@ const privacyLabels: Record<keyof ShareSavePrivacyInspection['counts'], string> 
   participantEventFields: '仅参与者可见的事件字段',
   privateBellWatches: '私下报平安记录',
   privateSectChatPosts: '宗门私聊消息',
+  privateSectPlayerChatPosts: '掌门私语与未揭名的发言',
+  privateSectPlayerChatAliases: '未揭名的马甲记录',
   eventDialogueBlocks: '事件对话块',
   archiveDialogueBlocks: '史库对话块',
   councilDialogueFields: '议事发言字段',
@@ -760,6 +762,7 @@ export function ShareSavePrivacySummary({ inspection, onPrepare }: {
           <dt>{privacyLabels[key]}：</dt><dd>{inspection.counts[key]}</dd>
         </div>)}
     </dl>
+    {inspection.counts.privateSectPlayerChatAliases>0&&<p>未揭名的马甲及其发言不会随副本分享；当月已用的发言名额和已生效的事保留。</p>}
     <p>脱敏副本只处理以上项目，不是匿名档。人物名称、流言、封缄记录、章节标题及其他叙事文字可能仍在；分享前请检查。它也不保证复演出相同行动。</p>
     {onPrepare && <button type="button" className={button} onClick={onPrepare}>准备脱敏分享副本</button>}
   </div>;

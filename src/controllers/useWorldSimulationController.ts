@@ -8,6 +8,7 @@ import {resolveGuidedWorldTurn,type GuidedWorldTurn} from './guidedWorldTurn';
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {createInitialWorld} from '../data/initialWorld';
 import {useFastForwardCampaign} from '../components/useFastForwardCampaign';
+import {useSectPlayerPosting} from './useSectPlayerPosting';
 import type {FastForwardPreflightBinding} from '../components/FastForwardPanel';
 import {FAST_FORWARD_MAX_TICKS,type FastForwardCheckpoint,type FastForwardProgress,type FastForwardWorkerRequest,type FastForwardWorkerResponse} from '../engine/fastForwardEngine';
 import {classifyFastForwardRunReport} from './fastForwardRunReport';
@@ -91,6 +92,7 @@ export function useWorldSimulationController({
   const campaignGuard = useRef(false);
   const modelStepAbort = useRef<AbortController>();
   const sectChatAbort = useRef<AbortController>();
+  const sectPlayerPostingAbort = useRef<AbortController>();
   const fairTurns = useRef(new Map<string, { state: FairModelTurnState; coverage: FairModelCoverage }>());
   const [fastForwardView, setFastForwardView] = useState<FastForwardViewState>({ phase: 'idle' });
   useEffect(() => () => {
@@ -98,6 +100,7 @@ export function useWorldSimulationController({
     fastForwardRun.current = undefined;
     modelStepAbort.current?.abort();
     sectChatAbort.current?.abort();
+    sectPlayerPostingAbort.current?.abort();
   }, []);
   const [saveTimelineId, setSaveTimelineId] = useState(saveTimelineIdentity);
   const [restoredReadingOrigin, setRestoredReadingOrigin] = useState<{ world:WorldState; timelineId:string; branchId:string; restoredBranchId:string }>();
@@ -130,6 +133,7 @@ export function useWorldSimulationController({
     if (next !== current) {
       modelStepAbort.current?.abort();
       sectChatAbort.current?.abort();
+      sectPlayerPostingAbort.current?.abort();
       authority.current = next;
       if (record) updateTimeline(recordTimelineWorld(history.current, next));
       setWorld(next);
@@ -142,6 +146,7 @@ export function useWorldSimulationController({
   const tryBeginInteraction = useCallback(() => {
     if(stepInFlight.current||browsing.current)return false;
     sectChatAbort.current?.abort();
+    sectPlayerPostingAbort.current?.abort();
     stepInFlight.current=true;
     setIsStepping(true);
     return true;
@@ -160,8 +165,20 @@ export function useWorldSimulationController({
   const changeLlmConfig = (config: LLMConfig) => {
     modelStepAbort.current?.abort();
     sectChatAbort.current?.abort();
+    sectPlayerPostingAbort.current?.abort();
     setLlmConfig(config);
   };
+
+  const sectPlayerPosting=useSectPlayerPosting({
+    authority,history,revision:saveContextVersion,browsing,config:llmConfig,abort:sectPlayerPostingAbort,
+    safe:()=>!stepInFlight.current&&!fastForwardRun.current&&!campaignGuard.current,
+    begin:tryBeginInteraction,end:endInteraction,
+    commit:(frame,next)=>{
+      if(updateWorld(live=>live===frame?next:live)!==next)return false;
+      setLastSectMeeting(meeting=>meeting?.world===frame?{...meeting,world:next}:meeting);
+      return true;
+    },
+  });
 
   // Dialogue fills an already settled month. It never blocks reports or a user's next action.
   const narrateSectChat = useCallback((frame:WorldState,config:LLMConfig,branchId:string,revision:number) => {
@@ -329,6 +346,7 @@ export function useWorldSimulationController({
     if (fastForwardRun.current) stopFastForward('原分支已改变，暂存快进已丢弃。');
     modelStepAbort.current?.abort();
     sectChatAbort.current?.abort();
+    sectPlayerPostingAbort.current?.abort();
     setLastSectMeeting(undefined);
     saveContextVersion.current += 1;
     setIsRunning(false);
@@ -443,6 +461,7 @@ export function useWorldSimulationController({
     setIsRunning(false);
     onHistoricalPreview();
     sectChatAbort.current?.abort();
+    sectPlayerPostingAbort.current?.abort();
     saveContextVersion.current += 1;
     onPreviewContextChange();
     browsing.current = true;
@@ -632,7 +651,7 @@ export function useWorldSimulationController({
     updateWorld,replaceWorld,manageSectGrowth,restartManagedSect,newWorldFromSeed,changeStorytellerStyle,canUseSaveContext,archiveCurrentNarrative,handleReset,
     isRunning,setIsRunning,isStepping,tryBeginInteraction,endInteraction,tickIntervalMs,setTickIntervalMs,
     llmConfig,changeLlmConfig,handleStepTick,toggleAutoplay,compareDecision,fairModelCoverage,confirmSectMeeting,
-    sectJobObservations:!preview&&lastSectMeeting?.world===world?lastSectMeeting.rows:undefined,
+    sectPlayerPosting,sectJobObservations:!preview&&lastSectMeeting?.world===world?lastSectMeeting.rows:undefined,
     handleTimelinePreview,handleTimelineSelectBranch,handleTimelineFork,timelineNotice,
     fastForwardView,fastForwardLocked,startFastForward,stopFastForward,
     commandFastForward,applyFastForward,campaign,campaignPhase,

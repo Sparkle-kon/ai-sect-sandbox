@@ -6,7 +6,7 @@ import { availableEstateActions } from '../estateEngine';
 import { availableWitnessActions } from '../witnessEngine';
 import { availableWitnessInquiryActions } from '../witnessInquiry';
 import { exactWitnessInquiryDecision, witnessInquiryCommand } from '../witnessInquiryCognition';
-import { availableSettlementActions } from '../settlementEngine';
+import { availableSettlementActions, sectRecruitAdBonus } from '../settlementEngine';
 import { availableCivicMemorialActions } from '../civicMemorialEngine';
 import { availableSeedCultureActions } from '../seedCultureEngine';
 import { availableScriptureActions } from '../scriptureEngine';
@@ -168,8 +168,9 @@ export function completeHeuristicDecision({
     if(inquiry)return inquiry;
   }
 
-  const villageNeeds = world.tick >= 4 && !cultivator.guardAssignment ? availableSettlementActions(cultivator, world) : [];
-  const relief = villageNeeds.find((option) => option.action === 'DELIVER_RELIEF');
+  const recruitmentOutreach=sectRecruitAdBonus(world,cultivator)>0;
+  const villageNeeds = (world.tick >= 4||recruitmentOutreach) && !cultivator.guardAssignment ? availableSettlementActions(cultivator, world) : [];
+  const relief = world.tick >= 4 && villageNeeds.find((option) => option.action === 'DELIVER_RELIEF');
   if (relief) return { ...relief, chosenAction: relief.action, innerMonologue: '灾后所缺须从实际库存筹措。' };
 
   const civicAtVillage = world.civicMemorials.deeds.length > 0 && !cultivator.guardAssignment &&
@@ -202,7 +203,7 @@ export function completeHeuristicDecision({
   if (harvests.length === 1) return { chosenAction: 'SEED_CULTURE', seedMove: 'harvest',
     targetSeedPlotId: harvests[0].targetSeedPlotId, innerMonologue: '只收现场确实成熟的一畦，不把试苗当作收成。' };
 
-  if (world.tick % 6 === 2) {
+  if (world.tick % 6 === 2||recruitmentOutreach) {
     const recruit = villageNeeds.find((option) => option.action === 'RECRUIT_SETTLER');
     if (recruit) return { ...recruit, chosenAction: recruit.action, innerMonologue: '此人具仙缘且愿入门，依规发放安置资粮。' };
   }

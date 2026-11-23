@@ -1,3 +1,4 @@
+import type { SectPlayerChatState } from './sectPlayerChat';
 import type { SectChatState } from './sectChat';
 import type { SectPairDrama } from './sectPairDrama';
 import type { SectRecurringState } from './sectRecurring';
@@ -43,6 +44,7 @@ export interface SectManagementState {
   recurring?:SectRecurringState;
   pairDrama?:SectPairDrama;
   chat?:SectChatState;
+  playerChat?:SectPlayerChatState;
 }
 
 /** Stable genesis namespace; a new draw is a new lineage, not a changed live roster. */

@@ -11,6 +11,7 @@ import {isSectActive} from './sectActivity';
 import {sectComicEventId} from './sectComedy';
 import {onLowerPlane} from './upperPassageIsolation';
 import {sameGeneratedWorld} from './worldIdentity';
+import {projectSectAliasRivalReply} from './sectPlayerChatMemory';
 
 
 const cmp=(a:string,b:string)=>a<b?-1:a>b?1:0;
@@ -272,7 +273,7 @@ export function projectSectChat(world:WorldState):readonly SectChatRoomView[]{
             !managed.recurring?.encounters.some(row=>row.tick===post.tick&&row.entityId===actor.id&&row.role===about.role&&row.outcome===about.outcome)||
             !exactPrivateMarker(events,sectRecurringEventId(post.tick,managed.sectId,about.role),post.tick,[actor.id,leader.id]))break;
           const lines=SECT_RECURRING_VOICES[about.outcome];
-          text=lines[post.variant%lines.length];
+          text=(about.role==='rival'?projectSectAliasRivalReply(world,actor,post.tick):undefined)??lines[post.variant%lines.length];
           break;
         }
         case 'public_event':{

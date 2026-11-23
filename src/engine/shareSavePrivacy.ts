@@ -1,3 +1,4 @@
+import { SECT_PLAYER_CHAT_ALIASES, type SectPlayerChatState } from '../types/sectPlayerChat';
 import type { SectChatState } from '../types/sectChat';
 import type { DialogueExchange,WorldState } from '../types/world';
 import { decodeWorldSave,encodeWorldSave,WORLD_SAVE_MAX_BYTES,worldSaveByteCount } from './storageEngine';
@@ -16,6 +17,8 @@ export interface ShareSavePrivacyCounts {
   readonly participantEventFields:number;
   readonly privateBellWatches:number;
   readonly privateSectChatPosts:number;
+  readonly privateSectPlayerChatPosts:number;
+  readonly privateSectPlayerChatAliases:number;
   readonly eventDialogueBlocks:number;
   readonly archiveDialogueBlocks:number;
   readonly chapterProseFields:number;
@@ -53,7 +56,11 @@ const hiddenText=(text:string)=>candidateText(text)?SHARE_SAVE_REDACTED_TEXT:tex
 const presentCount=(texts:readonly string[])=>texts.filter(candidateText).length;
 const dialogueCount=(rows:readonly {dialogue?:DialogueExchange}[])=>rows.filter(row=>row.dialogue!==undefined).length;
 
+const sensitivePlayerPost=(playerChat:SectPlayerChatState,post:SectPlayerChatState['months'][number]['posts'][number])=>
+  post.roomId==='own'||post.identity!=='leader'&&!playerChat.aliases[post.identity]?.exposure;
+
 function countsFor(world:WorldState):ShareSavePrivacyCounts{
+  const playerChat=world.sectManagement?.playerChat;
   return {
     privateNotes:world.annotations.notes.length,
     avatarTranscriptFields:world.playerAvatar.transcript.reduce((sum,row)=>sum+presentCount([row.message,row.reply,row.effect]),0)+
@@ -66,6 +73,10 @@ function countsFor(world:WorldState):ShareSavePrivacyCounts{
     privateBellWatches:world.locations.filter(site=>site.bellWatch!==undefined).length,
     privateSectChatPosts:world.sectManagement?.chat?.months.reduce((total,month)=>total+
       month.posts.filter(row=>row.roomId==='own'||row.roomId==='leaders').length,0)??0,
+    privateSectPlayerChatPosts:playerChat?.months.reduce((total,month)=>total+
+      month.posts.filter(row=>sensitivePlayerPost(playerChat,row)).length,0)??0,
+    privateSectPlayerChatAliases:playerChat?SECT_PLAYER_CHAT_ALIASES.filter(alias=>
+      playerChat.aliases[alias]!==undefined&&playerChat.aliases[alias]?.exposure===undefined).length:0,
     eventDialogueBlocks:dialogueCount(world.events),
     archiveDialogueBlocks:dialogueCount(world.chronicleArchive.anchors)+
       [...world.chronicleArchive.chapters,...world.coldHistory.chapters].reduce((sum,row)=>sum+dialogueCount(row.anchors),0),
@@ -108,6 +119,15 @@ function redactedClone(world:WorldState,practiceRedactions:ReadonlySet<string>):
       posts:month.posts.filter(row=>row.roomId==='jiuzhou'||row.roomId==='market')})).filter(month=>month.posts.length);
     if(months.length)copy.sectManagement.chat={months};
     else delete copy.sectManagement.chat;
+  }
+  const playerChat=copy.sectManagement?.playerChat;
+  if(copy.sectManagement&&playerChat){
+    // An unexposed alias's counter would also reveal its ownership. Keep only already revealed masks,
+    // along with all used slots, intent cooldowns, and pending gameplay effects.
+    const aliases={...playerChat.aliases};
+    for(const identity of SECT_PLAYER_CHAT_ALIASES)if(!aliases[identity]?.exposure)delete aliases[identity];
+    copy.sectManagement.playerChat={...playerChat,aliases,months:playerChat.months.map(month=>({...month,
+      posts:month.posts.filter(post=>!sensitivePlayerPost(playerChat,post))}))};
   }
   for(const site of copy.locations)delete site.bellWatch;
   copy.events=copy.events.filter(event=>!isSealedBellMarker(event));
@@ -191,6 +211,13 @@ function protectedEqual(a:unknown,b:unknown,practiceRedactions:ReadonlySet<strin
       return posts.length?[{tick:month.tick,posts}]:[];
     });
     return protectedEqual(remaining.length?{months:remaining}:undefined,b,practiceRedactions);
+  }
+  if(pathIs(path,['sectManagement','playerChat'])&&a!==undefined){
+    const playerChat=a as SectPlayerChatState;
+    const exposed=Object.fromEntries(Object.entries(playerChat.aliases).filter(([,ledger])=>ledger.exposure!==undefined));
+    const expected={...playerChat,aliases:exposed,months:playerChat.months.map(month=>({...month,posts:month.posts.filter(post=>
+      post.roomId==='jiuzhou'&&(post.identity==='leader'||playerChat.aliases[post.identity]?.exposure!==undefined))}))};
+    return protectedEqual(expected,b,practiceRedactions);
   }
   if(Array.isArray(a)||Array.isArray(b))return Array.isArray(a)&&Array.isArray(b)&&a.length===b.length&&
     a.every((entry,index)=>protectedEqual(entry,b[index],practiceRedactions,[...path,index],a,b));

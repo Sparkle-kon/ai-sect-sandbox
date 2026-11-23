@@ -1,3 +1,4 @@
+import { sectPlayerChatShape, validateSectPlayerChat } from './sectPlayerChatValidation';
 import { sectChatShape, validateSectChat } from './sectChatValidation';
 import { sectPairDramaShape, validateSectPairDrama } from './sectPairDramaValidation';
 import { sectRecurringShape, validateSectRecurring } from './sectRecurringValidation';
@@ -26,6 +27,7 @@ export const sectManagementShape = structure({
   recurring: optional(sectRecurringShape),
   pairDrama: optional(sectPairDramaShape),
   chat: optional(sectChatShape),
+  playerChat: optional(sectPlayerChatShape),
 });
 
 export function validateSectManagement(world: WorldState, fail: (field:string)=>never): void {
@@ -81,4 +83,5 @@ export function validateSectManagement(world: WorldState, fail: (field:string)=>
   validateSectRecurring(world,state,state.recurring,creditor.id,fail);
   validateSectPairDrama(world,state,fail);
   if(state.chat)validateSectChat(world,state,state.chat,fail);
+  if(state.playerChat)validateSectPlayerChat(world,state,state.playerChat,fail);
 }
