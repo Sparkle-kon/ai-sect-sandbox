@@ -1,3 +1,4 @@
+import {resolveGuidedBoundaryGapTurn,type GuidedBoundaryGapTurn} from './guidedBoundaryGapTurn';
 import {resolveGuidedAbandonedQuarterTurn,type GuidedAbandonedQuarterTurn} from './guidedAbandonedQuarterTurn';
 import {resolveGuidedFurnaceEmergencyTurn,type GuidedFurnaceEmergencyTurn} from './guidedFurnaceEmergencyTurn';
 import {resolveGuidedApprenticeshipReunionTurn,type GuidedApprenticeshipReunionTurn} from './guidedApprenticeshipReunionTurn';
@@ -26,7 +27,7 @@ import {resolveGuidedHeavenlyAlchemyTurn,type GuidedHeavenlyAlchemyTurn} from '.
 import {resolveGuidedImmortalAuctionTurn,type GuidedImmortalAuctionTurn} from './guidedImmortalAuctionTurn';
 import type {WorldState} from '../types/world';
 
-export type GuidedWorldTurn=GuidedDungeonTurn|GuidedHeavenlyAlchemyTurn|GuidedDaoPathTurn|GuidedImmortalAuctionTurn|GuidedCultivationClanTurn|GuidedAscensionTurn|GuidedProtagonistFlightTurn|GuidedHeartDemonRecoveryTurn|GuidedBattlefieldRevisitTurn|GuidedCalamityArrayTurn|GuidedSchoolFormDuelTurn|GuidedFrontierNightHuntTurn|GuidedWitnessInquiryTurn|GuidedCampaignAssemblyTurn|GuidedPavilionFireTurn|GuidedFrontierGorgeTurn|GuidedMercyReunionTurn|GuidedFarewellLandingTurn|GuidedWildMigrationTurn|GuidedVacantGateTurn|GuidedVillageReunionTurn|GuidedBattlefieldAftermathTurn|GuidedPilgrimageForkTurn|GuidedApprenticeshipReunionTurn|GuidedFurnaceEmergencyTurn|GuidedAbandonedQuarterTurn;
+export type GuidedWorldTurn=GuidedDungeonTurn|GuidedHeavenlyAlchemyTurn|GuidedDaoPathTurn|GuidedImmortalAuctionTurn|GuidedCultivationClanTurn|GuidedAscensionTurn|GuidedProtagonistFlightTurn|GuidedHeartDemonRecoveryTurn|GuidedBattlefieldRevisitTurn|GuidedCalamityArrayTurn|GuidedSchoolFormDuelTurn|GuidedFrontierNightHuntTurn|GuidedWitnessInquiryTurn|GuidedCampaignAssemblyTurn|GuidedPavilionFireTurn|GuidedFrontierGorgeTurn|GuidedMercyReunionTurn|GuidedFarewellLandingTurn|GuidedWildMigrationTurn|GuidedVacantGateTurn|GuidedVillageReunionTurn|GuidedBattlefieldAftermathTurn|GuidedPilgrimageForkTurn|GuidedApprenticeshipReunionTurn|GuidedFurnaceEmergencyTurn|GuidedAbandonedQuarterTurn|GuidedBoundaryGapTurn;
 
 export function resolveGuidedWorldTurn(order:GuidedWorldTurn,world:WorldState,branch:string,revision:number){
   if(!('kind' in order))return resolveGuidedDungeonTurn(order,world,branch,revision);
@@ -34,6 +35,7 @@ export function resolveGuidedWorldTurn(order:GuidedWorldTurn,world:WorldState,br
     case 'vacant-gate':return resolveGuidedVacantGateTurn(order,world,branch,revision);
     case 'battlefield-aftermath':return resolveGuidedBattlefieldAftermathTurn(order,world,branch,revision);
     case 'pilgrimage-fork':return resolveGuidedPilgrimageForkTurn(order,world,branch,revision);
+    case 'boundary-gap':return resolveGuidedBoundaryGapTurn(order,world,branch,revision);
     case 'abandoned-quarter':return resolveGuidedAbandonedQuarterTurn(order,world,branch,revision);
     case 'furnace-emergency':return resolveGuidedFurnaceEmergencyTurn(order,world,branch,revision);
     case 'apprenticeship-reunion':return resolveGuidedApprenticeshipReunionTurn(order,world,branch,revision);

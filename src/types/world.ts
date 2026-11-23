@@ -1,4 +1,5 @@
 import type {ApprenticeshipReunionMove,ApprenticeshipReunionState} from './apprenticeshipReunion';
+import type {BoundaryGapMove,BoundaryGapState} from './boundaryGap';
 import type {AbandonedQuarterMove,AbandonedQuarterState} from './abandonedQuarter';
 import type { FurnaceEmergencyMove,FurnaceEmergencyState } from './furnaceEmergency';
 import type {PilgrimageForkMove,PilgrimageForkState} from './pilgrimageFork';
@@ -241,6 +242,7 @@ export type ActionType =
   | 'WORKSHOP_RELEASE'
   | 'WORKSHOP'
   | 'FURNACE_RESERVATION'
+  | 'BOUNDARY_GAP'
   | 'ABANDONED_QUARTER'
   | 'FURNACE_EMERGENCY'
   | 'FURNACE_SAFETY'
@@ -822,6 +824,8 @@ export interface LLMDecisionPayload {
   targetFurnaceEmergencyId?: string;
   abandonedQuarterMove?: AbandonedQuarterMove;
   targetAbandonedQuarterId?: string;
+  boundaryGapMove?: BoundaryGapMove;
+  targetBoundaryGapId?: string;
   damageAssuranceMove?: DamageAssuranceMove;
   targetDamageAssuranceId?: string;
   targetFurnaceSafetyId?: string;
@@ -3747,6 +3751,7 @@ export interface WorldState {
   furnaceSafety: FurnaceSafetyState;
   furnaceEmergencies?: FurnaceEmergencyState;
   abandonedQuarters?: AbandonedQuarterState;
+  boundaryGapResponses?: BoundaryGapState;
   damageAssurance: DamageAssuranceState;
   sparring: SparringState;
   expeditionRescues: ExpeditionRescueState;

@@ -1,3 +1,5 @@
+import { availableBoundaryGapActions } from './boundaryGap';
+import {exactBoundaryGapDecision,boundaryGapCommand} from './boundaryGapCognition';
 import { availableAbandonedQuarterActions } from './abandonedQuarter';
 import {exactAbandonedQuarterDecision,abandonedQuarterCommand} from './abandonedQuarterCognition';
 import { availableFurnaceEmergencyActions,furnaceEmergencyCrossingLocked } from './furnaceEmergency';
@@ -948,6 +950,15 @@ export function computeHeuristicDecision(
     if(choice)return exactFurnaceEmergencyDecision(furnaceEmergencyCommand(choice),emergency)??
       {chosenAction:'REST',innerMonologue:'先留在实处，不捏造援手。'};
     return {chosenAction:'REST',innerMonologue:'未肯应下援手这一问。'};
+  }
+  const boundaryGap=availableBoundaryGapActions(cultivator,world,world.tick);
+  if(boundaryGap.length){
+    if(activeAvatar(world)===cultivator)return {chosenAction:'REST',innerMonologue:'关口这一念，由身在这里的人自己择定。'};
+    const stance=cultivator.hp<cultivator.maxHp*.45?'refuse':cultivator.personality==='刚正'?'cover':'stay';
+    const choice=boundaryGap.find(row=>row.boundaryGapMove===stance)??
+      boundaryGap.find(row=>row.boundaryGapMove==='stay')??boundaryGap[0];
+    const exact=exactBoundaryGapDecision(boundaryGapCommand(choice),boundaryGap);
+    if(exact)return exact;
   }
   const ruins=availableAbandonedQuarterActions(cultivator,world,world.tick);
   if(ruins.length){
@@ -2691,6 +2702,14 @@ export async function requestCultivatorLLMDecision(
       parsed=>requestTick===world.tick+1&&activeAvatar(world)!==cultivator&&exactFurnaceEmergencyDecision(parsed,furnaceEmergency)
         ?exactFurnaceEmergencyDecision(parsed,availableFurnaceEmergencyActions(cultivator,world,requestTick)):undefined,160);
   }
+  const gap=availableBoundaryGapActions(cultivator,world,requestTick);
+  if(gap.length){
+    if(requestTick!==world.tick+1||activeAvatar(world)===cultivator)return undefined;
+    return requestDecisionPrompt(config,requestTick,options,
+      '只原样抄写本人确在缺岗现场的一项应对。不要填写来者到达、他人同意、守备身份、伤亡或丢失州域：'+JSON.stringify(gap.map(boundaryGapCommand)),
+      parsed=>requestTick===world.tick+1&&activeAvatar(world)!==cultivator&&exactBoundaryGapDecision(parsed,gap)
+        ?exactBoundaryGapDecision(parsed,availableBoundaryGapActions(cultivator,world,requestTick)):undefined,160);
+  }
   const ruin=availableAbandonedQuarterActions(cultivator,world,requestTick);
   if(ruin.length){
     if(requestTick!==world.tick+1||activeAvatar(world)===cultivator)return undefined;
@@ -3214,6 +3233,7 @@ ${JSON.stringify(cultivator.reflections.filter(row=>!sealedHeartDemonReflection(
 ${COGNITIVE_RESPONSE_GUIDE}`;
 
   return requestDecisionPrompt(config, requestTick, options, prompt, (parsed) => {
+          if(parsed&&(Object.hasOwn(parsed,'boundaryGapMove')||Object.hasOwn(parsed,'targetBoundaryGapId')))return undefined;
           if(parsed&&(Object.hasOwn(parsed,'abandonedQuarterMove')||Object.hasOwn(parsed,'targetAbandonedQuarterId')))return undefined;
           if(parsed&&(Object.hasOwn(parsed,'furnaceEmergencyMove')||Object.hasOwn(parsed,'targetFurnaceEmergencyId')))return undefined;
           if(parsed?.chosenAction==='APPRENTICESHIP_REUNION'){

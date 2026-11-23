@@ -328,6 +328,7 @@ export function advanceBoundaryReliefs(world:WorldState):WorldEvent[] {
   const terminal=state.cases.filter(closed).sort((a,b)=>(b.closedTick??-1)-(a.closedTick??-1) ||
     Number(b.id.slice(16))-Number(a.id.slice(16)));
   const keep=new Set(terminal.slice(0,BOUNDARY_RELIEF_HISTORY_LIMIT).map(row=>row.id));
+  for(const response of world.boundaryGapResponses?.responses??[])keep.add(response.reliefId);
   state.cases=state.cases.filter(row=>!closed(row)||row.closedTick===world.tick||keep.has(row.id));
   return events;
 }

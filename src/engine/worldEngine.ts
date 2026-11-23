@@ -1,3 +1,5 @@
+import {advanceBoundaryGapResponses,availableBoundaryGapActions,resolveBoundaryGapAction,isPrivateBoundaryGapEvent} from './boundaryGap';
+import {exactBoundaryGapDecision} from './boundaryGapCognition';
 import {availableAbandonedQuarterActions,recordAbandonedQuarterMovement,resolveAbandonedQuarterAction,isPrivateAbandonedQuarterEvent} from './abandonedQuarter';
 import {exactAbandonedQuarterDecision} from './abandonedQuarterCognition';
 import {advanceFurnaceEmergencies,availableFurnaceEmergencyActions,furnaceEmergencyCrossingLocked,
@@ -843,6 +845,13 @@ export function applyCultivatorBrainDecision(
       return resolveRelicExhibitAction(world, cultivator, decision);
     case 'WORKSHOP':
       return resolveWorkshopAction(world, cultivator, decision, rng);
+    case 'BOUNDARY_GAP': {
+      if((modelInput||isProviderPersonaDecision(decision))&&activeAvatar(world)===cultivator)return null;
+      const exact=exactBoundaryGapDecision(decision,availableBoundaryGapActions(cultivator,world,world.tick),true);
+      const result=exact?resolveBoundaryGapAction(world,cultivator,exact):null;
+      if(result&&exact){cultivator.currentAction='BOUNDARY_GAP';cultivator.innerMonologue=exact.innerMonologue;}
+      return result;
+    }
     case 'ABANDONED_QUARTER': {
       if((modelInput||isProviderPersonaDecision(decision))&&activeAvatar(world)===cultivator)return null;
       const exact=exactAbandonedQuarterDecision(decision,availableAbandonedQuarterActions(cultivator,world,world.tick),true);
@@ -1764,6 +1773,14 @@ export function advanceWorldTick(
         modelOrdinaryReplaced=true;
       }
     }
+    if(modelProposal?.chosenAction==='BOUNDARY_GAP'&&!avatarDecision){
+      const prior=prevState.cultivators.find(row=>row.id===cultivator.id);
+      if(!prior||activeAvatar(prevState)===prior||!exactBoundaryGapDecision(modelProposal,
+        availableBoundaryGapActions(prior,prevState,nextState.tick),true)){
+        provided=undefined;
+        modelOrdinaryReplaced=true;
+      }
+    }
     if(modelProposal?.chosenAction==='ABANDONED_QUARTER'&&!avatarDecision){
       const prior=prevState.cultivators.find(row=>row.id===cultivator.id);
       if(!prior||activeAvatar(prevState)===prior||!exactAbandonedQuarterDecision(modelProposal,
@@ -2097,6 +2114,7 @@ export function advanceWorldTick(
         availableVacantGateActions(cultivator,nextState,nextState.tick).length>0||
         availableFurnaceEmergencyActions(cultivator,nextState,nextState.tick).length>0||
         availableAbandonedQuarterActions(cultivator,nextState,nextState.tick).length>0||
+        availableBoundaryGapActions(cultivator,nextState,nextState.tick).length>0||
         availableVillageReunionActions(cultivator,nextState,nextState.tick).some(row=>row.villageReunionMove==='accept')||
         availableBattlefieldAftermathActions(cultivator,nextState,nextState.tick).some(row=>row.battlefieldAftermathMove==='accept_care')))continue;
 
@@ -2194,7 +2212,7 @@ export function advanceWorldTick(
         if (receipt && evt.id === `evt-${receipt.id}`) recordReliefCompetition(nextState, receipt);
       }
       newEvents.push(evt);
-      if(!isBattlefieldRevisitEvent(evt)&&!isPrivateCalamityArrayEvent(evt)&&!isTaughtSwordPracticeEvent(evt)&&!isPrivateSchoolFormEvent(evt)&&!isPrivateWitnessInquiryEvent(evt)&&!isPrivatePavilionFireEvent(evt)&&!isPrivateMercyReunionEvent(evt)&&!isPrivateWildMigrationEvent(evt)&&!isPrivateVillageReunionEvent(evt)&&!isPrivateBattlefieldAftermathEvent(evt)&&!isPrivatePilgrimageForkEvent(evt)&&!isPrivateApprenticeshipReunionEvent(evt)&&!isPrivateFurnaceEmergencyEvent(evt)&&!isPrivateAbandonedQuarterEvent(evt)&&!(evt.witnessScope==='participants'&&evt.id.endsWith('-study-technique-fire')))witnessEvent(nextState, evt);
+      if(!isBattlefieldRevisitEvent(evt)&&!isPrivateCalamityArrayEvent(evt)&&!isTaughtSwordPracticeEvent(evt)&&!isPrivateSchoolFormEvent(evt)&&!isPrivateWitnessInquiryEvent(evt)&&!isPrivatePavilionFireEvent(evt)&&!isPrivateMercyReunionEvent(evt)&&!isPrivateWildMigrationEvent(evt)&&!isPrivateVillageReunionEvent(evt)&&!isPrivateBattlefieldAftermathEvent(evt)&&!isPrivatePilgrimageForkEvent(evt)&&!isPrivateApprenticeshipReunionEvent(evt)&&!isPrivateFurnaceEmergencyEvent(evt)&&!isPrivateAbandonedQuarterEvent(evt)&&!isPrivateBoundaryGapEvent(evt)&&!(evt.witnessScope==='participants'&&evt.id.endsWith('-study-technique-fire')))witnessEvent(nextState, evt);
       if(decision.chosenAction==='SOCIALIZE'&&cultivator.currentAction==='SOCIALIZE'){
         const after=recordTournamentBanquetAfterTalk(nextState,evt);
         if(after&&!newEvents.some(row=>row.id===after.id))newEvents.push(after);
@@ -2282,6 +2300,10 @@ export function advanceWorldTick(
   for (const event of reconcileAscensionInterruptions(nextState)) {
     newEvents.push(event);
     witnessEvent(nextState, event);
+  }
+  for(const actual of advanceBoundaryGapResponses(nextState)){
+    newEvents.push(actual);
+    if(!isPrivateBoundaryGapEvent(actual))witnessEvent(nextState,actual);
   }
   for(const actual of advanceFurnaceEmergencies(nextState)){
     newEvents.push(actual);

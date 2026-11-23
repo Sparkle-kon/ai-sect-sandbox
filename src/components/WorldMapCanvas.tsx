@@ -113,7 +113,7 @@ import { projectLocalSectStipendStatus } from '../engine/sectStipendEngine';
 import { projectLocalToolLoanStatus } from '../engine/toolLoanEngine';
 import { projectLocalSeedCulture } from '../engine/seedCultureEngine';
 import { drawRouteWarningMarks,paintedRouteWarningGeometry } from './routeWarningMapDraw';
-import { getCurrentBoundaryCoverage } from '../engine/boundaryReliefEngine';
+import {drawBoundaryGapFlag,visibleBoundaryGapCoverage} from './boundaryGapMap';
 import { currentVisibleTileIds, knownMapLocations, terrainTileAt } from '../engine/terrainEngine';
 import { courierCheckpoint } from '../engine/sealedCourierEngine';
 import { pilgrimageCheckpoint } from '../engine/pilgrimageEngine';
@@ -305,8 +305,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const boundaryMarks = useMemo(() => [...new Map(
     [...mapView.boundaryPositions.values()].map((point) => [`${point.x}:${point.y}`, point]),
   ).values()], [mapView]);
-  const boundaryCoverage = useMemo(() => new Map(getCurrentBoundaryCoverage(world, selected)
-    .map((coverage) => [coverage.postSiteId, coverage])), [world, selected]);
+  const boundaryCoverage=useMemo(()=>visibleBoundaryGapCoverage(world,selected,mapView.isCurrentLocation),[world,selected,mapView]);
   const observedCohortSites = useMemo(() => {
     const lessons = world.apprenticeCohorts.cohorts.filter((row) => row.status === 'held' && row.lessonTick === world.tick);
     if (!selected?.alive || selected.hp <= 0 || !lessons.length) return new Set<string>();
@@ -740,7 +739,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         ctx.fillStyle = '#c7d2fe';
         ctx.font = 'bold 11px sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('换', x, y - 21);
+        ctx.fillText('途', x, y - 21);
         ctx.restore();
       }
 
@@ -764,6 +763,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           ctx.beginPath();ctx.moveTo(location.x,location.y);ctx.lineTo(pin.x,pin.y);ctx.stroke();ctx.restore();
         }
         drawMapLandmarkGlyph(ctx,loc,ownerColor,abandonedQuarterSites.has(loc.id));
+        drawBoundaryGapFlag(ctx,loc,logicalPerCssPixel,boundaryCoverage.get(loc.id)?.kind);
         if(anomalyRelayMarks.has(loc.id)){
           const d=logicalPerCssPixel;
           drawAnomalyRelaySeal(ctx,loc.x-19*d,loc.y-13*d,d);
@@ -973,7 +973,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener?.('change',stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, atlasDrawing, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, civicObservation, usedVillageSegments, annotationView, annotationPins, armedBrush, preview, compact, clusterScope, scenicRelief, qiFlow, inspectionEnabled, letters, travel, flightMap, canvasFlights, combatVfx, actorBadgeFacts, hasBadgeQuote, domes, strategic, arenaMarks, dungeonMark, alchemyMarks, daoMarks, auctionMark, realmHalos, clanCeremonies, ascensionMarks, formationFrames, calamityFlows, schoolStrokes, anomalyRelayMarks, abandonedQuarterSites, forkSegments, furnaceRescueSegments, historical]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, atlasDrawing, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, boundaryCoverage, civicObservation, usedVillageSegments, annotationView, annotationPins, armedBrush, preview, compact, clusterScope, scenicRelief, qiFlow, inspectionEnabled, letters, travel, flightMap, canvasFlights, combatVfx, actorBadgeFacts, hasBadgeQuote, domes, strategic, arenaMarks, dungeonMark, alchemyMarks, daoMarks, auctionMark, realmHalos, clanCeremonies, ascensionMarks, formationFrames, calamityFlows, schoolStrokes, anomalyRelayMarks, abandonedQuarterSites, forkSegments, furnaceRescueSegments, historical]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1274,7 +1274,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       {pilgrimageMark && <p className="sr-only">所选修士的巡礼关口：第 {pilgrimageMark.row} 行，第 {pilgrimageMark.col} 列。</p>}
       {campMarks.length > 0 && <p className="sr-only">已观测夜宿营地 {campMarks.length} 处，共 {campMarks.reduce((count, camp) => count + camp.parties, 0)} 队，不是新地点。</p>}
       {extractionMarks.length > 0 && <p className="sr-only">当前看见 {extractionMarks.length} 处实际撤离关口；不是新地点，也未公开路线。</p>}
-      {boundaryMarks.length > 0 && <p className="sr-only">当前看见 {boundaryMarks.length} 处实际换防关口。尚在途中的候补不算驻守。</p>}
+      {boundaryMarks.length > 0 && <p className="sr-only">当前看见 {boundaryMarks.length} 处换防行程的实到路点。候补在途，不算守关。</p>}
       {observedCohortSites.size > 0 && <p className="sr-only">当前亲见 {observedCohortSites.size} 处实际合班授课场所，不显示学徒身份。</p>}
       {observedSalvageSites.size > 0 && <p className="sr-only">当前见到 {observedSalvageSites.size} 处已发现并封存原货的地点，不显示货主身份。</p>}
       {localGranary && <p className="sr-only">在场确认：村镇义仓有实际库存。</p>}
@@ -1624,8 +1624,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                     {' · 候炉 '}{furnaceShift.queued} 位
                   </span>}
                 {guardCount > 0 && <span className="text-indigo-300">· 驻守 {guardCount} 人</span>}
-                {coverage && <span className="text-indigo-200">· Tick {coverage.tick} 现场确认：{coverage.kind === 'gap' ? '岗位空缺' :
-                  coverage.kind === 'relief' ? '接替者已实到' : '有实际驻守'}</span>}
+                {coverage && <span className="text-indigo-200">· Tick {coverage.tick} 现场确认：{coverage.kind === 'gap' ? '只有这处岗口空缺' :
+                  coverage.kind === 'relief' ? '接替者已实到，新旗在岗' : coverage.kind==='incumbent'?'原守仍在岗，旧旗未撤':'有实际驻守'}</span>}
                 {observedCohortSites.has(location.id) && <span className="text-amber-200">· 本回合已亲见实际合班授课</span>}
                 {observedSalvageSites.has(location.id) && <span className="text-teal-200">· 已亲见货损幸存原物封存</span>}
                 {schoolStrokeSites.has(location.id)&&<span className="text-amber-200">· 本月有实见剑招</span>}
