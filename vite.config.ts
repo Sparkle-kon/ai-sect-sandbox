@@ -139,7 +139,7 @@ export default defineConfig({
           'sect-growth-controls': ['./src/components/SectGrowthControls.tsx'],
           'sect-reaction-art': ['./src/components/SectReactionGlyph.tsx'],
           'sect-player-posting-control': ['./src/controllers/useSectPlayerPosting.ts'],
-          'sect-chat-voices': ['./src/data/sectChatVoices.ts','./src/data/sectMomentLines.ts'],
+          'sect-chat-voices': ['./src/data/sectChatVoices.ts','./src/data/sectMomentLines.ts','./src/data/sectLiveLines.ts'],
           'sect-comedy-catalog': ['./src/data/sectComedy/index.ts', './src/data/sectComedy/recurring.ts'],
           'pavilion-save-proof': ['./src/engine/storagePavilionLoanValidation.ts'],
           'grand-siege-proof': ['./src/engine/grandSiegeProof.ts', './src/engine/grandSiegeWitnessView.ts', './src/engine/storageGrandSiegeValidation.ts', './src/types/grandSiege.ts'],

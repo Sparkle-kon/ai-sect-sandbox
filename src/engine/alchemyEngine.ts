@@ -10,6 +10,8 @@ import { recordMemory } from './memoryEngine';
 import { guardingHerbBeast } from './spiritBeastEngine';
 import { canUseFurnace, claimFurnaceUse } from './furnaceReservationEngine';
 
+import { isSectActive } from './sectActivity';
+
 import { DANXIA_REGROWTH_CADENCE, danxiaMedicineSite, type DanxiaRegrowthSample } from './danxiaShortageTerms';
 
 export const HERB_LABELS: Record<HerbId, string> = {
@@ -101,7 +103,22 @@ function brewNative(world:WorldState,actor:Cultivator,place:LocationNode,pill:Pi
   actor.spiritStones-=cost;
   recordResourceFlow(world,{kind:'consumption',mechanism:'alchemy',refId:place.id,reason:'brew_fee',
     from:pocket,good:'stone',amount:cost,visibility:participant});
-  const success=rng()<alchemySuccess(actor,pill,place.furnaceGrade);
+  const roll=rng();
+  const success=roll<alchemySuccess(actor,pill,place.furnaceGrade);
+  const managed=world.sectManagement;
+  const active=managed&&isSectActive(world.sects.find(sect=>sect.id===managed.sectId));
+  // A paid, exceptionally bad ordinary brew can actually injure the alchemist. The
+  // ordinary success roll is reused; escrowed and private preparations never air.
+  if(!success&&roll>=.985&&roll<1&&!held&&active&&!managed?.growth?.failure&&recipe.furnaceGrade>=2&&
+    actor.positionPlane===undefined&&world.cultivators.includes(actor)&&actor.hp>1&&
+    place.type!=='secret_realm'&&place.type!=='abyss'&&place.expeditionOmenId===undefined){
+    const damage=Math.min(actor.hp-1,12,Math.max(1,Math.floor(actor.maxHp*.08)));
+    actor.hp-=damage;
+    const burst=event(world,actor,`${actor.name}炸炉`,
+      `炼制【${recipe.name}】时丹炉猛然炸响；${actor.name}损失${damage}点气血，未成丹。`);
+    return {success:false,event:{...burst,id:`evt-${world.tick}-${actor.id}-alchemy-burst-${pill}`,category:'heavenly',
+      damage:[{cultivatorId:actor.id,amount:damage}]}};
+  }
   if(success){
     actor.pills[pill]+=1;
     recordResourceFlow(world,{kind:'production',mechanism:'alchemy',refId:place.id,reason:'brew_output',

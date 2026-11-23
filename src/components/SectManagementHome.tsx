@@ -25,6 +25,7 @@ import {SectBuildingUpgrades,SectFailurePanel,SectGrowthNotices,SectTreasurySumm
 
 import type {ConfirmSectJobs} from './SectMorningBoard';
 import type {SectPlayerChatControls} from './SectPlayerChatComposer';
+import type {SectLiveAction} from './SectLivePanel';
 import type {SectMomentsAction} from './SectMomentsPanel';
 import type {SectChatModelControls} from './SectChatPanel';
 
@@ -51,6 +52,7 @@ export interface SectManagementHomeProps {
   chatModel?:SectChatModelControls;
   chatPosting?:SectPlayerChatControls;
   momentsAction?:SectMomentsAction;
+  liveAction?:SectLiveAction;
   onOpenChatSource?:(expectedWorld:WorldState,postId:string)=>boolean;
 }
 
@@ -225,7 +227,7 @@ function ManagedCourtyard({world,busy,onTick,onConfirmJobs,observations,report,o
   </>;
 }
 
-export function SectManagementHome({world,busy=false,onStart,onOpen,onTick,onConfirmJobs,observations,report,onDismissReport,titleRef,onManagementAction,onRestart,restartSeed,chatScope,onOpenChatSource,chatModel,chatPosting,momentsAction}:SectManagementHomeProps){
+export function SectManagementHome({world,busy=false,onStart,onOpen,onTick,onConfirmJobs,observations,report,onDismissReport,titleRef,onManagementAction,onRestart,restartSeed,chatScope,onOpenChatSource,chatModel,chatPosting,momentsAction,liveAction}:SectManagementHomeProps){
   const sect=world.sects.find(row=>row.id===world.sectManagement?.sectId);
   const growth=useMemo(()=>projectSectGrowth(world),[world]);
   const [restarting,setRestarting]=useState<WorldState>();
@@ -263,7 +265,7 @@ export function SectManagementHome({world,busy=false,onStart,onOpen,onTick,onCon
           <div className="min-w-0 space-y-3"><ManagedCourtyard world={world} busy={busy} onTick={onTick} onConfirmJobs={onConfirmJobs}
             observations={observations} report={report} onDismissReport={onDismissReport} growth={growth} command={command}/></div>
           {chatKey&&<Suspense fallback={<p role="status" className="text-sm text-stone-300">正在翻看群聊…</p>}>
-            <SectChatPanel key={chatKey} scope={chatKey} world={world} busy={busy} onOpenSource={onOpenChatSource} model={chatModel} posting={chatPosting} momentsAction={momentsAction}/>
+            <SectChatPanel key={chatKey} scope={chatKey} world={world} busy={busy} onOpenSource={onOpenChatSource} model={chatModel} posting={chatPosting} momentsAction={momentsAction} liveAction={liveAction}/>
           </Suspense>}
         </div>:<StarterSelection key={world.random.seed} seed={world.random.seed} busy={busy} onStart={onStart}/>}
     </div>

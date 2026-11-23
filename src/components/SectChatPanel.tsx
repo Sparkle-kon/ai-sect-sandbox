@@ -8,8 +8,10 @@ import type {LLMConfig,WorldState} from '../types/world';
 import {CultivatorPortrait} from './CultivatorPortrait';
 import {projectCultivatorPortrait} from './cultivatorPortraitModel';
 
+import type {SectLiveAction} from './SectLivePanel';
 import type {SectMomentsAction} from './SectMomentsPanel';
 
+const SectLivePanel=lazy(async()=>({default:(await import('./SectLivePanel')).SectLivePanel}));
 const SectMomentsPanel=lazy(async()=>({default:(await import('./SectMomentsPanel')).SectMomentsPanel}));
 
 const WIDE='(min-width: 1440px)';
@@ -89,18 +91,19 @@ function SectChatModelSettings({config,onChange,busy}:SectChatModelControls&{bus
   </div>;
 }
 
-export function SectChatPanel({world,scope,busy,onOpenSource,model,posting,momentsAction}:{
+export function SectChatPanel({world,scope,busy,onOpenSource,model,posting,momentsAction,liveAction}:{
   world:WorldState;scope:string;busy:boolean;onOpenSource?:(expectedWorld:WorldState,postId:string)=>boolean;
   model?:SectChatModelControls;
   posting?:SectPlayerChatControls;
   momentsAction?:SectMomentsAction;
+  liveAction?:SectLiveAction;
 }){
   const panelId=useId(),roomTitle=useId(),list=useRef<HTMLOListElement>(null);
   const failure=useRef<HTMLParagraphElement>(null);
   const previousRoom=useRef<SectChatRoomId>();
   const wide=useSyncExternalStore(watchWide,isWide,()=>false);
   const [open,setOpen]=useState(false);
-  const [tab,setTab]=useState<'chat'|'moments'>('chat');
+  const [tab,setTab]=useState<'chat'|'moments'|'live'>('chat');
   const storageKey=`sect-chat-read:${scope}`;
   const [read,setRead]=useState<LocalChatRead>(()=>readLocal(storageKey));
   const [failed,setFailed]=useState<{world:WorldState;postId:string}>();
@@ -172,16 +175,22 @@ export function SectChatPanel({world,scope,busy,onOpenSource,model,posting,momen
     </button>
     <div id={panelId} hidden={!shown} className="space-y-2">
       <h2 className="hidden font-serif text-lg font-semibold text-amber-100 min-[1440px]:block">仙门群聊</h2>
-      {momentsAction&&<div role="group" aria-label="选择江湖见闻" className="grid grid-cols-2 gap-1 rounded-md bg-stone-900/75 p-0.5">
+      {(momentsAction||liveAction)&&<div role="group" aria-label="选择江湖见闻"
+        className={`grid ${momentsAction&&liveAction?'grid-cols-3':'grid-cols-2'} gap-1 rounded-md bg-stone-900/75 p-0.5`}>
         <button type="button" aria-pressed={tab==='chat'} className="min-h-11 rounded px-2 text-sm text-stone-300 aria-pressed:bg-amber-950/60 aria-pressed:text-amber-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300"
           onClick={()=>setTab('chat')}>群聊</button>
-        <button type="button" aria-pressed={tab==='moments'} className="min-h-11 rounded px-2 text-sm text-stone-300 aria-pressed:bg-amber-950/60 aria-pressed:text-amber-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300"
-          onClick={()=>{setTab('moments');setFailed(undefined);}}>朋友圈</button>
+        {momentsAction&&<button type="button" aria-pressed={tab==='moments'} className="min-h-11 rounded px-2 text-sm text-stone-300 aria-pressed:bg-amber-950/60 aria-pressed:text-amber-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300"
+          onClick={()=>{setTab('moments');setFailed(undefined);}}>朋友圈</button>}
+        {liveAction&&<button type="button" aria-pressed={tab==='live'} className="min-h-11 rounded px-1 text-sm text-stone-300 aria-pressed:bg-amber-950/60 aria-pressed:text-amber-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300"
+          onClick={()=>{setTab('live');setFailed(undefined);}}>天机直播</button>}
       </div>}
       {shown&&tab==='moments'&&<Suspense fallback={<p className="px-2 py-3 text-sm text-stone-300">正翻开众友见闻…</p>}>
         <SectMomentsPanel world={world} busy={busy} onAction={momentsAction}/>
       </Suspense>}
-      <div hidden={tab==='moments'} className="space-y-2">
+      {shown&&tab==='live'&&<Suspense fallback={<p className="px-2 py-3 text-sm text-stone-300">天机阁正在架镜…</p>}>
+        <SectLivePanel world={world} busy={busy} onAction={liveAction}/>
+      </Suspense>}
+      <div hidden={tab!=='chat'} className="space-y-2">
       <div role="group" aria-label="选择群聊" className="grid min-w-0 grid-cols-2 gap-1">
         {rooms.map(room=>{
           const count=unread(room.posts);

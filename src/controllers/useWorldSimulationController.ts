@@ -1,7 +1,6 @@
+import {applySectLiveCommand} from '../engine/sectLive';
 import {applySectMomentCommand} from '../engine/sectMoments';
-import type {SectMomentCommand} from '../types/sectMoments';
 import {applySectGrowthCommand} from '../engine/sectGrowth';
-import type {SectGrowthCommand} from '../types/sectGrowth';
 import {quoteSectMeetingOrders} from '../engine/sectMeetingOrders';
 import type {SectJobAssignment,SectJobObservation} from '../types/sectJobs';
 import {configureStoryteller} from '../engine/storytellerDirector';
@@ -383,29 +382,22 @@ export function useWorldSimulationController({
     return true;
   };
 
-  const manageSectGrowth=(expected:WorldState,expectedTimeline:WorldTimeline,revision:number,command:SectGrowthCommand):boolean=>{
-    if(isRunning||fastForwardRun.current||campaignGuard.current||history.current!==expectedTimeline||
+  function manageSectCommand<Command>(apply:(next:WorldState,command:Command)=>boolean){
+    return (expected:WorldState,expectedTimeline:WorldTimeline,revision:number,command:Command):boolean=>{
+      if(isRunning||fastForwardRun.current||campaignGuard.current||history.current!==expectedTimeline||
         !canUseSaveContext(expected,revision))return false;
-    const next=cloneWorldWithColdHistory(expected);
-    if(!applySectGrowthCommand(next,command))return false;
-    const retained=recordTimelineWorld(expectedTimeline,next);
-    if(retained===expectedTimeline)return false;
-    updateTimeline(retained);
-    if(lastSectMeeting?.world===expected)setLastSectMeeting({world:next,rows:lastSectMeeting.rows});
-    return updateWorld(current=>current===expected?next:current,false)===next;
-  };
-
-  const manageSectMoment=async(expected:WorldState,expectedTimeline:WorldTimeline,revision:number,command:SectMomentCommand):Promise<boolean>=>{
-    if(isRunning||fastForwardRun.current||campaignGuard.current||history.current!==expectedTimeline||
-      !canUseSaveContext(expected,revision))return false;
-    const next=cloneWorldWithColdHistory(expected);
-    if(!applySectMomentCommand(next,command))return false;
-    const retained=recordTimelineWorld(expectedTimeline,next);
-    if(retained===expectedTimeline)return false;
-    updateTimeline(retained);
-    if(lastSectMeeting?.world===expected)setLastSectMeeting({world:next,rows:lastSectMeeting.rows});
-    return updateWorld(current=>current===expected?next:current,false)===next;
-  };
+      const next=cloneWorldWithColdHistory(expected);
+      if(!apply(next,command))return false;
+      const retained=recordTimelineWorld(expectedTimeline,next);
+      if(retained===expectedTimeline)return false;
+      updateTimeline(retained);
+      if(lastSectMeeting?.world===expected)setLastSectMeeting({world:next,rows:lastSectMeeting.rows});
+      return updateWorld(current=>current===expected?next:current,false)===next;
+    };
+  }
+  const manageSectGrowth=manageSectCommand(applySectGrowthCommand);
+  const manageSectMoment=manageSectCommand(applySectMomentCommand);
+  const manageSectLive=manageSectCommand(applySectLiveCommand);
 
   const restartManagedSect=(expected:WorldState,expectedTimeline:WorldTimeline,revision:number,fresh:WorldState):boolean=>{
     if(isRunning||fastForwardRun.current||campaignGuard.current||history.current!==expectedTimeline||
@@ -662,7 +654,7 @@ export function useWorldSimulationController({
     ...freshness,
     world,visibleWorld,timeline,saveTimelineId,restoredReadingOrigin,
     viewEpoch,viewScopeKey,sourceBranch,preview,activateTimeline,restoreHistoricalFrame,clearPreview,
-    updateWorld,replaceWorld,manageSectGrowth,manageSectMoment,restartManagedSect,newWorldFromSeed,changeStorytellerStyle,canUseSaveContext,archiveCurrentNarrative,handleReset,
+    updateWorld,replaceWorld,manageSectGrowth,manageSectMoment,manageSectLive,restartManagedSect,newWorldFromSeed,changeStorytellerStyle,canUseSaveContext,archiveCurrentNarrative,handleReset,
     isRunning,setIsRunning,isStepping,tryBeginInteraction,endInteraction,tickIntervalMs,setTickIntervalMs,
     llmConfig,changeLlmConfig,handleStepTick,toggleAutoplay,compareDecision,fairModelCoverage,confirmSectMeeting,
     sectPlayerPosting,sectJobObservations:!preview&&lastSectMeeting?.world===world?lastSectMeeting.rows:undefined,

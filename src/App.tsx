@@ -1,3 +1,4 @@
+import type {SectLiveCommand} from './types/sectLive';
 import type {SectMomentCommand} from './types/sectMoments';
 import {projectSectChat} from './engine/sectChat';
 import {managedRestartSeed} from './engine/timelineEngine';
@@ -773,12 +774,13 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
     setStoryEntryOpen(false);setManagerView('closed');setCockpitOpen(false);setDashboardOpen(true);
     return true;
   };
+  const canManage=(expected:WorldState)=>managerView==='opening'&&expected===world&&!!world.sectManagement&&managerIsCurrent();
   const manageGrowth=(expected:WorldState,command:SectGrowthCommand):boolean=>
-    managerView==='opening'&&expected===world&&!!world.sectManagement&&managerIsCurrent()&&
-    simulation.manageSectGrowth(expected,timeline,managerRevision,command);
+    canManage(expected)&&simulation.manageSectGrowth(expected,timeline,managerRevision,command);
   const manageMoment=async(expected:WorldState,command:SectMomentCommand):Promise<boolean>=>
-    managerView==='opening'&&expected===world&&!!world.sectManagement&&managerIsCurrent()&&
-    simulation.manageSectMoment(expected,timeline,managerRevision,command);
+    canManage(expected)&&simulation.manageSectMoment(expected,timeline,managerRevision,command);
+  const manageLive=async(expected:WorldState,command:SectLiveCommand):Promise<boolean>=>
+    canManage(expected)&&simulation.manageSectLive(expected,timeline,managerRevision,command);
   const restartSeed=managerView==='opening'?managedRestartSeed(timeline):undefined;
   const restartManaged=(expected:WorldState,starterId:StarterSectId,draw:StarterDraw):boolean=>{
     if(managerView!=='opening'||expected!==world||restartSeed===undefined||!world.sectManagement?.growth?.failure||!managerIsCurrent())return false;
@@ -796,7 +798,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
     onStart={startManagedSect} onOpen={openFromManager} onConfirmJobs={confirmSectJobs} observations={simulation.sectJobObservations}
     report={currentSectReport} onDismissReport={dismissSectReport} onManagementAction={manageGrowth} onRestart={restartManaged} restartSeed={restartSeed}
     chatScope={viewScopeKey} onOpenChatSource={openChatSource} chatModel={{config:llmConfig,onChange:simulation.changeLlmConfig}}
-    chatPosting={simulation.sectPlayerPosting} momentsAction={manageMoment}/>;
+    chatPosting={simulation.sectPlayerPosting} momentsAction={manageMoment} liveAction={manageLive}/>;
   if(managerView==='saves')return <main className="xianxia-shell min-h-dvh bg-slate-950 text-slate-100 px-4 py-3">
     <div className="mx-auto max-w-3xl space-y-3">
       <header className="flex items-center justify-between gap-2">

@@ -1,3 +1,4 @@
+import { sectLiveShape, validateSectLive } from './sectLiveValidation';
 import { sectMomentsShape, validateSectMoments } from './sectMomentsValidation';
 import { sectPlayerChatShape, validateSectPlayerChat } from './sectPlayerChatValidation';
 import { sectChatShape, validateSectChat } from './sectChatValidation';
@@ -30,6 +31,7 @@ export const sectManagementShape = structure({
   chat: optional(sectChatShape),
   playerChat: optional(sectPlayerChatShape),
   moments: optional(sectMomentsShape),
+  live: optional(sectLiveShape),
 });
 
 export function validateSectManagement(world: WorldState, fail: (field:string)=>never): void {
@@ -39,6 +41,8 @@ export function validateSectManagement(world: WorldState, fail: (field:string)=>
   }
   const state=world.sectManagement;
   if(!state){
+    if(world.resourceFlow.months.some(book=>book.entries.some(flow=>flow.reason==='livestream_tip')))
+      return fail('sectManagement.live.giftFlow');
     for(const starterId of STARTER_SECT_IDS){
       for(const draw of [0,1] as const){
         const identity=starterSectIdentity(world.random.seed,starterId,draw);
@@ -87,4 +91,5 @@ export function validateSectManagement(world: WorldState, fail: (field:string)=>
   if(state.chat)validateSectChat(world,state,state.chat,fail);
   if(state.playerChat)validateSectPlayerChat(world,state,state.playerChat,fail);
   if(state.moments)validateSectMoments(world,state,state.moments,fail);
+  validateSectLive(world,state,state.live,fail);
 }
