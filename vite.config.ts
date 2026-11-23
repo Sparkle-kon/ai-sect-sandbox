@@ -133,7 +133,7 @@ export default defineConfig({
             './src/engine/disasterShelterCheckpoint.ts','./src/engine/marketFreightCheckpoint.ts'],
           'journey-rules': ['./src/engine/terrainEngine.ts', './src/engine/simulationRegionGeometry.ts', './src/engine/mapMotionEngine.ts', './src/engine/roadEngine.ts',
             './src/engine/sealedCourierEngine.ts', './src/engine/escortEngine.ts', './src/engine/pilgrimageEngine.ts', './src/engine/expeditionRescueEngine.ts',
-            './src/engine/boundaryReliefEngine.ts','./src/engine/routeWarningProof.ts','./src/engine/routeWarningEngine.ts'],
+            './src/engine/boundaryReliefEngine.ts','./src/engine/pilgrimageFork.ts','./src/engine/pilgrimageForkPresence.ts','./src/engine/routeWarningProof.ts','./src/engine/routeWarningEngine.ts'],
           'workspace-shell': ['./src/components/SandboxWorkspace.tsx', './src/components/workspacePreferences.ts'],
           'map-controls': ['./src/components/mapCamera.ts', './src/components/mapKeyboard.ts', './src/components/mapActorClusters.ts',
             './src/components/mapBrushView.ts', './src/components/mapTouchGesture.ts'],

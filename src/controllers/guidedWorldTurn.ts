@@ -1,3 +1,4 @@
+import {resolveGuidedPilgrimageForkTurn,type GuidedPilgrimageForkTurn} from './guidedPilgrimageForkTurn';
 import {resolveGuidedBattlefieldAftermathTurn,type GuidedBattlefieldAftermathTurn} from './guidedBattlefieldAftermathTurn';
 import {resolveGuidedVillageReunionTurn,type GuidedVillageReunionTurn} from './guidedVillageReunionTurn';
 import {resolveGuidedVacantGateTurn,type GuidedVacantGateTurn} from './guidedVacantGateTurn';
@@ -22,13 +23,14 @@ import {resolveGuidedHeavenlyAlchemyTurn,type GuidedHeavenlyAlchemyTurn} from '.
 import {resolveGuidedImmortalAuctionTurn,type GuidedImmortalAuctionTurn} from './guidedImmortalAuctionTurn';
 import type {WorldState} from '../types/world';
 
-export type GuidedWorldTurn=GuidedDungeonTurn|GuidedHeavenlyAlchemyTurn|GuidedDaoPathTurn|GuidedImmortalAuctionTurn|GuidedCultivationClanTurn|GuidedAscensionTurn|GuidedProtagonistFlightTurn|GuidedHeartDemonRecoveryTurn|GuidedBattlefieldRevisitTurn|GuidedCalamityArrayTurn|GuidedSchoolFormDuelTurn|GuidedFrontierNightHuntTurn|GuidedWitnessInquiryTurn|GuidedCampaignAssemblyTurn|GuidedPavilionFireTurn|GuidedFrontierGorgeTurn|GuidedMercyReunionTurn|GuidedFarewellLandingTurn|GuidedWildMigrationTurn|GuidedVacantGateTurn|GuidedVillageReunionTurn|GuidedBattlefieldAftermathTurn;
+export type GuidedWorldTurn=GuidedDungeonTurn|GuidedHeavenlyAlchemyTurn|GuidedDaoPathTurn|GuidedImmortalAuctionTurn|GuidedCultivationClanTurn|GuidedAscensionTurn|GuidedProtagonistFlightTurn|GuidedHeartDemonRecoveryTurn|GuidedBattlefieldRevisitTurn|GuidedCalamityArrayTurn|GuidedSchoolFormDuelTurn|GuidedFrontierNightHuntTurn|GuidedWitnessInquiryTurn|GuidedCampaignAssemblyTurn|GuidedPavilionFireTurn|GuidedFrontierGorgeTurn|GuidedMercyReunionTurn|GuidedFarewellLandingTurn|GuidedWildMigrationTurn|GuidedVacantGateTurn|GuidedVillageReunionTurn|GuidedBattlefieldAftermathTurn|GuidedPilgrimageForkTurn;
 
 export function resolveGuidedWorldTurn(order:GuidedWorldTurn,world:WorldState,branch:string,revision:number){
   if(!('kind' in order))return resolveGuidedDungeonTurn(order,world,branch,revision);
   switch(order.kind){
     case 'vacant-gate':return resolveGuidedVacantGateTurn(order,world,branch,revision);
     case 'battlefield-aftermath':return resolveGuidedBattlefieldAftermathTurn(order,world,branch,revision);
+    case 'pilgrimage-fork':return resolveGuidedPilgrimageForkTurn(order,world,branch,revision);
     case 'village-reunion':return resolveGuidedVillageReunionTurn(order,world,branch,revision);
     case 'wild-migration':return resolveGuidedWildMigrationTurn(order,world,branch,revision);
     case 'farewell-landing':return resolveGuidedFarewellLandingTurn(order,world,branch,revision);

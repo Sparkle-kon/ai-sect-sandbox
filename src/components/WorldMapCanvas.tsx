@@ -1,3 +1,4 @@
+import {drawPilgrimageForkSegments,visiblePilgrimageForkSegments} from './pilgrimageForkMapView';
 import {projectBattlefieldAftermath} from '../engine/battlefieldAftermath';
 import {projectVillageReunion} from '../engine/villageReunion';
 import {drawAnomalyRelaySeal,formatAnomalyRelayMark,visibleAnomalyRelayMarks} from './anomalyRelayMapView';
@@ -432,6 +433,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const escortedCaravan = useMemo(() => visibleMapEscort(world, mapView, selected), [world, mapView, selected]);
   const hazards = useMemo(() => getVisibleHazards(world, mapView), [world, mapView]);
   const beastsByLocation = useMemo(() => visibleBeastsByLocation(world,mapView,selected),[world,mapView,selected]);
+  const forkSegments=useMemo(()=>visiblePilgrimageForkSegments(world,mapView,selected),[world,mapView,selected]);
   const localBattlefieldAftermath=useMemo(()=>selected?projectBattlefieldAftermath(world,selected):undefined,[world,selected]);
   const localVillageReunion=useMemo(()=>selected?projectVillageReunion(world,selected):undefined,[world,selected]);
   const anomalyRelayMarks=useMemo(()=>visibleAnomalyRelayMarks(world,mapView,selected),[world,mapView,selected]);
@@ -738,6 +740,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         ctx.restore();
       }
 
+      drawPilgrimageForkSegments(ctx,forkSegments,logicalPerCssPixel);
       // No landmark connects to an invented route. Qi uses only the approved geometry painted above.
       // 4. Draw Locations
       for (const location of seenLocations) {
@@ -965,7 +968,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener?.('change',stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, atlasDrawing, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, civicObservation, usedVillageSegments, annotationView, annotationPins, armedBrush, preview, compact, clusterScope, scenicRelief, qiFlow, inspectionEnabled, letters, travel, flightMap, canvasFlights, combatVfx, actorBadgeFacts, hasBadgeQuote, domes, strategic, arenaMarks, dungeonMark, alchemyMarks, daoMarks, auctionMark, realmHalos, clanCeremonies, ascensionMarks, formationFrames, calamityFlows, schoolStrokes, anomalyRelayMarks, historical]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, atlasDrawing, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, civicObservation, usedVillageSegments, annotationView, annotationPins, armedBrush, preview, compact, clusterScope, scenicRelief, qiFlow, inspectionEnabled, letters, travel, flightMap, canvasFlights, combatVfx, actorBadgeFacts, hasBadgeQuote, domes, strategic, arenaMarks, dungeonMark, alchemyMarks, daoMarks, auctionMark, realmHalos, clanCeremonies, ascensionMarks, formationFrames, calamityFlows, schoolStrokes, anomalyRelayMarks, forkSegments, historical]);
 
   useEffect(() => {
     const canvas = canvasRef.current;

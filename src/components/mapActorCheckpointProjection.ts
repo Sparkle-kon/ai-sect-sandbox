@@ -56,6 +56,9 @@ function checkpointCandidates(world: WorldState) {
     include(row.organizerId, PILGRIMAGE);
     include(row.companionId, PILGRIMAGE);
   }
+  for(const fork of world.pilgrimageForks?.forks??[])for(const choice of fork.choices){
+    if(choice.status==='traveling'||choice.status==='closed'&&choice.steps?.length)include(choice.actorId,PILGRIMAGE);
+  }
   return { roles, guarded };
 }
 

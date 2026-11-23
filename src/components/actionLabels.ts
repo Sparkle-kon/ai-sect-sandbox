@@ -16,6 +16,7 @@ const ACTION_LABELS = {
   FAREWELL_LANDING: '泊岸作别',
   WILD_MIGRATION: '山兽借道',
   VILLAGE_REUNION: '旧村重逢',
+  PILGRIMAGE_FORK: '岔路自择',
   BATTLEFIELD_AFTERMATH: '战后拾愿',
   VACANT_GATE: '山门守撤',
   SCHOOL_FORM_DUEL: '剑锋相对',

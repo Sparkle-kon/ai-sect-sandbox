@@ -1,3 +1,4 @@
+import type {PilgrimageForkMove,PilgrimageForkState} from './pilgrimageFork';
 import type {BattlefieldAftermathMove,BattlefieldAftermathState} from './battlefieldAftermath';
 import type {VillageReunionMove,VillageReunionState} from './villageReunion';
 import type {AnomalyRelayState} from './anomalyRelay';
@@ -150,6 +151,7 @@ export type ActionType =
   | 'FAREWELL_LANDING'
   | 'WILD_MIGRATION'
   | 'VILLAGE_REUNION'
+  | 'PILGRIMAGE_FORK'
   | 'BATTLEFIELD_AFTERMATH'
   | 'VACANT_GATE'
   | 'AUDIENCE_PLEDGE'
@@ -619,6 +621,8 @@ export interface LLMDecisionPayload {
   targetFarewellDeceasedId?: string;
   wildMigrationMove?: WildMigrationMove;
   villageReunionMove?: VillageReunionMove;
+  pilgrimageForkMove?: PilgrimageForkMove;
+  targetPilgrimageForkId?: string;
   battlefieldAftermathMove?: BattlefieldAftermathMove;
   targetBattlefieldAftermathId?: string;
   targetVillageReunionId?: string;
@@ -3695,6 +3699,7 @@ export interface WorldState {
   farewellLandings?: FarewellLandingState;
   wildMigrations?: WildMigrationState;
   villageReunions?: VillageReunionState;
+  pilgrimageForks?: PilgrimageForkState;
   battlefieldAftermath?: BattlefieldAftermathState;
   vacantGate?: VacantGateState;
   anomalyRelays?: AnomalyRelayState;

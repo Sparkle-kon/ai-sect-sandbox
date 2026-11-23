@@ -1,3 +1,7 @@
+import {advancePilgrimageForks,availablePilgrimageForkActions,isPrivatePilgrimageForkEvent,
+  recordPilgrimageForkArrival,resolvePilgrimageForkAction} from './pilgrimageFork';
+import {pilgrimageForkActedThisTick,pilgrimageForkTravelLocked} from './pilgrimageForkPresence';
+import {exactPilgrimageForkDecision} from './pilgrimageForkCognition';
 import {availableBattlefieldAftermathActions,isPrivateBattlefieldAftermathEvent,recordBattlefieldAftermathApproach,
   recordBattlefieldAftermathTerminal,resolveBattlefieldAftermathAction} from './battlefieldAftermath';
 import {exactBattlefieldAftermathDecision} from './battlefieldAftermathCognition';
@@ -547,6 +551,20 @@ export function applyCultivatorBrainDecision(
     cultivator.currentAction = 'WAYPOST_MEAL';
     cultivator.innerMonologue = '已经在本处停歇分茶，这月没有迈过下一个关口。';
     return null;
+  }
+  if(pilgrimageForkTravelLocked(world,cultivator)||pilgrimageForkActedThisTick(world,cultivator)){
+    cultivator.currentAction='PILGRIMAGE_FORK';
+    cultivator.innerMonologue='岔路各走各的，不在旧地另办事务。';
+    return null;
+  }
+  if(decision.chosenAction==='PILGRIMAGE_FORK'){
+    if((modelInput||isProviderPersonaDecision(decision))&&activeAvatar(world)===cultivator)return null;
+    const exact=exactPilgrimageForkDecision(decision,availablePilgrimageForkActions(cultivator,world,world.tick),true);
+    const rows=exact?resolvePilgrimageForkAction(world,cultivator,exact):[];
+    for(const prior of rows.slice(0,-1))emit?.(prior);
+    const own=rows.at(-1);
+    if(own&&exact){cultivator.currentAction='PILGRIMAGE_FORK';cultivator.innerMonologue=exact.innerMonologue;}
+    return own??null;
   }
   const mayIssueRouteWarning = decision.chosenAction === 'ROUTE_WARNING' &&
     availableRouteWarningActions(cultivator,world).some((option)=>
@@ -1703,6 +1721,14 @@ export function advanceWorldTick(
         modelOrdinaryReplaced=true;
       }
     }
+    if(modelProposal?.chosenAction==='PILGRIMAGE_FORK'&&!avatarDecision){
+      const prior=prevState.cultivators.find(row=>row.id===cultivator.id);
+      if(!prior||activeAvatar(prevState)===prior||!exactPilgrimageForkDecision(modelProposal,
+        availablePilgrimageForkActions(prior,prevState,nextState.tick),true)){
+        provided=undefined;
+        modelOrdinaryReplaced=true;
+      }
+    }
     if(modelProposal?.chosenAction==='BATTLEFIELD_AFTERMATH'&&!avatarDecision){
       const prior=prevState.cultivators.find(row=>row.id===cultivator.id);
       if(!prior||activeAvatar(prevState)===prior||!exactBattlefieldAftermathDecision(modelProposal,
@@ -2094,7 +2120,7 @@ export function advanceWorldTick(
         if (receipt && evt.id === `evt-${receipt.id}`) recordReliefCompetition(nextState, receipt);
       }
       newEvents.push(evt);
-      if(!isBattlefieldRevisitEvent(evt)&&!isPrivateCalamityArrayEvent(evt)&&!isTaughtSwordPracticeEvent(evt)&&!isPrivateSchoolFormEvent(evt)&&!isPrivateWitnessInquiryEvent(evt)&&!isPrivatePavilionFireEvent(evt)&&!isPrivateMercyReunionEvent(evt)&&!isPrivateWildMigrationEvent(evt)&&!isPrivateVillageReunionEvent(evt)&&!isPrivateBattlefieldAftermathEvent(evt)&&!(evt.witnessScope==='participants'&&evt.id.endsWith('-study-technique-fire')))witnessEvent(nextState, evt);
+      if(!isBattlefieldRevisitEvent(evt)&&!isPrivateCalamityArrayEvent(evt)&&!isTaughtSwordPracticeEvent(evt)&&!isPrivateSchoolFormEvent(evt)&&!isPrivateWitnessInquiryEvent(evt)&&!isPrivatePavilionFireEvent(evt)&&!isPrivateMercyReunionEvent(evt)&&!isPrivateWildMigrationEvent(evt)&&!isPrivateVillageReunionEvent(evt)&&!isPrivateBattlefieldAftermathEvent(evt)&&!isPrivatePilgrimageForkEvent(evt)&&!(evt.witnessScope==='participants'&&evt.id.endsWith('-study-technique-fire')))witnessEvent(nextState, evt);
       if(decision.chosenAction==='SOCIALIZE'&&cultivator.currentAction==='SOCIALIZE'){
         const after=recordTournamentBanquetAfterTalk(nextState,evt);
         if(after&&!newEvents.some(row=>row.id===after.id))newEvents.push(after);
@@ -2161,9 +2187,9 @@ export function advanceWorldTick(
         result.origin==='player'?'avatar':result.origin,true);
     },
   }), ...advanceOccasions(nextState, rng), ...advanceOaths(nextState), ...advanceMarkets(nextState), ...advanceWitnesses(nextState), ...advanceSeasonReviews(nextState, (state, seasonId) =>
-    publicCompetitionStandings(state, seasonId).find(({ rank }) => rank === 1)), ...maintainSectPolitics(nextState), ...advanceDoctrineFoundings(nextState), ...advanceDoctrineMaturity(nextState,prevState), ...advanceBounties(nextState), ...advanceResearch(nextState), ...advanceWorkshops(nextState), ...advanceCraftTraining(nextState), ...advanceScribeCommissions(nextState), ...advanceDamageAssurance(nextState), ...advanceRelicExhibits(nextState), ...advanceProbation(nextState), ...advanceToolLoans(nextState), ...advanceWaypostMeals(nextState), ...advanceImmortalAuctions(nextState), ...advanceVillageReunions(nextState), ...advanceEstates(nextState), ...advanceDoctrines(nextState), ...advanceSectCredit(nextState), ...advanceSanctuaries(nextState), ...advancePilgrimages(nextState), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceCareFollowups(nextState), ...advanceDanxiaShortages(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...reconcileCourierDeaths(nextState), ...advanceHouseholds(nextState), ...advanceHouseholdNames(nextState), ...advanceCultivationClans(nextState)]) {
+    publicCompetitionStandings(state, seasonId).find(({ rank }) => rank === 1)), ...maintainSectPolitics(nextState), ...advanceDoctrineFoundings(nextState), ...advanceDoctrineMaturity(nextState,prevState), ...advanceBounties(nextState), ...advanceResearch(nextState), ...advanceWorkshops(nextState), ...advanceCraftTraining(nextState), ...advanceScribeCommissions(nextState), ...advanceDamageAssurance(nextState), ...advanceRelicExhibits(nextState), ...advanceProbation(nextState), ...advanceToolLoans(nextState), ...advanceWaypostMeals(nextState), ...advanceImmortalAuctions(nextState), ...advanceVillageReunions(nextState), ...advancePilgrimageForks(nextState), ...advanceEstates(nextState), ...advanceDoctrines(nextState), ...advanceSectCredit(nextState), ...advanceSanctuaries(nextState), ...advancePilgrimages(nextState), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceCareFollowups(nextState), ...advanceDanxiaShortages(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...reconcileCourierDeaths(nextState), ...advanceHouseholds(nextState), ...advanceHouseholdNames(nextState), ...advanceCultivationClans(nextState)]) {
     newEvents.push(event);
-    if(!isPrivateTournamentBanquetEvent(event)&&!isPrivateVacantGateEvent(event)&&!isPrivateVillageReunionEvent(event))witnessEvent(nextState, event);
+    if(!isPrivateTournamentBanquetEvent(event)&&!isPrivateVacantGateEvent(event)&&!isPrivateVillageReunionEvent(event)&&!isPrivatePilgrimageForkEvent(event))witnessEvent(nextState, event);
   }
   if(pendingGateEffects.size){
     const executed=new Set(newEvents.filter(event=>event.actorIds.length===1&&isPrivateVacantGateEvent(event)).flatMap(event=>[...event.actorIds]));
@@ -2196,6 +2222,7 @@ export function advanceWorldTick(
   archiveChronicleEvents(nextState, newEvents);
   nextState.events = [...newEvents, ...nextState.events].slice(0, 120);
   recordBattlefieldAftermathTerminal(nextState,newEvents);
+  recordPilgrimageForkArrival(nextState,newEvents);
   advanceWitnessedPersonalStory(nextState);
   if (councilMode === 'utility') {
     settleAnnualCouncilOffline(nextState);

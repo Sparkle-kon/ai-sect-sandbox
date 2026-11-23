@@ -1,3 +1,6 @@
+import {availablePilgrimageForkActions} from './pilgrimageFork';
+import {pilgrimageForkActedThisTick,pilgrimageForkTravelLocked} from './pilgrimageForkPresence';
+import {exactPilgrimageForkDecision,pilgrimageForkCommand} from './pilgrimageForkCognition';
 import {availableBattlefieldAftermathActions} from './battlefieldAftermath';
 import {exactBattlefieldAftermathDecision,battlefieldAftermathCommand} from './battlefieldAftermathCognition';
 import {availableVillageReunionActions} from './villageReunion';
@@ -936,6 +939,8 @@ export function computeHeuristicDecision(
     const flightChoice=utilityProtagonistFlightDecision(cultivator,flightChoices);
     return flightChoice??{chosenAction:'REST',innerMonologue:'眼下没有可以实走的一步，先守住所在之处。'};
   }
+  if(pilgrimageForkTravelLocked(world,cultivator)||pilgrimageForkActedThisTick(world,cultivator))
+    return {chosenAction:'REST',innerMonologue:'已择自己的一段路，等身体走到再说。'};
   const pilgrim = activePilgrimageForActor(world, cultivator);
   const pendingVow = world.pilgrimages.journeys.some((journey) => journey.status === 'proposed' && journey.companionId === cultivator.id);
   if (pilgrim || pendingVow) {
@@ -2753,6 +2758,10 @@ export async function requestCultivatorLLMDecision(
         return exact&&tagCampaignAssemblyDecision(exact,current);
       },160);
   }
+  if(pilgrimageForkTravelLocked(world,cultivator)||pilgrimageForkActedThisTick(world,cultivator))return undefined;
+  const forkOptions=activeAvatar(world)===cultivator?[]:availablePilgrimageForkActions(cultivator,world,requestTick);
+  const forkGuide=forkOptions.length?'只复制本人确在同路岔站的一项分路选择，不填同行者同意、花费、路线或到达：'+
+    JSON.stringify(forkOptions.map(pilgrimageForkCommand)):'';
   const activeVow = activePilgrimageForActor(world, cultivator);
   const onPilgrimagePath = activeVow && Boolean(pilgrimageCheckpoint(world, cultivator));
   const mealOptions = onPilgrimagePath ? waypostMealProviderOptions(cultivator, world, requestTick) : [];
@@ -3030,6 +3039,7 @@ export async function requestCultivatorLLMDecision(
     activeVow ? `你是修仙沙盒中自愿参加巡礼的修士。只能使用本人的可执行行动，不许传送、额外援药或虚构站点。
 当前已实到 ${activeVow.stopsVisited.length - 1} 个巡礼站点；${onPilgrimagePath ? '仍在道路途中，不在旧站。' : '当前在已到达的实站，可调息。'}
 只允许复制执行回合的以下巡礼选项：${JSON.stringify(pilgrimageOptions)}
+${forkGuide}
 宿营、接续与撤营只抄本人合法动作和巡礼编号，不填写坐标、营地名称、临时目的地或费用。
 返回 JSON {"chosenAction":"PILGRIMAGE","pilgrimageMove":"照抄选项","targetPilgrimageId":"照抄","innerMonologue":"简短"}；${onPilgrimagePath ? (mealOptions.length ? '途中只选明列的巡礼或当面分茶选项。' : '途中只选所列巡礼行动。') : '若留站调息可选 REST，不填写目标。'}
 ${mealOptions.length ? `实到同一个关口才可改选 WAYPOST_MEAL，照抄以下本人许可，不填移动、补给数量、气血结果或他人身份：${JSON.stringify(mealOptions.map(waypostMealTargets))}。` : ''}
@@ -3110,6 +3120,7 @@ ${ownRecovery?`- 本月可以用一次调息自持。若选择，只原样复制
 - 栖息地复育与放归只用当地实际有资源的选择；记录复见必须亲眼核对同一野生灵兽：${JSON.stringify(habitatOptions)}
 - 纪事异闻只允在当地公示板提交列出的结构化说法或核证勘误，不许生成证据文字：${JSON.stringify(chronicleErrataOptions)}
 - 朝山巡礼只向在场同伴提议，两站必须是彼此知晓且可通行的地点。选择并原样复制当下巡礼选项：${JSON.stringify(pilgrimageOptions)}
+${forkGuide}
 - ${routeWarningGuide}
 - 宗门信贷为规则固定的零息本金，仅能选实际库账有据的选项：${JSON.stringify(creditOptions)}
 - 避难敕令只在指定站点保护持票人的直接斗法，且护盾有限。可执行事务：${JSON.stringify(sanctuaryOptions)}
@@ -3155,6 +3166,11 @@ ${JSON.stringify(cultivator.reflections.filter(row=>!sealedHeartDemonReflection(
 ${COGNITIVE_RESPONSE_GUIDE}`;
 
   return requestDecisionPrompt(config, requestTick, options, prompt, (parsed) => {
+          if(parsed?.chosenAction==='PILGRIMAGE_FORK'){
+            if(requestTick!==world.tick+1||activeAvatar(world)===cultivator||!exactPilgrimageForkDecision(parsed,forkOptions))return undefined;
+            return exactPilgrimageForkDecision(parsed,availablePilgrimageForkActions(cultivator,world,requestTick));
+          }
+          if(parsed&&(Object.hasOwn(parsed,'pilgrimageForkMove')||Object.hasOwn(parsed,'targetPilgrimageForkId')))return undefined;
           // Generic actions cannot smuggle proof-bound fields from a separate native choice lane.
           if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) ||
               Object.hasOwn(parsed, 'targetHeartTrialId') || Object.hasOwn(parsed, 'heartDemonChoice') ||

@@ -1,3 +1,4 @@
+import {pilgrimageForkCheckpoint} from './pilgrimageForkPresence';
 import { recordFlightStride } from './protagonistFlightTape';
 import type {WaypostMealVisit} from '../types/waypostMeal';
 import {waypostMealServedThisTick} from './waypostMealTerms';
@@ -67,6 +68,8 @@ export function pilgrimageActedThisTick(world: WorldState, actor: Cultivator): b
 
 export function pilgrimageCheckpoint(world: WorldState, actor: Cultivator): MapPoint | undefined {
   if (!alive(actor)) return undefined;
+  const fork=pilgrimageForkCheckpoint(world,actor);
+  if(fork)return fork;
   const journey = activePilgrimageForActor(world, actor);
   const point = journey?.path[journey.pathIndex];
   return point && pointOf(point);
@@ -508,6 +511,7 @@ export function advancePilgrimages(world: WorldState): WorldEvent[] {
   const terminal = new Set(state.journeys.filter((journey) => journey.status !== 'proposed' && journey.status !== 'active')
     .sort((a, b) => (a.settledTick ?? 0) - (b.settledTick ?? 0)).slice(-RETAIN_TERMINAL).map(({ id }) => id));
   const mealProof=new Set((world.waypostMeals?.meals??[]).flatMap(row=>[row.hostVisit.journeyId,row.guestVisit.journeyId]));
+  for(const fork of world.pilgrimageForks?.forks??[])mealProof.add(fork.journeyId);
   state.journeys = state.journeys.filter((journey) => journey.status === 'proposed' || journey.status === 'active' ||
     mealProof.has(journey.id) || terminal.has(journey.id) || (journey.settledTick !== undefined && world.tick - journey.settledTick < COOLDOWN));
   return events;
