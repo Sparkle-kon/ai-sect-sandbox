@@ -239,6 +239,39 @@ export interface SectChatRoomView {
   readonly posts:readonly SectChatMessageView[];
 }
 
+function provesChatEvent(world:WorldState,post:SectChatPost,actor:Cultivator,event:WorldEvent,
+    actors:ReadonlyMap<string,Cultivator>):boolean{
+  const {roomId,about}=post;
+  return about.kind==='public_event'&&isPublic(event,world.tick)&&event.id===about.eventId&&event.tick===about.eventTick&&
+    (roomId!=='market'||isMarket(world,event.locationId)&&(post.tick!==world.tick||isMarket(world,actor.locationId)||
+      event.tick===post.tick&&event.actorIds.includes(actor.id)))&&
+    knownPublicEvent(actor,event,post.tick,actors)===about.knowledge;
+}
+
+/** Structured, evidenced public references only; no authored or model prose is inspected. */
+export function quotePublicSectChatEvents(world:WorldState,from:number,through:number){
+  const managed=world.sectManagement;
+  if(!managed)return [];
+  const actors=byId(world.cultivators),events=byId(world.events);
+  const months=uniqueIndex(managed.chat?.months??[],row=>String(row.tick));
+  const result:{event:WorldEvent;post:SectChatPost}[]=[];
+  for(const month of months.values()){
+    if(!Number.isSafeInteger(month.tick)||month.tick<=managed.foundedTick||month.tick<from||
+      month.tick>through||month.tick>world.tick)continue;
+    for(const post of byId(month.posts).values()){
+      const {roomId,about}=post;
+      if(post.tick!==month.tick||post.audience!==undefined||!publicRoom(roomId)||
+        !SECT_CHAT_VARIANTS.includes(post.variant)||!Array.from({length:SECT_CHAT_POST_LIMIT},(_,index)=>
+          sectChatPostId(managed.sectId,month.tick,index)).includes(post.id)||
+        about.kind!=='public_event'||about.eventTick<=managed.foundedTick||about.eventTick>post.tick)continue;
+      const event=events.get(about.eventId),actor=actors.get(post.senderId);
+      if(actor&&actor.id!==managed.leaderId&&event&&provesChatEvent(world,post,actor,event,actors)&&
+        (!isSectChallengeCut(event)||matchSectChallengeResult(world,event)))result.push({event,post});
+    }
+  }
+  return result;
+}
+
 export function projectSectChat(world:WorldState):readonly SectChatRoomView[]{
   const context=managedContext(world);
   if(!context)return SECT_CHAT_ROOMS.map(id=>({id,label:LABELS[id],posts:[]}));
@@ -289,7 +322,7 @@ export function projectSectChat(world:WorldState):readonly SectChatRoomView[]{
           if(!isPublic(event,world.tick)||event.tick!==about.eventTick||
             roomId==='market'&&(!isMarket(world,event.locationId)||post.tick===world.tick&&!isMarket(world,actor.locationId)&&
               (event.tick!==post.tick||!event.actorIds.includes(actor.id))))break;
-          if(knownPublicEvent(actor,event,post.tick,actors)!==about.knowledge){
+          if(!provesChatEvent(world,post,actor,event,actors)){
             if(post.tick<world.tick)text='这条旧讯已收卷。';
             break;
           }

@@ -22,6 +22,7 @@ import { DAO_INTENT_QI, DAO_PATH_MAX_PRACTICES, DAO_INTENT_HISTORY } from '../da
 import { IMMORTAL_AUCTION_PILLS } from '../../types/immortalAuction';
 import { IMMORTAL_AUCTION_HISTORY, IMMORTAL_AUCTION_MAX_BID, IMMORTAL_AUCTION_MAX_BIDS } from '../immortalAuctionTerms';
 import { TIANJI_GAZETTE_HISTORY, TIANJI_GAZETTE_KINDS } from '../tianjiGazetteTerms';
+import { TIANJI_TABLOID_HISTORY, TIANJI_TABLOID_SPEAKERS } from '../../types/tianjiGazette';
 import { CLAN_INNATE_TRAITS } from '../../types/cultivationClan';
 import { CLAN_CEREMONY_QI, CLAN_BIRTH_EARNED_MONTHS } from '../cultivationClanTerms';
 import { ASCENSION_OPEN_QI, ASCENSION_WAVES } from '../ascensionTerms';
@@ -384,7 +385,13 @@ export const gazetteEntry:Validator=(value,path)=>{
 };
 export const tianjiGazette=structure({issues:arr(TIANJI_GAZETTE_HISTORY,structure({
   id,tick,year:tick,month,trigger:one('year_turn','battle','finale'),entries:arr(TIANJI_GAZETTE_KINDS.length,gazetteEntry),
-}))});
+})),quarterlies:optional(arr(TIANJI_TABLOID_HISTORY,structure({
+  id,tick,year:tick,month:one(3,6,9,12),legacyEntries:arr(3,gazetteEntry),
+  challenge:optional(structure({...gazetteSource,challengeId:id})),
+  embarrassment:optional(structure({...gazetteSource,actorId:id})),
+  hotTopic:optional(structure({...gazetteSource,roomId:one('jiuzhou','market'),speakerIds:arr(TIANJI_TABLOID_SPEAKERS,id),speakerCount:num(2,36,true)})),
+  advertisement:optional(structure({postId:id,postedTick:tick,sectId:id,siteId:id})),
+})))});
 export const clanTrait=one(...CLAN_INNATE_TRAITS);
 export const clanHeritage=structure({childId:id,clanId:id,roots:arr(2,spirit),innateTrait:clanTrait});
 export const cultivationClans=structure({nextId:num(1,Number.MAX_SAFE_INTEGER,true),

@@ -1,5 +1,4 @@
 import {useAnomalyRelayRead} from '../useAnomalyRelayRead';
-import {TianjiGazetteLauncher} from '../TianjiGazetteLauncher';
 import {lazy,Suspense,type ComponentProps} from 'react';
 import {HallOfImmortalsLauncher} from '../HallOfImmortalsLauncher';
 import type {useWorldSimulationController} from '../../controllers/useWorldSimulationController';
@@ -19,6 +18,7 @@ import {findVisibleCampaignStopOption,type CampaignStopOption} from '../campaign
 import {chooseWorkspaceSection} from '../workspacePreferences';
 import {InstitutionHubPanel} from './InstitutionHubPanel';
 
+const TianjiGazetteLauncher=lazy(async()=>({default:(await import('../TianjiGazetteLauncher')).TianjiGazetteLauncher}));
 const AttestationPanel=lazy(async()=>({default:(await import('../AttestationPanel')).AttestationPanel}));
 const ChronicleFeed=lazy(async()=>({default:(await import('../ChronicleFeed')).ChronicleFeed}));
 const ChronicleLibraryPanel=lazy(async()=>({default:(await import('../ChronicleLibraryPanel')).ChronicleLibraryPanel}));
@@ -113,7 +113,7 @@ export function ChronicleArchiveHub({simulation,selectedCultivator,active,initia
       {id:'feed',label:'山河见闻',content:<Suspense fallback={<p role="status">载入山河见闻…</p>}>
         <AuthoredEraChronicle world={visibleWorld} visible={feed.events}/>
         {!isReturning&&!personal?.active&&anomalyRelay}
-        {!isReturning&&!personal?.active&&!personal?.story&&<TianjiGazetteLauncher world={visibleWorld} viewer={selectedCultivator}
+        {!isReturning&&!personal?.active&&!personal?.story&&visibleWorld.tianjiGazette&&<TianjiGazetteLauncher world={visibleWorld} viewer={selectedCultivator}
           scopeKey={`${viewScopeKey}:${actorId??''}`} historical={!!preview}/>}
         {!isReturning&&scopedSupplyLinks.length>0&&<CrossRegionConsequenceRead key={viewScopeKey} consequences={scopedSupplyLinks}
           viewerName={selectedCultivator?.name} frame={visibleWorld.authoredEraOrigin?undefined:visibleWorld}/>}

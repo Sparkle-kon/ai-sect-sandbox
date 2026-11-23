@@ -14,6 +14,7 @@ import { recordBattlefieldAftermathTerminal } from '../battlefieldAftermath';
 import { deadSchoolFormContacts } from '../schoolFormDuel';
 import { pruneInvalidBeastDuelContacts } from '../beastDuelProtection';
 import { publishTianjiGazette } from '../tianjiGazetteEngine';
+import { publishTianjiTabloid } from '../tianjiTabloid';
 import { expireRingAudiences } from '../ringAudienceEngine';
 import { pruneInvalidForbiddenDuelContacts } from '../forbiddenArtEngine';
 import { settleFrontierMortality } from '../frontierMovementEngine';
@@ -120,6 +121,7 @@ export function runChronicleAndPostTurn(context: WorldTickContext): void {
   finalizeProtagonistFlightTurn(prevState,nextState,completedEvents);
   recordEraHistoryTurn(prevState,nextState,completedEvents);
   publishTianjiGazette(prevState,nextState,completedEvents);
+  if(nextState.sectManagement)publishTianjiTabloid(prevState,nextState,completedEvents);
   recordRegionalTurnRegistry(nextState);
   const director=nextState.storyteller;
   const directorStyle=director&&STORYTELLER_STYLES.find(row=>row.id===director.style);

@@ -9,4 +9,22 @@ export type TianjiGazetteEntry=
 export interface TianjiGazetteIssue {
   id:string;tick:number;year:number;month:number;trigger:TianjiGazetteTrigger;entries:TianjiGazetteEntry[];
 }
-export interface TianjiGazetteState {issues:TianjiGazetteIssue[]}
+export const TIANJI_TABLOID_HISTORY=8;
+export const TIANJI_TABLOID_SPEAKERS=4;
+export const tianjiTabloidIssueId=(tick:number)=>`tabloid-${tick}`;
+export type TianjiTabloidChallenge=TianjiGazetteSource&{challengeId:string};
+export type TianjiTabloidEmbarrassment=TianjiGazetteSource&{actorId:string};
+export interface TianjiTabloidHotTopic extends TianjiGazetteSource {
+  roomId:'jiuzhou'|'market';speakerIds:string[];speakerCount:number;
+}
+export interface TianjiTabloidAdvertisement {
+  postId:string;postedTick:number;sectId:string;siteId:string;
+}
+export interface TianjiTabloidIssue {
+  id:string;tick:number;year:number;month:number;legacyEntries:TianjiGazetteEntry[];
+  challenge?:TianjiTabloidChallenge;
+  embarrassment?:TianjiTabloidEmbarrassment;
+  hotTopic?:TianjiTabloidHotTopic;
+  advertisement?:TianjiTabloidAdvertisement;
+}
+export interface TianjiGazetteState {issues:TianjiGazetteIssue[];quarterlies?:TianjiTabloidIssue[]}

@@ -157,6 +157,15 @@ export function publishTianjiGazette(before:WorldState,world:WorldState,complete
   newspaper.issues.push(page);
   if(newspaper.issues.length>TIANJI_GAZETTE_HISTORY)newspaper.issues.splice(0,newspaper.issues.length-TIANJI_GAZETTE_HISTORY);
 }
+/** Quarterly editors reuse the existing bracket, siege and independently dated rivalry receipts. */
+export function collectTabloidLegacyEntries(world:WorldState,from:number,completed:readonly WorldEvent[]):TianjiGazetteEntry[]{
+  const sites=uniqueIndex(world.locations),sources=sourceIndex(world,completed);
+  const arena=arenaStories(world,sources,sites,from);
+  const headline=newest([...siegeHeadlines(world,sources,sites,from),...arena.headlines]);
+  const rivalry=pairStory(world,sources,Math.max(1,world.tick-TIANJI_GAZETTE_WINDOW));
+  return [headline,arena.upset,rivalry&&rivalry.tick>=from?rivalry:undefined]
+    .filter((row):row is Headline|Feature|Pair=>row!==undefined);
+}
 export interface TianjiGazetteReadScope{currentVisibleSiteIds:ReadonlySet<string>;viewerId?:string|null;throughTick?:number}
 export interface TianjiGazetteIssueView {
   id:string;tick:number;year:number;month:number;trigger:TianjiGazetteTrigger;
@@ -166,8 +175,9 @@ const name=(value:string)=>Array.from(value.replace(/[\p{Cc}\p{Cf}\p{Cs}\u2028\u
 const liveLower=(actor:Cultivator|undefined)=>actor?.alive&&actor.hp>0&&actor.positionPlane===undefined;
 
 /** Exact known public venue filtering happens before a view or issue can disclose an entry. */
-export function projectTianjiGazette(world:WorldState,scope:TianjiGazetteReadScope):TianjiGazetteIssueView[]{
-  const journal=world.tianjiGazette?.issues,through=scope.throughTick??world.tick;
+export function projectTianjiGazette(world:WorldState,scope:TianjiGazetteReadScope,
+  journal:readonly TianjiGazetteIssue[]|undefined=world.tianjiGazette?.issues):TianjiGazetteIssueView[]{
+  const through=scope.throughTick??world.tick;
   if(!journal?.length||!scope.currentVisibleSiteIds.size||!Number.isSafeInteger(through)||through<1||through>world.tick)return [];
   const actors=uniqueIndex(world.cultivators),sects=uniqueIndex(world.sects),sites=uniqueIndex(world.locations);
   if(scope.viewerId&&!liveLower(actors.get(scope.viewerId)))return [];

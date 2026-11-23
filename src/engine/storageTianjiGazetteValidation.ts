@@ -1,5 +1,11 @@
-import type { TianjiGazetteSource } from '../types/tianjiGazette';
+import {TIANJI_TABLOID_SPEAKERS,tianjiTabloidIssueId,type TianjiGazetteSource} from '../types/tianjiGazette';
+import {SECT_PLAYER_CHAT_POST_LIMIT,sectPlayerChatPostId} from '../types/sectPlayerChat';
 import type { ChronicleAnchor, WorldEvent, WorldState } from '../types/world';
+import {isChronicleStoryFact} from './chronicleLead';
+import {SECT_CHALLENGE_PUBLIC_TITLE} from './sectChallengeProof';
+import {isSectLiveSourceId} from './sectLiveSources';
+import {resolveTabloidChallenge,resolveTabloidEmbarrassment} from './tianjiTabloidProof';
+import {isTabloidAdvertisementProven,isTabloidHotspotProven} from './tianjiTabloidSocial';
 import { DRAMATIC_BOND_FACTS_MAX } from './dramaticBondTerms';
 import { TIANJI_GAZETTE_WINDOW,tianjiGazetteBattleVenue,tianjiGazetteIssueId,tianjiGazetteMatchesSource,tianjiGazetteVenue } from './tianjiGazetteTerms';
 
@@ -16,9 +22,13 @@ const dateMatches=(a:TianjiGazetteSource,b:{tick:number;year:number;month:number
 export function validateTianjiGazetteHistory(world:WorldState,fail:Fail):void{
   const state=world.tianjiGazette;
   if(!state)return;
-  if(!state.issues.length)return fail(path+'.issues');
-  const ids=new Set(state.issues.flatMap(issue=>issue.entries.flatMap(entry=>entry.kind==='rivalry'?
+  if(!state.issues.length&&!state.quarterlies?.length)return fail(path+'.issues');
+  const issues=[...state.issues.map(issue=>({...issue,quarterly:false as const})),
+    ...(state.quarterlies??[]).map(issue=>({...issue,entries:issue.legacyEntries,trigger:undefined,quarterly:true as const}))];
+  const ids=new Set(issues.flatMap(issue=>issue.entries.flatMap(entry=>entry.kind==='rivalry'?
     [entry.sourceEventId,entry.earlier.sourceEventId]:[entry.sourceEventId])));
+  for(const issue of state.quarterlies??[])
+    for(const row of [issue.challenge,issue.embarrassment,issue.hotTopic])if(row)ids.add(row.sourceEventId);
   const hot=new Map<string,WorldEvent[]>(),cold=new Map<string,ChronicleAnchor[]>();
   const append=<T extends {id:string}>(table:Map<string,T[]>,value:T)=>{
     if(!ids.has(value.id))return;
@@ -58,16 +68,18 @@ export function validateTianjiGazetteHistory(world:WorldState,fail:Fail):void{
     proof(source,token[3]==='kill'?'death':'combat',raw=>raw.actorIds[0]===token[2]&&samePair(raw.actorIds,actorIds));
   };
   let lastTick=0,lastDate=0;
-  for(const issue of state.issues){
+  for(const issue of issues){
     const date=calendar(issue);
-    if(!issue.entries.length||issue.id!==tianjiGazetteIssueId(issue.tick)||issue.tick<=lastTick||issue.tick>world.tick||date<=lastDate||
-      date>calendar(world)||issue.tick===world.tick&&date!==calendar(world)||
-      issue.trigger==='year_turn'&&issue.month!==1)return fail(path+'.issue');
-    lastTick=issue.tick;lastDate=date;
+    if(!issue.quarterly){
+      if(!issue.entries.length||issue.id!==tianjiGazetteIssueId(issue.tick)||issue.tick<=lastTick||issue.tick>world.tick||date<=lastDate||
+        date>calendar(world)||issue.tick===world.tick&&date!==calendar(world)||
+        issue.trigger==='year_turn'&&issue.month!==1)return fail(path+'.issue');
+      lastTick=issue.tick;lastDate=date;
+    }
     let lastEntry=-1,triggerProof=false;
     for(const row of issue.entries){
       const position=order[row.kind];
-      if(position<=lastEntry||row.tick>issue.tick||row.tick<issue.tick-TIANJI_GAZETTE_WINDOW||calendar(row)>date||
+      if(position<=lastEntry||issue.quarterly&&(row.kind==='bounty'||row.tick<issue.tick-2||date-calendar(row)!==issue.tick-row.tick)||row.tick>issue.tick||row.tick<issue.tick-TIANJI_GAZETTE_WINDOW||calendar(row)>date||
         row.tick===issue.tick&&calendar(row)!==date)return fail(path+'.entries');
       lastEntry=position;
       if(row.kind==='headline'&&row.story==='siege'){
@@ -116,6 +128,75 @@ export function validateTianjiGazetteHistory(world:WorldState,fail:Fail):void{
         proof(row,'diplomacy',raw=>raw.actorIds.length===0&&raw.title.startsWith('天机悬赏：'));
       }
     }
-    if(issue.trigger!=='year_turn'&&!triggerProof)return fail(path+'.trigger');
+    if(!issue.quarterly&&issue.trigger!=='year_turn'&&!triggerProof)return fail(path+'.trigger');
+  }
+
+  if(state.quarterlies&&!state.quarterlies.length)return fail(path+'.quarterlies');
+  const managed=world.sectManagement;
+  let precedingQuarter=0;
+  for(const issue of state.quarterlies??[]){
+    const issueDate=calendar(issue),from=issue.tick-2;
+    if(!managed||issue.id!==tianjiTabloidIssueId(issue.tick)||issue.tick<=precedingQuarter||
+      issue.tick<=managed.foundedTick||issue.tick>world.tick||issue.month%3!==0||
+      calendar(world)-issueDate!==world.tick-issue.tick)return fail(path+'.quarterly');
+    precedingQuarter=issue.tick;
+    const dated=(row:TianjiGazetteSource)=>row.tick>managed.foundedTick&&row.tick>=from&&row.tick<=issue.tick&&
+      issueDate-calendar(row)===issue.tick-row.tick&&tianjiGazetteVenue(venues.get(row.siteId));
+    const publicProof=(row:TianjiGazetteSource,check:(event:WorldEvent|ChronicleAnchor)=>boolean)=>{
+      if(!dated(row))return false;
+      const originals=hot.get(row.sourceEventId)??[],archives=cold.get(row.sourceEventId)??[];
+      return originals.length<=1&&[...originals,...archives].every(raw=>tianjiGazetteMatchesSource(row,raw)&&
+        isChronicleStoryFact(raw,issue.tick)&&check(raw))&&
+        (originals.length>0||archives.length>0||row.tick<=oldestHot&&world.events.length>=120);
+    };
+    if(issue.challenge){
+      const row=issue.challenge;
+      const original=hot.get(row.sourceEventId)?.[0];
+      const challenge=managed.challenges?.history.find(result=>result.id===row.challengeId);
+      const key=/^sect-challenge-(inbound|outbound)-(0|[1-9]\d*)$/.exec(row.challengeId);
+      if(!key||!Number.isSafeInteger(Number(key[2]))||
+        Number(key[2])>row.tick||Number(key[2])<row.tick-4||row.sourceEventId!==`evt-${row.tick}-${row.challengeId}-completed`||
+        !publicProof(row,raw=>raw.category==='combat'&&raw.title===SECT_CHALLENGE_PUBLIC_TITLE&&
+          raw.actorIds.length===2&&raw.actorIds[0]!==raw.actorIds[1]&&raw.actorIds.every(id=>people.has(id))&&
+          (!challenge||raw.actorIds[0]===challenge.challengerId&&raw.actorIds[1]===challenge.defenderId))||
+        challenge&&(challenge.outcome!=='completed'||challenge.eventId!==row.sourceEventId||challenge.siteId!==row.siteId||
+          challenge.resolvedTick!==row.tick||original&&!resolveTabloidChallenge(world,row))||
+        !challenge&&row.tick===world.tick)return fail(path+'.quarterly.challenge');
+    }
+    if(issue.embarrassment){
+      const row=issue.embarrassment;
+      if(!people.has(row.actorId)||!isSectLiveSourceId({...row,kind:'furnace',castIds:[row.actorId]})||
+        !publicProof(row,raw=>raw.category==='heavenly'&&raw.actorIds.length===1&&raw.actorIds[0]===row.actorId&&
+          raw.title.endsWith('炸炉')&&(!('damage' in raw)||raw.damage?.length===1&&raw.damage[0].cultivatorId===row.actorId&&
+            Number.isSafeInteger(raw.damage[0].amount)&&raw.damage[0].amount>0&&raw.damage[0].amount<=12))||
+        row.tick===world.tick&&!resolveTabloidEmbarrassment(world,row))return fail(path+'.quarterly.embarrassment');
+    }
+    if(issue.hotTopic){
+      const row=issue.hotTopic;
+      if(row.speakerIds.length<2||row.speakerIds.length!==Math.min(TIANJI_TABLOID_SPEAKERS,row.speakerCount)||row.speakerIds.some((id,index)=>id===managed.leaderId||!people.has(id)||
+        index>0&&id<=row.speakerIds[index-1])||!publicProof(row,()=>true))return fail(path+'.quarterly.hotTopic');
+      const proven=isTabloidHotspotProven(world,row,Math.max(from,1),issue.tick);
+      // These exact public lines can age out or lose their underlying witnesses. The read model
+      // also checks proof, so retaining an old identifier never republishes an unproved quote.
+      if(!proven){
+        const chats=(managed.chat?.months??[]).filter(month=>month.tick>=Math.max(from,row.tick)&&month.tick<=issue.tick);
+        const oldest=managed.chat?.months[0]?.tick??Infinity;
+        if(issue.tick===world.tick||(oldest<=Math.max(from,row.tick)&&
+          !row.speakerIds.every(id=>chats.some(month=>month.posts.some(post=>post.senderId===id&&
+            post.roomId===row.roomId&&post.audience===undefined&&post.about.kind==='public_event'&&
+            post.about.eventId===row.sourceEventId&&post.about.eventTick===row.tick)))))
+          return fail(path+'.quarterly.hotTopic');
+      }
+    }
+    if(issue.advertisement){
+      const row=issue.advertisement;
+      if(row.postedTick<Math.max(from,managed.foundedTick)||row.postedTick>issue.tick||row.sectId!==managed.sectId||
+        !tianjiGazetteVenue(venues.get(row.siteId))||!sects.has(row.sectId)||
+        !Array.from({length:SECT_PLAYER_CHAT_POST_LIMIT},(_,index)=>sectPlayerChatPostId(row.postedTick,index)).includes(row.postId))
+        return fail(path+'.quarterly.advertisement');
+      const oldest=managed.playerChat?.months[0]?.tick??Infinity;
+      if((issue.tick===world.tick||oldest<=row.postedTick)&&!isTabloidAdvertisementProven(world,row))
+        return fail(path+'.quarterly.advertisement');
+    }
   }
 }

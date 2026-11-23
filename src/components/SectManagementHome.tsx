@@ -33,6 +33,7 @@ import type {SectChatModelControls} from './SectChatPanel';
 const SectJobReportStage=lazy(async()=>({default:(await import('./SectJobReportStage')).SectJobReportStage}));
 const SectMorningBoard=lazy(async()=>({default:(await import('./SectMorningBoard')).SectMorningBoard}));
 const SectChallengePanel=lazy(async()=>({default:(await import('./SectChallengePanel')).SectChallengePanel}));
+const TianjiGazetteLauncher=lazy(async()=>({default:(await import('./TianjiGazetteLauncher')).TianjiGazetteLauncher}));
 const SectChatPanel=lazy(async()=>({default:(await import('./SectChatPanel')).SectChatPanel}));
 
 type HomeView='story'|'cockpit'|'sandbox'|'saves';
@@ -247,6 +248,8 @@ export function SectManagementHome({world,busy=false,onStart,onOpen,onTick,onCon
     try{applied=onManagementAction(world,choice);}
     finally{if(!applied){consumed.current=undefined;setNotice({world,text:'这一笔没办成，灵石还在原处。'});}}
   }:undefined;
+  const newsViewer=world.tianjiGazette?.quarterlies?.length&&world.sectManagement?
+    world.cultivators.find(row=>row.id===world.sectManagement?.leaderId):undefined;
   const chatKey=sect?`${chatScope??world.random.seed}:${sect.id}`:undefined;
   return <main className="xianxia-shell min-h-dvh bg-slate-950 px-3 pb-8 pt-[max(.75rem,env(safe-area-inset-top))] text-slate-100 sm:px-6">
     <div className={`mx-auto max-w-6xl space-y-3 ${sect&&!growth?.failure?'min-[1440px]:max-w-[90rem]':''}`}>
@@ -271,6 +274,9 @@ export function SectManagementHome({world,busy=false,onStart,onOpen,onTick,onCon
               <SectChallengePanel key={chatKey} world={world} busy={busy||pendingReport}
                 onRequest={(expected,discipleId,defenderSectId)=>challengeAction(expected,{kind:'request',discipleId,defenderSectId})}
                 onAnswer={(expected,offerId,accept)=>challengeAction(expected,{kind:'answer',offerId,accept})}/>
+            </Suspense>}
+            {chatKey&&newsViewer&&<Suspense fallback={null}>
+              <TianjiGazetteLauncher world={world} viewer={newsViewer} scopeKey={chatKey} historical={false}/>
             </Suspense>}
           </div>
           {chatKey&&<Suspense fallback={<p role="status" className="text-sm text-stone-300">正在翻看群聊…</p>}>
