@@ -1,6 +1,6 @@
-Read and strictly follow `AGENTS.md` and `BACKLOG.md` at the root of this repository.
-You are in UNATTENDED AUTONOMOUS EVOLUTION MODE. Current top priority: the G1–G5 "gamification" track
-(Storyteller Director → Cultivator Career Mode → LLM Narrator → Storylet content volume → Onboarding & release).
-Rules stay strict for settlement/cost/death/save; event supply must be generous. LLM writes, rules decide.
-Never add new stacked-precondition text-only micro-stories or ledger tasks. No developer jargon in player-facing copy.
-Verify every task with `npm run verify`, tick BACKLOG, update CHANGELOG, commit, push to `origin main`, continue immediately.
+Read `AGENTS.md`, `BACKLOG.md`, and `docs/design/G0-reference-guide.md` before coding.
+UNATTENDED AUTONOMOUS EVOLUTION MODE. Execute BACKLOG G0 section in order: G0-1 → G0-2 → G2-1 → G2-2 → G2-3 → G4-2, one commit per task.
+Count only real highlights via `isHighlight` (≥2 differing options, at least one with a non-ordinary consequence); rest/cultivate/talk/travel never count.
+Director may seed future-only nudges, never rewrite past facts. New content = storylet data, no per-story top-level WorldState fields.
+No stacked-precondition micro-stories, no A/B/C/D micro-tuning commits, no developer jargon in player copy.
+Verify with `npm run verify`, tick BACKLOG, update CHANGELOG, commit, push to `origin main`, continue immediately.

@@ -1,20 +1,22 @@
-# PROMPT_FOR_DOTS.md — 复制给 GPT / Dots / Codex 的【游戏化重塑 G1–G5】指令
+# PROMPT_FOR_DOTS.md — 唤醒 / 纠偏指令（复制整段发给 GPT Dots）
 
 ```markdown
 Target GitHub Repository: https://github.com/Sparkle-kon/ai-sect-sandbox
-Live Preview Site: https://ai-sect-sandbox-mobile-20261121.spazzzz.chatgpt.site/
 
-Sync first: `git pull --rebase origin main`, then read `AGENTS.md` and `BACKLOG.md` completely.
+You stopped committing at 19:18. Resume now.
 
-SV1–SV3 are done. The 2026-11-23 review concluded: the engine is large-game grade, but the experience is still an "advanced simulator", not a game. New top priority is the `G1`–`G5` track at the top of `BACKLOG.md`:
+1. `git pull --rebase origin main`, then read `AGENTS.md`, `BACKLOG.md`, and **`docs/design/G0-reference-guide.md`** completely before writing any code.
 
-- G1 Storyteller Director: a RimWorld-style director that guarantees an interactive highlight every 1–3 months, tension curve, trigger-threshold audit & relaxation, player-chosen monthly intents, and a homepage that is never empty.
-- G2 Cultivator Career Mode: origin selection, clear progression goals (realm / sect rank / fame), 20+ quest templates, end-of-life evaluation scroll, and local meta-progression unlocks.
-- G3 LLM Narrator (token burner, optional): LLM expands each chapter to 1,500–3,000 chars, free-form NPC conversation, improvised encounter prose, token budget & telemetry. LLM writes, rules decide; offline falls back to deterministic text.
-- G4 Content Volume: migrate 20 micro-stories into `storyletEngine`, add 30 new storylets, a storylet editor, split `WorldMapCanvas.tsx`, content coverage report.
-- G5 Onboarding & Release: remove developer/audit jargon from player-facing copy, first-10-minutes tutorial, continuous ambient animation (no 4-second freeze), art quality upgrade, real-browser acceptance & live redeploy.
+2. Second review findings (2026-11-23 22:30):
+   - G1-1's "41 interactive opportunities in 120 months" were only the four basic moves (rest / cultivate / talk / travel) wrapped in six flavor texts. That is not a highlight. The acceptance criterion was under-specified; it is now fixed.
+   - G1-3 fell into micro-tuning (A/B/C/D sub-commits moving 0→1, 3→9). 26 of 40 story systems still trigger 0 times in 1,200 months. Stop micro-tuning.
 
-Key rule change: keep settlement/cost/death/save strictly verifiable, but stop gating whether events happen behind stacked preconditions. Never generate new "only if A and B and C" text-only micro-stories or ledger tasks again.
+3. New counting rule: a **highlight** = ≥2 options with different outcomes, and at least one option causes a consequence that ordinary actions never produce (item/technique, bond, injury/breakthrough/lifespan, sequel, sect/reputation). Use `isHighlight` from the guide everywhere. The four basic moves never count.
 
-Start with `[G1-1]`. For every task: implement fully, add deterministic tests (mock LLM), `npm run verify`, tick BACKLOG, update CHANGELOG in player-readable language, commit, `git push origin main`, and immediately continue. Never stop to ask.
+4. Execute the G0 section in this exact order, **one commit per task**:
+   - `[G0-1]` Rebuild the director: probe real gameplay sources (encounters, heart demon, tournament, dungeon, auction, dao path, forbidden art, bond reunions, quests, sequels) via a `HighlightSource` registry; when nothing is available, **seed** missing preconditions with future-only nudges (`travel_bias`, `encounter_ticket`, `omen_bias`, `npc_accept_bias`) stored in one field. Acceptance: seed 13071 "wandering_jianghu" 120 months → ≥30 highlights, ≥6 kinds, max gap ≤4; still_water ≥15; great_calamity ≥45; deterministic; output `docs/director-highlights.md`.
+   - `[G0-2]` Close G1-3 in a single commit: classify every <2-trigger system as director-seeded / folded into a storylet / frozen (see the table in the guide), rewrite `docs/trigger-audit.md`, remove the "should not force antecedents" section, tick G1-3.
+   - `[G2-1]` Origin selection & player cultivator. `[G2-2]` Career goals & "仙途" card. `[G2-3]` 20+ quest templates as storylet data. `[G4-2]` 30 new encounter storylets as data (use the generic `StoryletRuntimeState` + `StoryletEffect` descriptors; no new per-story top-level WorldState fields).
+
+5. For every task: implement fully, deterministic tests with mocked LLM, `npm run verify`, tick BACKLOG, CHANGELOG in player-readable Chinese, commit, `git push origin main`, continue immediately. Never stop to ask.
 ```
