@@ -58,7 +58,7 @@
 
 - [x] **[SV3-1] Engine 2.0 第一刀：通用数据驱动 `Storylet` 奇遇/叙事引擎 (`DataDrivenStoryletEngine`)**：
   - 解决“每写一个剧情就要新建 3 个 `.ts` 文件并往 `WorldState` 顶层加字段”的膨胀瓶颈！构建 `src/engine/storyletEngine.ts`（统一管理 `Condition 触发条件 -> Role 角色绑定 -> Scene 2D舞台配置 -> Choices 选项 -> Effects 状态变更`），将散落的微剧本逐步收敛为干净的数据驱动 Storylet 注册表，不再污染 `WorldState` 顶层结构。
-- [ ] **[SV3-2] Engine 2.0 第二刀：拆解 4,600 行 `storageEngine.ts` 与 4,000 行 `llmBrain.ts` 上帝文件 (`ModularStorageAndBrainRegistry`)**：
+- [x] **[SV3-2] Engine 2.0 第二刀：拆解 4,600 行 `storageEngine.ts` 与 4,000 行 `llmBrain.ts` 上帝文件 (`ModularStorageAndBrainRegistry`)**：
   - 将 `src/engine/storageEngine.ts`（4624行）按领域拆分为声明式/模块化的子校验器（`src/engine/storage/`），将 `src/engine/llmBrain.ts`（4041行）拆分为独立的领域候选动作注册表（`src/engine/cognition/`），使核心引擎单个文件控制在 1,000 行以内，大幅提升大型游戏的可维护性与编译速度。
 - [ ] **[SV3-3] Engine 2.0 第三刀：2,500 行 `worldEngine.ts` 回合管线插件化 (`WorldTickPipelineRegistry`)**：
   - 将 `worldEngine.ts` 中硬编码串联的 110+ 个子系统调用重构为清晰的五阶段 `TickStagePipeline`（`PreTurn -> MovementAndEncounter -> ActionAndCombat -> InstitutionAndWorld -> ChronicleAndPostTurn`），让新系统通过标准插件接口挂载。

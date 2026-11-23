@@ -42,6 +42,9 @@ export default defineConfig({
           'territorial-accords': ['./src/engine/ceasefireEngine.ts', './src/engine/territorialLeaseEngine.ts',
             './src/engine/sanctuaryEngine.ts'],
           'cognitive-protocol': ['./src/engine/llmCognitiveResponseGuide.ts', './src/engine/llmScheduler.ts', './src/engine/fairModelTurnEngine.ts'],
+          // The provider's scoped menus/parser are an independent runtime; don't fold them into the UI entry.
+          'cognitive-provider': ['./src/engine/cognition/providerDecision.ts', './src/engine/cognition/nativeDecisionGate.ts',
+            './src/engine/cognition/ordinaryDecisionPrompt.ts', './src/engine/cognition/ordinaryActionDecoder.ts'],
           'furnace-rules': ['./src/engine/furnaceReservationEngine.ts'],
 
           // Shared leaf callbacks never put historical custody into the native action chunks.
