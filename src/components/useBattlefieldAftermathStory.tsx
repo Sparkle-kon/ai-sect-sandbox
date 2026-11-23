@@ -1,3 +1,4 @@
+import type { ReadingOpportunity } from './StoryReadingOpportunity';
 import { lazy,Suspense,useMemo,useRef,useState } from 'react';
 import { resolveGuidedBattlefieldAftermathTurn,type GuidedBattlefieldAftermathTurn } from '../controllers/guidedBattlefieldAftermathTurn';
 import type { useWorldSimulationController } from '../controllers/useWorldSimulationController';
@@ -7,7 +8,7 @@ import type { Cultivator } from '../types/world';
 const Card=lazy(async()=>({default:(await import('./BattlefieldAftermathStoryCard')).BattlefieldAftermathStoryCard}));
 type Sim=ReturnType<typeof useWorldSimulationController>;
 
-export function useBattlefieldAftermathStory(sim:Sim,active:boolean,viewer:Cultivator|undefined) {
+export function useBattlefieldAftermathStory(sim:Sim,active:boolean,viewer:Cultivator|undefined):ReadingOpportunity|undefined {
   const {world,timeline}=sim,branchId=timeline.activeBranchId,revision=sim.saveContextVersion.current;
   const visible=active&&!sim.preview&&Boolean(viewer&&world.cultivators.includes(viewer));
   const scope=useRef({visible,actorId:viewer?.id,mark:0});
@@ -34,5 +35,8 @@ export function useBattlefieldAftermathStory(sim:Sim,active:boolean,viewer:Culti
       setPending(false);
     });
   };
-  return <Suspense fallback={null}><Card view={view} busy={busy} onChoose={choose}/></Suspense>;
+  return {
+    hasLegalChoice:view.options.length>0,
+    card:<Suspense fallback={null}><Card view={view} busy={busy} onChoose={choose}/></Suspense>,
+  };
 }
