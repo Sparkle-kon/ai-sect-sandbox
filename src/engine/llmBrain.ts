@@ -1,3 +1,5 @@
+import {availableBanquetSeatActions} from './banquetSeats';
+import {banquetSeatCommand,exactBanquetSeatDecision} from './banquetSeatCognition';
 import {availableNightDoorActions} from './nightDoor';
 import {exactNightDoorDecision,nightDoorCommand} from './nightDoorCognition';
 import {projectReliefHomecoming} from './reliefHomecoming';
@@ -962,6 +964,18 @@ export function computeHeuristicDecision(
       ['identify','shelter','accept','cross','escort','close'];
     const choice=preferences.flatMap(move=>door.find(row=>row.nightDoorMove===move)??[])[0];
     const exact=choice&&exactNightDoorDecision(nightDoorCommand(choice),door);
+    if(exact)return exact;
+  }
+  // Receiving an invitation in the arena does not automatically interrupt later life at home.
+  // Utility may respond spontaneously after actually returning to the venue. Explicit and
+  // Cognitive invitations can still ask for one lawful trip, with movement independently checked.
+  const banquet=availableBanquetSeatActions(cultivator,world,world.tick).filter(option=>
+    world.banquetSeats?.tables.some(table=>table.id===option.targetBanquetSeatId&&table.siteId===cultivator.locationId));
+  if(banquet.length){
+    if(activeAvatar(world)===cultivator)return {chosenAction:'REST',innerMonologue:'邀帖在手；赴不赴这一席，由本人亲定。'};
+    const preference=cultivator.hp<cultivator.maxHp*.55||cultivator.personality==='阴险'?'decline':'attend';
+    const choice=banquet.find(row=>row.banquetSeatMove===preference)??banquet.find(row=>row.banquetSeatMove==='late')??banquet[0];
+    const exact=exactBanquetSeatDecision(banquetSeatCommand(choice),banquet);
     if(exact)return exact;
   }
   const boundaryGap=availableBoundaryGapActions(cultivator,world,world.tick);
@@ -2723,6 +2737,10 @@ export async function requestCultivatorLLMDecision(
       parsed=>requestTick===world.tick+1&&activeAvatar(world)!==cultivator&&exactNightDoorDecision(parsed,door)
         ?exactNightDoorDecision(parsed,availableNightDoorActions(cultivator,world,requestTick)):undefined,160);
   }
+  const banquet=requestTick===world.tick+1&&activeAvatar(world)!==cultivator?
+    availableBanquetSeatActions(cultivator,world,requestTick):[];
+  const banquetGuide=banquet.length?'若选择赴宴，只原样抄本人真正受邀的一项许可。不安排他人、不伪写到达或对谈：'+
+    JSON.stringify(banquet.map(banquetSeatCommand)):'';
   const gap=availableBoundaryGapActions(cultivator,world,requestTick);
   if(gap.length){
     if(requestTick!==world.tick+1||activeAvatar(world)===cultivator)return undefined;
@@ -3134,6 +3152,7 @@ ${mealOptions.length ? `实到同一个关口才可改选 WAYPOST_MEAL，照抄�
 ${!onPilgrimagePath && routeWarningOptions.length ? `停站可另选 ROUTE_WARNING。
 ${routeWarningGuide}` : ''}` : `你是修仙沙盒世界中的修士【${cultivator.name}】（称号：${cultivator.title}）。
 ${ownReliefScene?'【只限你在旧村亲见的片刻】'+JSON.stringify(ownReliefScene.beats.map(beat=>beat.line))+'。只当见闻，不得推断缺席者去向、替别人回忆或新增行动字段。':''}
+${banquetGuide}
 【自身状态】
 - 境界：${cultivator.realm}${cultivator.realmStage}层（灵气进度：${cultivator.qiProgress}%）
 - 气血：${cultivator.hp}/${cultivator.maxHp} | 战力：${cultivator.combatPower}
@@ -3256,6 +3275,11 @@ ${JSON.stringify(cultivator.reflections.filter(row=>!sealedHeartDemonReflection(
 ${COGNITIVE_RESPONSE_GUIDE}`;
 
   return requestDecisionPrompt(config, requestTick, options, prompt, (parsed) => {
+          if(parsed?.chosenAction==='BANQUET_SEAT'){
+            if(requestTick!==world.tick+1||activeAvatar(world)===cultivator||!exactBanquetSeatDecision(parsed,banquet))return undefined;
+            return exactBanquetSeatDecision(parsed,availableBanquetSeatActions(cultivator,world,requestTick));
+          }
+          if(parsed&&(Object.hasOwn(parsed,'banquetSeatMove')||Object.hasOwn(parsed,'targetBanquetSeatId')))return undefined;
           if(parsed&&(Object.hasOwn(parsed,'nightDoorMove')||Object.hasOwn(parsed,'targetNightDoorId')))return undefined;
           if(parsed&&(Object.hasOwn(parsed,'boundaryGapMove')||Object.hasOwn(parsed,'targetBoundaryGapId')))return undefined;
           if(parsed&&(Object.hasOwn(parsed,'abandonedQuarterMove')||Object.hasOwn(parsed,'targetAbandonedQuarterId')))return undefined;

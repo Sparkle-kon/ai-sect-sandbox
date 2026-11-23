@@ -1,4 +1,5 @@
 import type {ApprenticeshipReunionMove,ApprenticeshipReunionState} from './apprenticeshipReunion';
+import type {BanquetSeatMove,BanquetSeatState} from './banquetSeat';
 import type {NightDoorMove,NightDoorState} from './nightDoor';
 import type {ReliefHomecomingState} from './reliefHomecoming';
 import type {BoundaryGapMove,BoundaryGapState} from './boundaryGap';
@@ -244,6 +245,7 @@ export type ActionType =
   | 'WORKSHOP_RELEASE'
   | 'WORKSHOP'
   | 'FURNACE_RESERVATION'
+  | 'BANQUET_SEAT'
   | 'NIGHT_DOOR'
   | 'BOUNDARY_GAP'
   | 'ABANDONED_QUARTER'
@@ -831,6 +833,8 @@ export interface LLMDecisionPayload {
   targetBoundaryGapId?: string;
   nightDoorMove?: NightDoorMove;
   targetNightDoorId?: string;
+  banquetSeatMove?: BanquetSeatMove;
+  targetBanquetSeatId?: string;
   damageAssuranceMove?: DamageAssuranceMove;
   targetDamageAssuranceId?: string;
   targetFurnaceSafetyId?: string;
@@ -3759,6 +3763,7 @@ export interface WorldState {
   boundaryGapResponses?: BoundaryGapState;
   reliefHomecomings?: ReliefHomecomingState;
   nightDoors?: NightDoorState;
+  banquetSeats?: BanquetSeatState;
   damageAssurance: DamageAssuranceState;
   sparring: SparringState;
   expeditionRescues: ExpeditionRescueState;

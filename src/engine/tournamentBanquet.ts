@@ -1,3 +1,4 @@
+import {banquetSeatSummarySource} from './banquetSeatProof';
 import type { Cultivator, WorldEvent, WorldOccasion, WorldState } from '../types/world';
 import { isScopedExpeditionGate } from './expeditionOmenTerms';
 import { tournamentArenaPrizeId, TOURNAMENT_ARENA_TITLE } from './tournamentArenaTerms';
@@ -8,15 +9,29 @@ const hallSpeech = '胜负已写在榜上。今夜歇一歇剑，请你同饮这
 const thoughtTitle = '论剑夜宴·席间一念';
 const thoughtText = {
   winner: '剑已归鞘。众人敬的是榜上之名，方才那场交手，只有我还记得分外清楚。',
-  other: '输赢已在榜上。入席时还觉手中有剑；待坐下来，才发觉它早已入鞘。',
+  other: '输赢已在榜上。听见那声邀约，手还下意识按着剑。今晚去不去，尚未开口。',
 };
+const legacyOtherThought = '输赢已在榜上。入席时还觉手中有剑；待坐下来，才发觉它早已入鞘。';
 const afterTitle = '论剑夜宴·会后对谈';
 const afterText = '「末一合，我到现在还记得。」\n「我也是。既已散席，今日不再争输赢。」';
 
+const laterTitle = '论剑之后·另日相逢';
+const laterText = '「那一合，我还记得。」\n「先前没能在一桌说话。今天既碰见了，慢慢说罢。」';
+
+function afterVersion(world:WorldState,occasion:WorldOccasion,tick:number){
+  const rows=world.banquetSeats?.tables.filter(row=>row.occasionId===occasion.id)??[];
+  if(rows.length===0)return {title:afterTitle,text:afterText,phase:undefined};
+  const table=rows.length===1?rows[0]:undefined;
+  const seated=table?.summary&&table.summary.tick<tick&&table.summary.presentIds.length===2&&
+    sameIds(table.summary.presentIds,table.finalistIds)&&!!banquetSeatSummarySource(world,table);
+  return seated?{title:afterTitle,text:afterText,phase:'shared_table' as const}:
+    {title:laterTitle,text:laterText,phase:'later_meeting' as const};
+}
+
 export interface TournamentBanquetView {
   hall: { id: string; tick: number; siteName: string; speech: string };
-  thought?: { text: string };
-  after?: { tick: number; text: string; otherName: string };
+  thought?: {text:string;phase?:'invited'};
+  after?: {tick:number;text:string;otherName:string;phase?:'shared_table'|'later_meeting'};
 }
 
 const hallId = (occasion: WorldOccasion, tick: number) => `evt-banquet-${occasion.id}-hall-${tick}`;
@@ -97,7 +112,7 @@ export function openTournamentBanquet(
 }
 
 /** The version already committed to this world's original hot event stream. */
-function committed(world: WorldState, occasion: WorldOccasion) {
+export function committedTournamentBanquet(world: WorldState, occasion: WorldOccasion) {
   const arena = occasion.arena, terminal = arena?.terminal, prize = arena?.prize;
   if (occasion.status !== 'completed' || terminal?.status !== 'completed' || !prize ||
       prize.tick !== terminal.tick || prize.title !== TOURNAMENT_ARENA_TITLE ||
@@ -129,7 +144,7 @@ export function recordTournamentBanquetAfterTalk(world: WorldState, social: Worl
   const from = world.tick - AFTER_WINDOW;
   const prior = world.occasions.filter(occasion => occasion.status === 'completed' && occasion.arena?.prize &&
     occasion.locationId === social.locationId && occasion.arena.prize.tick >= from && occasion.arena.prize.tick < world.tick)
-    .map(occasion => committed(world, occasion)).filter(row => row !== undefined)
+    .map(occasion => committedTournamentBanquet(world, occasion)).filter(row => row !== undefined)
     .find(({ final, site }) => nativeSocial(world, social, final.ids, site.id));
   if (!prior || !prior.final.ids.every(id => isHere(knownActor(world, id), prior.site.id))) return undefined;
   const { occasion, site } = prior;
@@ -138,8 +153,9 @@ export function recordTournamentBanquetAfterTalk(world: WorldState, social: Worl
     return undefined;
   seen.add(occasion.id);
   followedThisFrame.set(world, seen);
+  const version=afterVersion(world,occasion,world.tick);
   return { id: afterId(occasion, world.tick), tick: world.tick, year: world.year, month: world.month, locationId: site.id,
-    category: 'diplomacy', title: afterTitle, description: afterText, actorIds: [...social.actorIds], witnessScope: 'participants' };
+    category: 'diplomacy', title: version.title, description: version.text, actorIds: [...social.actorIds], witnessScope: 'participants' };
 }
 
 const safeName = (name: string) => name.replace(/[\p{Cc}\p{Cf}\p{Cs}]/gu, '').trim().slice(0, 64);
@@ -147,7 +163,7 @@ const safeName = (name: string) => name.replace(/[\p{Cc}\p{Cf}\p{Cs}]/gu, '').tr
 /** Reads a single already witnessed feast. A canonical, present possession lease grants only its own private pages. */
 export function projectTournamentBanquet(world: WorldState, viewer?: Cultivator): TournamentBanquetView | undefined {
   const record = world.occasions.filter(occasion => occasion.status === 'completed' && occasion.arena?.prize)
-    .map(occasion => committed(world, occasion)).filter(row => row !== undefined)
+    .map(occasion => committedTournamentBanquet(world, occasion)).filter(row => row !== undefined)
     .sort((a, b) => b.final.tick - a.final.tick || (a.occasion.id < b.occasion.id ? -1 : 1))[0];
   if (!record) return undefined;
   const { occasion, final, site, source } = record;
@@ -158,18 +174,22 @@ export function projectTournamentBanquet(world: WorldState, viewer?: Cultivator)
   const own = knownEvent(world, thoughtId(occasion, viewer.id, final.tick));
   const words = viewer.id === final.winnerId ? thoughtText.winner : thoughtText.other;
   const thought = own && dateMatches(world, own, final.tick) && own.locationId === site.id && own.category === 'intrigue' &&
-    own.witnessScope === 'participants' && own.title === thoughtTitle && own.description === words &&
-    sameIds(own.actorIds, [viewer.id]) ? { text: words } : undefined;
+    own.witnessScope === 'participants' && own.title === thoughtTitle &&
+    (own.description===words||viewer.id!==final.winnerId&&own.description===legacyOtherThought) &&
+    sameIds(own.actorIds, [viewer.id]) ?
+    world.banquetSeats?.tables.some(row=>row.occasionId===occasion.id)?{text:words,phase:'invited' as const}:{text:own.description} : undefined;
   const possibleAfter = world.events.filter(event => event.id.startsWith(`evt-banquet-${occasion.id}-after-`));
   const later = possibleAfter.length === 1 ? possibleAfter[0] : undefined;
   const sourceSpeaker = later?.actorIds[0];
   const social = sourceSpeaker && later ? knownEvent(world, `evt-${later.tick}-${sourceSpeaker}-social`) : undefined;
   const otherId = final.ids.find(id => id !== viewer.id);
   const otherName = otherId ? safeName(knownActor(world, otherId)?.name ?? '') : '';
-  const after = later && social && otherName && later.id === afterId(occasion, later.tick) &&
+  const echo=later&&afterVersion(world,occasion,later.tick);
+  const after = later && echo && social && otherName && later.id === afterId(occasion, later.tick) &&
     later.tick > final.tick && later.tick <= final.tick + AFTER_WINDOW && dateMatches(world, later, later.tick) &&
-    later.locationId === site.id && later.witnessScope === 'participants' && later.title === afterTitle &&
-    later.category === 'diplomacy' && later.description === afterText && sameIds(later.actorIds, social.actorIds) &&
-    nativeSocial(world, social, final.ids, site.id) ? { tick: later.tick, text: afterText, otherName } : undefined;
+    later.locationId === site.id && later.witnessScope === 'participants' && later.title === echo.title &&
+    later.category === 'diplomacy' && later.description === echo.text && sameIds(later.actorIds, social.actorIds) &&
+    nativeSocial(world, social, final.ids, site.id) ?
+    {tick:later.tick,text:echo.text,otherName,...(echo.phase?{phase:echo.phase}:{})}:undefined;
   return { hall, ...(thought ? { thought } : {}), ...(after ? { after } : {}) };
 }

@@ -1,10 +1,11 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import type { TournamentBanquetView } from '../engine/tournamentBanquet';
 
 interface BanquetProps {
   view:TournamentBanquetView;
   scopeKey?:string;
   revision?:object;
+  seating?:ReactNode;
 }
 
 interface DisclosureScope {
@@ -37,7 +38,7 @@ function PrivateScene({label,text,scope}:{label:string;text:string;scope:Disclos
 }
 
 /** Public words at the feast are separate from either authorized private scene. */
-export function TournamentBanquetCard({view,scopeKey,revision}:BanquetProps){
+export function TournamentBanquetCard({view,scopeKey,revision,seating}:BanquetProps){
   const heading=useId();
   const {hall,thought,after}=view;
   const scopeFor=(content:string):DisclosureScope=>({scopeKey,revision,hallId:hall.id,hallTick:hall.tick,content});
@@ -47,9 +48,10 @@ export function TournamentBanquetCard({view,scopeKey,revision}:BanquetProps){
       <h3 id={heading} className="font-serif text-base font-semibold text-amber-50">大比散场，灯下开席</h3>
     </header>
     <blockquote className="border-l border-amber-100/30 pl-2.5 font-serif text-sm leading-relaxed text-slate-100">{hall.speech}</blockquote>
-    {thought?.text&&<PrivateScene label="席间心绪" scope={scopeFor(thought.text)} text={thought.text}/>}
-    {after?.text&&after.tick>hall.tick&&<PrivateScene label="散席后"
+    {seating}
+    {thought?.text&&<PrivateScene label={thought.phase==='invited'?'受邀时所想':'席间心绪'} scope={scopeFor(thought.text)} text={thought.text}/>}
+    {after?.text&&after.tick>hall.tick&&<PrivateScene label={after.phase==='later_meeting'?'后来相逢':'散席后'}
       scope={scopeFor(JSON.stringify([after.tick,after.otherName,after.text]))}
-      text={after.otherName?`与${after.otherName}的会后对谈：${after.text}`:after.text}/>}
+      text={after.otherName?`与${after.otherName}${after.phase==='later_meeting'?'后来相逢':'的会后对谈'}：${after.text}`:after.text}/>}
   </article>;
 }

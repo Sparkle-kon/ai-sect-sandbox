@@ -17,6 +17,7 @@ const ACTION_LABELS = {
   WILD_MIGRATION: '山兽借道',
   VILLAGE_REUNION: '旧村重逢',
   APPRENTICESHIP_REUNION: '旧课再叙',
+  BANQUET_SEAT: '赴夜宴之约',
   NIGHT_DOOR: '乡舍叩门',
   BOUNDARY_GAP: '关口缺岗',
   ABANDONED_QUARTER: '探访旧村',

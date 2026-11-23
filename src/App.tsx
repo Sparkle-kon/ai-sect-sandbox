@@ -1,3 +1,4 @@
+import {useBanquetSeatStory} from './components/useBanquetSeatStory';
 import {useNightDoorStory} from './components/useNightDoorStory';
 import {projectReliefHomecoming,projectReliefHomecomingLead} from './engine/reliefHomecoming';
 import {useBoundaryGapStory} from './components/useBoundaryGapStory';
@@ -449,8 +450,10 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   useEffect(() => {
     if (trail) backRef.current?.focus({ preventScroll: true });
   }, [trail]);
+  const banquetSeat=useBanquetSeatStory(simulation,cockpitOpen||!dashboardOpen&&!storyEntryOpen||dashboardOpen&&workspace==='world',
+    activeAvatar(world)??selectedCultivator,cockpitOpen?'cockpit':dashboardOpen?workspace:'story');
   const {card:banquetCard,story:banquetStory}=useTournamentBanquetScene(visibleWorld,viewScopeKey,
-    cockpitOpen||!dashboardOpen&&!storyEntryOpen||dashboardOpen&&workspace==='world',Boolean(preview));
+    cockpitOpen||!dashboardOpen&&!storyEntryOpen||dashboardOpen&&workspace==='world',Boolean(preview),banquetSeat);
   const {immersive,atlasExtras,passageScene}=useCivicRealmViews({
     simulation,selectedCultivator,cockpitOpen,dashboardOpen,storyEntryOpen,workspace,onSelectCultivator:setSelectedCultivatorId,
     onClearAvatarNotice:()=>setAvatarNotice(undefined),

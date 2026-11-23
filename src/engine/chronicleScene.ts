@@ -43,6 +43,14 @@ export function writeChronicleScene(fact: ChronicleSceneFact): ChronicleSceneTex
       paragraph:`山门迁到${newSeat}，${oldSeat}的旧工坊章程却留在了过去。旧单不随山门转手，新址也没有接下这些委托。`};
   }
   if(fact.category==='diplomacy'){
+    if(title==='论剑夜宴·席时已过'){
+      if(text==='约定时候已过；这两席，都不曾有人按约入座。')
+        return {title:'夜宴的两张空椅',paragraph:'约定的时候过去，两把椅子都空着。榜上依旧有胜负，这一桌却没有人坐下来重提那场剑试。'};
+      if(text==='约定时候已过；两席之中，只见一人按约入座。')
+        return {title:'这一席只来了一人',paragraph:'到了约定的时候，只一人入座。榜上记着两个名字，今夜来不来，却是两人各自的事。'};
+      if(text==='约定时候已过；两人都按约到场，在同一张桌前坐下。')
+        return {title:'两人同在一桌',paragraph:'这一回，两人都按约来到桌前。榜上早有结果，此刻只是分坐两边，不必再争一场。'};
+    }
     const ruin=/^([^：。\r\n]{1,100})：原址成为遗址。原名、账目与旧址仍可核查。$/u.exec(text);
     if(title==='原址成为遗址'&&ruin){
       const place=ruin[1];

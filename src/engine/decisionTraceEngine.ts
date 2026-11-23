@@ -118,6 +118,7 @@ export function recordDecisionTrace(world: WorldState, actorId: string, candidat
     decision.chosenAction === 'BEAST_DUEL_RESPONSE' || decision.targetBeastDuelId !== undefined || decision.beastDuelChoice !== undefined ||
     decision.chosenAction==='VACANT_GATE'||decision.vacantGateMove!==undefined||decision.targetVacantGateSiegeId!==undefined||
     decision.chosenAction==='APPRENTICESHIP_REUNION'||decision.apprenticeshipReunionMove!==undefined||decision.targetApprenticeshipReunionId!==undefined||
+    decision.chosenAction==='BANQUET_SEAT'||decision.banquetSeatMove!==undefined||decision.targetBanquetSeatId!==undefined||
     decision.chosenAction==='NIGHT_DOOR'||decision.nightDoorMove!==undefined||decision.targetNightDoorId!==undefined||
     decision.chosenAction==='BOUNDARY_GAP'||decision.boundaryGapMove!==undefined||decision.targetBoundaryGapId!==undefined||
     decision.chosenAction==='ABANDONED_QUARTER'||decision.abandonedQuarterMove!==undefined||decision.targetAbandonedQuarterId!==undefined||
@@ -189,7 +190,7 @@ export function createDecisionReplayTape(base: WorldState, councilMode: ReplayCo
 }
 
 const MECHANICAL_FIELDS = [
-  'targetHeartDemonAftermathId','nightDoorMove','targetNightDoorId','boundaryGapMove','targetBoundaryGapId','abandonedQuarterMove','targetAbandonedQuarterId','furnaceEmergencyMove','targetFurnaceEmergencyId','apprenticeshipReunionMove','targetApprenticeshipReunionId','pilgrimageForkMove','targetPilgrimageForkId','battlefieldAftermathMove','targetBattlefieldAftermathId','villageReunionMove','targetVillageReunionId','vacantGateMove','targetVacantGateSiegeId','wildMigrationMove','targetWildMigrationId','farewellLandingMove','targetFarewellDeceasedId', 'targetCampaignAssemblySiegeId','pavilionFireMove','targetPavilionFireId','duelMercy','mercyReunionMove','targetMercyReunionId',
+  'targetHeartDemonAftermathId','banquetSeatMove','targetBanquetSeatId','nightDoorMove','targetNightDoorId','boundaryGapMove','targetBoundaryGapId','abandonedQuarterMove','targetAbandonedQuarterId','furnaceEmergencyMove','targetFurnaceEmergencyId','apprenticeshipReunionMove','targetApprenticeshipReunionId','pilgrimageForkMove','targetPilgrimageForkId','battlefieldAftermathMove','targetBattlefieldAftermathId','villageReunionMove','targetVillageReunionId','vacantGateMove','targetVacantGateSiegeId','wildMigrationMove','targetWildMigrationId','farewellLandingMove','targetFarewellDeceasedId', 'targetCampaignAssemblySiegeId','pavilionFireMove','targetPavilionFireId','duelMercy','mercyReunionMove','targetMercyReunionId',
   'targetLocationId', 'targetCultivatorId', 'rumorIntent', 'proposedScheme', 'targetTuitionId', 'targetOathId', 'oathTerm', 'marketGood',
   'marketQuantity', 'marketLimitPrice', 'targetMarketOrderId', 'targetSettlementId', 'civicMemorialMove', 'targetCivicDeedId', 'targetCivicMemorialId', 'targetVolunteerId', 'targetWitnessEventId',
   'targetWitnessClaimId', 'targetEstateId', 'targetTechniqueId', 'targetHerbId', 'seedMove', 'targetSeedLotId', 'targetSeedPlotId', 'targetPillId', 'targetArtifactId', 'forgeTier',
