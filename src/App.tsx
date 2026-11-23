@@ -1,3 +1,4 @@
+import {useBattlefieldAftermathStory} from './components/useBattlefieldAftermathStory';
 import {useVillageReunionStory} from './components/useVillageReunionStory';
 import {useAnomalyRelayRead} from './components/useAnomalyRelayRead';
 import {useVacantGateStory} from './components/useVacantGateStory';
@@ -321,6 +322,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   const mercyReunion=useMercyReunionStory(simulation,(!dashboardOpen||cockpitOpen)&&!storyEntryOpen,selectedCultivator);
   const anomalyRelay=useAnomalyRelayRead(visibleWorld,selectedCultivator,(!dashboardOpen||cockpitOpen)&&!storyEntryOpen,true);
   const vacantGate=useVacantGateStory(simulation,(!dashboardOpen||cockpitOpen)&&!storyEntryOpen,selectedCultivator);
+  const battlefieldAftermath=useBattlefieldAftermathStory(simulation,(!dashboardOpen||cockpitOpen)&&!storyEntryOpen,selectedCultivator);
   const villageReunion=useVillageReunionStory(simulation,(!dashboardOpen||cockpitOpen)&&!storyEntryOpen,selectedCultivator);
   const wildMigration=useWildMigrationStory(simulation,(!dashboardOpen||cockpitOpen)&&!storyEntryOpen,selectedCultivator);
   const pavilionFire=usePavilionFireStory(simulation,(!dashboardOpen||cockpitOpen)&&!storyEntryOpen,selectedCultivator);
@@ -661,7 +663,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   const clearWorldPulse=(token:number)=>setPulseFocus(current=>current?.token===token?undefined:current);
   const pulseStrip=worldPulse&&<WorldPulseBar view={worldPulse} historical={Boolean(preview)}
     canFocus={!immersive} onFocusAlert={focusWorldPulse}/>;
-  if(cockpitOpen)return <PanoramicCockpitView world={visibleWorld} titleRef={cockpitHeading} exit={cockpitSwitch} statusStrip={pulseStrip} stageOverride={featuredStoryCard} subplot={guidance.subplot} branchScene={vacantGate??pavilionFire??villageReunion??wildMigration??mercyReunion??farewellLanding??frontierGorge??schoolFormDuel??flightCard??passageScene??banquetStory??campaignAssembly??anomalyRelay}
+  if(cockpitOpen)return <PanoramicCockpitView world={visibleWorld} titleRef={cockpitHeading} exit={cockpitSwitch} statusStrip={pulseStrip} stageOverride={featuredStoryCard} subplot={guidance.subplot} branchScene={vacantGate??pavilionFire??battlefieldAftermath??villageReunion??wildMigration??mercyReunion??farewellLanding??frontierGorge??schoolFormDuel??flightCard??passageScene??banquetStory??campaignAssembly??anomalyRelay}
     time={{historical:Boolean(preview),running:isRunning,busy:cockpitBusy||storyDecisionPending,onStep:()=>void handleStepTick(),
       onToggleAutoplay:toggleStoryAutoplay,onReturnLive:()=>handleTimelinePreview(null),onOpenTimeline:()=>{
         openWorkspace('chronicle');rememberFold('chronicle','timeline');setStoryEntryOpen(false);
@@ -686,7 +688,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
         resolvePublicDialogue={publicRead?.dialogue.event} category={chronicleFilter} onCategoryChange={setChronicleFilter}/>
     </React.Suspense>}/>;
 
-  const activeReadingScene=vacantGate??pavilionFire??dungeonFork??villageReunion??wildMigration??mercyReunion??farewellLanding??frontierGorge??nightHunt??schoolFormDuel??calamityArray??battlefieldRevisit??witnessInquiry??campaignAssembly??
+  const activeReadingScene=vacantGate??pavilionFire??dungeonFork??battlefieldAftermath??villageReunion??wildMigration??mercyReunion??farewellLanding??frontierGorge??nightHunt??schoolFormDuel??calamityArray??battlefieldRevisit??witnessInquiry??campaignAssembly??
     flightCard??passageScene??banquetStory??anomalyRelay;
   const guidanceActor=!preview&&storyHome&&!activeReadingScene
     ?activeAvatar(world)??world.cultivators.find(actor=>actor.id===storyHome.lead?.id)??selectedCultivator:undefined;

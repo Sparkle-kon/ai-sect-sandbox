@@ -1,3 +1,4 @@
+import type {BattlefieldAftermathMove,BattlefieldAftermathState} from './battlefieldAftermath';
 import type {VillageReunionMove,VillageReunionState} from './villageReunion';
 import type {AnomalyRelayState} from './anomalyRelay';
 import type {VacantGateMove,VacantGateState} from './vacantGate';
@@ -149,6 +150,7 @@ export type ActionType =
   | 'FAREWELL_LANDING'
   | 'WILD_MIGRATION'
   | 'VILLAGE_REUNION'
+  | 'BATTLEFIELD_AFTERMATH'
   | 'VACANT_GATE'
   | 'AUDIENCE_PLEDGE'
   | 'CULTIVATE'
@@ -617,6 +619,8 @@ export interface LLMDecisionPayload {
   targetFarewellDeceasedId?: string;
   wildMigrationMove?: WildMigrationMove;
   villageReunionMove?: VillageReunionMove;
+  battlefieldAftermathMove?: BattlefieldAftermathMove;
+  targetBattlefieldAftermathId?: string;
   targetVillageReunionId?: string;
   vacantGateMove?: VacantGateMove;
   targetVacantGateSiegeId?: string;
@@ -3691,6 +3695,7 @@ export interface WorldState {
   farewellLandings?: FarewellLandingState;
   wildMigrations?: WildMigrationState;
   villageReunions?: VillageReunionState;
+  battlefieldAftermath?: BattlefieldAftermathState;
   vacantGate?: VacantGateState;
   anomalyRelays?: AnomalyRelayState;
   scribeCommissions?: ScribeCommissionState;

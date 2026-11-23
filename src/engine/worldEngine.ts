@@ -1,3 +1,6 @@
+import {availableBattlefieldAftermathActions,isPrivateBattlefieldAftermathEvent,recordBattlefieldAftermathApproach,
+  recordBattlefieldAftermathTerminal,resolveBattlefieldAftermathAction} from './battlefieldAftermath';
+import {exactBattlefieldAftermathDecision} from './battlefieldAftermathCognition';
 import {advanceVillageReunions,availableVillageReunionActions,isPrivateVillageReunionEvent,recordVillageReunionMovement,resolveVillageReunionAction} from './villageReunion';
 import {exactVillageReunionDecision} from './villageReunionCognition';
 import {availableVacantGateActions,isPrivateVacantGateEvent,stageVacantGateAction} from './vacantGate';
@@ -890,6 +893,18 @@ export function applyCultivatorBrainDecision(
       // The native attack round, not this individual turn, owns actual array and resource settlement.
       return null;
     case 'VACANT_GATE': return null; // The actual opposing round applies the independently staged response.
+    case 'BATTLEFIELD_AFTERMATH': {
+      if((modelInput||isProviderPersonaDecision(decision))&&activeAvatar(world)===cultivator)return null;
+      const exact=exactBattlefieldAftermathDecision(decision,availableBattlefieldAftermathActions(cultivator,world,world.tick),true);
+      if(!exact)return null;
+      return resolveBattlefieldAftermathAction(world,cultivator,exact,siteId=>{
+        const before=cultivator.locationId;
+        const native=applyCultivatorBrainDecision(world,cultivator,{chosenAction:'EXPLORE',targetLocationId:siteId,
+          innerMonologue:'循自己走过的旧路归去。'},rng,undefined,emit);
+        if(native)emit?.(native);
+        return cultivator.alive&&cultivator.locationId===siteId&&before!==siteId&&cultivator.currentAction==='EXPLORE';
+      });
+    }
     case 'VILLAGE_REUNION': {
       if((modelInput||isProviderPersonaDecision(decision))&&activeAvatar(world)===cultivator)return null;
       const exact=exactVillageReunionDecision(decision,availableVillageReunionActions(cultivator,world,world.tick),true);
@@ -1688,6 +1703,14 @@ export function advanceWorldTick(
         modelOrdinaryReplaced=true;
       }
     }
+    if(modelProposal?.chosenAction==='BATTLEFIELD_AFTERMATH'&&!avatarDecision){
+      const prior=prevState.cultivators.find(row=>row.id===cultivator.id);
+      if(!prior||activeAvatar(prevState)===prior||!exactBattlefieldAftermathDecision(modelProposal,
+        availableBattlefieldAftermathActions(prior,prevState,nextState.tick),true)){
+        provided=undefined;
+        modelOrdinaryReplaced=true;
+      }
+    }
     if(modelProposal?.chosenAction==='VILLAGE_REUNION'&&!avatarDecision){
       const prior=prevState.cultivators.find(row=>row.id===cultivator.id);
       if(!prior||activeAvatar(prevState)===prior||!exactVillageReunionDecision(modelProposal,
@@ -1979,7 +2002,8 @@ export function advanceWorldTick(
     if(!liveEncounter&&!liveDestiny&&expeditionOrder?.chosenAction!=='EXPEDITION_DUNGEON'&&deferRegionalActorTurn(nextState,regionalTurn,cultivator,expeditionOrder??provided??supplied??fieldNegotiation,
       ()=>!!requiredBeforeOrdinaryDecision(cultivator,nextState)||
         availableVacantGateActions(cultivator,nextState,nextState.tick).length>0||
-        availableVillageReunionActions(cultivator,nextState,nextState.tick).some(row=>row.villageReunionMove==='accept')))continue;
+        availableVillageReunionActions(cultivator,nextState,nextState.tick).some(row=>row.villageReunionMove==='accept')||
+        availableBattlefieldAftermathActions(cultivator,nextState,nextState.tick).some(row=>row.battlefieldAftermathMove==='accept_care')))continue;
 
     let decisionDraws = 0;
     if (provided && traceOptions?.replayDraws) {
@@ -1992,7 +2016,8 @@ export function advanceWorldTick(
     const unresolvedModelConsent=!expeditionOrder&&!provided&&!fieldNegotiation&&
       (traceOptions?.suppressAutoClanConsent?.has(cultivator.id)||modelProposal!==undefined);
     const decision:LLMDecisionPayload=unresolvedModelConsent&&planned.chosenAction==='CULTIVATION_CLAN'?waitForOwnClanChoice():
-      unresolvedModelConsent&&planned.chosenAction==='VILLAGE_REUNION'&&(planned.villageReunionMove==='offer'||planned.villageReunionMove==='accept')?
+      unresolvedModelConsent&&(planned.chosenAction==='VILLAGE_REUNION'&&(planned.villageReunionMove==='offer'||planned.villageReunionMove==='accept')||
+        planned.chosenAction==='BATTLEFIELD_AFTERMATH'&&(planned.battlefieldAftermathMove==='offer_care'||planned.battlefieldAftermathMove==='accept_care'))?
         {chosenAction:'REST',innerMonologue:'未曾应下旧交所问，先让这句话留在原处。'}:planned;
 
     const captureTrace = traceOptions?.captureTrace !== false;
@@ -2033,6 +2058,7 @@ export function advanceWorldTick(
       if(mercyMeeting)newEvents.push(mercyMeeting);
       const villageMeeting=recordVillageReunionMovement(nextState,cultivator,previousLocation);
       if(villageMeeting)newEvents.push(villageMeeting);
+      recordBattlefieldAftermathApproach(nextState,cultivator,previousLocation);
     }
     if (evt && (decision.chosenAction === 'DUEL' || decision.chosenAction === 'SOCIALIZE' || decision.chosenAction === 'BREAKTHROUGH' ||
       decision.chosenAction==='MERCY_REUNION'&&evt.duelWinnerId!==undefined))
@@ -2068,7 +2094,7 @@ export function advanceWorldTick(
         if (receipt && evt.id === `evt-${receipt.id}`) recordReliefCompetition(nextState, receipt);
       }
       newEvents.push(evt);
-      if(!isBattlefieldRevisitEvent(evt)&&!isPrivateCalamityArrayEvent(evt)&&!isTaughtSwordPracticeEvent(evt)&&!isPrivateSchoolFormEvent(evt)&&!isPrivateWitnessInquiryEvent(evt)&&!isPrivatePavilionFireEvent(evt)&&!isPrivateMercyReunionEvent(evt)&&!isPrivateWildMigrationEvent(evt)&&!isPrivateVillageReunionEvent(evt)&&!(evt.witnessScope==='participants'&&evt.id.endsWith('-study-technique-fire')))witnessEvent(nextState, evt);
+      if(!isBattlefieldRevisitEvent(evt)&&!isPrivateCalamityArrayEvent(evt)&&!isTaughtSwordPracticeEvent(evt)&&!isPrivateSchoolFormEvent(evt)&&!isPrivateWitnessInquiryEvent(evt)&&!isPrivatePavilionFireEvent(evt)&&!isPrivateMercyReunionEvent(evt)&&!isPrivateWildMigrationEvent(evt)&&!isPrivateVillageReunionEvent(evt)&&!isPrivateBattlefieldAftermathEvent(evt)&&!(evt.witnessScope==='participants'&&evt.id.endsWith('-study-technique-fire')))witnessEvent(nextState, evt);
       if(decision.chosenAction==='SOCIALIZE'&&cultivator.currentAction==='SOCIALIZE'){
         const after=recordTournamentBanquetAfterTalk(nextState,evt);
         if(after&&!newEvents.some(row=>row.id===after.id))newEvents.push(after);
@@ -2169,6 +2195,7 @@ export function advanceWorldTick(
   recordNewDeathsForReincarnation(prevState, nextState, newEvents);
   archiveChronicleEvents(nextState, newEvents);
   nextState.events = [...newEvents, ...nextState.events].slice(0, 120);
+  recordBattlefieldAftermathTerminal(nextState,newEvents);
   advanceWitnessedPersonalStory(nextState);
   if (councilMode === 'utility') {
     settleAnnualCouncilOffline(nextState);

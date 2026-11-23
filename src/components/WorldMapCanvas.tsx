@@ -1,3 +1,4 @@
+import {projectBattlefieldAftermath} from '../engine/battlefieldAftermath';
 import {projectVillageReunion} from '../engine/villageReunion';
 import {drawAnomalyRelaySeal,formatAnomalyRelayMark,visibleAnomalyRelayMarks} from './anomalyRelayMapView';
 import {buildSchoolFormMapStrokes,drawSchoolFormMapStrokes} from './schoolFormMapStroke';
@@ -431,6 +432,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const escortedCaravan = useMemo(() => visibleMapEscort(world, mapView, selected), [world, mapView, selected]);
   const hazards = useMemo(() => getVisibleHazards(world, mapView), [world, mapView]);
   const beastsByLocation = useMemo(() => visibleBeastsByLocation(world,mapView,selected),[world,mapView,selected]);
+  const localBattlefieldAftermath=useMemo(()=>selected?projectBattlefieldAftermath(world,selected):undefined,[world,selected]);
   const localVillageReunion=useMemo(()=>selected?projectVillageReunion(world,selected):undefined,[world,selected]);
   const anomalyRelayMarks=useMemo(()=>visibleAnomalyRelayMarks(world,mapView,selected),[world,mapView,selected]);
   const wildMigrants=useMemo(()=>currentVisibleWildMigrants(world,beastsByLocation),[world,beastsByLocation]);
@@ -1574,6 +1576,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                 {fog && (visibleActorsAtSite.get(location.id) ?? 0) > 0 &&
                   <span className="text-slate-300">· 可见修士 {visibleActorsAtSite.get(location.id)} 位（山河索引可查）</span>}
                 {ascensionMarks.some(mark=>mark.kind==='gate'&&mark.siteId===location.id)&&<span className="text-amber-200">· 仙门接引已实成</span>}
+                {localBattlefieldAftermath?.siteId===location.id&&selected?.locationId===location.id&&
+                  <span className="text-amber-200">· 本人亲历的战后尾章</span>}
                 {localVillageReunion?.siteId===location.id&&selected?.locationId===location.id&&
                   <span className="text-amber-200">· 亲到此地重逢旧村人</span>}
                 {relayMark&&<span className="text-amber-200">· 兽潮获讯 · {formatAnomalyRelayMark(relayMark)}</span>}

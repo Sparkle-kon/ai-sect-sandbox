@@ -1,3 +1,4 @@
+import {projectBattlefieldAftermath} from '../engine/battlefieldAftermath';
 import {projectVillageReunion} from '../engine/villageReunion';
 import {formatAnomalyRelayMark,visibleAnomalyRelayMarks} from './anomalyRelayMapView';
 import {projectLocalAlignedWeather} from '../engine/alignedWeatherEngine';
@@ -65,6 +66,8 @@ export function projectMapEntitySiteDetails(world:WorldState,view:TerrainView,si
     if(lease)add('地契',`${lease.role==='owner'?'本宗为出让方':'本宗为承租方'} · 尚余 ${lease.remaining} 份采集额度`);
   }
   if(!here)return details;
+  const localAftermath=projectBattlefieldAftermath(world,here);
+  if(localAftermath?.siteId===site.id)add('战后拾愿','本人在此处亲历同一场已经结算的战事。');
   const localReunion=projectVillageReunion(world,here);
   if(localReunion?.siteId===site.id)add('旧村重逢','此处有本人确实重逢的旧村一幕。');
 

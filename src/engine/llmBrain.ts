@@ -1,3 +1,5 @@
+import {availableBattlefieldAftermathActions} from './battlefieldAftermath';
+import {exactBattlefieldAftermathDecision,battlefieldAftermathCommand} from './battlefieldAftermathCognition';
 import {availableVillageReunionActions} from './villageReunion';
 import {exactVillageReunionDecision,villageReunionCommand} from './villageReunionCognition';
 import {availableVacantGateActions} from './vacantGate';
@@ -1431,6 +1433,12 @@ export function computeHeuristicDecision(
       if (exact) return exact;
     }
   }
+  if(activeAvatar(world)!==cultivator&&world.battlefieldAftermath?.cases.length){
+    const choices=availableBattlefieldAftermathActions(cultivator,world,world.tick);
+    const offered=choices.find(row=>row.battlefieldAftermathMove==='accept_care');
+    const exact=offered&&exactBattlefieldAftermathDecision(battlefieldAftermathCommand(offered),choices);
+    if(exact)return exact;
+  }
   if(activeAvatar(world)!==cultivator&&world.villageReunions?.pairs.length){
     const choices=availableVillageReunionActions(cultivator,world,world.tick);
     // Merely meeting does not interrupt an established ordinary habit. A real pending gift is an independent choice.
@@ -2642,6 +2650,14 @@ export async function requestCultivatorLLMDecision(
         exactBeastDuelResponse(parsed,beastContact.id,availableBeastDuelChoices(world,cultivator)):undefined,160);
   }
 
+  const aftermath=availableBattlefieldAftermathActions(cultivator,world,requestTick);
+  if(aftermath.length){
+    if(requestTick!==world.tick+1||activeAvatar(world)===cultivator)return undefined;
+    return requestDecisionPrompt(config,requestTick,options,
+      '仅复制一项同一场已经结算的冲突后的本人合法回应。不填写新的战功、伤势、花费、他人决定或未走路线：'+JSON.stringify(aftermath.map(battlefieldAftermathCommand)),
+      parsed=>requestTick===world.tick+1&&activeAvatar(world)!==cultivator&&exactBattlefieldAftermathDecision(parsed,aftermath)
+        ?exactBattlefieldAftermathDecision(parsed,availableBattlefieldAftermathActions(cultivator,world,requestTick)):undefined,160);
+  }
   const village=availableVillageReunionActions(cultivator,world,requestTick);
   if(village.length){
     if(requestTick!==world.tick+1||activeAvatar(world)===cultivator)return undefined;
