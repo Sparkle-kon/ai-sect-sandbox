@@ -1,3 +1,4 @@
+import {sectQuirkLabels} from './sectQuirkLabels';
 import {projectAtmosphere,type AtmosphereFrame} from './seasonalAtmosphereModel';
 import {isScopedExpeditionGate} from '../engine/expeditionOmenTerms';
 import {isSectActive} from '../engine/sectActivity';
@@ -21,7 +22,7 @@ export interface LocalCourtyardFacility extends Position {
   readonly id:string;readonly kind:LocalCourtyardFacilityKind;readonly label:string;readonly detail:string;
 }
 export interface LocalCourtyardActor extends Position {
-  readonly id:string;readonly name:string;readonly realm:string;readonly sprite:MapActorSpriteModel;
+  readonly id:string;readonly name:string;readonly realm:string;readonly sprite:MapActorSpriteModel;readonly quirkLabels?:readonly string[];
 }
 export interface LocalCourtyardVillager extends Position {
   readonly id:string;readonly name:string;readonly label:string;readonly sprite:MapActorSpriteModel;
@@ -123,7 +124,8 @@ export function buildLocalCourtyard(world:WorldState,view:NativeMapView,siteId:s
   const sprites=buildMapActorSpriteModels(world,view,residents.map(actor=>({actor})));
   const actors=residents.flatMap(body=>{
     const sprite=sprites.get(body.id);
-    return sprite?[{id:body.id,name:safe(body.name),realm:`${body.realm}${body.realmStage}层`,sprite,action:body.currentAction}]:[];
+    const quirkLabels=sectQuirkLabels(body.quirks);
+    return sprite?[{...(quirkLabels.length?{quirkLabels}:{}),id:body.id,name:safe(body.name),realm:`${body.realm}${body.realmStage}层`,sprite,action:body.currentAction}]:[];
   });
   const eligible=local&&village&&population&&population>0?new Set(availableSettlementActions(local,world).flatMap(choice=>
     choice.action==='RECRUIT_SETTLER'&&choice.targetSettlementId===village.id?[choice.targetVolunteerId]:[])):undefined;

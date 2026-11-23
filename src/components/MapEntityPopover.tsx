@@ -1,3 +1,4 @@
+import {SectQuirkBadges} from './SectQuirkBadges';
 import {CultivatorPortrait} from './CultivatorPortrait';
 import {useEffect,useId,useRef,useState,type CSSProperties} from 'react';
 import {Crosshair,Mountain,Sparkles,UserRound,X} from 'lucide-react';
@@ -104,6 +105,7 @@ export function MapEntityPopover({data,anchor,pinned,readOnly=false,actions,onCl
           <meter min={0} max={data.maxHp} value={Math.min(saneGauge(data.hp),data.maxHp)} aria-labelledby={hp}
             className="block h-2 w-full accent-rose-300"/>
         </div>}
+        <SectQuirkBadges labels={data.quirkLabels}/>
         {data.actionLabel&&<p className="text-xs text-teal-200">眼下：{data.actionLabel}</p>}
                 {(data.monologue||data.persona)&&<div>
           <p className="text-xs text-violet-200">{data.monologue?'仅本人可见 · 心声':'人物演绎 · 并非亲知'}</p>

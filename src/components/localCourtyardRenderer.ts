@@ -346,5 +346,29 @@ export function drawLocalCourtyard(ctx:Pen,frame:LocalCourtyardPlan,width:number
   for(const site of frame.facilities)facilityPaint(ctx,site,c,t);
   for(const person of frame.actors)drawCanvasCharacterSprite(ctx,person.x,person.y,person.sprite,35,t);
   for(const person of frame.villagers)civilian(ctx,person,t);
+  drawCourtyardQuirkTags(ctx,frame);
+
+  ctx.restore();
+}
+
+/** Draw one small primary badge; the courtyard’s semantic detail shows both. */
+export function drawCourtyardQuirkTags(ctx:Pen,frame:LocalCourtyardPlan):void {
+  if(!frame.actors.some(person=>person.quirkLabels?.length))return;
+  ctx.save();
+  ctx.font='600 11px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+  const drawn:Array<{x:number;y:number;width:number}>=[];
+  for(const person of frame.actors){
+    const label=person.quirkLabels?.[0];
+    if(!label)continue;
+    const width=Math.min(59,Math.max(24,Array.from(label).length*11+7));
+    const x=Math.max(width/2+2,Math.min(frame.width-width/2-2,person.x));
+    // Stagger horizontally crowded people without obscuring the sprite immediately below.
+    const y=[person.y-27,person.y-42].find(row=>row>=8&&drawn.every(tag=>
+      Math.abs(tag.y-row)>=14||Math.abs(tag.x-x)>=(tag.width+width)/2+2));
+    if(y===undefined)continue;
+    drawn.push({x,y,width});
+    ctx.fillStyle='#25150e';ctx.beginPath();ctx.roundRect(x-width/2,y-7,width,14,5);ctx.fill();
+    ctx.fillStyle='#ffda9c';ctx.fillText(label,x,y,width-7);
+  }
   ctx.restore();
 }

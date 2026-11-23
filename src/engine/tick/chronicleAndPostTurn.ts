@@ -1,3 +1,4 @@
+import {ensureManagedSectQuirks} from '../sectQuirkAssignment';
 import { advanceStorytellerDirector, canonicalStorytellerFocus, STORYTELLER_STYLES } from '../storytellerDirector';
 import { advanceDirectorHighlights } from '../director/directorHighlights';
 import { recordBanquetSeatInvitation } from '../banquetSeats';
@@ -84,6 +85,7 @@ export function runChronicleAndPostTurn(context: WorldTickContext): void {
   const completedEvents=[...newEvents,...nextState.events.filter(({id,tick})=>tick===nextState.tick&&!mainEventIds.has(id))];
   settleUpperPassageMortality(nextState);
   settleFrontierMortality(nextState);
+  ensureManagedSectQuirks(nextState);
   expireRingAudiences(nextState);
   finalizeDestinyTraitOffers(nextState);
   pruneInvalidForbiddenDuelContacts(nextState);

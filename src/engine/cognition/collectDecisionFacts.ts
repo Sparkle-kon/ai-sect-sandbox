@@ -15,7 +15,8 @@ import { schemeOptions } from '../schemeEngine';
 import { terrainTileAt, knownMapLocations } from '../terrainEngine';
 import { knownRumorLead } from '../rumorEngine';
 import { voluntaryHeartDemonChoiceEffect } from '../heartDemonChoicePolicy';
-import { hasOrdinaryIntentHistory, modelOrdinaryIntentOptions } from '../ordinaryIntentEngine';
+import { hasRankedOrdinaryIntentAuthority, modelOrdinaryIntentOptions, rankedOrdinaryQuirks } from '../ordinaryIntentEngine';
+import { SECT_QUIRK_CATALOG } from '../sectQuirkCatalog';
 import { activeAvatar } from '../avatarEngine';
 import { availableHeartDemonRecovery } from '../heartDemonAftermathEngine';
 import { availableApprenticeshipReunionActions } from '../apprenticeshipReunion';
@@ -122,13 +123,18 @@ export function collectDecisionFacts({ cultivator, world, requestTick }: Cogniti
   const knownLocations = knownMapLocations(world, cultivator);
   const unverifiedTrail = knownRumorLead(cultivator, world);
   const socialEffect=voluntaryHeartDemonChoiceEffect(world,cultivator,requestTick);
-  const ordinaryHistory=hasOrdinaryIntentHistory(world,cultivator,requestTick);
+  const ordinaryAuthority=hasRankedOrdinaryIntentAuthority(world,cultivator,requestTick);
   const ordinaryOptions = modelOrdinaryIntentOptions(world,cultivator,requestTick);
   const initialAftermathSocial=socialEffect?ordinaryOptions.find(row=>row.action==='SOCIALIZE'):undefined;
   const ownRecovery=!activeVow&&!rescueOnly&&!boundaryReliefOnly&&activeAvatar(world)!==cultivator?
     availableHeartDemonRecovery(world,cultivator,requestTick):undefined;
-  const ordinaryGuide=ordinaryHistory&&ordinaryOptions.length?
-    `- 若没有更紧急或早已承诺的合法事务，可从实际可执行的日常选项原样复制动作与目标。计分只是偏好，不可自报结果或编造额外目标：${JSON.stringify(ordinaryOptions.map(({action,targetCultivatorId,targetLocationId,targetHerbId,score,factors})=>({
+  const ownQuirks=rankedOrdinaryQuirks(world,cultivator,requestTick).map(id=>{
+    const {name,blurb}=SECT_QUIRK_CATALOG[id];
+    return {name,blurb};
+  });
+  const quirkGuide=ownQuirks.length?'本人脾性可作为轻微偏好：'+JSON.stringify(ownQuirks)+'。':'';
+  const ordinaryGuide=ordinaryAuthority&&ordinaryOptions.length?
+    `- 若没有更紧急或早已承诺的合法事务，可从实际可执行的日常选项原样复制动作与目标。计分只是偏好，不可自报结果或编造额外目标：${quirkGuide}${JSON.stringify(ordinaryOptions.map(({action,targetCultivatorId,targetLocationId,targetHerbId,score,factors})=>({
       chosenAction:action,targetCultivatorId,targetLocationId,targetHerbId,score,factors
     })))}` : initialAftermathSocial?
     `- 若没有更紧急或早已承诺的合法事务，本月若自行选择交谈，只可向这名实在同地的可选人物发起：${JSON.stringify({
@@ -283,7 +289,7 @@ export function collectDecisionFacts({ cultivator, world, requestTick }: Cogniti
     ownArtifactView, salvageOptions, seedPromptOptions, furnaceSafetyOptions, damageAssurancePromptOptions,
     furnaceOptions, sparringOptions, estateOptions, witnessOptions, settlementOptions, marketOptions,
     villageFairPromptOptions, arbitrationOptions, oathOptions, mentorshipOptions, apprenticeshipGuide,
-    currentPlan, eligiblePlans, privateHeartMemories, apprenticeshipOptions, ordinaryHistory, ordinaryOptions,
+    currentPlan, eligiblePlans, privateHeartMemories, apprenticeshipOptions, ordinaryAuthority, ordinaryOptions,
     initialAftermathSocial, socialEffect, renewalOptions, damageAssuranceOptions, villageFairOptions,
     toolLoanOptions, workshopReleaseOptions, courierHandoffOptions, stipendOptions, careFollowupOptions,
     alignedWeatherOptions, seedOptions

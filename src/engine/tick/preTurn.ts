@@ -1,3 +1,4 @@
+import {ensureManagedSectQuirks} from '../sectQuirkAssignment';
 import { advanceFrontierProduction } from '../frontierProductionEngine';
 import { advanceNorthGateRenewal } from '../northGateRenewalEngine';
 import { advanceRouteWarnings } from '../routeWarningEngine';
@@ -13,6 +14,7 @@ import type { PreTurnContext, TickBaseContext } from './tickContext';
 import { defineTickPlugins, runTickPlugins } from './tickPlugins';
 
 const preTurnMaintenance = defineTickPlugins<TickBaseContext>([
+  { id: 'ensureManagedSectQuirks', run: ({ nextState }) => ensureManagedSectQuirks(nextState) },
   { id: 'advanceProtagonistSuccession', run: ({ nextState, prevState }) => advanceProtagonistSuccession(nextState, prevState) },
   { id: 'trackFlightTurn', run: ({ nextState }) => trackFlightTurn(nextState) },
   { id: 'openResourceFlowMonth', run: ({ nextState }) => openResourceFlowMonth(nextState) },

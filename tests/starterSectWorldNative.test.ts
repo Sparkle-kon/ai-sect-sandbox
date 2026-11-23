@@ -55,7 +55,7 @@ describe('native new-game starter sects',()=>{
           ...person,alive:true,sectRank:'外门弟子',sectId:sect?.id,locationId:home?.id,
         });
         expect(world.cultivators).toHaveLength(oldWorld.cultivators.length+preview.disciples.length+2);
-        expect(world.cultivators.slice(0,oldWorld.cultivators.length)).toEqual(oldWorld.cultivators);
+        expect(world.cultivators.slice(0,oldWorld.cultivators.length).map(({quirks:_quirks,...original})=>original)).toEqual(oldWorld.cultivators);
         expect(world.locations.slice(0,-1)).toEqual(oldWorld.locations);
         expect(world.sects.slice(0,-1)).toEqual(oldWorld.sects);
         expect(world.events).toEqual(oldWorld.events);

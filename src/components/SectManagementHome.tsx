@@ -1,13 +1,16 @@
 import {useId,useMemo,useRef,useState,type RefObject} from 'react';
 import {previewStarterSect} from '../engine/starterSectWorld';
-import {MANAGEMENT_BUILDING_IDS,SECT_QUIRK_NAMES,STARTER_SECT_IDS,
-  type ManagementBuildings,type SectQuirkId,type StarterDraw,type StarterSectId} from '../types/sectManagement';
+import {MANAGEMENT_BUILDING_IDS,STARTER_SECT_IDS,
+  type ManagementBuildings,type StarterDraw,type StarterSectId} from '../types/sectManagement';
 import type {WorldState} from '../types/world';
 import {CultivatorPortrait} from './CultivatorPortrait';
 import {projectCultivatorPortrait} from './cultivatorPortraitModel';
 import {LocalCourtyardCanvas} from './LocalCourtyardCanvas';
 import {buildLocalCourtyard} from './localCourtyardModel';
 import {createTerrainMapView} from './terrainMapView';
+
+import {SectQuirkBadges} from './SectQuirkBadges';
+import {sectQuirkLabels} from './sectQuirkLabels';
 
 type HomeView='story'|'cockpit'|'sandbox'|'saves';
 export interface SectManagementHomeProps {
@@ -44,12 +47,6 @@ function BuildingList({levels}:{levels:ManagementBuildings}){
     {MANAGEMENT_BUILDING_IDS.map(id=><li key={id} className="rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5">
       {names[id]} {levels[id]>0?`${levels[id]}级`:'未建'}
     </li>)}
-  </ul>;
-}
-
-function Quirks({values}:{values:readonly SectQuirkId[]}){
-  return <ul aria-label="怪癖" className="flex flex-wrap gap-1">
-    {values.map(value=><li key={value} className="rounded-full bg-teal-950/90 px-2 py-0.5 text-xs text-teal-100">{SECT_QUIRK_NAMES[value]}</li>)}
   </ul>;
 }
 
@@ -99,7 +96,7 @@ function StarterSelection({world,busy,onStart}:Omit<SectManagementHomeProps,'onO
       </header>
       <ul aria-label="开局弟子" className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3">
         {current.disciples.map(row=><li key={row.id} className="min-w-0 rounded bg-slate-900/80 px-2 py-1.5">
-          <p className="font-medium text-slate-100">{row.name}</p><Quirks values={row.quirks}/>
+          <p className="font-medium text-slate-100">{row.name}</p><SectQuirkBadges labels={sectQuirkLabels(row.quirks)}/>
         </li>)}
       </ul>
       <div className="mt-2"><BuildingList levels={current.buildings}/></div>
@@ -146,7 +143,7 @@ function ManagedCourtyard({world,busy,onTick}:Pick<SectManagementHomeProps,'worl
               {portrait&&<CultivatorPortrait portrait={portrait} className="h-11 w-10 shrink-0"/>}
               <div className="min-w-0">
                 <p className="text-sm font-medium">{row.name}</p><p className="mb-0.5 text-xs text-slate-300">{row.realm}{row.realmStage}层</p>
-                <Quirks values={row.quirks??[]}/>
+                <SectQuirkBadges labels={sectQuirkLabels(row.quirks)}/>
               </div>
             </li>;
           })}

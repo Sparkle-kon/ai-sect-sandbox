@@ -1,3 +1,4 @@
+import {sectQuirkLabels} from './sectQuirkLabels';
 import {availablePavilionFireActions} from '../engine/pavilionFire';
 import {projectWitnessInquiry} from '../engine/witnessInquiry';
 import {projectMapEntitySiteDetails,type MapEntitySiteDetail} from './mapEntitySiteDetails';
@@ -15,7 +16,7 @@ import {mapActorPositions,type createTerrainMapView} from './terrainMapView';
 export type MapEntityTarget={kind:'actor'|'site';id:string};
 export type MapEntityAction='treasure'|'lightning'|'whisper';
 export type MapEntityRead=
-  | {kind:'actor';target:MapEntityTarget&{kind:'actor'};name:string;realm:string;hp:number;maxHp:number;actionLabel:string;portrait?:CultivatorPortraitSpec;monologue?:string;persona?:string}
+  | {kind:'actor';target:MapEntityTarget&{kind:'actor'};name:string;realm:string;hp:number;maxHp:number;actionLabel:string;portrait?:CultivatorPortraitSpec;monologue?:string;persona?:string;quirkLabels?:readonly string[]}
   | {kind:'site';target:MapEntityTarget&{kind:'site'};name:string;spiritQi:number;residents:readonly string[];residentCount:number;
      population?:number;spiritRoot?:LocationNode['spiritRoot'];details?:readonly MapEntitySiteDetail[];localDispute?:true;localWitnessFollowup?:true;localFire?:true;eventTitles:readonly string[]};
 
@@ -80,9 +81,10 @@ export function projectMapEntityPopover(world:WorldState,view:View,target:MapEnt
     const monologue=own?monologueLine(actor):undefined;
     const portrait=projectMapCultivatorPortrait(world,view,actor,
       {contextual:true,...(own?{viewer:actor,allowPersonal:true}:{})});
+    const quirkLabels=sectQuirkLabels(actor.quirks);
     return {kind:'actor',target:{kind:'actor',id:actor.id},name:cap(cleaned(actor.name),80),
       realm:`${actor.realm}${actor.realmStage}层`,hp:actor.hp,maxHp:actor.maxHp,
-      ...(portrait?{portrait}:{}),actionLabel:labelPublicMapAction(actor.currentAction),...(monologue?{monologue}:{persona:personaLine(actor,'thought')})};
+      ...(quirkLabels.length?{quirkLabels}:{}),...(portrait?{portrait}:{}),actionLabel:labelPublicMapAction(actor.currentAction),...(monologue?{monologue}:{persona:personaLine(actor,'thought')})};
   }
   if(target.kind!=='site')return undefined;
   const site=siteInView(world,view,target.id);

@@ -1,3 +1,4 @@
+import {SectQuirkBadges} from './SectQuirkBadges';
 import {useEffect,useId,useRef,useState} from 'react';
 import {Crosshair,Sparkles} from 'lucide-react';
 import {AVATAR_MESSAGE_LIMIT} from '../engine/avatarEngine';
@@ -91,6 +92,7 @@ export function MapSidebarDossier({data,onReadActor,onFocus,onCommit}:MapSidebar
           <span className="rounded border border-amber-300/30 px-1.5 py-0.5 text-amber-100">{actor.realm}</span>
           {data.sectName&&<span className="rounded border border-slate-700 px-1.5 py-0.5 text-slate-200">{data.sectName}</span>}
         </p>}
+        <SectQuirkBadges labels={actor?.quirkLabels}/>
       </div>
     </div>
 

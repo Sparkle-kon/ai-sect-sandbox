@@ -54,7 +54,7 @@ import { heldFurnaceReservation } from '../furnaceReservationEngine';
 import { effectiveWorkshopDeadline, effectiveWorkshopQuantity } from '../workshopCapacityTerms';
 import { availableWorkshopActions } from '../workshopEngine';
 import { availableSettlementActions } from '../settlementEngine';
-import { hasOrdinaryIntentHistory, rankOrdinaryIntents, preferredOrdinarySocialIntent } from '../ordinaryIntentEngine';
+import { hasRankedOrdinaryIntentAuthority, rankOrdinaryIntents, preferredOrdinarySocialIntent } from '../ordinaryIntentEngine';
 import { availableRouteWarningActions } from '../routeWarningEngine';
 import { availableToolLoanActions } from '../toolLoanEngine';
 import { type UpperPassageOption, availableUpperPassageActions } from '../upperPassageEngine';
@@ -495,9 +495,9 @@ export function requiredBeforeOrdinaryDecision(actor:Cultivator,world:WorldState
 
 }
 
-/** Ranked ordinary actions only after this actor has actual prior ordinary evidence. */
+/** Only authorized routine rankings can replace the untouched ordinary fallback. */
 export function utilityRankedOrdinaryDecision(actor:Cultivator,world:WorldState):LLMDecisionPayload|undefined{
-  if(!hasOrdinaryIntentHistory(world,actor))return undefined;
+  if(!hasRankedOrdinaryIntentAuthority(world,actor))return undefined;
   const ranked=rankOrdinaryIntents(world,actor);
   const baseline=ranked[0];
   const intent=baseline?.action==='SOCIALIZE'&&voluntaryHeartDemonChoiceEffect(world,actor)?

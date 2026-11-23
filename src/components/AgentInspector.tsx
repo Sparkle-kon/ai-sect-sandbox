@@ -1,3 +1,5 @@
+import {sectQuirkLabels} from './sectQuirkLabels';
+import {SectQuirkBadges} from './SectQuirkBadges';
 import {HeartDemonAftermathRead,type HeartDemonRecoveryControls} from './HeartDemonAftermathRead';
 import {labelAction} from './actionLabels';
 import {AscensionPanel,type AscensionControls} from './AscensionPanel';
@@ -101,6 +103,7 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
   const location = extractionPoint || reliefPoint ? undefined : world.locations.find((l) => l.id === cultivator.locationId);
   const bounty = relevantBounty(world.bounties, cultivator.id);
   const profile = !workspaceSection || workspaceSection === 'profile';
+  const quirkLabels=profile?sectQuirkLabels(cultivator.quirks):undefined;
   const clan=profile?projectCultivationClans(world,cultivator):undefined;
   const ascended=profile&&cultivator.positionPlane==='immortal'&&!!verifiedImmortalAscension(world,cultivator);
   const portrait = profile ? projectCultivatorPortrait(world,cultivator,
@@ -154,6 +157,7 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
                 性格：{cultivator.personality}
               </span>
             </div>
+            <SectQuirkBadges labels={quirkLabels}/>
             <p className="text-xs text-slate-400 mt-0.5">
               {sect?.name ?? '散修'} · {cultivator.title} · 寿元 {cultivator.age}/
               {cultivator.lifespan}载

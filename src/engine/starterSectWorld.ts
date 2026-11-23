@@ -1,3 +1,4 @@
+import {ensureManagedSectQuirks} from './sectQuirkAssignment';
 import {createInitialWorld,REALM_BASE_POWER,REALM_LIFESPAN} from '../data/initialWorld';
 import {SECT_QUIRK_IDS,STARTER_SECT_IDS,starterSectIdentity,type ManagementBuildings,type SectQuirkId,type StarterDraw,type StarterSectId} from '../types/sectManagement';
 import type {Cultivator,FictionalGender,LocationNode,PersonalityTrait,Sect,SpiritRoot,WorldgenProfileId,WorldState} from '../types/world';
@@ -129,5 +130,6 @@ export function createManagedSectWorld(seed:number,profileId:WorldgenProfileId,s
     foundingDiscipleIds:disciples.map(person=>person.id),buildings:{...starter.buildings},
     ...(starter.debt?{debt:{creditorId:wang.id,principal:starter.debt.principal,dueTick:world.tick+starter.debt.dueMonths}}:{})};
   if(!configureStoryteller(world,'wandering_jianghu',leaderId))return;
+  ensureManagedSectQuirks(world);
   return world;
 }

@@ -14,9 +14,12 @@ import {activeCourierForActor,courierActedThisTick} from './sealedCourierEngine'
 import {currentVisibleTileIds,terrainTileAt} from './terrainEngine';
 import {isTribulationActive} from './tribulationEngine';
 import {ordinaryActionAttention} from './ordinaryActionEvidence';
+import {activeAvatar} from './avatarEngine';
+import {canonicalSectQuirks,sectQuirkOrdinaryBias} from './sectQuirkCatalog';
+import {effectiveSectQuirks} from './sectQuirkAssignment';
 
 export type OrdinaryIntentAction='REST'|'CULTIVATE'|'SOCIALIZE'|'EXPLORE'|'GATHER_HERBS';
-export type OrdinaryIntentFactorKind='personality'|'recovery'|'local_need'|'known_intel'|'prior_commitment'|'repetition';
+export type OrdinaryIntentFactorKind='personality'|'quirk'|'recovery'|'local_need'|'known_intel'|'prior_commitment'|'repetition';
 export interface OrdinaryIntentFactor {readonly kind:OrdinaryIntentFactorKind;readonly points:number}
 type IntentChoice=
   | {readonly action:'REST'|'CULTIVATE';readonly targetCultivatorId?:never;readonly targetLocationId?:never;readonly targetHerbId?:never}
@@ -59,6 +62,15 @@ function allowedRoutineActor(world:WorldState,actor:Cultivator,tick:number){
 export function hasOrdinaryIntentHistory(world:WorldState,actor:Cultivator,executionTick=world.tick):boolean{
   return actualExecution(world,executionTick)&&world.cultivators.includes(actor)&&ordinaryActionAttention(actor,executionTick).run>0;
 }
+/** Independent authority for a managed NPC's present routine, not fabricated ordinary action history. */
+export function rankedOrdinaryQuirks(world:WorldState,actor:Cultivator,tick=world.tick){
+  if(!world.sectManagement||actor.id===world.sectManagement.leaderId||activeAvatar(world)===actor||
+    !actualExecution(world,tick)||actor.positionPlane!==undefined||!allowedRoutineActor(world,actor,tick))return [];
+  return canonicalSectQuirks(effectiveSectQuirks(world,actor));
+}
+export function hasRankedOrdinaryIntentAuthority(world:WorldState,actor:Cultivator,tick=world.tick):boolean{
+  return hasOrdinaryIntentHistory(world,actor,tick)||rankedOrdinaryQuirks(world,actor,tick).length>0;
+}
 function knownLeadWeight(world:WorldState,actor:Cultivator,known:ReadonlySet<string>,siteId:string){
   if(!known.has(siteId))return 0;
   const confidence=Math.max(0,...actor.rumors.filter(row=>row.locationId===siteId&&row.lead&&row.confidence>=65&&
@@ -99,10 +111,11 @@ export function rankOrdinaryIntents(world:WorldState,actor:Cultivator,executionT
   const site=world.locations.find(row=>row.id===actor.locationId);
   if(!site)return [];
   const candidates:OrdinaryIntentCandidate[]=[];
-  const recorded=ordinaryActionAttention(actor,executionTick);
+  const recorded=ordinaryActionAttention(actor,executionTick),quirks=rankedOrdinaryQuirks(world,actor,executionTick);
   const add=(candidate:IntentChoice,base:number,other:readonly OrdinaryIntentFactor[]=[])=>{
     const weighted:OrdinaryIntentFactor[]=[
-      {kind:'personality',points:PERSONALITY[actor.personality][candidate.action]??0},...other,
+      {kind:'personality',points:PERSONALITY[actor.personality][candidate.action]??0},
+      {kind:'quirk',points:sectQuirkOrdinaryBias(quirks,candidate.action)},...other,
       {kind:'repetition',points:recorded.last===candidate.action?-Math.min(MAX_REPEAT_PENALTY,recorded.run*9):0},
     ];
     const flags=weighted.filter(flag=>flag.points!==0);
@@ -173,7 +186,7 @@ export function preferredOrdinarySocialIntent(world:WorldState,actor:Cultivator,
 /** A bounded projection of this actor's legal present choices, not narration or private source details. */
 export function modelOrdinaryIntentOptions(world:WorldState,actor:Cultivator,executionTick:number):OrdinaryIntentCandidate[]{
   const effect=voluntaryHeartDemonChoiceEffect(world,actor,executionTick);
-  const history=hasOrdinaryIntentHistory(world,actor,executionTick);
+  const history=hasRankedOrdinaryIntentAuthority(world,actor,executionTick);
   if(!history&&!effect)return [];
   if(!history){
     // An aftermath supplies authority for one affected social preference, not an ordinary menu.

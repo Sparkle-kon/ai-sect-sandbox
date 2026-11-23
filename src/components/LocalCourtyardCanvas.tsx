@@ -1,3 +1,4 @@
+import {SectQuirkBadges} from './SectQuirkBadges';
 import {drawSeasonalAtmosphere} from './seasonalAtmosphereRenderer';
 import {useEffect,useId,useMemo,useRef,useState} from 'react';
 import {drawLocalCourtyard} from './localCourtyardRenderer';
@@ -20,7 +21,7 @@ export function LocalCourtyardCanvas({plan,onReturn,onFocusActor,embedded=false}
   const [page,setPage]=useState(0);
   const rows=useMemo(()=>{
     const entries=[
-      ...plan.actors.map(row=>({kind:'actor' as const,id:row.id,label:row.name,detail:row.realm})),
+      ...plan.actors.map(row=>({kind:'actor' as const,id:row.id,label:row.name,detail:row.realm,quirkLabels:row.quirkLabels})),
       ...plan.villagers.map(row=>({kind:'villager' as const,id:row.id,label:row.name,detail:row.label})),
       ...plan.facilities.map(row=>({kind:'facility' as const,id:row.id,label:row.label,detail:row.detail})),
     ];
@@ -135,6 +136,7 @@ export function LocalCourtyardCanvas({plan,onReturn,onFocusActor,embedded=false}
       }}/>
     {!embedded&&selected&&<section id={detail} aria-label="庭院图中所选" className="space-y-1 rounded-md border border-amber-300/25 p-2 text-sm text-stone-200">
       <div aria-live="polite"><p className="font-semibold text-amber-50">{selected.label}</p><p>{selected.detail}{selected.distinction&&` · ${selected.distinction}`}</p></div>
+      {selected.kind==='actor'&&<SectQuirkBadges labels={selected.quirkLabels}/>}
       {selected.kind==='actor'&&onFocusActor&&
         <button type="button" className={button} onClick={()=>onFocusActor(selected.id)}>聚焦此人</button>}
     </section>}

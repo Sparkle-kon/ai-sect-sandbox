@@ -37,7 +37,7 @@ export function decodeOrdinaryDecision(snapshot: CognitiveSnapshot, quotes: Nati
     activeVow, onPilgrimagePath, bellOptions, storytellerOptions
   } = quotes;
   const {
-    apprenticeshipOptions, ownRecovery, ordinaryHistory, ordinaryOptions, unverifiedTrail,
+    apprenticeshipOptions, ownRecovery, ordinaryAuthority, ordinaryOptions, unverifiedTrail,
     initialAftermathSocial, socialEffect, frontierOptions, renewalOptions, pendingUpperEntry,
     arrayFieldWellOptions, oldWellOptions, charterOptions, waterVeinOptions
   } = facts;
@@ -232,7 +232,7 @@ export function decodeOrdinaryDecision(snapshot: CognitiveSnapshot, quotes: Nati
     if(activeAvatar(world)===cultivator||!exactHeartDemonRecoveryDecision(parsed,ownRecovery))return undefined;
     return exactHeartDemonRecoveryDecision(parsed,availableHeartDemonRecovery(world,cultivator,requestTick));
   }
-  if (ordinaryHistory && ordinaryOptions.length && isOrdinaryIntentAction(chosenAction) &&
+  if (ordinaryAuthority && ordinaryOptions.length && isOrdinaryIntentAction(chosenAction) &&
       !ordinaryOptions.some((candidate)=>matchesOrdinaryIntent(candidate,{...parsed,chosenAction})) &&
       !(chosenAction==='EXPLORE'&&unverifiedTrail&&parsed.targetLocationId===unverifiedTrail)) return undefined;
   if(chosenAction==='SOCIALIZE'){

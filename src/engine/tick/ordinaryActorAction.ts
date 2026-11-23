@@ -52,7 +52,7 @@ import { availableCultivationClanActions } from '../cultivationClanEngine';
 import { exactImmortalAuctionDecision, exactAuctionAmbushDecision } from '../immortalAuctionCognition';
 import { availableImmortalAuctionActions } from '../immortalAuctionEngine';
 import { availableDaoPathActions } from '../daoPathEngine';
-import { isOrdinaryIntentAction, hasOrdinaryIntentHistory, preferredOrdinarySocialIntent, matchesOrdinaryIntent, modelOrdinaryIntentOptions, rankOrdinaryIntents } from '../ordinaryIntentEngine';
+import { isOrdinaryIntentAction, hasRankedOrdinaryIntentAuthority, preferredOrdinarySocialIntent, matchesOrdinaryIntent, modelOrdinaryIntentOptions, rankOrdinaryIntents } from '../ordinaryIntentEngine';
 import { knownRumorLead, witnessEvent } from '../rumorEngine';
 import { activeSiegeForActor } from '../diplomacyEngine';
 import { availableCeasefireActions, recordCeasefireHostility } from '../ceasefireEngine';
@@ -383,7 +383,7 @@ export function runOrdinaryActorAction(
     }else{
       const earlier=prevState.cultivators.find(actor=>actor.id===cultivator.id);
       if(earlier){
-        const history=Boolean(modelProposal)&&hasOrdinaryIntentHistory(prevState,earlier,nextState.tick);
+        const rankedAuthority=Boolean(modelProposal)&&hasRankedOrdinaryIntentAuthority(prevState,earlier,nextState.tick);
         const social=ordinaryProposal.chosenAction==='SOCIALIZE';
         const oldEffect=social&&voluntaryHeartDemonChoiceEffect(prevState,earlier,nextState.tick);
         const effect=social&&voluntaryHeartDemonChoiceEffect(nextState,cultivator);
@@ -395,8 +395,8 @@ export function runOrdinaryActorAction(
         const target=ordinaryProposal.targetLocationId;
         const independentTrail=ordinaryProposal.chosenAction==='EXPLORE'&&target!==undefined&&
           knownRumorLead(earlier,prevState)===target&&knownRumorLead(cultivator,nextState)===target;
-        const offered=history?modelOrdinaryIntentOptions(prevState,earlier,nextState.tick):[];
-        const stillLegal=!history||!offered.length||offered.some(option=>matchesOrdinaryIntent(option,ordinaryProposal))&&
+        const offered=rankedAuthority?modelOrdinaryIntentOptions(prevState,earlier,nextState.tick):[];
+        const stillLegal=!rankedAuthority||!offered.length||offered.some(option=>matchesOrdinaryIntent(option,ordinaryProposal))&&
           rankOrdinaryIntents(nextState,cultivator).some(option=>matchesOrdinaryIntent(option,ordinaryProposal));
         if(!validPreference||!stillLegal&&!independentTrail){provided=undefined;modelOrdinaryReplaced=true;}
       }
