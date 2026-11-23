@@ -1,3 +1,5 @@
+import {availableWildMigrationActions,isPrivateWildMigrationEvent,resolveWildMigrationAction} from './wildMigration';
+import {exactWildMigrationDecision} from './wildMigrationCognition';
 import {availableFarewellLandingActions,isPrivateFarewellLandingEvent,resolveFarewellLandingAction} from './farewellLanding';
 import {exactFarewellLandingDecision} from './farewellLandingCognition';
 import {availableMercyReunionActions,isPrivateMercyReunionEvent,mercyReunionAidActed,mercyReunionAidPendingHold,recordMercyReunionMovement,
@@ -883,6 +885,11 @@ export function applyCultivatorBrainDecision(
     case 'GRAND_SIEGE_HERO':
       // The native attack round, not this individual turn, owns actual array and resource settlement.
       return null;
+    case 'WILD_MIGRATION': {
+      if(modelInput&&activeAvatar(world)===cultivator)return null;
+      const exact=exactWildMigrationDecision(decision,availableWildMigrationActions(cultivator,world,world.tick),true);
+      return exact?resolveWildMigrationAction(world,cultivator,exact):null;
+    }
     case 'MERCY_REUNION': {
       if(modelInput&&activeAvatar(world)===cultivator)return null;
       const exact=exactStoryMercyDecision(decision,availableMercyReunionActions(cultivator,world,world.tick),true);
@@ -1662,6 +1669,14 @@ export function advanceWorldTick(
         modelOrdinaryReplaced=true;
       }
     }
+    if(modelProposal?.chosenAction==='WILD_MIGRATION'&&!avatarDecision){
+      const prior=prevState.cultivators.find(row=>row.id===cultivator.id);
+      if(!prior||activeAvatar(prevState)===prior||!exactWildMigrationDecision(modelProposal,
+        availableWildMigrationActions(prior,prevState,nextState.tick),true)){
+        provided=undefined;
+        modelOrdinaryReplaced=true;
+      }
+    }
     if(modelProposal&&!avatarDecision&&(modelProposal.chosenAction==='MERCY_REUNION'||modelProposal.duelMercy!==undefined)){
       const before=prevState.cultivators.find(row=>row.id===cultivator.id);
       const menu=before&&(modelProposal.chosenAction==='MERCY_REUNION'
@@ -2012,7 +2027,7 @@ export function advanceWorldTick(
         if (receipt && evt.id === `evt-${receipt.id}`) recordReliefCompetition(nextState, receipt);
       }
       newEvents.push(evt);
-      if(!isBattlefieldRevisitEvent(evt)&&!isPrivateCalamityArrayEvent(evt)&&!isTaughtSwordPracticeEvent(evt)&&!isPrivateSchoolFormEvent(evt)&&!isPrivateWitnessInquiryEvent(evt)&&!isPrivatePavilionFireEvent(evt)&&!isPrivateMercyReunionEvent(evt)&&!(evt.witnessScope==='participants'&&evt.id.endsWith('-study-technique-fire')))witnessEvent(nextState, evt);
+      if(!isBattlefieldRevisitEvent(evt)&&!isPrivateCalamityArrayEvent(evt)&&!isTaughtSwordPracticeEvent(evt)&&!isPrivateSchoolFormEvent(evt)&&!isPrivateWitnessInquiryEvent(evt)&&!isPrivatePavilionFireEvent(evt)&&!isPrivateMercyReunionEvent(evt)&&!isPrivateWildMigrationEvent(evt)&&!(evt.witnessScope==='participants'&&evt.id.endsWith('-study-technique-fire')))witnessEvent(nextState, evt);
       if(decision.chosenAction==='SOCIALIZE'&&cultivator.currentAction==='SOCIALIZE'){
         const after=recordTournamentBanquetAfterTalk(nextState,evt);
         if(after&&!newEvents.some(row=>row.id===after.id))newEvents.push(after);

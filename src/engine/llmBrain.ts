@@ -1,3 +1,5 @@
+import {availableWildMigrationActions} from './wildMigration';
+import {exactWildMigrationDecision,wildMigrationCommand} from './wildMigrationCognition';
 import {availableFarewellLandingActions} from './farewellLanding';
 import {exactFarewellLandingDecision,farewellLandingCommand} from './farewellLandingCognition';
 import {availableMercyReunionActions} from './mercyReunion';
@@ -1418,6 +1420,13 @@ export function computeHeuristicDecision(
       if (exact) return exact;
     }
   }
+  if(activeAvatar(world)!==cultivator&&world.wildMigrations?.records.length){
+    const nearby=availableWildMigrationActions(cultivator,world,world.tick);
+    const desired=cultivator.personality==='嗜血'?'drive':cultivator.personality==='诡诈'?'track':'let_pass';
+    const local=nearby.find(row=>row.wildMigrationMove===desired)??nearby.find(row=>row.wildMigrationMove==='let_pass');
+    const accepted=local&&exactWildMigrationDecision(wildMigrationCommand(local),nearby);
+    if(accepted)return accepted;
+  }
   if(activeAvatar(world)!==cultivator&&world.mercyReunions?.cases.length){
     const menu=availableMercyReunionActions(cultivator,world,world.tick);
     const choice=menu.find(row=>row.mercyReunionMove==='accept_aid')??
@@ -2607,6 +2616,14 @@ export async function requestCultivatorLLMDecision(
         exactBeastDuelResponse(parsed,beastContact.id,availableBeastDuelChoices(world,cultivator)):undefined,160);
   }
 
+  const migration=availableWildMigrationActions(cultivator,world,requestTick);
+  if(migration.length){
+    if(requestTick!==world.tick+1||activeAvatar(world)===cultivator)return undefined;
+    return requestDecisionPrompt(config,requestTick,options,
+      '只原样抄写本人可做的一项山兽借道应对；不填远处身影、兽名、行迹、伤害、花费或效验：'+JSON.stringify(migration.map(wildMigrationCommand)),
+      parsed=>requestTick===world.tick+1&&activeAvatar(world)!==cultivator&&exactWildMigrationDecision(parsed,migration)
+        ?exactWildMigrationDecision(parsed,availableWildMigrationActions(cultivator,world,requestTick)):undefined,160);
+  }
   const quoteMercy=()=>[...availableMercyReunionActions(cultivator,world,requestTick),
     ...conditionalMercyChoices(world,cultivator,requestTick)];
   const mercy=quoteMercy();

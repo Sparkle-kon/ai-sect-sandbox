@@ -63,7 +63,8 @@ export default defineConfig({
           'household-register': ['./src/engine/householdNameEngine.ts','./src/engine/mortalAgeCohorts.ts'],
           'rural-governance': ['./src/engine/householdEngine.ts','./src/engine/seasonalHousingEngine.ts',
             './src/engine/sharedCommonsEngine.ts','./src/engine/civicMemorialEngine.ts','./src/engine/villageFairEngine.ts'],
-          'living-landscape': ['./src/engine/habitatEngine.ts','./src/engine/watchlistEngine.ts'],
+          // Season-scoped migration stamping is part of ecology, not technique circulation.
+          'living-landscape': ['./src/engine/habitatEngine.ts','./src/engine/watchlistEngine.ts','./src/engine/wildMigrationStamp.ts'],
           'furnace-damage': ['./src/engine/damageAssuranceEngine.ts'],
           'institution-terms': ['./src/engine/sectActivity.ts','./src/engine/sectCreditTerms.ts'],
           // Small stateless records also used by save validators; don't absorb them into live scripture logic.

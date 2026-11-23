@@ -1,3 +1,4 @@
+import {recordWildMigration} from './wildMigrationStamp';
 import { courierCheckpoint } from './sealedCourierEngine';
 import { habitatCanReceiveWildBeast, isRewildingAcclimating } from './habitatEngine';
 import { pilgrimageCheckpoint } from './pilgrimageEngine';
@@ -156,7 +157,9 @@ export function advanceSpiritBeasts(world: WorldState, rng: () => number): World
     if (!destination) continue;
     place = destination;
     beast.locationId = place.id;
-    results.push(event(world, `roam-${beast.id}`, '妖兽游踪', `${beast.name}离开原处，在${place.name}附近出没。`, [], place.id));
+    const roam=event(world, `roam-${beast.id}`, '妖兽游踪', `${beast.name}离开原处，在${place.name}附近出没。`, [], place.id);
+    recordWildMigration(world,beast,previous,place,roam);
+    results.push(roam);
   }
   return results;
 }

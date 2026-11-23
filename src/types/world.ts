@@ -1,3 +1,4 @@
+import type { WildMigrationMove, WildMigrationState } from './wildMigration';
 import type { FarewellLandingMove, FarewellLandingState } from './farewellLanding';
 import type { MercyReunionMove, MercyReunionState } from './mercyReunion';
 import type { PavilionFireMove, PavilionFireState } from './pavilionFire';
@@ -143,6 +144,7 @@ export type ActionType =
   | 'FRONTIER_NIGHT_HUNT'
   | 'FRONTIER_GORGE'
   | 'FAREWELL_LANDING'
+  | 'WILD_MIGRATION'
   | 'AUDIENCE_PLEDGE'
   | 'CULTIVATE'
   | 'BREAKTHROUGH'
@@ -608,6 +610,8 @@ export interface LLMDecisionPayload {
   frontierGorgeMove?: 'detour'|'wait';
   farewellLandingMove?: FarewellLandingMove;
   targetFarewellDeceasedId?: string;
+  wildMigrationMove?: WildMigrationMove;
+  targetWildMigrationId?: string;
   witnessInquiryMove?: 'inspect'|'ask';
   pavilionFireMove?: PavilionFireMove;
   targetPavilionFireId?: string;
@@ -3676,6 +3680,7 @@ export interface WorldState {
   pavilionFires?: PavilionFireState;
   mercyReunions?: MercyReunionState;
   farewellLandings?: FarewellLandingState;
+  wildMigrations?: WildMigrationState;
   scribeCommissions?: ScribeCommissionState;
   waypostMeals?: WaypostMealState;
   disasterShelter?: DisasterShelterState;

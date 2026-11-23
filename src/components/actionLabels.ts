@@ -14,6 +14,7 @@ const ACTION_LABELS = {
   FRONTIER_NIGHT_HUNT: '雪岭查迹',
   FRONTIER_GORGE: '峡口避风',
   FAREWELL_LANDING: '泊岸作别',
+  WILD_MIGRATION: '山兽借道',
   SCHOOL_FORM_DUEL: '剑锋相对',
   AUDIENCE_PLEDGE: '践行密议',
   WATER_VEIN: '实察井水、借脉或采矿',

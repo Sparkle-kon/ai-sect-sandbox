@@ -90,7 +90,7 @@ import type { MapCameraCommand } from './mapKeyboard';
 import { beginMapGesture, cancelMapGesture, endMapGesture, IDLE_MAP_GESTURE, invalidateMapGesture, moveMapGesture } from './mapTouchGesture';
 import type { MapGestureContact, MapGestureFrame, MapGestureState, MapGestureTransition } from './mapTouchGesture';
 import { BRUSH_LABELS, drawHazards, getVisibleHazards } from './mapBrushView';
-import { BEAST_COLORS, visibleBeastsByLocation } from './spiritBeastView';
+import { BEAST_COLORS, currentVisibleWildMigrants, drawWildMigrantGlyph, visibleBeastsByLocation } from './spiritBeastView';
 import { activeAvatar } from '../engine/avatarEngine';
 import { localQiWeather } from '../engine/weatherEngine';
 import { visiblePilgrimageCampMarks, visiblePilgrimageMapCheckpoint } from './pilgrimageMapView';
@@ -428,7 +428,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const campMarks = useMemo(() => visiblePilgrimageCampMarks(world, selected), [world, selected]);
   const escortedCaravan = useMemo(() => visibleMapEscort(world, mapView, selected), [world, mapView, selected]);
   const hazards = useMemo(() => getVisibleHazards(world, mapView), [world, mapView]);
-  const beastsByLocation = useMemo(() => visibleBeastsByLocation(world, mapView), [world, mapView]);
+  const beastsByLocation = useMemo(() => visibleBeastsByLocation(world,mapView,selected),[world,mapView,selected]);
+  const wildMigrants=useMemo(()=>currentVisibleWildMigrants(world,beastsByLocation),[world,beastsByLocation]);
   const armedBrush = toolsExpanded && !fog && onBrushStroke && brush !== 'browse' ? brush : undefined;
   const gestureScope = `${clusterScope}|${selectedCultivatorId ?? ''}|${world.tick}|${world.interventionSequence}|${onBrushStroke ? 'live' : 'read'}`;
   useEffect(() => { abandonGesture(); }, [gestureScope]);
@@ -749,6 +750,10 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           ctx.beginPath();ctx.moveTo(location.x,location.y);ctx.lineTo(pin.x,pin.y);ctx.stroke();ctx.restore();
         }
         drawMapLandmarkGlyph(ctx,loc,ownerColor);
+        wildMigrants.get(loc.id)?.forEach((beast,index)=>{
+          const offset=logicalPerCssPixel;
+          drawWildMigrantGlyph(ctx,loc.x-13*offset,loc.y+(9+index*10)*offset,beast.kind,offset);
+        });
 
         const arenaRound=arenaMarks.get(loc.id);
         if(arenaRound!==undefined)drawTournamentArenaMark(ctx,loc.x,loc.y,arenaRound);

@@ -37,7 +37,7 @@ export function projectMapEntitySiteDetails(world:WorldState,view:TerrainView,si
   if(site.inheritanceScrolls.length>0)add('遗卷',`此地存 ${site.inheritanceScrolls.length} 卷`);
   const guards=residents.filter(actor=>isGuardOnDuty(actor,world)).length;
   if(guards>0)add('驻守',`正在值守 ${guards} 人`);
-  const beasts=visibleBeastsByLocation(world,view).get(site.id);
+  const beasts=visibleBeastsByLocation(world,view,viewer).get(site.id);
   if(beasts?.length)add('灵兽',`此地可见 ${beasts.length} 只`);
   const occasions=view.visibleOpenOccasions.filter(row=>row.locationId===site.id);
   if(occasions.length>0)add('盛会',occasions.map(row=>`${OCCASION_KIND[row.kind]}${row.status==='registration'?'报名中':'进行中'}`).join('、'));
