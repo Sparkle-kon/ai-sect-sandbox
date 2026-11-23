@@ -1,3 +1,4 @@
+import {reliefHomecomingPinnedSettlementIds} from './reliefHomecomingProof';
 import {villageReunionBeforeRecruit,villageReunionAfterRecruit,villageReunionPinnedRecruitmentIds} from './villageReunion';
 import {fictionalGenderFor} from './fictionalPersonMetadata';
 import {disasterShelterPinnedRecordIds} from './disasterShelterCheckpoint';
@@ -122,6 +123,7 @@ function log(world: WorldState, village: MortalSettlement, row: Omit<SettlementR
     for(const id of civicMemorialPinnedReliefIds(world))pinned.add(id);
     for(const id of villageReunionPinnedRecruitmentIds(world))pinned.add(id);
     for(const visit of world.abandonedQuarters?.visits??[])if(visit.formerRecruitmentId)pinned.add(visit.formerRecruitmentId);
+    for(const id of reliefHomecomingPinnedSettlementIds(world))pinned.add(id);
     world.settlements.records=world.settlements.records.filter((entry,index)=>index>=tail||pinned.has(entry.id));
   }
   if (actual.kind === 'relief') {

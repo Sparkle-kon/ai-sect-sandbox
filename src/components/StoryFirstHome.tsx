@@ -1,4 +1,5 @@
 import { lazy, Suspense, useRef } from 'react';
+import type {ReliefHomecomingView} from '../engine/reliefHomecoming';
 import type {NextStoryGuidance} from '../engine/nextStoryGuidance';
 import type { Cultivator, WorldState } from '../types/world';
 import {PublicBondAside,type PublicBondArc} from './DramaticBondRead';
@@ -16,6 +17,8 @@ interface StoryFirstScene {
 
 interface StoryFirstHomeProps {
   scene?: StoryFirstScene;
+  reliefHomecoming?:ReliefHomecomingView;
+  reliefHomecomingFocus?:string;
   subplot?:PublicBondArc;
   branchScene?:ReactNode;
   nextGuide?:NextStoryGuidance;
@@ -32,10 +35,12 @@ interface StoryFirstHomeProps {
   onMore: () => void;
 }
 
-export function StoryFirstHome({ scene, subplot, branchScene, nextGuide, recapContext, leadName, playerName, busy = false, notice, outcome, calendar, moreRef, opening, onContinue, onMore }: StoryFirstHomeProps) {
+export function StoryFirstHome({ scene, reliefHomecoming, reliefHomecomingFocus, subplot, branchScene, nextGuide, recapContext, leadName, playerName, busy = false, notice, outcome, calendar, moreRef, opening, onContinue, onMore }: StoryFirstHomeProps) {
   const nextDescription = useId();
   const storyReader=useRef<HTMLElement>(null);
   const leadHeading=useId();
+  const quiet=reliefHomecoming?.beats.length?reliefHomecoming:undefined;
+  const primary:StoryFirstScene|undefined=quiet?{title:'村灯照见今朝',paragraph:quiet.beats.map(beat=>beat.line).join('')}:scene;
   return (
     <section ref={storyReader} aria-label="故事主页" className="mx-auto w-full min-w-0 max-w-lg px-4 pb-[calc(8rem+env(safe-area-inset-bottom))] pt-4 text-slate-100 sm:px-6 sm:pb-8 sm:pt-8">
       <header className="flex min-w-0 items-center justify-between gap-2 border-b border-slate-800 pb-3">
@@ -48,7 +53,7 @@ export function StoryFirstHome({ scene, subplot, branchScene, nextGuide, recapCo
           走进故事
         </button>
       </header>
-      {opening&&<div className="mt-3 border-l border-amber-400/55 pl-3 text-sm [overflow-wrap:anywhere]">
+      {!quiet&&opening&&<div className="mt-3 border-l border-amber-400/55 pl-3 text-sm [overflow-wrap:anywhere]">
         <p className="font-semibold text-amber-100">{opening.title}</p>
         {opening.intent&&<p className="text-slate-300">{opening.intent}</p>}
       </div>}
@@ -62,18 +67,18 @@ export function StoryFirstHome({ scene, subplot, branchScene, nextGuide, recapCo
             你正在引导：<strong className="text-amber-100">{playerName}</strong>。可在「走进故事」安排下月行动。
           </p> : leadName && <p className="mt-1 text-sm leading-relaxed text-slate-300">你在旁观。点「走进故事」查看能否以主角行动。</p>}
         </section>
-        <article aria-label={scene?.earlier ? '上一幕' : '当前故事'}
+        <article aria-label={primary?.earlier ? '上一幕' : '当前故事'}
           className="min-w-0 space-y-2 rounded-xl border border-slate-800 bg-slate-900/65 px-3.5 py-3.5 [overflow-wrap:anywhere] sm:px-5 sm:py-5">
-          <p className="text-xs font-medium text-amber-200">{scene?.earlier ? '本月暂无新见闻 · 上一幕' : '本月见闻'}</p>
-          <h2 data-chronicle-reader-heading className="font-serif text-xl font-semibold leading-snug text-amber-50 sm:text-2xl">{scene?.title ?? '暂无新的公开见闻'}</h2>
-          {scene && scene.paragraph !== scene.title && <p className="font-serif text-base leading-7 text-slate-200"><span data-chronicle-paragraph-text>{scene.paragraph}</span></p>}
-          {nextGuide&&<p className="border-t border-slate-800 pt-2 text-sm leading-relaxed text-slate-300"><strong className="font-medium text-amber-200">{nextGuide.title}</strong> · {nextGuide.line}</p>}
-          {leadName && scene?.followsLead === false && <p className="text-xs leading-relaxed text-slate-400">这一幕说的是别人，主线尚未换人。</p>}
+          <p className="text-xs font-medium text-amber-200">{quiet?<>{quiet.siteName}{reliefHomecomingFocus&&` · 随${reliefHomecomingFocus}所见`}</>:primary?.earlier ? '本月暂无新见闻 · 上一幕' : '本月见闻'}</p>
+          <h2 data-chronicle-reader-heading className="font-serif text-xl font-semibold leading-snug text-amber-50 sm:text-2xl">{primary?.title ?? '暂无新的公开见闻'}</h2>
+          {primary && primary.paragraph !== primary.title && <p className="font-serif text-base leading-7 text-slate-200"><span data-chronicle-paragraph-text>{primary.paragraph}</span></p>}
+          {!quiet&&nextGuide&&<p className="border-t border-slate-800 pt-2 text-sm leading-relaxed text-slate-300"><strong className="font-medium text-amber-200">{nextGuide.title}</strong> · {nextGuide.line}</p>}
+          {leadName && primary?.followsLead === false && <p className="text-xs leading-relaxed text-slate-400">这一幕说的是别人，主线尚未换人。</p>}
         </article>
       </div>
-      {recapContext&&<Suspense fallback={null}><StoryHomeRecap {...recapContext} readerRef={storyReader}/></Suspense>}
-      {branchScene&&<div className="mt-3 empty:hidden">{branchScene}</div>}
-      {subplot&&<div className="mt-3"><PublicBondAside arc={subplot}/></div>}
+      {!quiet&&recapContext&&<Suspense fallback={null}><StoryHomeRecap {...recapContext} readerRef={storyReader}/></Suspense>}
+      {!quiet&&branchScene&&<div className="mt-3 empty:hidden">{branchScene}</div>}
+      {!quiet&&subplot&&<div className="mt-3"><PublicBondAside arc={subplot}/></div>}
       {outcome&&<p role="status" className="mt-3 rounded-lg border border-emerald-400/30 px-3 py-2 text-sm text-emerald-100 [overflow-wrap:anywhere]">{outcome}</p>}
       <div data-story-next className="fixed inset-x-0 bottom-0 z-10 border-t border-slate-800 bg-slate-950 px-[max(1rem,env(safe-area-inset-left))] pb-[calc(.75rem+env(safe-area-inset-bottom))] pt-2.5 sm:static sm:mt-5 sm:border-0 sm:bg-transparent sm:p-0">
         <div className="mx-auto w-full max-w-lg text-center">

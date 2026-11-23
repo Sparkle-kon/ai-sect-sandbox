@@ -1,3 +1,4 @@
+import {projectReliefHomecoming,projectReliefHomecomingLead} from './engine/reliefHomecoming';
 import {useBoundaryGapStory} from './components/useBoundaryGapStory';
 import {useAbandonedQuarterStory} from './components/useAbandonedQuarterStory';
 import {useFurnaceEmergencyStory} from './components/useFurnaceEmergencyStory';
@@ -702,7 +703,13 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
 
   const activeReadingScene=furnaceEmergency??vacantGate??boundaryGap??abandonedQuarter??pavilionFire??dungeonFork??pilgrimageFork??battlefieldAftermath??apprenticeshipReunion??villageReunion??wildMigration??mercyReunion??farewellLanding??frontierGorge??nightHunt??schoolFormDuel??calamityArray??battlefieldRevisit??witnessInquiry??campaignAssembly??
     flightCard??passageScene??banquetStory??anomalyRelay;
-  const guidanceActor=!preview&&storyHome&&!activeReadingScene
+  const isUrgentPublicScene=storyHome?.scene&&!storyHome.scene.earlier&&world.events.some(event=>event.id===storyHome.scene?.eventId&&
+    (event.category==='combat'||event.category==='death'||event.category==='breakthrough'));
+  const allowQuietScene=!preview&&storyHome&&!storyEntryOpen&&!featuredStoryCard&&!activeReadingScene&&!isUrgentPublicScene;
+  const quietViewer=allowQuietScene?activeAvatar(world):undefined;
+  const reliefHomecomingLead=allowQuietScene&&!quietViewer?projectReliefHomecomingLead(world):undefined;
+  const reliefHomecoming=quietViewer?projectReliefHomecoming(world,quietViewer):reliefHomecomingLead;
+  const guidanceActor=!preview&&storyHome&&!activeReadingScene&&!reliefHomecoming
     ?activeAvatar(world)??world.cultivators.find(actor=>actor.id===storyHome.lead?.id)??selectedCultivator:undefined;
   const nextGuide=guidanceActor?projectNextStoryGuidance(world,guidanceActor):undefined;
   if (storyHome) return <main data-story-home data-story-turn={storyHome.calendar.tick} className="min-h-dvh bg-slate-950 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
@@ -715,7 +722,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
       openings={<HighDramaPresetPicker scopeKey={viewScopeKey} revision={world} disabled={dramaticOpening.disabled} onStart={dramaticOpening.start}/>}
       onFollow={storyHome.lead?followCurrentLead:undefined} onEnter={enterCurrentLead} onOrder={orderCurrentStoryAvatar} />:
       <StoryFirstHome recapContext={world.chronicleArchive.chapters.length||world.coldHistory?.chapters.length?
-        {world,scopeKey:viewScopeKey,viewer:activeAvatar(world)}:undefined} scene={storyHome.scene} subplot={guidance.subplot} nextGuide={nextGuide?.kind==='heart'?undefined:nextGuide} branchScene={activeReadingScene??<DeferredGrandSiegeMapScene world={world} viewer={activeAvatar(world)} fog personalOnly visible witnessScopeKey={viewScopeKey}/>} leadName={storyHome.lead?.name} playerName={activeAvatar(world)?.name}
+        {world,scopeKey:viewScopeKey,viewer:activeAvatar(world)}:undefined} scene={storyHome.scene} reliefHomecoming={reliefHomecoming} reliefHomecomingFocus={reliefHomecomingLead?.actorName} subplot={guidance.subplot} nextGuide={nextGuide?.kind==='heart'?undefined:nextGuide} branchScene={activeReadingScene??<DeferredGrandSiegeMapScene world={world} viewer={activeAvatar(world)} fog personalOnly visible witnessScopeKey={viewScopeKey}/>} leadName={storyHome.lead?.name} playerName={activeAvatar(world)?.name}
         busy={isStepping} moreRef={storyMoreRef} notice={storyNotice} calendar={storyHome.calendar} opening={dramaticOpening.opening}
         outcome={storyOutcome?.world===world?storyOutcome.text:undefined} onContinue={advanceStory} onMore={openStoryEntry} />)}
   </main>;

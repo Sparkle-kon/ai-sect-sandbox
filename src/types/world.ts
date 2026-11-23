@@ -1,4 +1,5 @@
 import type {ApprenticeshipReunionMove,ApprenticeshipReunionState} from './apprenticeshipReunion';
+import type {ReliefHomecomingState} from './reliefHomecoming';
 import type {BoundaryGapMove,BoundaryGapState} from './boundaryGap';
 import type {AbandonedQuarterMove,AbandonedQuarterState} from './abandonedQuarter';
 import type { FurnaceEmergencyMove,FurnaceEmergencyState } from './furnaceEmergency';
@@ -3752,6 +3753,7 @@ export interface WorldState {
   furnaceEmergencies?: FurnaceEmergencyState;
   abandonedQuarters?: AbandonedQuarterState;
   boundaryGapResponses?: BoundaryGapState;
+  reliefHomecomings?: ReliefHomecomingState;
   damageAssurance: DamageAssuranceState;
   sparring: SparringState;
   expeditionRescues: ExpeditionRescueState;

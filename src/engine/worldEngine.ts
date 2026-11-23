@@ -1,3 +1,4 @@
+import {advanceReliefHomecomings,recordReliefHomecomingAid,recordReliefHomecomingMovement} from './reliefHomecoming';
 import {advanceBoundaryGapResponses,availableBoundaryGapActions,resolveBoundaryGapAction,isPrivateBoundaryGapEvent} from './boundaryGap';
 import {exactBoundaryGapDecision} from './boundaryGapCognition';
 import {availableAbandonedQuarterActions,recordAbandonedQuarterMovement,resolveAbandonedQuarterAction,isPrivateAbandonedQuarterEvent} from './abandonedQuarter';
@@ -2176,7 +2177,9 @@ export function advanceWorldTick(
       recordApprenticeshipReunionMovement(nextState,cultivator,previousLocation);
       const returnToRuin=recordAbandonedQuarterMovement(nextState,cultivator,previousLocation);
       if(returnToRuin)newEvents.push(returnToRuin);
+      recordReliefHomecomingMovement(nextState,cultivator,previousLocation);
     }
+    if(evt&&decision.chosenAction==='DELIVER_RELIEF')recordReliefHomecomingAid(nextState,evt);
     if(evt&&decision.chosenAction==='SOCIALIZE')recordApprenticeshipReunionQuiet(nextState,evt);
     if (evt && (decision.chosenAction === 'DUEL' || decision.chosenAction === 'SOCIALIZE' || decision.chosenAction === 'BREAKTHROUGH' ||
       decision.chosenAction==='MERCY_REUNION'&&evt.duelWinnerId!==undefined))
@@ -2314,6 +2317,7 @@ export function advanceWorldTick(
   }
   recordRegionalLatePromotions(nextState,prevState,newEvents);
   advanceCivicMemorials(nextState);
+  advanceReliefHomecomings(nextState);
   advanceChronicleErrata(nextState);
   for (const actor of nextState.cultivators) if (actor.alive) noteTerrainVisit(nextState, actor);
   maintainPlayerAvatar(nextState);

@@ -1,3 +1,5 @@
+import {validateReliefHomecomingSave} from './reliefHomecomingProof';
+import {reliefHomecomingSchema} from './reliefHomecomingSchema';
 import {validateBoundaryGapSave} from './boundaryGapProof';
 import {boundaryGapSchema} from './boundaryGapSchema';
 import {validateAbandonedQuarterSave} from './abandonedQuarterProof';
@@ -702,6 +704,7 @@ const shape = structure({
     wardProof:optional(structure({dispatcherId:id,dispatchTick:tick,dutyTick:tick})),
     requestedActorIds:optional(arr(SAVE_COLLECTION_LIMIT,id)),
   }))})),
+  reliefHomecomings:optional(reliefHomecomingSchema({optional,structure,arr,id,tick},SAVE_COLLECTION_LIMIT)),
   boundaryGapResponses:optional(boundaryGapSchema({optional,structure,arr,one,num,id,tick},SAVE_COLLECTION_LIMIT)),
   abandonedQuarters:optional(abandonedQuarterSchema({optional,structure,arr,id,tick,bool},SAVE_COLLECTION_LIMIT)),
   furnaceEmergencies:optional(furnaceEmergencySchema({optional,structure,arr,num,one,id,tick},SAVE_COLLECTION_LIMIT)),
@@ -4013,6 +4016,7 @@ function verifyWorld(value: unknown): WorldState {
     }
   }
   validateFrontierDrylandLocal(w,frontierDrylandTradeCustody(w),fail);
+  validateReliefHomecomingSave(w,fail);
   validateBoundaryGapSave(w,fail);
   validateAbandonedQuarterSave(w,fail);
   validateFurnaceEmergencySave(w,fail);

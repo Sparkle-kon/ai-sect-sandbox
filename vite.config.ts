@@ -123,7 +123,7 @@ export default defineConfig({
           // Keep physical witness checks and their read-only scenes outside the scripture action bundle.
           'local-witness-scenes': ['./src/engine/vacantGate.ts','./src/engine/grandSiegePresence.ts','./src/engine/anomalyRelay.ts','./src/engine/villageReunion.ts','./src/engine/battlefieldAftermath.ts'],
           // Portable validators stay outside the general save-loader size budget.
-          'local-scene-schemas': ['./src/engine/apprenticeshipReunionSchema.ts','./src/engine/furnaceEmergencySchema.ts','./src/engine/abandonedQuarterSchema.ts','./src/engine/boundaryGapSchema.ts'],
+          'local-scene-schemas': ['./src/engine/apprenticeshipReunionSchema.ts','./src/engine/furnaceEmergencySchema.ts','./src/engine/abandonedQuarterSchema.ts','./src/engine/boundaryGapSchema.ts','./src/engine/reliefHomecomingSchema.ts'],
           'pavilion-save-proof': ['./src/engine/storagePavilionLoanValidation.ts'],
           'grand-siege-proof': ['./src/engine/grandSiegeProof.ts', './src/engine/grandSiegeWitnessView.ts', './src/engine/storageGrandSiegeValidation.ts', './src/types/grandSiege.ts'],
           // The game seed depends only on trace state; keep the optional replay rules separate.

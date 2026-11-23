@@ -1,3 +1,4 @@
+import {projectReliefHomecoming} from './reliefHomecoming';
 import { availableBoundaryGapActions } from './boundaryGap';
 import {exactBoundaryGapDecision,boundaryGapCommand} from './boundaryGapCognition';
 import { availableAbandonedQuarterActions } from './abandonedQuarter';
@@ -3096,6 +3097,7 @@ export async function requestCultivatorLLMDecision(
   const relicOptions = availableRelicActions(cultivator, world, requestTick);
   const recollectionOptions = availableRecollectionActions(cultivator, world);
   const ownEcho = visibleRecollection(world, cultivator.id);
+  const ownReliefScene=projectReliefHomecoming(world,cultivator);
   const earnedPersona = latestEarnedPersonaTrait(cultivator);
   const prompt = boundaryReliefOnly ?
     `你是修仙沙盒中正在路上的换防修士，不在上个实站。若由本人撤回，只复制执行回合许可的动作与换防编号：${JSON.stringify(boundaryReliefOptions)}。
@@ -3111,6 +3113,7 @@ ${forkGuide}
 ${mealOptions.length ? `实到同一个关口才可改选 WAYPOST_MEAL，照抄以下本人许可，不填移动、补给数量、气血结果或他人身份：${JSON.stringify(mealOptions.map(waypostMealTargets))}。` : ''}
 ${!onPilgrimagePath && routeWarningOptions.length ? `停站可另选 ROUTE_WARNING。
 ${routeWarningGuide}` : ''}` : `你是修仙沙盒世界中的修士【${cultivator.name}】（称号：${cultivator.title}）。
+${ownReliefScene?'【只限你在旧村亲见的片刻】'+JSON.stringify(ownReliefScene.beats.map(beat=>beat.line))+'。只当见闻，不得推断缺席者去向、替别人回忆或新增行动字段。':''}
 【自身状态】
 - 境界：${cultivator.realm}${cultivator.realmStage}层（灵气进度：${cultivator.qiProgress}%）
 - 气血：${cultivator.hp}/${cultivator.maxHp} | 战力：${cultivator.combatPower}
