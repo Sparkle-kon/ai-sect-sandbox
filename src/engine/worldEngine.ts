@@ -1,3 +1,5 @@
+import {availableVacantGateActions,isPrivateVacantGateEvent,stageVacantGateAction} from './vacantGate';
+import {exactVacantGateDecision} from './vacantGateCognition';
 import {availableWildMigrationActions,isPrivateWildMigrationEvent,resolveWildMigrationAction} from './wildMigration';
 import {exactWildMigrationDecision} from './wildMigrationCognition';
 import {availableFarewellLandingActions,isPrivateFarewellLandingEvent,resolveFarewellLandingAction} from './farewellLanding';
@@ -885,6 +887,7 @@ export function applyCultivatorBrainDecision(
     case 'GRAND_SIEGE_HERO':
       // The native attack round, not this individual turn, owns actual array and resource settlement.
       return null;
+    case 'VACANT_GATE': return null; // The actual opposing round applies the independently staged response.
     case 'WILD_MIGRATION': {
       if(modelInput&&activeAvatar(world)===cultivator)return null;
       const exact=exactWildMigrationDecision(decision,availableWildMigrationActions(cultivator,world,world.tick),true);
@@ -1322,6 +1325,7 @@ export function advanceWorldTick(
   maintainPlayerAvatar(nextState);
   maintainMentorship(nextState);
   const avatarOrder = consumeAvatarOrder(nextState);
+  const pendingGateEffects=new Map<string,{decision:LLMDecisionPayload;model:boolean;avatar:boolean;supplied:boolean}>();
   const danxiaRegrowth = maintainAlchemy(nextState);
   maintainSectEconomy(nextState);
   const newEvents: WorldEvent[] = [...advanceSanctuaries(nextState), ...advanceCeasefires(nextState), ...advanceCompetitionSeasons(nextState), ...advanceMapHazards(nextState), ...advanceTerrainSuccession(nextState), ...advanceWaterVein(nextState), ...advanceRoads(nextState), ...advanceCouriers(nextState), ...advanceDanxiaMedicine(nextState), ...advanceDanxiaSeasonReviews(nextState), ...advancePilgrimages(nextState), ...advanceRelocations(nextState), ...advanceDoctrineMaturity(nextState,prevState), ...advanceWorkshopInstitutionClosures(nextState), ...advanceSettlements(nextState), ...advanceVillageSupply(nextState), ...advanceVillageWorks(nextState), ...advanceSpiritBeasts(nextState, rng), ...advanceSeedCulture(nextState), ...advanceVillageFairs(nextState), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...advanceSharedCommons(nextState), ...advanceHouseholds(nextState), ...advanceSeasonalHousing(nextState)];
@@ -1669,6 +1673,14 @@ export function advanceWorldTick(
         modelOrdinaryReplaced=true;
       }
     }
+    if(modelProposal?.chosenAction==='VACANT_GATE'&&!avatarDecision){
+      const prior=prevState.cultivators.find(row=>row.id===cultivator.id);
+      if(!prior||activeAvatar(prevState)===prior||!exactVacantGateDecision(modelProposal,
+        availableVacantGateActions(prior,prevState,nextState.tick),true)){
+        provided=undefined;
+        modelOrdinaryReplaced=true;
+      }
+    }
     if(modelProposal?.chosenAction==='WILD_MIGRATION'&&!avatarDecision){
       const prior=prevState.cultivators.find(row=>row.id===cultivator.id);
       if(!prior||activeAvatar(prevState)===prior||!exactWildMigrationDecision(modelProposal,
@@ -1950,7 +1962,8 @@ export function advanceWorldTick(
       }
     }
     if(!liveEncounter&&!liveDestiny&&expeditionOrder?.chosenAction!=='EXPEDITION_DUNGEON'&&deferRegionalActorTurn(nextState,regionalTurn,cultivator,expeditionOrder??provided??supplied??fieldNegotiation,
-      ()=>!!requiredBeforeOrdinaryDecision(cultivator,nextState)))continue;
+      ()=>!!requiredBeforeOrdinaryDecision(cultivator,nextState)||
+        availableVacantGateActions(cultivator,nextState,nextState.tick).length>0))continue;
 
     let decisionDraws = 0;
     if (provided && traceOptions?.replayDraws) {
@@ -1973,6 +1986,14 @@ export function advanceWorldTick(
       legalTraceCandidates(nextState, cultivator) : [];
     const chosenByModel = Boolean(modelProposal && !modelOrdinaryReplaced && !modelStoryChoiceReplaced && !expeditionModelReplaced);
     if (traceOptions?.tape) rememberReplayDecision(traceOptions.tape, cultivator.id, decision, decisionDraws, chosenByModel, false, false, nextState);
+    if(decision.chosenAction==='VACANT_GATE'){
+      const exact=exactVacantGateDecision(decision,availableVacantGateActions(cultivator,nextState,nextState.tick),true);
+      const applied=Boolean(exact&&(!(modelProposal||isProviderPersonaDecision(decision))||activeAvatar(nextState)!==cultivator)&&
+        stageVacantGateAction(nextState,cultivator,exact));
+      if(applied&&exact)pendingGateEffects.set(cultivator.id,{decision:exact,model:chosenByModel,avatar:Boolean(avatarDecision),supplied:Boolean(supplied)});
+      else if(supplied)recordDecisionEffect?.(cultivator.id,false);
+      continue;
+    }
     const previousLocation = cultivator.locationId;
     const previousRealm = cultivator.realm;
     const previousRealmStage = cultivator.realmStage;
@@ -2096,7 +2117,17 @@ export function advanceWorldTick(
   }), ...advanceOccasions(nextState, rng), ...advanceOaths(nextState), ...advanceMarkets(nextState), ...advanceWitnesses(nextState), ...advanceSeasonReviews(nextState, (state, seasonId) =>
     publicCompetitionStandings(state, seasonId).find(({ rank }) => rank === 1)), ...maintainSectPolitics(nextState), ...advanceDoctrineFoundings(nextState), ...advanceDoctrineMaturity(nextState,prevState), ...advanceBounties(nextState), ...advanceResearch(nextState), ...advanceWorkshops(nextState), ...advanceCraftTraining(nextState), ...advanceScribeCommissions(nextState), ...advanceDamageAssurance(nextState), ...advanceRelicExhibits(nextState), ...advanceProbation(nextState), ...advanceToolLoans(nextState), ...advanceWaypostMeals(nextState), ...advanceImmortalAuctions(nextState), ...advanceEstates(nextState), ...advanceDoctrines(nextState), ...advanceSectCredit(nextState), ...advanceSanctuaries(nextState), ...advancePilgrimages(nextState), ...advanceHabitats(nextState), ...advanceInfirmaries(nextState), ...advanceCareFollowups(nextState), ...advanceDanxiaShortages(nextState), ...advanceFormations(nextState), ...advanceTerritorialLeases(nextState), ...reconcileCourierDeaths(nextState), ...advanceHouseholds(nextState), ...advanceHouseholdNames(nextState), ...advanceCultivationClans(nextState)]) {
     newEvents.push(event);
-    if(!isPrivateTournamentBanquetEvent(event))witnessEvent(nextState, event);
+    if(!isPrivateTournamentBanquetEvent(event)&&!isPrivateVacantGateEvent(event))witnessEvent(nextState, event);
+  }
+  if(pendingGateEffects.size){
+    const executed=new Set(newEvents.filter(event=>event.actorIds.length===1&&isPrivateVacantGateEvent(event)).flatMap(event=>[...event.actorIds]));
+    for(const [actorId,planned] of pendingGateEffects){
+      const applied=executed.has(actorId);
+      if(planned.supplied)recordDecisionEffect?.(actorId,applied&&!planned.avatar);
+      traceOptions?.onActor?.(actorId,[],applied);
+      if(traceOptions?.captureTrace!==false)recordDecisionTrace(nextState,actorId,[],planned.decision,
+        planned.avatar?'avatar':planned.model?'model':'utility',applied);
+    }
   }
   for(const event of [...advanceDisasterShelters(nextState), ...advanceSeasonalHousing(nextState), ...advanceMentorTransfers(nextState), ...advanceSectStipends(nextState)]) {
     newEvents.push(event);

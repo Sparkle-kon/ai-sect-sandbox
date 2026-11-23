@@ -1,3 +1,5 @@
+import {activeRelocationForActor} from './siteDutyTerms';
+export {activeRelocationForActor} from './siteDutyTerms';
 import { ascensionDutyActive } from './ascensionPresence';
 import {doctrineFoundingPinnedRelocationIds} from './doctrineFoundingTerms';
 import { activeCourierForActor } from './sealedCourierEngine';
@@ -30,10 +32,6 @@ export const createRelocationState = (): RelocationState => ({ plans: [], abando
 
 export function relocationQuorum(plan: Pick<RelocationPlan, 'voterIds'>): number {
   return Math.max(2, Math.ceil(2 * plan.voterIds.length / 3));
-}
-
-export function activeRelocationForActor(world: WorldState, actor: Cultivator): RelocationPlan | undefined {
-  return world.relocations.plans.find((plan) => plan.status === 'in_transit' && plan.garrisonIds.includes(actor.id));
 }
 
 export function activeRelocationForSect(world: WorldState, sectId: string): RelocationPlan | undefined {

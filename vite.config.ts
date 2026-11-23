@@ -119,6 +119,7 @@ export default defineConfig({
             './src/components/RingAudiencePanel.tsx', './src/components/useRingAudienceControls.ts',
             './src/components/HighDramaPresetPicker.tsx','./src/components/PlayerStoryEntry.tsx','./src/components/storyPlayerController.ts','./src/components/useHighDramaOpening.ts'],
           // Truce and storage need the typed siege proof, not the active combat graph.
+          'vacant-gate-scenes': ['./src/engine/vacantGate.ts','./src/engine/grandSiegePresence.ts'],
           'grand-siege-proof': ['./src/engine/grandSiegeProof.ts', './src/engine/storageGrandSiegeValidation.ts', './src/types/grandSiege.ts'],
           // The game seed depends only on trace state; keep the optional replay rules separate.
           'decision-replay': ['./src/engine/decisionTraceEngine.ts'],

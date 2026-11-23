@@ -116,6 +116,7 @@ export function recordDecisionTrace(world: WorldState, actorId: string, candidat
     decision.targetForbiddenDuelId !== undefined || decision.forbiddenArtChoice !== undefined ||
     decision.chosenAction === 'GRAND_SIEGE_HERO' || decision.targetGrandSiegeId !== undefined || decision.grandSiegeHeroMove !== undefined ||
     decision.chosenAction === 'BEAST_DUEL_RESPONSE' || decision.targetBeastDuelId !== undefined || decision.beastDuelChoice !== undefined ||
+    decision.chosenAction==='VACANT_GATE'||decision.vacantGateMove!==undefined||decision.targetVacantGateSiegeId!==undefined||
     decision.chosenAction==='WILD_MIGRATION'||decision.wildMigrationMove!==undefined||decision.targetWildMigrationId!==undefined||
     decision.chosenAction==='MERCY_REUNION'||decision.duelMercy!==undefined||decision.targetMercyReunionId!==undefined||
     decision.chosenAction==='PAVILION_FIRE'||decision.targetPavilionFireId!==undefined||decision.pavilionFireMove!==undefined||
@@ -180,7 +181,7 @@ export function createDecisionReplayTape(base: WorldState, councilMode: ReplayCo
 }
 
 const MECHANICAL_FIELDS = [
-  'targetHeartDemonAftermathId','wildMigrationMove','targetWildMigrationId','farewellLandingMove','targetFarewellDeceasedId', 'targetCampaignAssemblySiegeId','pavilionFireMove','targetPavilionFireId','duelMercy','mercyReunionMove','targetMercyReunionId',
+  'targetHeartDemonAftermathId','vacantGateMove','targetVacantGateSiegeId','wildMigrationMove','targetWildMigrationId','farewellLandingMove','targetFarewellDeceasedId', 'targetCampaignAssemblySiegeId','pavilionFireMove','targetPavilionFireId','duelMercy','mercyReunionMove','targetMercyReunionId',
   'targetLocationId', 'targetCultivatorId', 'rumorIntent', 'proposedScheme', 'targetTuitionId', 'targetOathId', 'oathTerm', 'marketGood',
   'marketQuantity', 'marketLimitPrice', 'targetMarketOrderId', 'targetSettlementId', 'civicMemorialMove', 'targetCivicDeedId', 'targetCivicMemorialId', 'targetVolunteerId', 'targetWitnessEventId',
   'targetWitnessClaimId', 'targetEstateId', 'targetTechniqueId', 'targetHerbId', 'seedMove', 'targetSeedLotId', 'targetSeedPlotId', 'targetPillId', 'targetArtifactId', 'forgeTier',

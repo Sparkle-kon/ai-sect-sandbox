@@ -1,3 +1,5 @@
+import {activeAt,participant,usedAfterAccept} from './siteDutyTerms';
+export {sparringLocksActor} from './siteDutyTerms';
 import type {
   Cultivator, LLMDecisionPayload, SparringAgreement, SparringMove, SparringRound, SparringState, WorldEvent, WorldState,
 } from '../types/world';
@@ -15,14 +17,11 @@ export type SparringOption = { action:'SPARRING' } & (
 );
 
 const live = (actor: Cultivator | undefined): actor is Cultivator => Boolean(actor?.alive && actor.hp > 0);
-const participant = (row: SparringAgreement, id: string) => row.proposerId === id || row.partnerId === id;
 const parties = (row: SparringAgreement) => [row.proposerId,row.partnerId];
 const physicalSite = (world: WorldState, siteId: string) => world.locations.some(site => site.id === siteId &&
   site.type !== 'secret_realm' && site.type !== 'abyss');
 const open = (row: SparringAgreement) => row.status === 'offered' || row.status === 'active';
 const offeredAt = (row: SparringAgreement, tick: number) => row.status === 'offered' && row.offeredTick <= tick && tick < row.offerExpiresTick;
-const activeAt = (row: SparringAgreement, tick: number) => row.status === 'active' &&
-  (row.acceptedTick ?? Infinity) < tick && tick < (row.deadlineTick ?? 0);
 const at = (world: WorldState, id: string) => world.cultivators.find(actor => actor.id === id);
 const ascending = (a: Cultivator, b: Cultivator) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 
@@ -50,15 +49,6 @@ function presentPair(world: WorldState, row: SparringAgreement, tick: number): [
 
 const canReady = (actor: Cultivator) => Number.isFinite(actor.qiProgress) && actor.qiProgress >= SPARRING_QI_COST &&
   actor.hp >= actor.maxHp * .5 && Number.isFinite(actor.techniqueMastery) && actor.techniqueMastery >= 0 && actor.techniqueMastery <= 100;
-
-function usedAfterAccept(row: SparringAgreement, id: string, tick: number) {
-  return participant(row,id) && row.acceptedTick !== undefined && row.acceptedTick < tick && row.closedTick === tick;
-}
-
-export function sparringLocksActor(world: WorldState, actor: Cultivator): boolean {
-  return world.sparring.agreements.some(row => participant(row,actor.id) &&
-    (activeAt(row,world.tick) || usedAfterAccept(row,actor.id,world.tick)));
-}
 
 export function availableSparringActions(actor: Cultivator, world: WorldState, includeOffers = true,
   executionTick = world.tick): SparringOption[] {

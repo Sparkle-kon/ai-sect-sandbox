@@ -1,3 +1,5 @@
+import {availableVacantGateActions} from './vacantGate';
+import {exactVacantGateDecision,vacantGateCommand} from './vacantGateCognition';
 import {availableWildMigrationActions} from './wildMigration';
 import {exactWildMigrationDecision,wildMigrationCommand} from './wildMigrationCognition';
 import {availableFarewellLandingActions} from './farewellLanding';
@@ -888,6 +890,13 @@ export function computeHeuristicDecision(
   if (roguelikeDecision) return roguelikeDecision;
   const destinyDecision = chooseDestinyTraitDecision(world, cultivator);
   if (destinyDecision) return destinyDecision;
+  if(activeAvatar(world)!==cultivator&&world.sieges.some(row=>row.status==='sieging')){
+    const choices=availableVacantGateActions(cultivator,world,world.tick);
+    const cautious=cultivator.hp<cultivator.maxHp*.55||cultivator.personality==='诡诈';
+    const choice=choices.find(row=>row.vacantGateMove===(cautious?'withdraw':'guard'))??choices[0];
+    const exact=choice&&exactVacantGateDecision(vacantGateCommand(choice),choices);
+    if(exact)return exact;
+  }
   const grandSiegeDecision = chooseGrandSiegeHeroDecision(world, cultivator);
   if (grandSiegeDecision?.targetGrandSiegeId &&
       !grandSiegeHeroReservedForPlayer(world, grandSiegeDecision.targetGrandSiegeId)) return grandSiegeDecision;
@@ -2579,6 +2588,14 @@ export async function requestCultivatorLLMDecision(
         ? decodeDestinyTraitDecision(parsed, submittedMenu) : undefined, 160);
   }
 
+  const vacantGate=availableVacantGateActions(cultivator,world,requestTick);
+  if(vacantGate.length){
+    if(requestTick!==world.tick+1||activeAvatar(world)===cultivator)return undefined;
+    return requestDecisionPrompt(config,requestTick,options,
+      '山门同月确有失守之虞。只原样抄写本人可做的一项；不填旁人同意、继任、阵力、花费或胜负：'+JSON.stringify(vacantGate.map(vacantGateCommand)),
+      parsed=>requestTick===world.tick+1&&activeAvatar(world)!==cultivator&&exactVacantGateDecision(parsed,vacantGate)
+        ?exactVacantGateDecision(parsed,availableVacantGateActions(cultivator,world,requestTick)):undefined,160);
+  }
   if (hasQueuedGrandSiegeHero(world, cultivator)) return undefined;
   const hero = availableGrandSiegeHeroActions(cultivator, world);
   if (hero.length) {

@@ -1,3 +1,5 @@
+import {GUARD_DURATION} from './siteDutyTerms';
+export {GUARD_DURATION} from './siteDutyTerms';
 import {isSectActive} from './sectActivity';
 import { flowSect, recordResourceFlow } from './resourceFlowEngine';
 import { isRetiredFromService } from './serviceRetirementEngine';
@@ -17,7 +19,6 @@ export const FACILITY_RULES: Record<FacilityKind, { name: string; baseCost: numb
 
 const KINDS = Object.keys(FACILITY_RULES) as FacilityKind[];
 const TREASURY_CAP = 50_000;
-const GUARD_DURATION = 6;
 const ARRAY_HP_PER_LEVEL = 200;
 
 export interface SectEconomyOption {

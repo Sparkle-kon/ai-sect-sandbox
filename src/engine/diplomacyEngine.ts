@@ -1,3 +1,4 @@
+import {applyVacantGateGuards,commitVacantGateWithdrawals,prepareVacantGateRound,recordVacantGateRound} from './vacantGate';
 import { ascensionDutyActive } from './ascensionPresence';
 import {activeSiegeForActor,isActiveSiege as active} from './siegeParticipants';
 export {activeSiegeForActor} from './siegeParticipants';
@@ -256,23 +257,32 @@ export function advanceDiplomacy(world: WorldState, rng: () => number, theatre?:
     siege.rounds++;
     const wall = defender.arrayHp;
     const attackRoll=rng(),defenseRoll=rng();
-    const theatricalRound=beginGrandSiegeRound(world,siege,forefront,holdingFront,attackRoll,defenseRoll);
+    const vacancy=prepareVacantGateRound(world,siege,holdingFront);
+    const retreating=vacancy.length?new Set(vacancy.filter(({row})=>row.move==='withdraw').map(({row})=>row.actorId)):undefined;
+    const defending=retreating?.size?holdingFront.filter(actor=>!retreating.has(actor.id)):holdingFront;
+    const theatricalRound=beginGrandSiegeRound(world,siege,forefront,defending,attackRoll,defenseRoll);
+    if(theatricalRound)commitVacantGateWithdrawals(world,vacancy);
+    const activeDefenders=theatricalRound?defending:holdingFront;
     const effectiveAttack = livedPower(forefront) * (.82 + .36 * attackRoll);
-    const effectiveDefense = livedPower(holdingFront) * (.82 + .36 * defenseRoll);
+    const effectiveDefense = livedPower(activeDefenders) * (.82 + .36 * defenseRoll);
     if (wall > 0) {
       const projected = clamp(Math.round(38 + 90 * effectiveAttack / Math.max(1, effectiveAttack + effectiveDefense)), 38, 128);
       const harm=theatricalRound
         ?applyGrandSiegeHero(world,siege,theatricalRound,projected,theatre?.chosenHero(siege),
-          actorId=>theatre?.heldByModel?.(siege,actorId))
+          actorId=>theatre?.heldByModel?.(siege,actorId),vacancy.length?new Set(vacancy.map(({row})=>row.actorId)):undefined)
         :projected;
       if(theatricalRound?.hero)theatre?.applied?.(siege,theatricalRound.hero);
-      defender.arrayHp = Math.max(0, wall - harm);
+      const nativeHarm=theatricalRound?applyVacantGateGuards(world,theatricalRound,vacancy,harm):harm;
+      defender.arrayHp = Math.max(0, wall - nativeHarm);
       injure(forefront, .045 + .055 * effectiveDefense / Math.max(1, effectiveAttack + effectiveDefense));
-      injure(holdingFront, .035);
+      injure(activeDefenders, .035);
       if (siege.rounds < MAX_ROUNDS) {
         const event=makeEvent(world,siege.id,'护山阵接战',`护山阵受损${wall - defender.arrayHp}，尚余${defender.arrayHp}阵力。`,
           belowRoster(world,siege.participantIds),siege.destinationId);
-        if(theatricalRound)finishGrandSiegeRound(world,siege,theatricalRound,event,defender.arrayHp);
+        if(theatricalRound){
+          finishGrandSiegeRound(world,siege,theatricalRound,event,defender.arrayHp);
+          events.push(...recordVacantGateRound(world,theatricalRound,vacancy));
+        }
         events.push(event);
         const scene=theatricalRound&&grandSiegeSceneEvent(world,siege,theatricalRound);
         if(scene)events.push(scene);
@@ -280,8 +290,11 @@ export function advanceDiplomacy(world: WorldState, rng: () => number, theatre?:
       }
     }
     const won = defender.arrayHp <= 0 && effectiveAttack > effectiveDefense * 1.07;
-    const event=settleSiege(world,siege,attacker,defender,forefront,holdingFront,won);
-    if(theatricalRound)finishGrandSiegeRound(world,siege,theatricalRound,event,defender.arrayHp);
+    const event=settleSiege(world,siege,attacker,defender,forefront,activeDefenders,won);
+    if(theatricalRound){
+          finishGrandSiegeRound(world,siege,theatricalRound,event,defender.arrayHp);
+          events.push(...recordVacantGateRound(world,theatricalRound,vacancy));
+        }
     finishGrandSiegeTheatre(world,siege,event);
     events.push(event);
     const scene=theatricalRound&&grandSiegeSceneEvent(world,siege,theatricalRound);

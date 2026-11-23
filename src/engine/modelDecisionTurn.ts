@@ -1,3 +1,4 @@
+import {availableVacantGateActions} from './vacantGate';
 import {availableFarewellLandingActions} from './farewellLanding';
 import { availableFrontierGorgeActions } from './frontierGorge';
 import { availableCampaignAssemblyActions } from './campaignAssembly';
@@ -91,7 +92,9 @@ export function modelDecisionCandidates(world: WorldState): Cultivator[] {
     if (encounter && (encounter.guided || encounter.openedTick !== world.tick)) return false;
     const destiny = heart || contact || encounter ? undefined : activeDestinyTraitOffer(world, actor);
     if (destiny && avatar === actor) return false;
-    const priorScene = !!(heart || contact || encounter || destiny);
+    const vacantGate=!heart&&!contact&&!encounter&&!destiny&&avatar!==actor&&
+      availableVacantGateActions(actor,world,nextTick).length>0;
+    const priorScene = !!(heart || contact || encounter || destiny || vacantGate);
     if (!priorScene && hasQueuedGrandSiegeHero(world, actor)) return false;
     const hero = priorScene ? [] : availableGrandSiegeHeroActions(actor, world);
     if (hero.length) {
@@ -107,7 +110,7 @@ export function modelDecisionCandidates(world: WorldState): Cultivator[] {
     const assembly=!priorScene&&!hero.length&&!flight&&avatar!==actor
       ?availableCampaignAssemblyActions(actor,world,nextTick).filter(row=>row.kind!=='guard'):[];
     // Genuine autonomous offers wake only normal admission guards; a field leader may only negotiate an active march.
-    return (!passive.has(actor.id) || !!heart || !!contact || !!encounter || !!destiny || hero.length > 0 || dungeon || flight || assembly.length>0) &&
+    return (!passive.has(actor.id) || !!heart || !!contact || !!encounter || !!destiny || vacantGate || hero.length > 0 || dungeon || flight || assembly.length>0) &&
     (!activeCourierForActor(world, actor) || availableCourierHandoffActions(actor, world, nextTick).some(({ courierHandoffMove }) => courierHandoffMove === 'offer')) &&
     !activeDanxiaMedicineEscort(world,actor)&&!activeEscortForActor(world, actor) && !activeRelocationForActor(world, actor) &&
     (!activeSiegeForActor(world, actor)||assembly.some(row=>row.kind==='negotiate')) && (dungeon || isEligibleForOccasionDecision(world, actor, nextTick)) &&

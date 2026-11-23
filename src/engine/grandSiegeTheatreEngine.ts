@@ -1,20 +1,12 @@
-import { ascensionDutyActive } from './ascensionPresence';
+import {isGrandSiegeFighterPresent} from './grandSiegePresence';
+export {isGrandSiegeFighterPresent} from './grandSiegePresence';
 import { currentPublic, roundEventId, theatreOf } from './grandSiegeProof';
 import { projectPublicSiegeRound, projectSiegeWitness, type SiegeWitnessView } from './grandSiegeWitnessView';
 import type {createTerrainMapView} from '../components/terrainMapView';
 import type {GrandSiegeFighter,GrandSiegeHeroMove,GrandSiegeHeroOrder,GrandSiegeHeroOrigin,GrandSiegeRound,GrandSiegeTheatre} from '../types/grandSiege';
 import type {Cultivator,LLMDecisionPayload,Sect,SectSiege,WorldEvent,WorldState} from '../types/world';
-import {activeDanxiaMedicineEscort} from './danxiaMedicineTerms';
-import {boundaryReliefCheckpoint} from './boundaryReliefCheckpoint';
 import {cloneWorldWithColdHistory} from './coldHistoryEngine';
-import {disasterShelterLocksTravel} from './disasterShelterCheckpoint';
-import {activeEscortForActor} from './escortEngine';
 import {isScopedExpeditionGate} from './expeditionOmenTerms';
-import {expeditionRescueCheckpoint} from './expeditionRescueCheckpoint';
-import {activePilgrimageForActor} from './pilgrimageEngine';
-import {activeRelocationForActor} from './relocationEngine';
-import {activeCourierForActor} from './sealedCourierEngine';
-import {sparringLocksActor} from './sparringEngine';
 import {isSectActive} from './sectActivity';
 
 type HeroMove=Exclude<GrandSiegeHeroMove,'hold'>;
@@ -74,15 +66,6 @@ export function recordGrandSiegeArrival(world:WorldState,siege:SectSiege,event:W
     world.tick<=theatre.openedTick+1||siege.lastResolvedTick!==world.tick||!currentPublic(world,event)||
     event.id!==roundEventId(world.tick,siege.id)||event.title!=='联军抵达山门'||event.locationId!==siege.destinationId)return;
   theatre.arrivedTick=world.tick;
-}
-export function isGrandSiegeFighterPresent(world:WorldState,actor:Cultivator,siteId:string){
-  return actor.alive&&actor.hp>0&&actor.positionPlane===undefined&&!ascensionDutyActive(world,actor)&&actor.locationId===siteId&&
-    actor.tribulation?.stage!=='lightning'&&actor.tribulation?.stage!=='heart_demon'&&
-    !activeDanxiaMedicineEscort(world,actor)&&!activeEscortForActor(world,actor)&&!activeCourierForActor(world,actor)&&
-    !activeRelocationForActor(world,actor)&&!activePilgrimageForActor(world,actor)&&!disasterShelterLocksTravel(world,actor)&&
-    !expeditionRescueCheckpoint(world,actor)&&!boundaryReliefCheckpoint(world,actor)&&!sparringLocksActor(world,actor)&&
-    !world.occasions.some(row=>(row.status==='registration'||row.status==='running')&&row.participantIds.includes(actor.id))&&
-    !world.forbiddenDuels?.some(row=>row.attackerId===actor.id||row.defenderId===actor.id);
 }
 function hasAlliance(world:WorldState,own:string,actorSectId:string){
   return own===actorSectId||world.diplomacy.some(row=>row.pact==='alliance'&&
@@ -173,7 +156,8 @@ export function queueGrandSiegeHero(world:WorldState,actorId:string,siegeId:stri
   return next;
 }
 export function applyGrandSiegeHero(world:WorldState,siege:SectSiege,round:GrandSiegeRound,baseHarm:number,
-  model?:{actorId:string;decision:LLMDecisionPayload},onModelHold?:(actorId:string)=>void):number{
+  model?:{actorId:string;decision:LLMDecisionPayload},onModelHold?:(actorId:string)=>void,
+  excludedActorIds?:ReadonlySet<string>):number{
   const theatre=theatreOf(world,siege),pending=pendingRounds.get(round);
   if(!theatre||pending?.world!==world||pending.siege!==siege||pending.heroTried)return baseHarm;
   pending.heroTried=true;
@@ -181,7 +165,8 @@ export function applyGrandSiegeHero(world:WorldState,siege:SectSiege,round:Grand
   if(queued&&queued.queuedTick<world.tick)delete theatre.queued;
   const actualHarm=Math.min(baseHarm,round.wallBefore);
   if(!Number.isFinite(actualHarm)||actualHarm<=0||theatre.rounds.some(row=>row.hero))return baseHarm;
-  const parties=round.defenders.map(stamp=>uniqueById(world.cultivators,stamp.actorId)).filter((actor):actor is Cultivator=>Boolean(actor));
+  const parties=round.defenders.filter(stamp=>!excludedActorIds?.has(stamp.actorId))
+    .map(stamp=>uniqueById(world.cultivators,stamp.actorId)).filter((actor):actor is Cultivator=>Boolean(actor));
   const choiceFor=(actor:Cultivator,move:GrandSiegeHeroMove|undefined,origin:GrandSiegeHeroOrigin)=>{
     const realMove=heroMove(actor,world,siege);
     return move&&move!=='hold'&&move===realMove?{actor,move,origin}:undefined;

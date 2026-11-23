@@ -1,3 +1,4 @@
+import type {VacantGateMove,VacantGateState} from './vacantGate';
 import type { WildMigrationMove, WildMigrationState } from './wildMigration';
 import type { FarewellLandingMove, FarewellLandingState } from './farewellLanding';
 import type { MercyReunionMove, MercyReunionState } from './mercyReunion';
@@ -145,6 +146,7 @@ export type ActionType =
   | 'FRONTIER_GORGE'
   | 'FAREWELL_LANDING'
   | 'WILD_MIGRATION'
+  | 'VACANT_GATE'
   | 'AUDIENCE_PLEDGE'
   | 'CULTIVATE'
   | 'BREAKTHROUGH'
@@ -611,6 +613,8 @@ export interface LLMDecisionPayload {
   farewellLandingMove?: FarewellLandingMove;
   targetFarewellDeceasedId?: string;
   wildMigrationMove?: WildMigrationMove;
+  vacantGateMove?: VacantGateMove;
+  targetVacantGateSiegeId?: string;
   targetWildMigrationId?: string;
   witnessInquiryMove?: 'inspect'|'ask';
   pavilionFireMove?: PavilionFireMove;
@@ -3681,6 +3685,7 @@ export interface WorldState {
   mercyReunions?: MercyReunionState;
   farewellLandings?: FarewellLandingState;
   wildMigrations?: WildMigrationState;
+  vacantGate?: VacantGateState;
   scribeCommissions?: ScribeCommissionState;
   waypostMeals?: WaypostMealState;
   disasterShelter?: DisasterShelterState;
