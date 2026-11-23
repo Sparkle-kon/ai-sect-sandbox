@@ -1,3 +1,5 @@
+import { GUQIN_PHRASES, renderGuqinNote } from './guqinSoundscape';
+
 export type SoundscapeCueKind='flight'|'clash'|'alchemy'|'thunder';
 
 export interface SoundscapeEngineOptions {
@@ -14,12 +16,12 @@ export interface SoundscapeEngine {
 }
 
 type Voice={source:AudioScheduledSourceNode;nodes:AudioNode[]};
-type Graph={audio:AudioContext;master:GainNode;music:GainNode;effects:GainNode;voices:Set<Voice>;noise?:AudioBuffer};
+type GuqinSample={buffer:AudioBuffer;duration:number};
+type Graph={audio:AudioContext;master:GainNode;music:GainNode;effects:GainNode;voices:Set<Voice>;
+  plucks:Map<number,GuqinSample>;noise?:AudioBuffer};
 
-const masterLevel=.13, musicLevel=.44, effectsLevel=.68, floor=.0001;
-const pitches=[261.626,293.665,329.628,391.995,440,523.251,587.330] as const;
-const melody=[0,3,2,4,3,5,4,2,1,3,0,4,2,6,4,3] as const;
-const pauses=[880,680,920,1280,760,1080,860,1450] as const;
+const masterLevel=.13, musicLevel=.54, effectsLevel=.64, floor=.0001;
+const musicSampleRate=24000;
 const quiet=(work:()=>void)=>{try{work();}catch{/* Already ended or the device disconnected. */}};
 const hz=(frequency:number)=>Math.max(20,Math.min(12000,frequency));
 const nonzero=(gain:number)=>Math.max(floor,Math.min(.6,gain));
@@ -92,21 +94,24 @@ function noise(graph:Graph,bus:GainNode,at:number,duration:number,frequency:numb
   start(graph,source,[filter,amp],at,at+duration);
 }
 
-function pluck(graph:Graph,at:number,f:number,level:number){
-  tone(graph,graph.music,'triangle',at,.76,f*1.004,level,.008,f);
-  tone(graph,graph.music,'sine',at,.40,f*2.006,level*.28,.006,f*2);
-  tone(graph,graph.music,'sine',at,.19,f*3.011,level*.16,.005,f*3);
-}
-
-function flute(graph:Graph,at:number,f:number){
-  tone(graph,graph.music,'sine',at,.69,f*.995,.075,.095,f*1.004,.22);
-  tone(graph,graph.music,'sine',at,.57,f*2,.017,.11,f*2.008,.16);
-  noise(graph,graph.music,at,.62,1640,1240,.035,'bandpass',.105);
-}
-
-function bell(graph:Graph,at:number){
-  for(const [ratio,decay,level] of [[1,.80,.24],[1.51,.61,.075],[2.08,.41,.055],[2.96,.27,.031]] as const)
-    tone(graph,graph.effects,'sine',at,decay,147*ratio,level,.012);
+function pluck(graph:Graph,at:number,midi:number,velocity:number){
+  if(graph.voices.size>=20)return;
+  const audio=graph.audio;
+  let sample=graph.plucks.get(midi);
+  if(!sample){
+    const rate=Math.min(audio.sampleRate,musicSampleRate);
+    const pcm=renderGuqinNote(midi,rate);
+    const buffer=audio.createBuffer(1,pcm.length,rate);
+    buffer.getChannelData(0).set(pcm);
+    sample={buffer,duration:pcm.length/rate};
+    graph.plucks.set(midi,sample);
+  }
+  const source=audio.createBufferSource(),amp=audio.createGain();
+  source.buffer=sample.buffer;
+  // The instrument already carries its own transient and decay. Do not gate its ring with a second envelope.
+  amp.gain.setValueAtTime(nonzero(velocity*.78),at);
+  source.connect(amp);amp.connect(graph.music);
+  start(graph,source,[amp],at,at+sample.duration);
 }
 
 function cue(graph:Graph,kind:SoundscapeCueKind,at:number,wave?:number){
@@ -146,7 +151,7 @@ export function createSoundscapeEngine(options:SoundscapeEngineOptions={}):Sound
   const make=options.createContext??findContext;
   const setTimer=options.setTimer??((callback,delay)=>globalThis.setTimeout(callback,delay));
   const clearTimer=options.clearTimer??(token=>globalThis.clearTimeout(token as ReturnType<typeof setTimeout>));
-  let audio:AudioContext|undefined,graph:Graph|undefined,active=false,disposed=false,announced=false,epoch=0,beat=0;
+  let audio:AudioContext|undefined,graph:Graph|undefined,active=false,disposed=false,epoch=0,beat=0;
   let pending:{token:unknown}|undefined;
   let lastEffect=-Infinity;
 
@@ -183,11 +188,10 @@ export function createSoundscapeEngine(options:SoundscapeEngineOptions={}):Sound
         pending=undefined;
         if(target.audio.state!=='running'){disable();return;}
         try{
-          const at=target.audio.currentTime+.035,index=beat++;
-          const f=pitches[melody[index%melody.length]];
-          pluck(target,at,index%8===0?f/2:f,index%4===0?.185:.138);
-          if(index%8===5)flute(target,at+.11,pitches[4]);
-          queue(target,turn,pauses[index%pauses.length]);
+          const at=target.audio.currentTime+.075,event=GUQIN_PHRASES[beat];
+          for(const note of event.notes)pluck(target,at+(note.offsetMs??0)/1000,note.midi,note.velocity);
+          beat=(beat+1)%GUQIN_PHRASES.length;
+          queue(target,turn,event.delayMs);
         }catch{disable();}
       },delay);
     }catch(error){if(pending===ticket)pending=undefined;throw error;}
@@ -213,15 +217,14 @@ export function createSoundscapeEngine(options:SoundscapeEngineOptions={}):Sound
         music.gain.setValueAtTime(musicLevel,at);
         effects.gain.setValueAtTime(effectsLevel,at);
         music.connect(master);effects.connect(master);master.connect(targetAudio.destination);
-        graph={audio:targetAudio,master,music,effects,voices:new Set()};
+        graph={audio:targetAudio,master,music,effects,voices:new Set(),plucks:new Map()};
       }
       const at=targetAudio.currentTime;
       graph.master.gain.cancelScheduledValues(at);
       graph.master.gain.setValueAtTime(0,at);
       graph.master.gain.linearRampToValueAtTime(masterLevel,at+.055);
       active=true;
-      if(!announced){bell(graph,at+.055);announced=true;}
-      queue(graph,turn,380);
+      queue(graph,turn,520);
       return true;
     }catch{
       if(turn===epoch){disable();}

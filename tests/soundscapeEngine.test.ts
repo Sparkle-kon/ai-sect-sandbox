@@ -1,9 +1,10 @@
 import {describe,expect,it,vi} from 'vitest';
+import { GUQIN_PHRASES } from '../src/engine/guqinSoundscape';
 import {createSoundscapeEngine} from '../src/engine/soundscapeEngine';
 
 function rig(mode:'ready'|'held'|'denied'='ready'){
   let endResume:()=>void=()=>{};
-  const timers=new Map<number,()=>void>(),exceptions:string[]=[];
+  const timers=new Map<number,{run:()=>void;delay:number}>(),exceptions:string[]=[];
   let next=0;
   const rate=8000;
   const parameter=()=>({
@@ -16,7 +17,7 @@ function rig(mode:'ready'|'held'|'denied'='ready'){
     ...node(),type:'sine' as OscillatorType,frequency:parameter(),start:vi.fn(),stop:vi.fn(),
     onended:null as null|(()=>void),
   });
-  const gains:ReturnType<typeof gain>[]=[],sources:ReturnType<typeof source>[]=[],noise:Float32Array[]=[];
+  const gains:ReturnType<typeof gain>[]=[],sources:ReturnType<typeof source>[]=[],buffers:Float32Array[]=[];
   const context={
     state:'suspended' as AudioContextState,currentTime:5,destination:node(),sampleRate:rate,
     resume:vi.fn(()=>{
@@ -31,15 +32,15 @@ function rig(mode:'ready'|'held'|'denied'='ready'){
     createBiquadFilter:vi.fn(()=>({...node(),type:'bandpass' as BiquadFilterType,Q:parameter(),frequency:parameter()})),
     createBufferSource:vi.fn(()=>{const entry={...source(),buffer:null as AudioBuffer|null};sources.push(entry);return entry;}),
     createBuffer:vi.fn((channels:number,samples:number,sampleRate:number)=>{
-      if(channels!==1||sampleRate!==rate||samples>rate)exceptions.push('oversized buffer');
-      const contents=new Float32Array(samples);noise.push(contents);
+      if(channels!==1||sampleRate!==rate||samples>rate*2.6)exceptions.push('oversized buffer');
+      const contents=new Float32Array(samples);buffers.push(contents);
       return {getChannelData:()=>contents};
     }),
   };
   const make=vi.fn(()=>context as unknown as AudioContext);
   const setTimer=vi.fn((fn:()=>void,delay:number)=>{
-    if(!Number.isFinite(delay)||delay<=0||delay>2000)exceptions.push('unbounded timer');
-    timers.set(++next,fn);
+    if(!Number.isFinite(delay)||delay<=0||delay>3000)exceptions.push('unbounded timer');
+    timers.set(++next,{run:fn,delay});
     return next;
   });
   const clearTimer=vi.fn((id:unknown)=>{if(typeof id==='number')timers.delete(id);});
@@ -47,9 +48,9 @@ function rig(mode:'ready'|'held'|'denied'='ready'){
   const beat=()=>{
     const queued=timers.entries().next().value;
     if(!queued)throw Error('missing beat');
-    const [id,run]=queued;
+    const [id,{run,delay}]=queued;
     timers.delete(id);
-    context.currentTime+=1;
+    context.currentTime+=delay/1000;
     run();
     // In a real context expired sources call onended naturally before later beats.
     for(const voice of sources){
@@ -58,11 +59,11 @@ function rig(mode:'ready'|'held'|'denied'='ready'){
     }
     return run;
   };
-  return {context,engine,gains,sources,timers,make,endResume:()=>endResume(),setTimer,clearTimer,beat,noise,exceptions};
+  return {context,engine,gains,sources,timers,make,endResume:()=>endResume(),setTimer,clearTimer,beat,buffers,exceptions};
 }
 
 describe('gesture-only procedural soundscape graph',()=>{
-  it('allocates lazily, caps gain/duration, schedules one guqin pulse and catches stale ticks after mute',async()=>{
+  it('allocates lazily, caps gain/duration, starts without a gong, schedules authored plucks on one timer, and catches stale ticks after mute',async()=>{
     const r=rig(),{engine,context,sources,gains}=r;
     expect(engine.play('thunder',2)).toBe(false);
     expect(r.make).not.toHaveBeenCalled();
@@ -70,21 +71,23 @@ describe('gesture-only procedural soundscape graph',()=>{
     const active=engine.enable();
     expect(r.make).toHaveBeenCalledOnce(); // Context construction precedes the first await in the real gesture.
     expect(await active).toBe(true);
-    expect(sources).toHaveLength(4);
+    expect(sources).toHaveLength(0);
     expect(r.timers.size).toBe(1);
     expect(gains[0].gain.linearRampToValueAtTime).toHaveBeenCalledWith(expect.any(Number),expect.any(Number));
     expect(gains[0].gain.linearRampToValueAtTime.mock.calls[0][0]).toBeLessThanOrEqual(.15);
     expect(gains[1].connect).toHaveBeenCalledWith(gains[0]);
     expect(gains[2].connect).toHaveBeenCalledWith(gains[0]);
     const stale=r.beat();
-    expect(sources).toHaveLength(7);
+    expect(sources).toHaveLength(GUQIN_PHRASES[0].notes.length);
+    expect(context.createOscillator).not.toHaveBeenCalled();
+    expect(context.createBuffer).toHaveBeenCalled();
     expect(r.timers.size).toBe(1);
     expect(engine.play('flight')).toBe(true);
     expect(context.createBiquadFilter).toHaveBeenCalledOnce();
     for(const voice of sources){
       const start=voice.start.mock.calls[0][0],stop=voice.stop.mock.calls[0][0];
       expect(stop).toBeGreaterThan(start);
-      expect(stop-start).toBeLessThan(1);
+      expect(stop-start).toBeLessThan(2.6);
     }
     engine.disable();
     expect(r.timers.size).toBe(0);
@@ -96,7 +99,7 @@ describe('gesture-only procedural soundscape graph',()=>{
     expect(engine.play('clash')).toBe(false);
     expect(await engine.enable()).toBe(true);
     expect(r.make).toHaveBeenCalledOnce();
-    expect(sources).toHaveLength(before); // The welcoming bell doesn't replay on unmute.
+    expect(sources).toHaveLength(before); // A gesture resumes timing without an intrusive onset.
     engine.dispose();
     engine.dispose();
     expect(context.close).toHaveBeenCalledOnce();
@@ -127,7 +130,10 @@ describe('gesture-only procedural soundscape graph',()=>{
     const render=async()=>{
       const r=rig();
       expect(await r.engine.enable()).toBe(true);
-      for(let i=0;i<6;i++)r.beat(); // Exercises both plucked harmonics and the intermittent breath motif.
+      for(let i=0;i<GUQIN_PHRASES.length;i++)r.beat();
+      const distinctPitches=new Set(GUQIN_PHRASES.flatMap(event=>event.notes.map(({midi})=>midi)));
+      expect(r.buffers).toHaveLength(distinctPitches.size);
+      expect(r.context.createOscillator).not.toHaveBeenCalled();
       for(const kind of ['flight','clash','alchemy','thunder'] as const){
         r.context.currentTime+=1;
         const n=r.sources.length;
@@ -135,13 +141,13 @@ describe('gesture-only procedural soundscape graph',()=>{
         expect(r.sources.length).toBeGreaterThan(n);
         for(const voice of r.sources)voice.onended?.();
       }
-      expect(r.noise).toHaveLength(1);
-      expect(r.noise[0].length).toBeLessThanOrEqual(r.context.sampleRate);
+      expect(r.buffers).toHaveLength(distinctPitches.size+1);
+      expect(r.buffers.at(-1)?.length).toBeLessThanOrEqual(r.context.sampleRate);
       const signature=r.sources.map(voice=>({frequency:voice.frequency.setValueAtTime.mock.calls,
         start:voice.start.mock.calls,stop:voice.stop.mock.calls}));
       r.engine.dispose();
       expect(r.exceptions).toEqual([]);
-      return {signature,samples:[...r.noise[0].slice(0,16)]};
+      return {signature,samples:r.buffers.map(buffer=>[...buffer.slice(0,16)])};
     };
     expect(await render()).toEqual(await render());
   });
