@@ -275,7 +275,7 @@ export function ChronicleLibraryPanel({ world, cultivator, scopeKey, scribeContr
       <ChronicleTopicDigest world={world} viewerId={cultivator?.id} scopeKey={scopeKey} />
       <ChronicleErrataPanel world={world} chapter={chapter} cultivator={cultivator} />
       <ScribeCommissionRead key={`${scopeKey??''}:${cultivator?.id??''}`} world={world} viewer={cultivator} controls={scribeControls}/>
-      <ColdChronicleShelf world={world} chapterTitle={(older) => {
+      <ColdChronicleShelf key={`${scopeKey??''}:${cultivator?.id??''}`} world={world} chapterTitle={(older) => {
         const safe = readable(older);
         return projectChronicleReading(safe, stampedChronicleLead(safe), true).title;
       }}
