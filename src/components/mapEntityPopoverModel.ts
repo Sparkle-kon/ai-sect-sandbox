@@ -17,7 +17,7 @@ export type MapEntityAction='treasure'|'lightning'|'whisper';
 export type MapEntityRead=
   | {kind:'actor';target:MapEntityTarget&{kind:'actor'};name:string;realm:string;hp:number;maxHp:number;actionLabel:string;portrait?:CultivatorPortraitSpec;monologue?:string;persona?:string}
   | {kind:'site';target:MapEntityTarget&{kind:'site'};name:string;spiritQi:number;residents:readonly string[];residentCount:number;
-     population?:number;spiritRoot?:LocationNode['spiritRoot'];details?:readonly MapEntitySiteDetail[];localDispute?:true;localFire?:true;eventTitles:readonly string[]};
+     population?:number;spiritRoot?:LocationNode['spiritRoot'];details?:readonly MapEntitySiteDetail[];localDispute?:true;localWitnessFollowup?:true;localFire?:true;eventTitles:readonly string[]};
 
 type View=ReturnType<typeof createTerrainMapView>;
 const cleaned=(text:string)=>text.replace(/[\p{Cc}\p{Cf}\p{Cs}\u2028\u2029]/gu,' ').replace(/\s+/gu,' ').trim();
@@ -93,13 +93,15 @@ export function projectMapEntityPopover(world:WorldState,view:View,target:MapEnt
   const permittedViewer=viewers.length===1&&viewer&&trueActor(viewer)?viewer:undefined;
   const local=permittedViewer&&residents.includes(permittedViewer)?villageEvolutionLocalSettlement(world,permittedViewer):undefined;
   const details=includeFacilities?projectMapEntitySiteDetails(world,view,site,residents,permittedViewer):[];
-  const localDispute=permittedViewer?.locationId===site.id&&residents.includes(permittedViewer)&&
-    Boolean(projectWitnessInquiry(world,permittedViewer));
+  const localInquiry=permittedViewer?.locationId===site.id&&residents.includes(permittedViewer)
+    ?projectWitnessInquiry(world,permittedViewer):undefined;
   const localFire=permittedViewer?.locationId===site.id&&residents.includes(permittedViewer)&&
     world.pavilionFires?.cases.some(row=>row.siteId===site.id&&row.heatTick===world.tick+1)&&
     availablePavilionFireActions(permittedViewer,world).some(row=>row.pavilionFireMove!=='secure');
   return {kind:'site',target:{kind:'site',id:site.id},name:cap(cleaned(site.name),80),spiritQi:site.spiritQi,spiritRoot:site.spiritRoot,
-    ...(details.length?{details}:{}),...(localDispute?{localDispute:true as const}:{}),...(localFire?{localFire:true as const}:{}),
+    ...(details.length?{details}:{}),...(localInquiry
+      ?localInquiry.claim.reviewSettled?{localWitnessFollowup:true as const}:{localDispute:true as const}
+      :{}),...(localFire?{localFire:true as const}:{}),
     residents:residents.slice(0,MAX_RESIDENT_LABELS).map(actor=>cap(cleaned(actor.name),60)),residentCount:residents.length,
     ...(local?.locationId===site.id?{population:local.population}:{}),eventTitles:localSceneTitles(world,site.id)};
 }

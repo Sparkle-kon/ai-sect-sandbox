@@ -29,6 +29,13 @@ describe('same-dispute independent clues',()=>{
     expect(renderToStaticMarkup(<WitnessInquiryCard view={{...base,witness:{...witness,canAsk:false},options:[]}} onChoose={onChoose}/>))
       .not.toMatch(/方檐|原场所见|<button/);
   });
+  it('shows a settled official review without turning the retained private question into a new public report',()=>{
+    const view:WitnessInquiryView={...base,claim:{...base.claim,reviewSettled:true},witness,options:[ask]};
+    const html=renderToStaticMarkup(<WitnessInquiryCard view={view} onChoose={onChoose}/>);
+    expect(html).toContain('已结案');
+    expect(html).toContain('上前问其亲眼所见');
+    expect(html).not.toMatch(/未经证实|上前细看告示/);
+  });
   it('keeps an actual reply explicitly separate from judgment, with no repeated ask',()=>{
     const view={...base,witness:{...witness,canAsk:false,reply:{text:'方檐只看见段氏占了上风。'}},options:[]};
     const html=renderToStaticMarkup(<WitnessInquiryCard view={view} onChoose={onChoose}/>);

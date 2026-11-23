@@ -24,7 +24,7 @@ export function WitnessInquiryCard({view,busy=false,onChoose}:{
       <h3 id={heading} className="font-serif text-lg font-semibold text-amber-50">一纸指证，两处落眼</h3>
     </header>
     <section aria-label="公开指证" className="space-y-1 border-l border-amber-400/35 pl-2 text-sm leading-relaxed">
-      <h4 className="font-semibold text-amber-100">一纸指证 <span className="font-normal text-slate-300">· 未经证实</span></h4>
+      <h4 className="font-semibold text-amber-100">一纸指证 <span className="font-normal text-slate-300">· {view.claim.reviewSettled?'已结案':'未经证实'}</span></h4>
       <p className="font-serif text-slate-200">{view.claim.text}</p>
       {inspect&&renderButton(inspect,'上前细看告示')}
     </section>

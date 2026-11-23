@@ -8,7 +8,7 @@ export type WitnessInquiryOption={action:'WITNESS_INQUIRY';targetWitnessClaimId:
   {witnessInquiryMove:'inspect';targetCultivatorId?:never}|{witnessInquiryMove:'ask';targetCultivatorId:string});
 export interface WitnessInquiryView {
   venueName:string;
-  claim:{text:string};
+  claim:{text:string;reviewSettled?:true};
   witness?:{name:string;canAsk:boolean;reply?:{text:string}};
   options:readonly WitnessInquiryOption[];
 }
@@ -35,7 +35,7 @@ export const isPrivateWitnessInquiryEvent=(event:Pick<WorldEvent,'id'|'witnessSc
   event.witnessScope==='participants'&&event.id.startsWith(NS);
 
 function authority(world:WorldState,claim:WitnessClaim,tick:number){
-  if(claim.filedTick>=tick||claim.settledTick!==undefined||tick>=claim.deadlineTick)return;
+  if(claim.filedTick>=tick||tick>=claim.deadlineTick)return;
   const site=one(world.locations,row=>row.id===claim.locationId);
   if(!site||site.type==='secret_realm'||site.type==='abyss'||isScopedExpeditionGate(site))return;
   const posted=one(world.events,row=>row.id===claim.publicationEventId);
@@ -76,14 +76,35 @@ function receipt(world:WorldState,claim:WitnessClaim,actor:Cultivator,move:'insp
   }
   return result.length===1?result[0]:undefined;
 }
+const verdictTitle={
+  corroborated:'独立证词印证指证',
+  retracted:'争议指证撤回',
+  disputed:'证据不足，指证存疑',
+} as const;
+
+function recentlySettledForPrivateQuestion(world:WorldState,claim:WitnessClaim,tick:number):boolean{
+  const style=world.storyteller?.style,settled=claim.settledTick;
+  if((style!=='wandering_jianghu'&&style!=='great_calamity')||settled===undefined||
+     settled<=claim.filedTick||settled>=tick||tick-settled!==1||tick>=claim.deadlineTick||
+     claim.status==='pending'||!claim.reason)return false;
+  const verdict=one(world.events,row=>row.id===`evt-${settled}-${claim.id}-settled`);
+  return !!verdict&&date(world,verdict,settled)&&verdict.witnessScope===undefined&&
+    verdict.category==='diplomacy'&&verdict.locationId===claim.locationId&&ids(verdict.actorIds,[claim.subjectId])&&
+    verdict.title===verdictTitle[claim.status]&&verdict.description===claim.reason;
+}
+
 function cases(world:WorldState,actor:Cultivator,tick:number){
   if((tick!==world.tick&&tick!==world.tick+1)||!world.witnesses.claims.some(row=>row.locationId===actor.locationId)||
     !local(world,actor,actor.locationId,tick))return [];
   return world.witnesses.claims.flatMap(claim=>{
     if(claim.locationId!==actor.locationId||one(world.witnesses.claims,row=>row.id===claim.id)!==claim)return [];
+    const closed=claim.settledTick!==undefined;
+    if(closed&&!recentlySettledForPrivateQuestion(world,claim,tick))return [];
     const direct=authority(world,claim,tick);
     if(!direct)return [];
     const read=receipt(world,claim,actor,'inspect',world.tick);
+    // The former reader may finish that private question, never initiate a new inquiry into an ended review.
+    if(closed&&(!read||read.tick>claim.settledTick!||tick-read.tick>2))return [];
     const other=read?direct.witnessIds.flatMap(id=>{
       if(id===actor.id)return [];
       const witness=body(world,id);
@@ -118,12 +139,17 @@ export function resolveWitnessInquiry(world:WorldState,actor:Cultivator,decision
 }
 
 export function projectWitnessInquiry(world:WorldState,viewer:Cultivator):WitnessInquiryView|undefined{
-  const current=cases(world,viewer,world.tick+1)[0];
+  const recentReply=cases(world,viewer,world.tick).find(row=>row.claim.settledTick!==undefined&&
+    row.other.some(({reply})=>reply?.tick===world.tick));
+  const current=recentReply??cases(world,viewer,world.tick+1)[0];
   if(!current)return;
   const {direct,other,options}=current;
-  const candidate=other.find(row=>row.reply)??other[0];
-  return {venueName:label(direct.site.name),claim:{text:`${label(direct.claimant.name)}在此张榜，称${label(direct.subject.name)}在所引斗法中落败。这里只照录公示。`},
-    options:options.filter(row=>row.witnessInquiryMove==='inspect'||row.targetCultivatorId===candidate?.witness.id),
+  const candidate=(recentReply?other.find(({reply})=>reply?.tick===world.tick):undefined)??
+    other.find(row=>row.reply)??other[0];
+  return {venueName:label(direct.site.name),claim:{text:`${label(direct.claimant.name)}在此张榜，称${label(direct.subject.name)}在所引斗法中落败。${current.claim.settledTick===undefined?
+    '这里只照录公示。':'公议已经有了结论，这里只说当时的见闻。'}`,
+    ...(current.claim.settledTick!==undefined?{reviewSettled:true as const}:{})},
+    options:(recentReply?[]:options).filter(row=>row.witnessInquiryMove==='inspect'||row.targetCultivatorId===candidate?.witness.id),
     ...(candidate?{witness:{name:label(candidate.witness.name),canAsk:!candidate.reply&&options.some(row=>row.targetCultivatorId===candidate.witness.id),
       ...(candidate.reply?{reply:{text:`“我只看见${label(direct.winner.name)}在那场交锋中占了上风。旁的事，我不能作证。”`}}:{})}}:{})};
 }
