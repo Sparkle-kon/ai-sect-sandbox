@@ -1,7 +1,7 @@
 import {LABELS,GREETINGS,COMIC_NEUTRAL,WITNESS_VOICES,RUMOR_VOICES,GRAVE_VOICES,type Greeting} from '../data/sectChatVoices';
 import {SECT_COMEDY_TEMPLATES} from '../data/sectComedy';
 import {SECT_RECURRING_VOICES} from '../data/sectComedy/recurring';
-import {SECT_CHAT_MONTH_LIMIT,SECT_CHAT_POST_LIMIT,SECT_CHAT_ROOMS,SECT_CHAT_VARIANTS,sectChatPostId,
+import {SECT_CHAT_MONTH_LIMIT,SECT_CHAT_POST_LIMIT,SECT_CHAT_ROOMS,SECT_CHAT_VARIANTS,isSectChatModelText,sameSectChatReplyContext,sectChatPostId,
   type SectChatPost,type SectChatRoomId,type SectChatSource,type SectChatVariant} from '../types/sectChat';
 import {starterSectIdentity} from '../types/sectManagement';
 import {sectRecurringEventId,sectRecurringIdentity,type SectRecurringRole} from '../types/sectRecurring';
@@ -74,7 +74,12 @@ const managedContext=(world:WorldState)=>{
   return {managed,actors,leader,sect};
 };
 
-type Draft=Omit<SectChatPost,'id'|'tick'|'source'|'variant'>;
+type Draft=Omit<Extract<SectChatPost,{source:'template'}>,'id'|'tick'|'source'|'variant'>;
+const BASE_POST_LIMIT=8;
+const MAJOR_POST_LIMIT=4;
+const publicRoom=(room:SectChatRoomId)=>room==='jiuzhou'||room==='market';
+const major=(event:WorldEvent,tick:number)=>event.tick===tick&&
+  (event.category==='breakthrough'||event.category==='combat'||event.category==='heavenly'||event.category==='death');
 const audience=(senderId:string,leaderId:string):Draft['audience']=>[senderId,leaderId];
 function publicDraft(candidate:PublicCandidate,roomId:Exclude<SectChatRoomId,'leaders'>,leaderId:string):Draft{
   const {event,actor,knowledge}=candidate;
@@ -135,7 +140,7 @@ export function settleSectChatMonth(world:WorldState,prevWorld:WorldState,comple
   const drafts:Draft[]=[];
   const used=new Set<string>();
   const pick=(room:Exclude<SectChatRoomId,'leaders'>,predicate:(candidate:PublicCandidate)=>boolean)=>{
-    const match=candidates.find(candidate=>!used.has(candidate.event.id)&&predicate(candidate));
+    const match=candidates.find(candidate=>!used.has(candidate.event.id)&&!major(candidate.event,world.tick)&&predicate(candidate));
     if(!match)return;
     used.add(match.event.id);
     drafts.push(publicDraft(match,room,leader.id));
@@ -167,8 +172,45 @@ export function settleSectChatMonth(world:WorldState,prevWorld:WorldState,comple
   greet('jiuzhou',alive.filter(actor=>actor.id!==leader.id));
   greet('market',alive.filter(actor=>isMarket(world,actor.locationId)));
   pick('jiuzhou',row=>row.knowledge==='rumor');
-  if(!drafts.length)return;
-  const posts=drafts.slice(0,SECT_CHAT_POST_LIMIT).map((row,index):SectChatPost=>{
+  // Preserve the established first voices. If the quieter rooms used fewer than three
+  // public seats, choose another evidenced source first, then neutral distinct speakers.
+  const publicCount=()=>drafts.filter(post=>publicRoom(post.roomId)).length;
+  while(publicCount()<3){
+    const length=drafts.length;
+    pick('jiuzhou',()=>true);
+    if(drafts.length===length)break;
+  }
+  const greetingActors=new Set(drafts.filter(post=>post.about.kind==='room_greeting').map(post=>post.senderId));
+  for(const actor of [...alive.slice(world.tick%alive.length),...alive.slice(0,world.tick%alive.length)]){
+    if(publicCount()>=3)break;
+    if(actor.id===leader.id||greetingActors.has(actor.id))continue;
+    greetingActors.add(actor.id);
+    drafts.push({roomId:'jiuzhou',senderId:actor.id,about:{kind:'room_greeting',kindOfGreeting:'jiuzhou'}});
+  }
+  const basePublic=drafts.filter(post=>publicRoom(post.roomId)).length;
+  let privateSeats=Math.max(0,BASE_POST_LIMIT-Math.min(3,basePublic));
+  const base=drafts.filter(post=>{
+    if(publicRoom(post.roomId))return true;
+    if(privateSeats<=0)return false;
+    privateSeats--;
+    return true;
+  }).slice(0,BASE_POST_LIMIT);
+  // A major event is a deterministic extra thread. Prefer broad coverage before
+  // another participant's take, and only reuse an event for a different proven speaker.
+  const extra:Draft[]=[],seenMajor=new Set<string>();
+  const majorCandidates=candidates.filter(row=>major(row.event,world.tick));
+  for(const firstOfEvent of [true,false]){
+    for(const row of majorCandidates){
+      if(extra.length>=MAJOR_POST_LIMIT)break;
+      const {id}=row.event;
+      if(firstOfEvent?seenMajor.has(id):extra.some(post=>post.senderId===row.actor.id&&
+          post.about.kind==='public_event'&&post.about.eventId===id))continue;
+      seenMajor.add(id);
+      extra.push(publicDraft(row,'jiuzhou',leader.id));
+    }
+  }
+  if(!base.length&&!extra.length)return;
+  const posts=[...base,...extra].slice(0,SECT_CHAT_POST_LIMIT).map((row,index):SectChatPost=>{
     const id=sectChatPostId(managed.sectId,world.tick,index);
     return {...row,id,tick:world.tick,source:'template',variant:variant(world,id)};
   });
@@ -184,6 +226,8 @@ export interface SectChatMessageView {
   readonly text:string;
   readonly about:SectChatSource['kind'];
   readonly sourceEventId?:string;
+  readonly source?:'template'|'llm';
+  readonly replyTo?:string;
 }
 export interface SectChatRoomView {
   readonly id:SectChatRoomId;
@@ -202,7 +246,7 @@ export function projectSectChat(world:WorldState):readonly SectChatRoomView[]{
     if(month.tick>world.tick)continue;
     for(const post of month.posts){
       const actor=actors.get(post.senderId);
-      if(!actor||post.tick!==month.tick||post.source!=='template'||!SECT_CHAT_VARIANTS.includes(post.variant))continue;
+      if(!actor||post.tick!==month.tick||!SECT_CHAT_VARIANTS.includes(post.variant))continue;
       const {roomId,about}=post,scoped=roomId==='own'||roomId==='leaders';
       if(scoped?(actor.id===leader.id||post.audience?.length!==2||post.audience[0]!==actor.id||post.audience[1]!==leader.id):
         post.audience!==undefined)continue;
@@ -253,8 +297,14 @@ export function projectSectChat(world:WorldState):readonly SectChatRoomView[]{
         }
       }
       if(!text)continue;
-      const row={id:post.id,tick:post.tick,senderId:actor.id,name:actor.name,text,about:about.kind,...(sourceEventId?{sourceEventId}:{})};
       const existing=output.get(roomId);
+      const model=post.source==='llm'&&!scoped&&isSectChatModelText(post.text)&&
+        (about.kind==='room_greeting'&&living(actor)||about.kind==='public_event'&&sourceEventId!==undefined);
+      const target=model&&post.replyTo?month.posts.find(row=>row.id===post.replyTo):undefined;
+      const replyTo=target&&sameSectChatReplyContext(post,target)&&existing?.some(row=>row.id===target.id&&
+        row.tick===post.tick&&(about.kind==='room_greeting'||row.sourceEventId===sourceEventId))?target.id:undefined;
+      const row:SectChatMessageView={id:post.id,tick:post.tick,senderId:actor.id,name:actor.name,
+        text:model?post.text:text,about:about.kind,source:model?'llm':'template',...(sourceEventId?{sourceEventId}:{}),...(replyTo?{replyTo}:{})};
       if(existing)existing.push(row);
       else output.set(roomId,[row]);
     }

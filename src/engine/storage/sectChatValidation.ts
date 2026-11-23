@@ -1,6 +1,6 @@
 import { findSectComedyTemplate } from '../../data/sectComedy';
 import { SECT_CHAT_MONTH_LIMIT, SECT_CHAT_POST_LIMIT, SECT_CHAT_ROOMS, SECT_CHAT_VARIANTS,
-  sectChatPostId, type SectChatPost, type SectChatState } from '../../types/sectChat';
+  isSectChatModelText, sameSectChatReplyContext, sectChatPostId, type SectChatPost, type SectChatState } from '../../types/sectChat';
 import { starterSectIdentity, type SectManagementState } from '../../types/sectManagement';
 import { SECT_RECURRING_OUTCOMES, sectRecurringEventId, sectRecurringIdentity } from '../../types/sectRecurring';
 import type { ChronicleAnchor, Cultivator, WorldState } from '../../types/world';
@@ -17,10 +17,17 @@ const source:Validator=(value,path)=>{
     return rejectShape(path);
   return shapes[value.kind as keyof typeof shapes](value,path);
 };
-const post=structure({
-  id,roomId:one(...SECT_CHAT_ROOMS),senderId:id,tick,source:one('template'),about:source,
+const postBase={
+  id,roomId:one(...SECT_CHAT_ROOMS),senderId:id,tick,about:source,
   variant:one(...SECT_CHAT_VARIANTS),audience:optional(arr(2,id)),
-});
+};
+const templatePost=structure({...postBase,source:one('template')});
+const modelText:Validator=(value,path)=>{if(!isSectChatModelText(value))rejectShape(path);};
+const modelPost=structure({...postBase,source:one('llm'),text:modelText,replyTo:optional(id)});
+const post:Validator=(value,path)=>{
+  if(!value||typeof value!=='object'||!('source' in value))return rejectShape(path);
+  return (value.source==='llm'?modelPost:templatePost)(value,path);
+};
 export const sectChatShape=structure({months:arr(SECT_CHAT_MONTH_LIMIT,structure({tick,posts:arr(SECT_CHAT_POST_LIMIT,post)}))});
 const validRecurringOutcomes={
   wang:['debt_notice','market_remark'],rival:['comparison'],ancestor:['ancestor_remark'],host:['host_cue','public_news'],
@@ -43,7 +50,10 @@ function archivedSources(world:WorldState,id:string,at:number):ChronicleAnchor[]
       .flatMap(chapter=>chapter.anchors.filter(anchor=>anchor.id===id))];
 }
 
-function supportsPublic(world:WorldState,entry:SectChatPost,actor:Cultivator,management:SectManagementState,known:ReadonlySet<string>):boolean {
+const isMajorChatEvent=(category:ChronicleAnchor['category'])=>
+  category==='breakthrough'||category==='combat'||category==='death'||category==='heavenly';
+function supportsPublic(world:WorldState,entry:SectChatPost,actor:Cultivator,management:SectManagementState,
+  known:ReadonlySet<string>,repeat:boolean):boolean {
   const about=entry.about;
   if(about.kind!=='public_event'||entry.roomId==='leaders')return false;
   const {eventId,eventTick,knowledge}=about;
@@ -56,12 +66,15 @@ function supportsPublic(world:WorldState,entry:SectChatPost,actor:Cultivator,man
   const retained=[...live,...history];
   if(live.length>1||retained.some(event=>event.tick!==eventTick||!isChronicleStoryFact(event,entry.tick))||
       live.length===0&&history.length===0&&withinHotTail(world,eventTick))return false;
+  if(repeat&&(entry.roomId!=='jiuzhou'||retained.some(event=>!isMajorChatEvent(event.category))))return false;
   if(retained.some(event=>event.category!==retained[0].category||event.locationId!==retained[0].locationId)||
       retained.length&&entry.roomId==='market'&&!world.locations.some(site=>
         site.id===retained[0].locationId&&site.type==='market'&&site.expeditionOmenId===undefined))return false;
   const packet=eligibleDatedRumor(actor,eventId,eventTick,entry.tick,knowledge,live[0]?.title,known);
-  if(knowledge==='witness')return !retained.length||retained.every(event=>event.actorIds.includes(actor.id))||packet;
-  return packet||entry.tick<world.tick;
+  if(packet||knowledge==='witness'&&retained.length>0&&retained.every(event=>event.actorIds.includes(actor.id)))return true;
+  // Native witness and relay packets share the bounded rumor mailbox. A later turn can evict
+  // either; keep the old transcript as history without giving it authority to navigate or cite a title.
+  return entry.tick<world.tick;
 }
 
 export function validateSectChat(world:WorldState,management:SectManagementState,chat:SectChatState,fail:(field:string)=>never):void {
@@ -76,7 +89,7 @@ export function validateSectChat(world:WorldState,management:SectManagementState
         newest.tick-month.tick>=SECT_CHAT_MONTH_LIMIT||!month.posts.length)return fail('sectManagement.chat.clock');
     last=month.tick;
     let ordinal=-1;
-    const sources=new Set<string>();
+    const sources=new Set<string>(),publicSources=new Set<string>(),previousPosts=new Map<string,SectChatPost>();
     for(const entry of month.posts){
       const sender=people.get(entry.senderId);
       const index=Array.from({length:SECT_CHAT_POST_LIMIT},(_,i)=>i)
@@ -89,9 +102,18 @@ export function validateSectChat(world:WorldState,management:SectManagementState
           entry.senderId===management.leaderId:
           entry.audience!==undefined)return fail('sectManagement.chat.audience');
 
+      if(entry.source==='llm'){
+        if(privateRoom)return fail('sectManagement.chat.audience');
+        if(entry.replyTo!==undefined){
+          const target=previousPosts.get(entry.replyTo);
+          if(!target||!sameSectChatReplyContext(entry,target))return fail('sectManagement.chat.replyTo');
+        }
+      }
+      previousPosts.set(entry.id,entry);
       const about=entry.about;
-      const sourceKey=JSON.stringify([about.kind,about.kind==='public_event'?about.eventId:
-        about.kind==='recurring'?about.role:about.kind==='room_greeting'?about.kindOfGreeting:null]);
+      const sourceKey=JSON.stringify([about.kind,about.kind==='public_event'?[about.eventId,entry.senderId]:
+        about.kind==='recurring'?about.role:about.kind==='room_greeting'?[about.kindOfGreeting,
+          privateRoom?null:entry.senderId]:null]);
       if(sources.has(sourceKey))return fail('sectManagement.chat.source');
       sources.add(sourceKey);
       if(about.kind==='room_greeting'){
@@ -99,7 +121,9 @@ export function validateSectChat(world:WorldState,management:SectManagementState
             entry.roomId==='own'&&!management.foundingDiscipleIds.includes(entry.senderId))
           return fail('sectManagement.chat.source');
       }else if(about.kind==='public_event'){
-        if(!supportsPublic(world,entry,sender,management,known))return fail('sectManagement.chat.source');
+        if(!supportsPublic(world,entry,sender,management,known,publicSources.has(about.eventId)))
+          return fail('sectManagement.chat.source');
+        publicSources.add(about.eventId);
       }else if(about.kind==='comic'){
         const markerId=`evt-${entry.tick}-${management.sectId}-comic`;
         const marker=world.events.filter(event=>event.id===markerId);

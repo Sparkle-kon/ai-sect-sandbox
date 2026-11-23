@@ -90,12 +90,14 @@ export function useWorldSimulationController({
   const fastForwardRun = useRef<ActiveFastForward>();
   const campaignGuard = useRef(false);
   const modelStepAbort = useRef<AbortController>();
+  const sectChatAbort = useRef<AbortController>();
   const fairTurns = useRef(new Map<string, { state: FairModelTurnState; coverage: FairModelCoverage }>());
   const [fastForwardView, setFastForwardView] = useState<FastForwardViewState>({ phase: 'idle' });
   useEffect(() => () => {
     fastForwardRun.current?.worker?.terminate();
     fastForwardRun.current = undefined;
     modelStepAbort.current?.abort();
+    sectChatAbort.current?.abort();
   }, []);
   const [saveTimelineId, setSaveTimelineId] = useState(saveTimelineIdentity);
   const [restoredReadingOrigin, setRestoredReadingOrigin] = useState<{ world:WorldState; timelineId:string; branchId:string; restoredBranchId:string }>();
@@ -127,6 +129,7 @@ export function useWorldSimulationController({
     const next = change(current);
     if (next !== current) {
       modelStepAbort.current?.abort();
+      sectChatAbort.current?.abort();
       authority.current = next;
       if (record) updateTimeline(recordTimelineWorld(history.current, next));
       setWorld(next);
@@ -138,6 +141,7 @@ export function useWorldSimulationController({
   const stepInFlight = useRef(false);
   const tryBeginInteraction = useCallback(() => {
     if(stepInFlight.current||browsing.current)return false;
+    sectChatAbort.current?.abort();
     stepInFlight.current=true;
     setIsStepping(true);
     return true;
@@ -155,8 +159,29 @@ export function useWorldSimulationController({
   });
   const changeLlmConfig = (config: LLMConfig) => {
     modelStepAbort.current?.abort();
+    sectChatAbort.current?.abort();
     setLlmConfig(config);
   };
+
+  // Dialogue fills an already settled month. It never blocks reports or a user's next action.
+  const narrateSectChat = useCallback((frame:WorldState,config:LLMConfig,branchId:string,revision:number) => {
+    if(!config.sectChatEnabled||!config.apiKey.trim()||frame.sectManagement?.chat?.months.at(-1)?.tick!==frame.tick)return;
+    const controller=new AbortController();
+    sectChatAbort.current?.abort();
+    sectChatAbort.current=controller;
+    const current=()=>sectChatAbort.current===controller&&!controller.signal.aborted&&authority.current===frame&&
+      history.current.activeBranchId===branchId&&saveContextVersion.current===revision&&!browsing.current;
+    void import('../engine/sectChatModelProvider').then(async ({enrichSectChatMonth})=>{
+      if(!current())return;
+      const next=await enrichSectChatMonth(frame,config,controller.signal);
+      if(!current()||next===frame||stepInFlight.current||fastForwardRun.current||campaignGuard.current)return;
+      sectChatAbort.current=undefined;
+      if(updateWorld(live=>live===frame?next:live)===next){
+        setLastSectMeeting(meeting=>meeting?.world===frame?{...meeting,world:next}:meeting);
+      }
+    }).catch(()=>{ /* The authored fallback is already visible and remains on this branch. */ })
+      .finally(()=>{if(sectChatAbort.current===controller)sectChatAbort.current=undefined;});
+  },[updateWorld]);
 
   const runStepTick = useCallback(async (guide?:GuidedWorldTurn, meeting?:SectMeetingRequest):Promise<boolean> => {
     if ((guide&&meeting)||fastForwardRun.current || campaignGuard.current || !tryBeginInteraction()) return false;
@@ -186,7 +211,13 @@ export function useWorldSimulationController({
         const endpoint = llmDecisionEndpoint(llmConfig);
         llmScheduler.beginTick(requestedTick);
         const fairness = fairTurns.current.get(branchId)?.state ?? createFairModelTurnState();
-        const admission = () => llmScheduler.decisionAdmission(requestedTick, endpoint);
+        const available=()=>llmScheduler.decisionAdmission(requestedTick,endpoint);
+        const reserveForChat=llmConfig.sectChatEnabled&&starting.sectManagement&&!starting.sectManagement.growth?.failure?
+          Math.min(4,Math.floor(available().slots/3)):0;
+        const admission=()=>{
+          const now=available();
+          return reserveForChat?{...now,slots:Math.max(0,now.slots-reserveForChat)}:now;
+        };
         const turn = await runModelDecisionTurn({
           state: fairness, eligible: modelDecisionCandidates(starting).filter(actor=>actor.id!==directed?.actorId&&!directedDisciples.has(actor.id)), signal: controller.signal,
           admission: admission(), currentAdmission: admission,
@@ -247,6 +278,7 @@ export function useWorldSimulationController({
           llmScheduler.markDecision('local_fallback', utility);
           llmScheduler.markDecision('applied', applied.size);
           llmScheduler.markDecision('simulation_rejected', modelActors.size - applied.size);
+          narrateSectChat(next,llmConfig,branchId,revision);
           return true;
         } else {
           llmScheduler.markDecision('stale', modelActors.size);
@@ -259,13 +291,14 @@ export function useWorldSimulationController({
         if(next===starting||next.tick!==starting.tick+1)return false;
         retainReplay(branchId,tape,next,sectJobAssignments);
         if(sectJobAssignments)setLastSectMeeting({world:next,rows:sectJobRows});
+        narrateSectChat(next,llmConfig,branchId,revision);
         return true;
       }
     } finally {
       if (modelStepAbort.current === modelAbort) modelStepAbort.current = undefined;
       endInteraction();
     }
-  }, [llmConfig, updateWorld, retainReplay, tryBeginInteraction, endInteraction]);
+  }, [llmConfig, updateWorld, retainReplay, tryBeginInteraction, endInteraction, narrateSectChat]);
 
   const handleStepTick=useCallback(async(guide?:GuidedWorldTurn):Promise<void>=>{await runStepTick(guide);},[runStepTick]);
   const confirmSectMeeting=useCallback((world:WorldState,branchId:string,revision:number,
@@ -295,6 +328,7 @@ export function useWorldSimulationController({
   const activateTimeline = (next: WorldTimeline, incoming: WorldState) => {
     if (fastForwardRun.current) stopFastForward('原分支已改变，暂存快进已丢弃。');
     modelStepAbort.current?.abort();
+    sectChatAbort.current?.abort();
     setLastSectMeeting(undefined);
     saveContextVersion.current += 1;
     setIsRunning(false);
@@ -408,6 +442,7 @@ export function useWorldSimulationController({
     if (!snapshot) { setTimelineNotice('此快照不在当前分支保留的范围内。'); return; }
     setIsRunning(false);
     onHistoricalPreview();
+    sectChatAbort.current?.abort();
     saveContextVersion.current += 1;
     onPreviewContextChange();
     browsing.current = true;

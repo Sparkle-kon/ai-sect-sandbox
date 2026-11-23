@@ -21,7 +21,7 @@ export function telemetryHeadline(snapshot: LLMSchedulerSnapshot, configured: bo
 }
 
 const REQUEST_TYPES = {
-  decision: 'NPC 决策', reflection: '反思', dialogue: '对白', council: '议事', chronicle: '史书', avatar: '临身对话',
+  decision: 'NPC 决策', reflection: '反思', dialogue: '对白', council: '议事', chronicle: '史书', avatar: '临身对话', sect_chat: '仙门群聊',
 } as const;
 
 const OUTCOMES = {

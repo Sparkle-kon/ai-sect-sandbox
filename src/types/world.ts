@@ -618,6 +618,7 @@ export interface CausalChronicleState {
 
 export interface LLMConfig {
   enabled: boolean;
+  sectChatEnabled?: boolean;
   apiBaseUrl: string;
   apiKey: string;
   model: string;

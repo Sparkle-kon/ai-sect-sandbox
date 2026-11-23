@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
-import {act} from 'react';
+import {act,useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {SectManagementHome} from '../src/components/SectManagementHome';
 import {createManagedSectWorld} from '../src/engine/starterSectWorld';
-import type {WorldState} from '../src/types/world';
+import type {SectChatRoomView} from '../src/engine/sectChat';
+import type {LLMConfig,WorldState} from '../src/types/world';
 
-const preview=vi.hoisted(()=>vi.fn());
+const preview=vi.hoisted(()=>vi.fn<(frame:WorldState)=>readonly SectChatRoomView[]>());
 vi.mock('../src/engine/sectChat',()=>({projectSectChat:preview}));
 const openSource=vi.fn<(world:WorldState,postId:string)=>boolean>();
 
@@ -20,7 +21,7 @@ function fixture(){
     const line={tick:frame.tick,senderId:speaker.id,name:speaker.name};
     return [
       {id:'own',label:'本宗内部群',posts:[{...line,id:'own-first',text:'灶火已熄，谁还在找锅？',about:'comic'},
-        ...(frame.tick>world.tick?[{...line,id:'own-second',text:'锅找着了。',about:'comic'}]:[])]},
+        ...(frame.tick>world.tick?[{...line,id:'own-second',text:'锅找着了。',about:'comic' as const}]:[])]},
       {id:'jiuzhou',label:'九州修仙交流群',posts:[{...line,id:'jiuzhou-first',text:'且问这一剑是从何处学的？',about:'public_event',sourceEventId:'real-anchor'}]},
       {id:'market',label:'坊市二手群',posts:[{...line,id:'market-first',text:'旧蒲团一个，坐过三年。',about:'room_greeting'}]},
       {id:'leaders',label:'掌门私聊',posts:[]},
@@ -143,5 +144,70 @@ it('opens the same chat panel by default at wide desktop width',async()=>{
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
     expect(panel.querySelectorAll('[data-sect-chat-message]')).toHaveLength(1);
     expect(host.querySelectorAll('[data-sect-chat]')).toHaveLength(1);
+  }finally{await cleanup();}
+});
+
+
+it('keeps chat model opt-in collapsed and independent from world decisions and local read storage',async()=>{
+  const world=fixture();
+  const config:LLMConfig={enabled:false,apiBaseUrl:'https://example.invalid/v1',apiKey:'never-store-this',model:'test-model'};
+  const onConfig=vi.fn<(next:LLMConfig)=>void>();
+  const host=document.createElement('div');
+  document.body.append(host);
+  const root=createRoot(host);
+  function Harness(){
+    const [current,setCurrent]=useState(config);
+    return <SectManagementHome world={world} onStart={vi.fn()} onOpen={vi.fn()} chatScope="chat-model-test"
+      chatModel={{config:current,onChange:next=>{onConfig(next);setCurrent(next);}}}/>;
+  }
+  try{
+    await act(async()=>root.render(<Harness/>));
+    const panel=chat(host);
+    expect(panel.querySelector('input')).toBeNull();
+    await click(getButton(panel,'仙门群聊'));
+    const settings=getButton(panel,'群聊设置');
+    expect(settings.getAttribute('aria-expanded')).toBe('false');
+    expect(settings.textContent).toContain('离线对白');
+    expect(panel.querySelector('input')).toBeNull();
+    await click(settings);
+    const toggle=panel.querySelector<HTMLInputElement>('input[type="checkbox"]');
+    if(!toggle)throw Error('Expected explicit chat switch');
+    expect(toggle.checked).toBe(false);
+    expect(toggle.labels?.[0].textContent).toContain('让大模型代写群聊');
+    expect(panel.querySelector('input[type="password"]')).not.toBeNull();
+    expect(panel.textContent).toContain('本宗群和掌门私聊留在游戏里');
+    expect(panel.textContent).toContain('可能产生 API 费用');
+    expect(onConfig).not.toHaveBeenCalled();
+    await act(async()=>toggle.click());
+    expect(onConfig).toHaveBeenLastCalledWith({...config,sectChatEnabled:true});
+    expect(settings.textContent).toContain('大模型已开启');
+    expect(JSON.stringify(sessionStorage)).not.toMatch(/never-store-this|example.invalid|test-model/);
+    await act(async()=>toggle.click());
+    expect(onConfig).toHaveBeenLastCalledWith({...config,sectChatEnabled:false});
+    expect(settings.textContent).toContain('离线对白');
+  }finally{await act(async()=>root.unmount());host.remove();}
+});
+
+
+it('shows a reply attribution only to an earlier visible message in the same room',async()=>{
+  const world=fixture(),{host,render,cleanup}=mount();
+  const old=preview.getMockImplementation();
+  if(!old)throw Error('Expected read fixture');
+  preview.mockImplementation((frame:WorldState)=>old(frame).map((room):SectChatRoomView=>{
+    if(room.id!=='jiuzhou')return room;
+    const original=room.posts[0];
+    return {...room,posts:[original,
+      {...original,id:'reply-visible',text:'那位前辈并未报姓名。',source:'llm',replyTo:original.id},
+      {...original,id:'reply-hidden',text:'只见一道剑光。',source:'llm',replyTo:'own-first'}]};
+  }));
+  try{
+    await render(world);
+    const panel=chat(host);
+    await click(getButton(panel,'仙门群聊'));
+    await click(getButton(panel,'九州修仙交流群'));
+    const [,reply,hidden]=Array.from(panel.querySelectorAll('[data-sect-chat-message]'));
+    expect(reply?.textContent).toContain('回 ');
+    expect(reply?.textContent).toContain('那位前辈并未报姓名。');
+    expect(hidden?.textContent).not.toContain('回 ');
   }finally{await cleanup();}
 });

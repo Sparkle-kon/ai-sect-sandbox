@@ -1,7 +1,7 @@
 import {useEffect,useId,useMemo,useRef,useState,useSyncExternalStore} from 'react';
 import {projectSectChat} from '../engine/sectChat';
-import {SECT_CHAT_MONTH_LIMIT,SECT_CHAT_POST_LIMIT,SECT_CHAT_ROOMS,type SectChatRoomId} from '../types/sectChat';
-import type {WorldState} from '../types/world';
+import {SECT_CHAT_MONTH_LIMIT,SECT_CHAT_POST_LIMIT,SECT_CHAT_ROOMS,sectChatModelEndpoint,type SectChatRoomId} from '../types/sectChat';
+import type {LLMConfig,WorldState} from '../types/world';
 import {CultivatorPortrait} from './CultivatorPortrait';
 import {projectCultivatorPortrait} from './cultivatorPortraitModel';
 
@@ -37,8 +37,54 @@ function dateLabel(world:WorldState,tick:number):string{
   return month>=0?`${Math.floor(month/12)} 年 ${month%12+1} 月`:'';
 }
 
-export function SectChatPanel({world,scope,busy,onOpenSource}:{
+export interface SectChatModelControls {
+  readonly config:LLMConfig;
+  readonly onChange:(config:LLMConfig)=>void;
+}
+
+function SectChatModelSettings({config,onChange,busy}:SectChatModelControls&{busy:boolean}){
+  const form=useId(),notice=useId();
+  const [expanded,setExpanded]=useState(false);
+  const enabled=config.sectChatEnabled===true;
+  const ready=!!sectChatModelEndpoint(config.apiBaseUrl)&&!!config.apiKey.trim();
+  const control='min-h-11 min-w-0 w-full rounded border border-stone-600 bg-stone-950 px-2 text-sm text-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300 disabled:opacity-60';
+
+  return <div className="border-t border-stone-700 pt-1">
+    <button type="button" aria-expanded={expanded} aria-controls={form} onClick={()=>setExpanded(value=>!value)}
+      className="flex min-h-11 w-full items-center justify-between gap-2 rounded px-1 text-left text-xs text-stone-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300">
+      <span>群聊设置</span>
+      <span className="text-amber-200">{enabled&&ready?'大模型已开启':'离线对白'}</span>
+    </button>
+    <div id={form} hidden={!expanded}>
+      {expanded&&<fieldset disabled={busy} className="min-w-0 space-y-1.5 rounded-md bg-stone-900/80 p-2 disabled:opacity-70">
+        <legend className="sr-only">群聊模型设置</legend>
+        <p id={notice} className="text-xs leading-5 text-stone-300">只把九州群与坊市群的公开见闻和相关角色资料发给所填服务。本宗群和掌门私聊留在游戏里。模型只写对白，不改结算；可能产生 API 费用。刷新页面后需重新设置。</p>
+        <label className="flex min-h-11 items-center gap-2 rounded border border-stone-700 px-2 text-sm text-amber-100">
+          <input type="checkbox" checked={enabled} className="size-4 shrink-0 accent-amber-300" aria-describedby={notice}
+            onChange={event=>onChange({...config,sectChatEnabled:event.currentTarget.checked})}/>
+          <span>让大模型代写群聊</span>
+        </label>
+        {enabled&&!ready&&<p className="text-xs text-amber-200">请填写有效的 API 地址和密钥。在此之前仍用离线对白。</p>}
+        <label className="block space-y-1 text-xs text-stone-300"><span>API 地址</span>
+          <input type="url" spellCheck={false} value={config.apiBaseUrl} className={control}
+            onChange={event=>onChange({...config,apiBaseUrl:event.currentTarget.value})}/>
+        </label>
+        <label className="block space-y-1 text-xs text-stone-300"><span>API 密钥</span>
+          <input type="password" autoComplete="off" value={config.apiKey} className={control}
+            onChange={event=>onChange({...config,apiKey:event.currentTarget.value})}/>
+        </label>
+        <label className="block space-y-1 text-xs text-stone-300"><span>模型名称</span>
+          <input type="text" spellCheck={false} placeholder="留空使用默认模型" value={config.model} className={control}
+            onChange={event=>onChange({...config,model:event.currentTarget.value})}/>
+        </label>
+      </fieldset>}
+    </div>
+  </div>;
+}
+
+export function SectChatPanel({world,scope,busy,onOpenSource,model}:{
   world:WorldState;scope:string;busy:boolean;onOpenSource?:(expectedWorld:WorldState,postId:string)=>boolean;
+  model?:SectChatModelControls;
 }){
   const panelId=useId(),roomTitle=useId(),list=useRef<HTMLOListElement>(null);
   const failure=useRef<HTMLParagraphElement>(null);
@@ -122,6 +168,8 @@ export function SectChatPanel({world,scope,busy,onOpenSource}:{
             const date=index===0||selected.posts[index-1].tick!==post.tick?dateLabel(world,post.tick):'';
             const portrait=portraits.get(post.senderId);
             const hasJump=!!post.sourceEventId&&!!onOpenSource;
+            const prior=post.replyTo?selected.posts.findIndex(row=>row.id===post.replyTo):-1;
+            const replyName=prior>=0&&prior<index?selected.posts[prior].name:undefined;
             return <li key={post.id} data-sect-chat-message="" className="min-w-0 [overflow-wrap:anywhere]">
               {date&&<p className="mb-1 text-center text-[11px] text-stone-400">{date}</p>}
               <div className="flex min-w-0 items-start gap-2">
@@ -129,7 +177,10 @@ export function SectChatPanel({world,scope,busy,onOpenSource}:{
                   {portrait?<CultivatorPortrait portrait={portrait} className="h-9 w-9"/>:Array.from(post.name)[0]??'·'}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="mb-0.5 text-xs font-medium text-amber-100">{post.name}</p>
+                  <p className="mb-0.5 flex flex-wrap items-baseline gap-x-1.5 text-xs font-medium text-amber-100">
+                    {post.name}
+                    {replyName&&<span className="text-stone-400">回 {replyName}</span>}
+                  </p>
                   {hasJump?<button type="button" disabled={busy} className="block min-h-11 max-w-full rounded-md border border-stone-700 bg-stone-900 px-2 py-1.5 text-left text-sm leading-6 text-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300 disabled:opacity-60"
                     onClick={()=>setFailed(onOpenSource?.(world,post.id)?undefined:{world,postId:post.id})}>
                     {post.text}<span className="ml-1 text-xs text-amber-200">看纪事 ›</span>
@@ -141,6 +192,7 @@ export function SectChatPanel({world,scope,busy,onOpenSource}:{
             </li>;
           })}
         </ol>}
+      {shown&&model&&<SectChatModelSettings {...model} busy={busy}/>}
     </div>
   </aside>;
 }
