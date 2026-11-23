@@ -740,6 +740,7 @@ const privacyLabels: Record<keyof ShareSavePrivacyInspection['counts'], string> 
   actorThoughtFields: '角色心声与私人目标字段',
   whisperMemoryFields: '传音记忆字段',
   participantEventFields: '仅参与者可见的事件字段',
+  privateBellWatches: '私下报平安记录',
   eventDialogueBlocks: '事件对话块',
   archiveDialogueBlocks: '史库对话块',
   councilDialogueFields: '议事发言字段',
@@ -781,8 +782,9 @@ export function ShareSavePrivacyConfirmation({ review, onConfirm, onCancel }: {
       <p>化身绑定：{protectedCounts.avatarBound ? '有' : '无'} · 待执行指令：{protectedCounts.avatarOrderPending ? '有' : '无'}。</p>
       <p>只下载新副本到本机，不上传，也不更改当前世界、存档槽或分支。</p>
     </> : <p role="status">{review.status === 'invalid_source' ? '原档未通过校验，未生成可下载副本。'
-      : review.redactedBytes !== null && review.redactedBytes > review.limitBytes ? '副本超过文件上限，不提供下载。'
-        : '副本未通过完整性或隐私核验，不提供下载。'}</p>}
+      : review.status === 'bell_watch_in_transit' ? '报平安的修士尚在途中，移除私下信路会改变他的位置；等抵达或折返后再分享。'
+        : review.redactedBytes !== null && review.redactedBytes > review.limitBytes ? '副本超过文件上限，不提供下载。'
+          : '副本未通过完整性或隐私核验，不提供下载。'}</p>}
     <div className="flex flex-wrap gap-1.5">
       {ready && <button type="button" className={confirmButton} onClick={onConfirm}>确认并下载脱敏副本</button>}
       <button type="button" className={button} onClick={onCancel}>取消脱敏副本预览</button>

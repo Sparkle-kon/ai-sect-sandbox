@@ -1,3 +1,4 @@
+import { bellWatchCheckpoint } from './bellWatchPresence';
 import {onLowerPlane} from './upperPassageIsolation';
 import {danxiaMedicineCheckpoint} from './danxiaMedicineTerms';
 import { isScopedExpeditionGate } from './expeditionOmenTerms';
@@ -73,7 +74,7 @@ export function terrainTileAt(world: WorldState, x: number, y: number): MapTile 
 
 export function currentVisibleTileIds(world: WorldState, actor: Cultivator): Set<string> {
   if (!onLowerPlane(actor)) return new Set();
-  const site = danxiaMedicineCheckpoint(world,actor) ?? expeditionRescueCheckpoint(world, actor) ?? boundaryReliefCheckpoint(world, actor) ??
+  const site = bellWatchCheckpoint(world,actor) ?? danxiaMedicineCheckpoint(world,actor) ?? expeditionRescueCheckpoint(world, actor) ?? boundaryReliefCheckpoint(world, actor) ??
     disasterShelterCheckpoint(world,actor) ?? marketFreightCheckpoint(world,actor) ?? courierCheckpoint(world, actor) ?? pilgrimageCheckpoint(world, actor) ??
     world.locations.find(({ id }) => id === actor.locationId);
   if (!actor.alive || !site) return new Set();

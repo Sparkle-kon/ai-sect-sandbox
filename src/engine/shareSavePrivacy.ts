@@ -2,6 +2,7 @@ import type { DialogueExchange,WorldState } from '../types/world';
 import { decodeWorldSave,encodeWorldSave,WORLD_SAVE_MAX_BYTES,worldSaveByteCount } from './storageEngine';
 
 import { SHARE_SAVE_REDACTED_TEXT } from './shareSaveRedactionText';
+import { isSealedBellMarker } from './storage/bellWatchValidation';
 import { matchesDramaticBondFact, matchesDramaticBondRedactedPractice } from './dramaticBondTerms';
 
 export { SHARE_SAVE_REDACTED_TEXT } from './shareSaveRedactionText';
@@ -12,6 +13,7 @@ export interface ShareSavePrivacyCounts {
   readonly actorThoughtFields:number;
   readonly whisperMemoryFields:number;
   readonly participantEventFields:number;
+  readonly privateBellWatches:number;
   readonly eventDialogueBlocks:number;
   readonly archiveDialogueBlocks:number;
   readonly chapterProseFields:number;
@@ -36,7 +38,7 @@ export interface ShareSavePrivacyReview extends ShareSavePrivacyInspection {
   readonly originalBytes:number|null;
   readonly redactedBytes:number|null;
   readonly limitBytes:number;
-  readonly status:'ready'|'invalid_source'|'invalid_copy';
+  readonly status:'ready'|'invalid_source'|'invalid_copy'|'bell_watch_in_transit';
   readonly protectedStateVerified:boolean;
 }
 export interface ConfirmedShareSave { readonly json:string; readonly bytes:number }
@@ -59,6 +61,7 @@ function countsFor(world:WorldState):ShareSavePrivacyCounts{
     whisperMemoryFields:world.cultivators.reduce((sum,row)=>sum+presentCount([...row.memories,...row.coreMemories]
       .filter(memory=>memory.category==='whisper').map(memory=>memory.content)),0),
     participantEventFields:world.events.reduce((sum,row)=>sum+(row.witnessScope==='participants'?presentCount([row.title,row.description]):0),0),
+    privateBellWatches:world.locations.filter(site=>site.bellWatch!==undefined).length,
     eventDialogueBlocks:dialogueCount(world.events),
     archiveDialogueBlocks:dialogueCount(world.chronicleArchive.anchors)+
       [...world.chronicleArchive.chapters,...world.coldHistory.chapters].reduce((sum,row)=>sum+dialogueCount(row.anchors),0),
@@ -95,6 +98,8 @@ function nativePracticeRedactions(world:WorldState):ReadonlySet<string>{
 function redactedClone(world:WorldState,practiceRedactions:ReadonlySet<string>):WorldState{
   const copy=structuredClone(world);
   copy.annotations.notes=[];
+  for(const site of copy.locations)delete site.bellWatch;
+  copy.events=copy.events.filter(event=>!isSealedBellMarker(event));
   for(const entry of copy.playerAvatar.transcript){
     entry.message=hiddenText(entry.message);entry.reply=hiddenText(entry.reply);entry.effect=hiddenText(entry.effect);
   }
@@ -146,6 +151,8 @@ function isPrivateKind(a:unknown,b:unknown,key:string,value:string){
 function allowedChange(path:readonly PathPart[],leftParent:unknown,rightParent:unknown,practiceRedactions:ReadonlySet<string>){
   const last=path.at(-1);
   if(pathIs(path,['annotations','notes']))return true;
+  if(pathIs(path,['locations',ITEM,'bellWatch'])&&object(leftParent)&&object(rightParent))
+    return leftParent.id===rightParent.id&&Object.hasOwn(leftParent,'bellWatch')&&!Object.hasOwn(rightParent,'bellWatch');
   if((last==='message'||last==='reply'||last==='effect')&&pathIs(path,['playerAvatar','transcript',ITEM,last]))return true;
   if((last==='message'||last==='reply')&&pathIs(path,['playerAvatar','audience','sessions',ITEM,'turns',ITEM,last]))return true;
   if((last==='innerMonologue'||last==='secretGoal')&&pathIs(path,['cultivators',ITEM,last]))return true;
@@ -189,12 +196,18 @@ export function prepareShareSavePrivacy(world:WorldState):ShareSavePrivacyReview
       protectedStateVerified:false});
   }
   const originalBytes=encoder().encode(originalJson).byteLength;
+  // The courier's physical position depends on the private route until the native arrival or return.
+  if(original.locations.some(({bellWatch})=>bellWatch?.choice?.move==='reroute'&&bellWatch.choice.endedTick===undefined)){
+    return Object.freeze({...common,originalBytes,redactedBytes:null,status:'bell_watch_in_transit',
+      protectedStateVerified:false});
+  }
   try{
     const practiceRedactions=nativePracticeRedactions(original);
     const redacted=redactedClone(original,practiceRedactions);
     const copyJson=encodeWorldSave(redacted);
     const decoded=decodeWorldSave(copyJson);
-    if(!protectedEqual(original,decoded,practiceRedactions) || Object.values(countsFor(decoded)).some(amount=>amount!==0)){
+    const baseline={...original,events:original.events.filter(event=>!isSealedBellMarker(event))};
+    if(!protectedEqual(baseline,decoded,practiceRedactions) || Object.values(countsFor(decoded)).some(amount=>amount!==0)){
       return Object.freeze({...common,originalBytes,redactedBytes:null,status:'invalid_copy',protectedStateVerified:false});
     }
     const copyBytes=encoder().encode(copyJson).byteLength;

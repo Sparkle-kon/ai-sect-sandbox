@@ -1,3 +1,6 @@
+import { availableBellWatchActions } from '../engine/bellWatch';
+import { bellWatchCommand, exactBellWatchDecision } from '../engine/cognition/bellWatchDecision';
+import type { BellWatchOption } from '../types/bellWatch';
 import {resolveGuidedLastRosterTurn,type GuidedLastRosterTurn} from './guidedLastRosterTurn';
 import {resolveGuidedBanquetSeatTurn,type GuidedBanquetSeatTurn} from './guidedBanquetSeatTurn';
 import {resolveGuidedNightDoorTurn,type GuidedNightDoorTurn} from './guidedNightDoorTurn';
@@ -30,11 +33,29 @@ import {resolveGuidedHeavenlyAlchemyTurn,type GuidedHeavenlyAlchemyTurn} from '.
 import {resolveGuidedImmortalAuctionTurn,type GuidedImmortalAuctionTurn} from './guidedImmortalAuctionTurn';
 import type {WorldState} from '../types/world';
 
-export type GuidedWorldTurn=GuidedDungeonTurn|GuidedHeavenlyAlchemyTurn|GuidedDaoPathTurn|GuidedImmortalAuctionTurn|GuidedCultivationClanTurn|GuidedAscensionTurn|GuidedProtagonistFlightTurn|GuidedHeartDemonRecoveryTurn|GuidedBattlefieldRevisitTurn|GuidedCalamityArrayTurn|GuidedSchoolFormDuelTurn|GuidedFrontierNightHuntTurn|GuidedWitnessInquiryTurn|GuidedCampaignAssemblyTurn|GuidedPavilionFireTurn|GuidedFrontierGorgeTurn|GuidedMercyReunionTurn|GuidedFarewellLandingTurn|GuidedWildMigrationTurn|GuidedVacantGateTurn|GuidedVillageReunionTurn|GuidedBattlefieldAftermathTurn|GuidedPilgrimageForkTurn|GuidedApprenticeshipReunionTurn|GuidedFurnaceEmergencyTurn|GuidedAbandonedQuarterTurn|GuidedBoundaryGapTurn|GuidedNightDoorTurn|GuidedBanquetSeatTurn|GuidedLastRosterTurn;
+export interface GuidedBellWatchTurn {
+  readonly kind: 'bell-watch';
+  readonly world: WorldState;
+  readonly branchId: string;
+  readonly revision: number;
+  readonly actorId: string;
+  readonly option: BellWatchOption;
+}
+
+export function resolveGuidedBellWatchTurn(order: GuidedBellWatchTurn, world: WorldState, branchId: string, revision: number) {
+  if (order.world !== world || order.branchId !== branchId || order.revision !== revision || order.option.chosenAction !== 'BELL_WATCH') return undefined;
+  const bodies = world.cultivators.filter(actor => actor.id === order.actorId);
+  if (bodies.length !== 1) return undefined;
+  const decision = exactBellWatchDecision(bellWatchCommand(order.option), availableBellWatchActions(bodies[0], world, world.tick + 1));
+  return decision ? { actorId: order.actorId, decision } : undefined;
+}
+
+export type GuidedWorldTurn=GuidedBellWatchTurn|GuidedDungeonTurn|GuidedHeavenlyAlchemyTurn|GuidedDaoPathTurn|GuidedImmortalAuctionTurn|GuidedCultivationClanTurn|GuidedAscensionTurn|GuidedProtagonistFlightTurn|GuidedHeartDemonRecoveryTurn|GuidedBattlefieldRevisitTurn|GuidedCalamityArrayTurn|GuidedSchoolFormDuelTurn|GuidedFrontierNightHuntTurn|GuidedWitnessInquiryTurn|GuidedCampaignAssemblyTurn|GuidedPavilionFireTurn|GuidedFrontierGorgeTurn|GuidedMercyReunionTurn|GuidedFarewellLandingTurn|GuidedWildMigrationTurn|GuidedVacantGateTurn|GuidedVillageReunionTurn|GuidedBattlefieldAftermathTurn|GuidedPilgrimageForkTurn|GuidedApprenticeshipReunionTurn|GuidedFurnaceEmergencyTurn|GuidedAbandonedQuarterTurn|GuidedBoundaryGapTurn|GuidedNightDoorTurn|GuidedBanquetSeatTurn|GuidedLastRosterTurn;
 
 export function resolveGuidedWorldTurn(order:GuidedWorldTurn,world:WorldState,branch:string,revision:number){
   if(!('kind' in order))return resolveGuidedDungeonTurn(order,world,branch,revision);
   switch(order.kind){
+    case 'bell-watch':return resolveGuidedBellWatchTurn(order,world,branch,revision);
     case 'vacant-gate':return resolveGuidedVacantGateTurn(order,world,branch,revision);
     case 'battlefield-aftermath':return resolveGuidedBattlefieldAftermathTurn(order,world,branch,revision);
     case 'pilgrimage-fork':return resolveGuidedPilgrimageForkTurn(order,world,branch,revision);

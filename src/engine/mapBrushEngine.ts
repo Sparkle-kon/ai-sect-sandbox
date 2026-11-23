@@ -1,3 +1,4 @@
+import { bellWatchCheckpoint, bellWatchDamage } from './bellWatch';
 import {advanceVillageReunions} from './villageReunion';
 import { openPavilionFire } from './pavilionFire';
 import { resolveCalamityArrayProtection } from './calamityArray';
@@ -47,7 +48,7 @@ function peopleAtTile(world: WorldState, tileId: string): Cultivator[] {
   return world.cultivators.filter((person) => {
     if (!person.alive || person.hp <= 0) return false;
     const convoy = activeRelocationForActor(world, person) ?? activeEscortForActor(world, person);
-    const checkpoint = expeditionRescueCheckpoint(world, person) ?? boundaryReliefCheckpoint(world, person) ?? disasterShelterCheckpoint(world,person) ?? convoy?.path[convoy.pathIndex] ??
+    const checkpoint = bellWatchCheckpoint(world,person) ?? expeditionRescueCheckpoint(world, person) ?? boundaryReliefCheckpoint(world, person) ?? disasterShelterCheckpoint(world,person) ?? convoy?.path[convoy.pathIndex] ??
       pilgrimageCheckpoint(world, person) ?? courierCheckpoint(world, person);
     return checkpoint ? terrainTileAt(world, checkpoint.x, checkpoint.y)?.id === tileId : matching.has(person.locationId);
   });
@@ -172,6 +173,7 @@ export function advanceMapHazards(world: WorldState): WorldEvent[] {
   const structuralEvents: WorldEvent[] = [];
   for (const hazard of world.mapHazards) {
     if (hazard.kind === 'meteor' || hazard.createdTick >= world.tick) continue;
+    structuralEvents.push(...bellWatchDamage(world,hazard));
     if (hazard.kind === 'beast_tide') structuralEvents.push(...damageFurnacesFromBeastTide(world,hazard));
     const id = `evt-${world.tick}-${hazard.id}`;
     if (world.events.some((entry) => entry.id === id)) continue;

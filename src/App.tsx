@@ -1,3 +1,4 @@
+import {useBellWatchStory} from './components/useBellWatchStory';
 import {SoundscapeToggle,useSoundscape} from './components/useSoundscape';
 import {useLastRosterStory} from './components/useLastRosterStory';
 import {useBanquetSeatStory} from './components/useBanquetSeatStory';
@@ -328,6 +329,10 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
     onClearAvatarNotice:()=>setAvatarNotice(undefined),
   });
   const {card:featuredStoryCard,pending:storyDecisionPending}=useFeaturedStoryDecision(simulation);
+  const bellStoryViewer=cockpitOpen?selectedCultivator:
+    activeAvatar(world)??world.cultivators.find(({id})=>id===storyHome?.lead?.id)??selectedCultivator;
+  const bellWatch=useBellWatchStory(simulation,!storyEntryOpen&&(!dashboardOpen||cockpitOpen),
+    bellStoryViewer,cockpitOpen?'cockpit':'story');
   const dungeonFork=useDungeonStoryFork(simulation,!dashboardOpen&&!cockpitOpen&&!storyEntryOpen,selectedCultivator);
   const mercyReunion=useMercyReunionStory(simulation,(!dashboardOpen||cockpitOpen)&&!storyEntryOpen,selectedCultivator);
   const anomalyRelay=useAnomalyRelayRead(visibleWorld,selectedCultivator,(!dashboardOpen||cockpitOpen)&&!storyEntryOpen,true);
@@ -697,7 +702,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
     viewer:soundViewer,siteId:!soundViewer?soundFact?.locationId:undefined,sourceId:!soundViewer?soundFact?.id:undefined,
     historical:Boolean(preview),fog:soundViewer?true:undefined});
   const soundToggle=<SoundscapeToggle sound={sound}/>;
-  if(cockpitOpen)return <PanoramicCockpitView world={visibleWorld} stageViewer={selectedCultivator} titleRef={cockpitHeading} exit={<div className="flex flex-wrap justify-end gap-2">{soundToggle}{cockpitSwitch}</div>} statusStrip={pulseStrip} stageOverride={featuredStoryCard} subplot={guidance.subplot} branchScene={furnaceEmergency??vacantGate??nightDoor??lastRoster??boundaryGap??abandonedQuarter??pavilionFire??pilgrimageFork??battlefieldAftermath??apprenticeshipReunion??villageReunion??wildMigration??mercyReunion??farewellLanding??frontierGorge??schoolFormDuel??flightCard??passageScene??banquetStory??campaignAssembly??anomalyRelay}
+  if(cockpitOpen)return <PanoramicCockpitView world={visibleWorld} stageViewer={selectedCultivator} titleRef={cockpitHeading} exit={<div className="flex flex-wrap justify-end gap-2">{soundToggle}{cockpitSwitch}</div>} statusStrip={pulseStrip} stageOverride={featuredStoryCard} subplot={guidance.subplot} branchScene={furnaceEmergency??bellWatch??vacantGate??nightDoor??lastRoster??boundaryGap??abandonedQuarter??pavilionFire??pilgrimageFork??battlefieldAftermath??apprenticeshipReunion??villageReunion??wildMigration??mercyReunion??farewellLanding??frontierGorge??schoolFormDuel??flightCard??passageScene??banquetStory??campaignAssembly??anomalyRelay}
     time={{historical:Boolean(preview),running:isRunning,busy:cockpitBusy||storyDecisionPending,onStep:()=>void handleStepTick(),
       onToggleAutoplay:toggleStoryAutoplay,onReturnLive:()=>handleTimelinePreview(null),onOpenTimeline:()=>{
         openWorkspace('chronicle');rememberFold('chronicle','timeline');setStoryEntryOpen(false);
@@ -722,7 +727,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
         resolvePublicDialogue={publicRead?.dialogue.event} category={chronicleFilter} onCategoryChange={setChronicleFilter}/>
     </React.Suspense>}/>;
 
-  const activeReadingScene=furnaceEmergency??vacantGate??nightDoor??lastRoster??boundaryGap??abandonedQuarter??pavilionFire??dungeonFork??pilgrimageFork??battlefieldAftermath??apprenticeshipReunion??villageReunion??wildMigration??mercyReunion??farewellLanding??frontierGorge??nightHunt??schoolFormDuel??calamityArray??battlefieldRevisit??witnessInquiry??campaignAssembly??
+  const activeReadingScene=furnaceEmergency??bellWatch??vacantGate??nightDoor??lastRoster??boundaryGap??abandonedQuarter??pavilionFire??dungeonFork??pilgrimageFork??battlefieldAftermath??apprenticeshipReunion??villageReunion??wildMigration??mercyReunion??farewellLanding??frontierGorge??nightHunt??schoolFormDuel??calamityArray??battlefieldRevisit??witnessInquiry??campaignAssembly??
     flightCard??passageScene??banquetStory??anomalyRelay;
   const isUrgentPublicScene=storyHome?.scene&&!storyHome.scene.earlier&&world.events.some(event=>event.id===storyHome.scene?.eventId&&
     (event.category==='combat'||event.category==='death'||event.category==='breakthrough'));

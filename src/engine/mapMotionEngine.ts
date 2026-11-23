@@ -1,3 +1,4 @@
+import { bellWatchCheckpoint } from './bellWatchPresence';
 import {disasterShelterCheckpoint} from './disasterShelterCheckpoint';
 import {marketFreightCheckpoint} from './marketFreightCheckpoint';
 import {isUpperPassageEvent,onLowerPlane} from './upperPassageIsolation';
@@ -86,6 +87,10 @@ export function deriveMapPresentation(prev: WorldState, next: WorldState, events
     closedTick === next.tick && status === 'completed').map(({ incomingId }) => incomingId));
   const shelterSteps=new Set(next.disasterShelter?.cases.filter(row=>row.steps.at(-1)?.tick===next.tick)
     .map(row=>row.guest.actorId));
+  const bellTravelers = new Set(next.locations.flatMap(({bellWatch})=>
+    bellWatch?.choice?.lastMovedTick===next.tick || bellWatch?.choice?.endedTick===next.tick && bellWatch.choice.move==='reroute'
+      ? [bellWatch.watcherId] : []));
+  for(const id of bellTravelers)trails.delete(id);
   const shelterTraveler=(id:string)=>{
     const a=after.get(id),b=before.get(id);
     return !!(a&&disasterShelterCheckpoint(next,a)||b&&disasterShelterCheckpoint(prev,b));
@@ -108,7 +113,7 @@ export function deriveMapPresentation(prev: WorldState, next: WorldState, events
     const previous = before.get(actor.id);
     if (!previous || !onLowerPlane(actor) || !onLowerPlane(previous)) continue;
     if (previous.locationId !== actor.locationId && actor.alive && !pilgrimsMoved.has(actor.id) && !couriersMoved.has(actor.id) &&
-        !realRescueArrivals.has(actor.id) && !actualReliefArrivals.has(actor.id) && !shelterSteps.has(actor.id) &&
+        !bellTravelers.has(actor.id) && !bellWatchCheckpoint(prev,previous) && !realRescueArrivals.has(actor.id) && !actualReliefArrivals.has(actor.id) && !shelterSteps.has(actor.id) &&
         !expeditionRescueCheckpoint(prev, previous) && !boundaryReliefCheckpoint(prev, previous) && !marketFreightCheckpoint(prev,previous)) {
       const origin = prevSites.get(previous.locationId) ?? nextSites.get(previous.locationId);
       const dest = nextSites.get(actor.locationId);
@@ -123,7 +128,7 @@ export function deriveMapPresentation(prev: WorldState, next: WorldState, events
     if (actor.alive && previous.alive && (previous.realm !== actor.realm || previous.realmStage < actor.realmStage)) {
       put(`evt-${next.tick}-${actor.id}-map-breakthrough`, 'breakthrough', actor.locationId, [actor.id], `${actor.realm}${actor.realmStage}层`);
     }
-    if (previous.hp > actor.hp && !damaged.has(actor.id) && !shelterTraveler(actor.id) && actor.alive && previous.alive) {
+    if (previous.hp > actor.hp && !damaged.has(actor.id) && !shelterTraveler(actor.id) && !bellWatchCheckpoint(next,actor) && !bellTravelers.has(actor.id) && actor.alive && previous.alive) {
       put(`evt-${next.tick}-${actor.id}-map-damage`, 'damage', actor.locationId, [actor.id], `−${previous.hp - actor.hp} HP`);
     }
   }

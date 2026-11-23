@@ -1,4 +1,5 @@
 import { validateBattlefieldAftermathSave } from '../battlefieldAftermath';
+import { validateBellWatches } from './bellWatchValidation';
 import { validateVillageReunionSave } from '../villageReunion';
 import { validateAnomalyRelaySave } from '../anomalyRelay';
 import { validateVacantGateSave } from '../vacantGate';
@@ -227,5 +228,6 @@ export function verifyWorld(value: unknown): WorldState {
   validateContinuity(w, actor, sector, locations, map, settlementIds, volunteerIds);
   validateFrontier(w);
   w.coldHistory = freezeColdHistory(w.coldHistory);
+  validateBellWatches(w, fail);
   return w;
 }

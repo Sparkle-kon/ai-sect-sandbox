@@ -1,3 +1,4 @@
+import { projectBellWatchSideNote } from '../engine/bellWatch';
 import { ChronicleRecapControls } from './ChronicleRecapControls';
 import { projectStoryRecap } from '../engine/storyRecap';
 import { ChronicleBookPage } from './ChronicleBookPage';
@@ -84,6 +85,9 @@ function ChapterArchive({ chapter, reading, lead, turningPoints, sharedTurningPo
   const readerRef=useRef<HTMLElement>(null);
   const recap=useMemo(()=>recapContext&&projectStoryRecap(recapContext.world,recapContext.viewer,chapter.id),
     [recapContext,chapter.id]);
+  const bellSideNote=useMemo(()=>recapContext?.viewer&&projectBellWatchSideNote(
+    recapContext.world,recapContext.viewer,chapter.startTick,chapter.endTick),
+    [recapContext,chapter.startTick,chapter.endTick]);
   const scenes = new Map(reading.sections.map((entry) => [entry.eventId, entry]));
   const anchors = chapter.anchors.filter(({ id }) => scenes.has(id));
   const proofDialogues = new Map(anchors.map(({id})=>[id,resolveDialogue(id)]));
@@ -97,6 +101,10 @@ function ChapterArchive({ chapter, reading, lead, turningPoints, sharedTurningPo
           scopeKey={recapContext.scopeKey} viewerId={recapContext.viewer?.id} chapterId={chapter.id}/>
       </div>}
       <ChronicleBookPage reading={reading} resolveSources={resolveBookSources} />
+      {bellSideNote&&<aside aria-label="当事人侧记，不随公开章节分享" className="min-w-0 border-l border-amber-300/35 pl-3 [overflow-wrap:anywhere]">
+        <p className="text-xs text-amber-200">当事人侧记 · {bellSideNote.title}</p>
+        <p className="mt-1 font-serif text-sm leading-7 text-slate-200">{bellSideNote.body}</p>
+      </aside>}
       <ChapterTurningPoints arcs={turningPoints} shared={sharedTurningPoints} />
       {excerpt&&<ChapterExcerptPanel {...excerpt} chapterId={chapter.id}/>}
       <details className="rounded border border-slate-800 bg-slate-950/70 p-2">

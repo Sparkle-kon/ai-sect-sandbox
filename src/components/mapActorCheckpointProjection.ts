@@ -1,4 +1,5 @@
 import { activeDanxiaMedicineEscort, danxiaMedicineCheckpoint, danxiaMedicineParties } from '../engine/danxiaMedicineTerms';
+import { bellWatchCheckpoint } from '../engine/bellWatchPresence';
 import { courierCheckpoint } from '../engine/sealedCourierEngine';
 import { pilgrimageCheckpoint } from '../engine/pilgrimageEngine';
 import { expeditionRescueCheckpoint } from '../engine/expeditionRescueCheckpoint';
@@ -9,7 +10,7 @@ import { currentVisibleTileIds, terrainTileAt } from '../engine/terrainEngine';
 import { onLowerPlane } from '../engine/upperPassageIsolation';
 import type { Cultivator, MapPoint, WorldState } from '../types/world';
 
-const MEDICINE = 1, RESCUE = 2, RELIEF = 4, SHELTER = 8, FREIGHT = 16, COURIER = 32, PILGRIMAGE = 64;
+const MEDICINE = 1, RESCUE = 2, RELIEF = 4, SHELTER = 8, FREIGHT = 16, COURIER = 32, PILGRIMAGE = 64, BELL_WATCH = 128;
 const shelterTravel = (status: string) => status === 'outbound' || status === 'returning' || status === 'stranded';
 
 /**
@@ -56,6 +57,11 @@ function checkpointCandidates(world: WorldState) {
     include(row.organizerId, PILGRIMAGE);
     include(row.companionId, PILGRIMAGE);
   }
+  for(const {bellWatch} of world.locations) {
+    if(!bellWatch?.choice || bellWatch.choice.move!=='reroute' || bellWatch.choice.endedTick!==undefined) continue;
+    guarded=true;
+    include(bellWatch.watcherId,BELL_WATCH);
+  }
   for(const fork of world.pilgrimageForks?.forks??[])for(const choice of fork.choices){
     if(choice.status==='traveling'||choice.status==='closed'&&choice.steps?.length)include(choice.actorId,PILGRIMAGE);
   }
@@ -101,14 +107,15 @@ export function projectMapActorsAtCheckpoints(world: WorldState, scope: Checkpoi
       (guest.actorId === exactViewer.id || host.actorId === exactViewer.id)))) continue;
     const freight = role & FREIGHT ? marketFreightCheckpoint(world, actor) : undefined;
     if (freight && !canSeeMarketFreightCheckpoint(world, actor, viewer)) continue;
-    const checkpoint = rescue ?? relief ?? shelter ?? freight ??
+    const bell = role & BELL_WATCH ? bellWatchCheckpoint(world,actor) : undefined;
+    const checkpoint = rescue ?? relief ?? shelter ?? freight ?? bell ??
       (role & COURIER ? courierCheckpoint(world, actor) : undefined) ??
       (role & PILGRIMAGE ? pilgrimageCheckpoint(world, actor) : undefined);
     if (!checkpoint) {
       if (isCurrentLocation(actor.locationId)) liveActors.push(actor);
       continue;
     }
-    const tiles = rescue || relief || shelter || freight ? guardedTravelTiles : viewCurrent;
+    const tiles = rescue || relief || shelter || freight || bell ? guardedTravelTiles : viewCurrent;
     if (tiles && !tiles.has(terrainTileAt(world, checkpoint.x, checkpoint.y)?.id ?? '')) continue;
     trailPositions.set(actor.id, checkpoint);
     if (rescue) extractionPositions.set(actor.id, rescue);

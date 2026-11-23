@@ -99,6 +99,19 @@ interface UtilityContinuation {
   readonly pairStation: "edge" | "wait" | "center" | undefined;
 }
 
+/** Existing charter choices take precedence over new local narrative follow-ups. */
+export function utilityDoctrineFoundingDecision(cultivator:Cultivator,world:WorldState):LLMDecisionPayload|undefined {
+  if(world.relocations.abandonedSites.length||world.doctrineFoundings.foundings.length){
+    const choices=availableDoctrineFoundingActions(cultivator,world);
+    const hesitant=cultivator.personality==='阴险'||cultivator.personality==='诡诈';
+    const response=choices.find(row=>row.doctrineFoundingMove===(hesitant?'decline':'authorize'));
+    const action=choices.find(row=>row.doctrineFoundingMove==='establish')??response??
+      (!hesitant?choices.find(row=>row.doctrineFoundingMove==='join')??choices.find(row=>row.doctrineFoundingMove==='propose'):undefined);
+    if(action)return {...action,chosenAction:action.action,innerMonologue:'原山门、本人许可和实有钱库要一项项核对。'};
+  }
+  return undefined;
+}
+
 export function completeHeuristicDecision({
   cultivator,
   world,
@@ -271,14 +284,8 @@ export function completeHeuristicDecision({
       (!reticent?next.find(option=>option.doctrineMaturityMove==='offer_merge'):undefined);
     if(choice)return {...choice,chosenAction:choice.action,innerMonologue:'旧地确受困，仍要我方、对方和每个同门分别决定。'};
   }
-  if(world.relocations.abandonedSites.length||world.doctrineFoundings.foundings.length){
-    const choices=availableDoctrineFoundingActions(cultivator,world);
-    const hesitant=cultivator.personality==='阴险'||cultivator.personality==='诡诈';
-    const response=choices.find(row=>row.doctrineFoundingMove===(hesitant?'decline':'authorize'));
-    const action=choices.find(row=>row.doctrineFoundingMove==='establish')??response??
-      (!hesitant?choices.find(row=>row.doctrineFoundingMove==='join')??choices.find(row=>row.doctrineFoundingMove==='propose'):undefined);
-    if(action)return {...action,chosenAction:action.action,innerMonologue:'原山门、本人许可和实有钱库要一项项核对。'};
-  }
+  const founding=utilityDoctrineFoundingDecision(cultivator,world);
+  if(founding)return founding;
   if (world.tick >= 13 && !cultivator.guardAssignment &&
       (world.tick % 4 === 0 || world.doctrines.proposals.some(({ status }) => status === 'pending'))) {
     const options = availableDoctrineActions(cultivator, world);

@@ -1,4 +1,5 @@
 import type { Rule } from './primitives';
+import { bellWatchShape } from './bellWatchSchema';
 import { DRAMATIC_BOND_FACTS_MAX, DRAMATIC_BOND_WITNESSES_MAX } from '../dramaticBondTerms';
 import { DRAMATIC_BOND_FACT_KINDS } from '../../types/dramaticBond';
 import { lastRosterSchema } from '../lastRosterSchema';
@@ -116,7 +117,7 @@ export const worldRulesActors: Record<string, Rule> = {
     succession:optional(structure({tick,method:one('election','challenge','coup'),previousLeaderId:oid,leaderId:id,supporterIds:ids})),
     monthlyEconomy:optional(structure({tick,taxes:wealth,mining:wealth,upkeep:wealth,net:num(-1_000_000_000,1_000_000_000)}))})),
   locations:arr(1200,structure({id,name:id,x:num(0,1000),y:num(0,600),type:one('sect_hq','spirit_vein','secret_realm','market','abyss'),spiritRoot:spirit,
-    spiritQi:num(0,150),ownerSectId:oid,expeditionOmenId:oid,inheritanceScrolls:arr(350,technique),herbs,herbCapacity:herbs,furnaceGrade:one(0,1,2,3),description:text})),
+    spiritQi:num(0,150),ownerSectId:oid,expeditionOmenId:oid,bellWatch:optional(bellWatchShape),inheritanceScrolls:arr(350,technique),herbs,herbCapacity:herbs,furnaceGrade:one(0,1,2,3),description:text})),
   cultivators:arr(SAVE_COLLECTION_LIMIT,structure({id,name:id,gender:fictionalGender,clanHeritage:optional(clanHeritage),title:text,sectId:strings(240),sectRank,contribution:wealth,transgressions:percentage,disciplineRevision:otick,realm,realmStage:num(1,9,true),
     publicAlchemy:optional(arr(1200,structure({siteId:id,firstTick:tick,lastTick:tick,successes:num(1,100_000_000,true),bestGrade:one(1,2,3)}))),
     heavenlyAlchemy:optional(heavenlyAlchemy),

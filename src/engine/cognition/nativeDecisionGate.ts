@@ -58,6 +58,8 @@ import { beastDuelContactForParticipant, availableBeastDuelChoices } from '../be
 import { beastDuelCommand, exactBeastDuelResponse } from '../beastDuelCognition';
 import { availableFurnaceEmergencyActions } from '../furnaceEmergency';
 import { furnaceEmergencyCommand, exactFurnaceEmergencyDecision } from '../furnaceEmergencyCognition';
+import { activeBellWatchForActor, availableBellWatchActions } from '../bellWatch';
+import { bellWatchCommand } from './bellWatchDecision';
 import { availableNightDoorActions } from '../nightDoor';
 import { nightDoorCommand, exactNightDoorDecision } from '../nightDoorCognition';
 import { availableBanquetSeatActions } from '../banquetSeats';
@@ -329,6 +331,7 @@ export function quoteNativeDecision(
         exactBeastDuelResponse(parsed,beastContact.id,availableBeastDuelChoices(world,cultivator)):undefined,160));
   }
 
+  if(activeBellWatchForActor(world,cultivator))return handledDecision(undefined);
   const furnaceEmergency=availableFurnaceEmergencyActions(cultivator,world,requestTick);
   if(furnaceEmergency.length){
     if(requestTick!==world.tick+1||activeAvatar(world)===cultivator)return handledDecision(undefined);
@@ -579,12 +582,17 @@ export function quoteNativeDecision(
       }, 160));
     }
   }
+  const mayOfferLocalStory = requestTick===world.tick+1 && activeAvatar(world)!==cultivator &&
+    !boundaryReliefOnly && !rescueOnly && !onPilgrimagePath;
+  const bellOptions=mayOfferLocalStory?availableBellWatchActions(cultivator,world,requestTick):[];
+  const bellGuide=bellOptions.length?'若选钟楼差事，只原样抄写本人确在现场的一项许可。不写脚程、灾情或收信结果：'+
+    JSON.stringify(bellOptions.map(bellWatchCommand)):'';
   return {
     handled: false,
     quotes: {
       activeVow, rescueOnly, boundaryReliefOnly, boundaryReliefOptions, rescueOptions, rescuePause, onPilgrimagePath,
       pilgrimageOptions, forkGuide, mealOptions, routeWarningOptions, routeWarningGuide, banquetGuide, afterSectGuide,
-      afterSect, banquet, forkOptions, rescueEffect,
+      afterSect, banquet, forkOptions, rescueEffect, bellOptions, bellGuide,
     },
   } as const;
 }

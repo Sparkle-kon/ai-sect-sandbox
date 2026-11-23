@@ -1,3 +1,4 @@
+import { activeBellWatchForActor } from '../bellWatchPresence';
 import { physicalAtlasHome } from '../physicalAtlasEngine';
 import { availableFrontierProviderActions, availableNorthGateRenewalProviderActions, availableUpperPassageProviderActions, availableUpperArrayFieldProviderActions, holdsCivicAppendAvatar } from './decisionFactsLate';
 import { frontierCommand } from '../frontierActions';
@@ -103,7 +104,7 @@ export function collectDecisionFacts({ cultivator, world, requestTick }: Cogniti
     (c) =>
       c.alive &&
       c.id !== cultivator.id &&
-      c.locationId === cultivator.locationId && !activeDanxiaMedicineEscort(world,c) && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) && !courierCheckpoint(world, c) && !boundaryReliefCheckpoint(world, c) && !disasterShelterCheckpoint(world,c)
+      c.locationId === cultivator.locationId && !activeBellWatchForActor(world,c) && !activeDanxiaMedicineEscort(world,c) && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) && !courierCheckpoint(world, c) && !boundaryReliefCheckpoint(world, c) && !disasterShelterCheckpoint(world,c)
   );
   const privateHeartMemories=sealedHeartDemonMemoryIds(cultivator);
   const recalled=recallMemories(cultivator,world.tick,privateHeartMemories.size?Infinity:5)

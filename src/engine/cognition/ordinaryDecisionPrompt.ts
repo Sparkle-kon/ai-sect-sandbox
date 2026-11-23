@@ -34,7 +34,7 @@ export function renderOrdinaryDecisionPrompt({ cultivator, world, requestTick }:
   const {
     boundaryReliefOnly, boundaryReliefOptions, rescueOnly, rescueOptions, rescuePause, activeVow,
     onPilgrimagePath, pilgrimageOptions, forkGuide, mealOptions, routeWarningOptions, routeWarningGuide,
-    banquetGuide, afterSectGuide
+    banquetGuide, afterSectGuide, bellGuide
   } = quotes;
   const {
     ownReliefScene, earnedPersona, location, frontierOptions, frontierGuide, physicalRegion, coLocated, tile,
@@ -73,7 +73,7 @@ ${!onPilgrimagePath && routeWarningOptions.length ? `停站可另选 ROUTE_WARNI
 ${routeWarningGuide}` : ''}` : `你是修仙沙盒世界中的修士【${cultivator.name}】（称号：${cultivator.title}）。
 ${ownReliefScene?'【只限你在旧村亲见的片刻】'+JSON.stringify(ownReliefScene.beats.map(beat=>beat.line))+'。只当见闻，不得推断缺席者去向、替别人回忆或新增行动字段。':''}
 ${banquetGuide}
-${afterSectGuide}
+${afterSectGuide}${bellGuide ? `\n${bellGuide}` : ''}
 【自身状态】
 - 境界：${cultivator.realm}${cultivator.realmStage}层（灵气进度：${cultivator.qiProgress}%）
 - 气血：${cultivator.hp}/${cultivator.maxHp} | 战力：${cultivator.combatPower}

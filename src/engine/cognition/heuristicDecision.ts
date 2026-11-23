@@ -29,6 +29,7 @@ import { utilityDisasterShelterDecision } from '../disasterShelterCognition';
 import { availableBoundaryReliefActions } from '../boundaryReliefEngine';
 import { furnaceEmergencyCrossingLocked, availableFurnaceEmergencyActions } from '../furnaceEmergency';
 import { exactFurnaceEmergencyDecision, furnaceEmergencyCommand } from '../furnaceEmergencyCognition';
+import { activeBellWatchForActor, availableBellWatchActions, bellWatchActedThisTick } from '../bellWatch';
 import { availableNightDoorActions } from '../nightDoor';
 import { exactNightDoorDecision, nightDoorCommand } from '../nightDoorCognition';
 import { availableBanquetSeatActions } from '../banquetSeats';
@@ -104,7 +105,8 @@ import { exactPavilionFireDecision, pavilionFireCommand } from '../pavilionFireC
 import { utilityAscensionDecision, utilityExpeditionRescueDecision } from './decisionFactsEarly';
 import { availableFrontierProviderActions, availableUpperArrayFieldProviderActions, holdsUpperPassageBody, upperPassageDecision, upperPassageRest, utilityCourierHandoffOffer, utilityHeartDemonDecision, dungeonDecisionOccasion, utilityDungeonDecision, utilityRouteWarning, PAIRED_OBSERVATORY_INTERVAL, PAIRED_OBSERVATORY_DAY, pairedObservatoryStation, preferredWorkshopWork, chooseLinkedToolConsent, urgentOrdinaryRefuge, urgentOrdinaryRecovery } from './decisionFactsLate';
 import { grandSiegeHeroReservedForPlayer, toMentorTransferDecision, toHousingDecision, possessedForWorkshopRelease, workshopReleaseDecision } from './decisionCommands';
-import { completeHeuristicDecision } from './heuristicDecisionTail';
+import { bellWatchCommand, exactBellWatchDecision } from './bellWatchDecision';
+import { completeHeuristicDecision, utilityDoctrineFoundingDecision } from './heuristicDecisionTail';
 
 export function computeHeuristicDecision(
   cultivator: Cultivator,
@@ -215,6 +217,16 @@ export function computeHeuristicDecision(
         innerMonologue: '伤势累进，在可实走退回时由本人撤回，不虚报已到岗。' };
       return { chosenAction: 'REST', innerMonologue: '换防途中仅按实际关口推进，不在旧站另行办事。' };
     }
+  }
+  if(activeBellWatchForActor(world,cultivator)||bellWatchActedThisTick(world,cultivator))
+    return {chosenAction:'REST',innerMonologue:'先走眼下这段信路。'};
+  const bellOptions=availableBellWatchActions(cultivator,world);
+  const bellPick=bellOptions.find(row=>row.bellWatchMove===(cultivator.hp >= cultivator.maxHp*.8?'reroute':'inspect'))??bellOptions[0];
+  if(bellPick && activeAvatar(world)!==cultivator){
+    const founding=utilityDoctrineFoundingDecision(cultivator,world);
+    if(founding)return founding;
+    const exact=exactBellWatchDecision(bellWatchCommand(bellPick),bellOptions);
+    if(exact)return exact;
   }
   if(furnaceEmergencyCrossingLocked(world,cultivator))return {chosenAction:'REST',innerMonologue:'先走自己已应下的那段路。'};
   const emergency = availableFurnaceEmergencyActions(cultivator,world,world.tick);
@@ -774,7 +786,7 @@ export function computeHeuristicDecision(
     (c) =>
       c.alive &&
       c.id !== cultivator.id &&
-      c.locationId === cultivator.locationId && !activeDanxiaMedicineEscort(world,c) && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) && !courierCheckpoint(world, c) && !boundaryReliefCheckpoint(world, c) && !disasterShelterCheckpoint(world,c)
+      c.locationId === cultivator.locationId && !activeBellWatchForActor(world,c) && !activeDanxiaMedicineEscort(world,c) && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) && !courierCheckpoint(world, c) && !boundaryReliefCheckpoint(world, c) && !disasterShelterCheckpoint(world,c)
   );
 
   if (activeAvatar(world) !== cultivator && cultivator.hp >= cultivator.maxHp * .45) {

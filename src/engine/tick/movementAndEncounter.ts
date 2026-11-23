@@ -1,3 +1,4 @@
+import { advanceBellWatch } from '../bellWatch';
 import { deadSchoolFormContacts } from '../schoolFormDuel';
 import { pruneInvalidBeastDuelContacts } from '../beastDuelProtection';
 import { pruneInvalidForbiddenDuelContacts } from '../forbiddenArtEngine';
@@ -49,6 +50,7 @@ const movementEventPlugins = defineTickPlugins<PreTurnContext, [WorldEvent[]]>([
   movementEvents('advanceCeasefires', ({ nextState }) => advanceCeasefires(nextState)),
   movementEvents('advanceCompetitionSeasons', ({ nextState }) => advanceCompetitionSeasons(nextState)),
   movementEvents('advanceMapHazards', ({ nextState }) => advanceMapHazards(nextState)),
+  movementEvents('advanceBellWatch', ({ nextState }) => advanceBellWatch(nextState)),
   movementEvents('advanceTerrainSuccession', ({ nextState }) => advanceTerrainSuccession(nextState)),
   movementEvents('advanceWaterVein', ({ nextState }) => advanceWaterVein(nextState)),
   movementEvents('advanceRoads', ({ nextState }) => advanceRoads(nextState)),

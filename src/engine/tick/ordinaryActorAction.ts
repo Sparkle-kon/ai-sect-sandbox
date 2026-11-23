@@ -9,6 +9,8 @@ import { exactLastRosterDecision } from '../lastRosterCognition';
 import { availableLastRosterActions, isPrivateLastRosterEvent } from '../lastRoster';
 import { exactBanquetSeatDecision } from '../banquetSeatCognition';
 import { availableBanquetSeatActions, isPrivateBanquetSeatEvent } from '../banquetSeats';
+import { availableBellWatchActions } from '../bellWatch';
+import { exactBellWatchDecision } from '../cognition/bellWatchDecision';
 import { exactNightDoorDecision } from '../nightDoorCognition';
 import { availableNightDoorActions, isPrivateNightDoorEvent } from '../nightDoor';
 import { exactBoundaryGapDecision } from '../boundaryGapCognition';
@@ -126,6 +128,14 @@ export function runOrdinaryActorAction(
     const prior=prevState.cultivators.find(row=>row.id===cultivator.id);
     if(!prior||activeAvatar(prevState)===prior||!exactBanquetSeatDecision(modelProposal,
       availableBanquetSeatActions(prior,prevState,nextState.tick),true)){
+      provided=undefined;
+      modelOrdinaryReplaced=true;
+    }
+  }
+  if(modelProposal?.chosenAction==='BELL_WATCH'&&!avatarDecision){
+    const prior=prevState.cultivators.find(row=>row.id===cultivator.id);
+    if(!prior||activeAvatar(prevState)===prior||!exactBellWatchDecision(modelProposal,
+      availableBellWatchActions(prior,prevState,nextState.tick),true)){
       provided=undefined;
       modelOrdinaryReplaced=true;
     }

@@ -124,10 +124,12 @@ export default defineConfig({
             './src/components/HighDramaPresetPicker.tsx','./src/components/PlayerStoryEntry.tsx','./src/components/storyPlayerController.ts','./src/components/useHighDramaOpening.ts'],
           // Truce and storage need the typed siege proof, not the active combat graph.
           // Keep physical witness checks and their read-only scenes outside the scripture action bundle.
+          'physical-presence-terms': ['./src/engine/ascensionPresence.ts','./src/engine/siteDutyTerms.ts','./src/engine/bellWatchPresence.ts'],
           'local-witness-scenes': ['./src/engine/vacantGate.ts','./src/engine/grandSiegePresence.ts','./src/engine/anomalyRelay.ts','./src/engine/villageReunion.ts','./src/engine/battlefieldAftermath.ts'],
           // Portable validators stay outside the general save-loader size budget.
           'local-scene-schemas': ['./src/engine/apprenticeshipReunionSchema.ts','./src/engine/furnaceEmergencySchema.ts','./src/engine/abandonedQuarterSchema.ts','./src/engine/boundaryGapSchema.ts','./src/engine/reliefHomecomingSchema.ts','./src/engine/nightDoorSchema.ts','./src/engine/banquetSeatSchema.ts','./src/engine/lastRosterSchema.ts'],
           'village-lamp-proof': ['./src/engine/reliefHomecomingProof.ts'],
+          'bell-watch-save-proof': ['./src/engine/storage/bellWatchValidation.ts'],
           'pavilion-save-proof': ['./src/engine/storagePavilionLoanValidation.ts'],
           'grand-siege-proof': ['./src/engine/grandSiegeProof.ts', './src/engine/grandSiegeWitnessView.ts', './src/engine/storageGrandSiegeValidation.ts', './src/types/grandSiege.ts'],
           // The game seed depends only on trace state; keep the optional replay rules separate.

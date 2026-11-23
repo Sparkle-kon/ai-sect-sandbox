@@ -2,6 +2,8 @@ import { availableLastRosterActions, recordLastRosterClosure, resolveLastRosterA
 import {exactLastRosterDecision} from './lastRosterCognition';
 import { availableBanquetSeatActions, resolveBanquetSeatAction } from './banquetSeats';
 import {exactBanquetSeatDecision} from './banquetSeatCognition';
+import { activeBellWatchForActor, availableBellWatchActions, bellWatchActedThisTick, resolveBellWatchAction } from './bellWatch';
+import { exactBellWatchDecision } from './cognition/bellWatchDecision';
 import { availableNightDoorActions, resolveNightDoorAction } from './nightDoor';
 import {exactNightDoorDecision} from './nightDoorCognition';
 import { availableBoundaryGapActions, resolveBoundaryGapAction } from './boundaryGap';
@@ -488,6 +490,11 @@ export function applyCultivatorBrainDecision(
     cultivator.innerMonologue='药束随实际路段走置；本轮不能在旧站另接事务。';
     return null;
   }
+  if(activeBellWatchForActor(world,cultivator)||bellWatchActedThisTick(world,cultivator)){
+    cultivator.currentAction='BELL_WATCH';
+    cultivator.innerMonologue='沿自己认得的山路走，未到不算传过话。';
+    return null;
+  }
   if (activeCourierForActor(world, cultivator) || courierActedThisTick(world, cultivator)) {
     if (decision.chosenAction === 'COURIER_HANDOFF' && decision.courierHandoffMove === 'offer' &&
         courierHandoffMayOfferNow(world, cultivator)) {
@@ -826,6 +833,13 @@ export function applyCultivatorBrainDecision(
         return cultivator.alive&&cultivator.locationId!==from&&cultivator.locationId===siteId&&cultivator.currentAction==='EXPLORE';
       });
       if(result){cultivator.currentAction='BANQUET_SEAT';cultivator.innerMonologue=exact.innerMonologue;}
+      return result;
+    }
+    case 'BELL_WATCH': {
+      if(activeAvatar(world)===cultivator&&decision!==explicitAvatarDecision)return null;
+      const exact=exactBellWatchDecision(decision,availableBellWatchActions(cultivator,world),true);
+      const result=exact?resolveBellWatchAction(world,cultivator,exact):null;
+      if(result&&exact){cultivator.currentAction='BELL_WATCH';cultivator.innerMonologue=exact.innerMonologue;}
       return result;
     }
     case 'NIGHT_DOOR': {
@@ -1224,7 +1238,7 @@ export function applyCultivatorBrainDecision(
 
     case 'SOCIALIZE': {
       const target = world.cultivators.find((c) =>
-        c.alive && c.id !== cultivator.id && !ascensionDutyActive(world,c) && c.locationId === cultivator.locationId && !activeDanxiaMedicineEscort(world,c) && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) && !courierCheckpoint(world, c) && !expeditionRescueCheckpoint(world, c) && !boundaryReliefCheckpoint(world, c) && !disasterShelterCheckpoint(world,c) &&
+        c.alive && c.id !== cultivator.id && !ascensionDutyActive(world,c) && c.locationId === cultivator.locationId && !activeBellWatchForActor(world,c) && !activeDanxiaMedicineEscort(world,c) && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) && !courierCheckpoint(world, c) && !expeditionRescueCheckpoint(world, c) && !boundaryReliefCheckpoint(world, c) && !disasterShelterCheckpoint(world,c) &&
         (decision.targetCultivatorId === undefined || c.id === decision.targetCultivatorId)
       );
       if (!target) return null;
@@ -1261,7 +1275,7 @@ export function applyCultivatorBrainDecision(
 
     case 'SCHEMING': {
       const target = world.cultivators.find((c) =>
-        c.alive && c.id !== cultivator.id && !ascensionDutyActive(world,c) && c.locationId === cultivator.locationId && !activeDanxiaMedicineEscort(world,c) && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) && !courierCheckpoint(world, c) && !expeditionRescueCheckpoint(world, c) && !boundaryReliefCheckpoint(world, c) && !disasterShelterCheckpoint(world,c) &&
+        c.alive && c.id !== cultivator.id && !ascensionDutyActive(world,c) && c.locationId === cultivator.locationId && !activeBellWatchForActor(world,c) && !activeDanxiaMedicineEscort(world,c) && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) && !courierCheckpoint(world, c) && !expeditionRescueCheckpoint(world, c) && !boundaryReliefCheckpoint(world, c) && !disasterShelterCheckpoint(world,c) &&
         (decision.targetCultivatorId === undefined || c.id === decision.targetCultivatorId)
       );
       if (!target) return null;
@@ -1320,7 +1334,7 @@ export function applyCultivatorBrainDecision(
       return null;
     case 'DUEL': {
       const defender = world.cultivators.find((c) =>
-        c.alive && c.id !== cultivator.id && !ascensionDutyActive(world,c) && c.locationId === cultivator.locationId && !activeDanxiaMedicineEscort(world,c) && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) && !courierCheckpoint(world, c) && !expeditionRescueCheckpoint(world, c) && !boundaryReliefCheckpoint(world, c) && !disasterShelterCheckpoint(world,c) &&
+        c.alive && c.id !== cultivator.id && !ascensionDutyActive(world,c) && c.locationId === cultivator.locationId && !activeBellWatchForActor(world,c) && !activeDanxiaMedicineEscort(world,c) && !activeRelocationForActor(world, c) && !activeEscortForActor(world, c) && !pilgrimageCheckpoint(world, c) && !courierCheckpoint(world, c) && !expeditionRescueCheckpoint(world, c) && !boundaryReliefCheckpoint(world, c) && !disasterShelterCheckpoint(world,c) &&
         (decision.targetCultivatorId === undefined || c.id === decision.targetCultivatorId)
       );
       if (!defender || forbiddenDuelForParticipant(world,defender) || forbiddenDuelForParticipant(world,cultivator)||beastDuelContactForParticipant(world,defender)||
@@ -1401,7 +1415,7 @@ export function executeGodIntervention(
       loc.spiritQi = clamp(loc.spiritQi + 20, 10, 150);
 
       const luckyOnes = nextState.cultivators.filter(
-        (c) => lowerAlive(c) && c.locationId === loc.id && !activeRelocationForActor(nextState, c) && !activeEscortForActor(nextState, c) && !pilgrimageCheckpoint(nextState, c) && !courierCheckpoint(nextState, c) && !expeditionRescueCheckpoint(nextState, c) && !boundaryReliefCheckpoint(nextState, c) && !disasterShelterCheckpoint(nextState,c)
+        (c) => lowerAlive(c) && c.locationId === loc.id && !activeBellWatchForActor(nextState,c) && !activeRelocationForActor(nextState, c) && !activeEscortForActor(nextState, c) && !pilgrimageCheckpoint(nextState, c) && !courierCheckpoint(nextState, c) && !expeditionRescueCheckpoint(nextState, c) && !boundaryReliefCheckpoint(nextState, c) && !disasterShelterCheckpoint(nextState,c)
       );
       for (const c of luckyOnes) {
         c.qiProgress = clamp(c.qiProgress + 30, 0, 100);

@@ -1,3 +1,4 @@
+import { activeBellWatchForActor, bellWatchActedThisTick, bellWatchCheckpoint } from './bellWatchPresence';
 import {onLowerPlane} from './upperPassageIsolation';
 import { regionForPoint, SIMULATION_REGIONS } from './simulationRegionGeometry';
 import { activeRegionalPromotionRegions } from './regionalPromotionEngine';
@@ -27,7 +28,7 @@ export function currentActorRegion(world:WorldState,actor:Cultivator):Simulation
   if (!onLowerPlane(actor)) return undefined;
   const relocation=world.relocations.plans.find(row=>row.status==='in_transit'&&row.garrisonIds.includes(actor.id));
   const escort=world.escorts.contracts.find(row=>row.status==='active'&&row.escortId===actor.id);
-  const proven=danxiaMedicineCheckpoint(world,actor)??courierCheckpoint(world,actor)??pilgrimageCheckpoint(world,actor)??
+  const proven=bellWatchCheckpoint(world,actor)??danxiaMedicineCheckpoint(world,actor)??courierCheckpoint(world,actor)??pilgrimageCheckpoint(world,actor)??
     boundaryReliefCheckpoint(world,actor)??expeditionRescueCheckpoint(world,actor)??
     (relocation?relocation.path[relocation.pathIndex]:undefined)??(escort?escort.path[escort.pathIndex]:undefined);
   return proven?regionForPoint(world,proven):regionForSite(world,actor.locationId);
@@ -266,7 +267,7 @@ export function deferRegionalActorTurn(world:WorldState,turn:RegionalTurn|undefi
   if(provided||!candidate||!onLowerPlane(actor)||!alive(actor)||actor.locationId!==candidate.siteId||
     isTribulationActive(actor)||actor.qiProgress>=80||actor.pillToxicity>0||
     actor.hp/Math.max(1,actor.maxHp)<.82||!!actor.guardAssignment&&actor.guardAssignment.expiresTick>world.tick||
-    courierActedThisTick(world,actor)||pilgrimageActedThisTick(world,actor)||danxiaMedicineActedThisTick(world,actor))return false;
+    (activeBellWatchForActor(world,actor)||bellWatchActedThisTick(world,actor))||courierActedThisTick(world,actor)||pilgrimageActedThisTick(world,actor)||danxiaMedicineActedThisTick(world,actor))return false;
   refreshObligations(world,turn);
   if(turn.exactRegions.has(candidate.regionId)||turn.protectedActors.has(actor.id)||required?.())return false;
   turn.concludedActors.add(actor.id);

@@ -19,6 +19,7 @@ const ACTION_LABELS = {
   APPRENTICESHIP_REUNION: '旧课再叙',
   LAST_ROSTER: '旧宗余页',
   BANQUET_SEAT: '赴夜宴之约',
+  BELL_WATCH: '山钟值守',
   NIGHT_DOOR: '乡舍叩门',
   BOUNDARY_GAP: '关口缺岗',
   ABANDONED_QUARTER: '探访旧村',

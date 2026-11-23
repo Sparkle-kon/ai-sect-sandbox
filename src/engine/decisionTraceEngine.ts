@@ -120,6 +120,7 @@ export function recordDecisionTrace(world: WorldState, actorId: string, candidat
     decision.chosenAction==='APPRENTICESHIP_REUNION'||decision.apprenticeshipReunionMove!==undefined||decision.targetApprenticeshipReunionId!==undefined||
     decision.chosenAction==='LAST_ROSTER'||decision.lastRosterMove!==undefined||decision.targetLastRosterId!==undefined||
     decision.chosenAction==='BANQUET_SEAT'||decision.banquetSeatMove!==undefined||decision.targetBanquetSeatId!==undefined||
+    decision.chosenAction==='BELL_WATCH'||decision.bellWatchMove!==undefined||decision.targetBellWatchId!==undefined||
     decision.chosenAction==='NIGHT_DOOR'||decision.nightDoorMove!==undefined||decision.targetNightDoorId!==undefined||
     decision.chosenAction==='BOUNDARY_GAP'||decision.boundaryGapMove!==undefined||decision.targetBoundaryGapId!==undefined||
     decision.chosenAction==='ABANDONED_QUARTER'||decision.abandonedQuarterMove!==undefined||decision.targetAbandonedQuarterId!==undefined||

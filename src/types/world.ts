@@ -1,3 +1,4 @@
+import type { BellWatchMove, BellWatchState } from './bellWatch';
 import type {ApprenticeshipReunionMove,ApprenticeshipReunionState} from './apprenticeshipReunion';
 import type {BanquetSeatMove,BanquetSeatState} from './banquetSeat';
 import type {LastRosterMove,LastRosterState} from './lastRoster';
@@ -249,6 +250,7 @@ export type ActionType =
   | 'LAST_ROSTER'
   | 'BANQUET_SEAT'
   | 'NIGHT_DOOR'
+  | 'BELL_WATCH'
   | 'BOUNDARY_GAP'
   | 'ABANDONED_QUARTER'
   | 'FURNACE_EMERGENCY'
@@ -349,6 +351,7 @@ export interface RelationshipEdge {
 }
 
 export interface LocationNode {
+  bellWatch?: BellWatchState;
   expeditionOmenId?: string;
   id: string;
   name: string;
@@ -617,6 +620,8 @@ export interface LLMConfig {
 }
 
 export interface LLMDecisionPayload {
+  bellWatchMove?: BellWatchMove;
+  targetBellWatchId?: string;
   targetHeartTrialId?: string;
   heartDemonChoice?: HeartDemonChoice;
   targetHeartDemonAftermathId?: string;
