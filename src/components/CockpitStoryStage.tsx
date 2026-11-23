@@ -1,9 +1,12 @@
+import {SceneStageCanvas} from './SceneStageCanvas';
+import {StoryStageDialogue} from './StoryStageDialogue';
+import {projectSceneStage} from './sceneStageModel';
 import {PublicBondAside,type PublicBondArc} from './DramaticBondRead';
 import {useId, useMemo,type ReactNode} from 'react';
 import {publicChronicleSceneEvents} from '../engine/chronicleLead';
 import {writePublicChronicleScene} from '../engine/chroniclePublicProse';
 import {projectStoryHomepage} from '../engine/storyHomepage';
-import type {WorldEvent,WorldState} from '../types/world';
+import type {Cultivator,WorldEvent,WorldState} from '../types/world';
 
 const highlights={
   combat:{label:'交锋',rank:6}, intrigue:{label:'波澜',rank:3}, diplomacy:{label:'相逢与往来',rank:2},
@@ -41,8 +44,10 @@ export function projectCockpitStoryStage(world:WorldState) {
   return {...home,...(currentScene?{currentLabel:highlights[currentScene.category].label}:{}),focus};
 }
 
-export function CockpitStoryStage({world,onFocus,subplot,branchScene}:{
+export function CockpitStoryStage({world,viewer,historical=false,onFocus,subplot,branchScene}:{
   world:WorldState;
+  viewer?:Cultivator;
+  historical?:boolean;
   subplot?:PublicBondArc;
   branchScene?:ReactNode;
   /** The parent rechecks the current frame and opens this exact public event if still authorized. */
@@ -51,6 +56,8 @@ export function CockpitStoryStage({world,onFocus,subplot,branchScene}:{
   const view=useMemo(()=>projectCockpitStoryStage(world),[world]);
   const stage=useId(),focus=useId();
   const scene=view.scene;
+  const stageFrame=useMemo(()=>projectSceneStage(world,{eventId:scene?.eventId,viewer,leadId:view.lead?.id,
+    historical:historical||Boolean(scene?.earlier)}),[world,scene,viewer,view.lead?.id,historical]);
   const eventTitle='min-h-11 w-full rounded-lg text-left font-serif font-semibold text-amber-100 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-200 [overflow-wrap:anywhere]';
   return <section aria-labelledby={stage} className="min-w-0 space-y-3 [overflow-wrap:anywhere]">
     <header className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
@@ -65,6 +72,8 @@ export function CockpitStoryStage({world,onFocus,subplot,branchScene}:{
         <h3 className="font-serif text-2xl font-semibold leading-tight text-amber-50">{view.lead?`主角：${view.lead.name}`:'主角未定'}</h3>
         {!view.lead&&<p className="text-sm leading-relaxed text-slate-300">此时仍是群像，尚无人走成主角。</p>}
       </div>
+      <SceneStageCanvas frame={stageFrame}/>
+      <StoryStageDialogue portrait={stageFrame.portrait}>
       <div className="space-y-1.5">
         <p className="text-xs font-medium text-amber-200">{scene?.earlier?'本月暂无新见闻 · 上一幕':view.currentLabel?`本月公开一幕 · ${view.currentLabel}`:'本月公开一幕'}</p>
         <h4 className="font-serif text-xl font-semibold leading-snug text-amber-50">
@@ -77,6 +86,7 @@ export function CockpitStoryStage({world,onFocus,subplot,branchScene}:{
             <p className="text-sm leading-relaxed text-slate-300">尚无可公开讲述的新进展。</p>:null}
         {view.lead&&scene?.followsLead===false&&<p className="text-xs leading-relaxed text-slate-400">这一幕另有人登场，主线并未换人。</p>}
       </div>
+      </StoryStageDialogue>
     </article>
     {branchScene}
     <PublicBondAside arc={subplot}/>

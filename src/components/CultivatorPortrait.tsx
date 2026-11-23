@@ -1,6 +1,6 @@
 import type {CultivatorPortraitSpec} from './cultivatorPortraitModel';
 
-type PortraitProps={portrait:CultivatorPortraitSpec;className?:string};
+type PortraitProps={portrait:CultivatorPortraitSpec;className?:string;presentation?:'stage'};
 const jaw=[
   'M35 47q2-18 25-19 23 1 25 19l-3 15q-3 13-22 22-19-9-22-22Z',
   'M35 48q1-20 25-21 24 1 25 21l-2 14q-2 16-23 24-21-8-23-24Z',
@@ -50,15 +50,21 @@ function PortraitHalo({halo}:{halo:NonNullable<CultivatorPortraitSpec['halo']>})
   </g>;
 }
 
-export function CultivatorPortrait({portrait,className='h-[4.5rem] w-16'}:PortraitProps){
+export function CultivatorPortrait({portrait,className='h-[4.5rem] w-16',presentation}:PortraitProps){
+  const stage=presentation==='stage';
   const {face,palette}=portrait;
   const {ink,skin,detail}=face;
   return <svg aria-hidden="true" focusable="false" viewBox="0 0 120 136" width={120} height={136}
-    className={`block shrink-0 overflow-hidden rounded-lg ${className}`} data-cultivator-portrait="">
+    className={`block shrink-0 overflow-hidden rounded-lg ${stage?'brightness-110 saturate-[1.22]':''} ${className}`} data-cultivator-portrait="">
     <rect x="1" y="1" width="118" height="134" rx="13" fill={palette.background}/>
     <rect x="4" y="4" width="112" height="128" rx="11" fill="none" stroke={palette.trim} strokeWidth=".75" opacity=".37"/>
     <path d="M6 89 25 74 32 81 48 57 70 82l11-7 32 24v31H6Z" fill={palette.spirit} opacity=".12"/>
     <path d="M7 109q13-8 26 0t26 0m27-2q12-9 26 0M10 25h20m-14 4h18m66 11h12m-16 4h16" stroke={palette.trim} strokeWidth=".65" opacity=".35" fill="none"/>
+    {stage&&<g fill={palette.spirit}>
+      <circle cx="88" cy="19" r="10" opacity=".34"/>
+      <path d="M5 92 28 64 50 89 64 74 82 95 107 68 115 76v44H5Z" opacity=".19"/>
+      <path d="M4 103q18-14 35-6t38-1 39-2v36H4Z" opacity=".21"/>
+    </g>}
     {portrait.halo&&<PortraitHalo halo={portrait.halo}/>}
     <path d="M33 55q-7 15-10 39l11-4 5 7 11-9h22l12 8 7-7 7 5q-4-27-10-39Z" fill={ink} opacity=".95"/>
     <path d="M8 132q2-24 16-32l19-12 17-5 17 5 19 12q14 8 16 32Z" fill={palette.fabric} stroke={ink} strokeWidth="1.55"/>
@@ -76,6 +82,13 @@ export function CultivatorPortrait({portrait,className='h-[4.5rem] w-16'}:Portra
     <path d={hair[face.hair]} transform={detail?`translate(${detail.fringeSweep*.6} 0)`:undefined} stroke={ink} strokeWidth="1.2" fill={ink}/>
     <path d="M36 44q3-14 14-16m-12 20q5-14 14-17m25 1q7 7 8 16" stroke={palette.trim} opacity={portrait.ageBand==='elder'?'.76':'.27'} strokeWidth=".8" strokeLinecap="round" fill="none"/>
     <path d={ornaments[face.ornament]} stroke={palette.trim} strokeWidth="1.55" strokeLinejoin="round" strokeLinecap="round" fill="none"/>
+    {stage&&<g>
+      <path d="M14 124q6-15 20-20l11-7-7 30-24 4Zm92 0q-6-15-20-20l-11-7 7 30 24 4Z" fill={palette.trim} opacity=".23"/>
+      <path d="M31 107l13-8m32 0 13 8m-47 19 18-22 18 22" fill="none" stroke={palette.trim} strokeWidth=".8" opacity=".75"/>
+      <path d="M46 59h4m20 0h4" stroke="#9a5351" strokeWidth="1" strokeLinecap="round" opacity=".3"/>
+      <circle cx="48" cy="54.5" r="1" fill={ink}/><circle cx="72" cy="54.5" r="1" fill={ink}/>
+      <circle cx="48.3" cy="54.2" r=".35" fill="#fff1d6"/><circle cx="72.3" cy="54.2" r=".35" fill="#fff1d6"/>
+    </g>}
     <path d="m60 119 3 4-3 4-3-4Z" fill={palette.spirit} stroke={palette.trim} strokeWidth=".55"/>
   </svg>;
 }

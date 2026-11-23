@@ -3,7 +3,7 @@ import type {PublicBondArc} from './DramaticBondRead';
 import type {ReactNode,Ref} from 'react';
 import {Compass,Map as MapIcon} from 'lucide-react';
 import {useViewportAtLeast} from './useViewportAtLeast';
-import type {WorldState} from '../types/world';
+import type {Cultivator,WorldState} from '../types/world';
 import {CockpitStoryStage} from './CockpitStoryStage';
 import {CockpitTimeControls,type CockpitTimeControlsProps} from './CockpitTimeControls';
 import {PanoramicCockpit,type PanoramicCockpitProps} from './PanoramicCockpit';
@@ -37,6 +37,7 @@ export function DesktopSandboxEntrance({onOpen,disabled}:{
 
 interface PanoramicCockpitViewProps extends Omit<PanoramicCockpitProps,'timeControls'|'stage'> {
   world:WorldState;
+  stageViewer?:Cultivator;
   titleRef:Ref<HTMLHeadingElement>;
   time:Omit<CockpitTimeControlsProps,'date'>;
   exit:ReactNode;
@@ -46,7 +47,7 @@ interface PanoramicCockpitViewProps extends Omit<PanoramicCockpitProps,'timeCont
   branchScene?:ReactNode;
 }
 
-export function PanoramicCockpitView({world,titleRef,time,exit,statusStrip,stageOverride,subplot,branchScene,...slots}:PanoramicCockpitViewProps){
+export function PanoramicCockpitView({world,stageViewer,titleRef,time,exit,statusStrip,stageOverride,subplot,branchScene,...slots}:PanoramicCockpitViewProps){
   const opening=highDramaPreset(world.builtinScenarioOrigin?.id);
   return <main data-panoramic-cockpit data-cockpit-tick={world.tick}
     className="min-h-dvh bg-slate-950 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
@@ -58,7 +59,7 @@ export function PanoramicCockpitView({world,titleRef,time,exit,statusStrip,stage
       {exit}
     </header>
     {statusStrip&&<div className="mx-auto mb-2 w-full max-w-[192rem] px-2.5 sm:px-4">{statusStrip}</div>}
-    <PanoramicCockpit {...slots} stage={stageOverride??<CockpitStoryStage world={world} subplot={subplot} branchScene={branchScene}/>}
+    <PanoramicCockpit {...slots} stage={stageOverride??<CockpitStoryStage world={world} viewer={stageViewer} historical={time.historical} subplot={subplot} branchScene={branchScene}/>}
       timeControls={<CockpitTimeControls {...time} date={world}/>}/>
   </main>;
 }
