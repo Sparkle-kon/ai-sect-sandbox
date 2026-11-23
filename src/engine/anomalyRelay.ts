@@ -152,6 +152,42 @@ function lineage(world:WorldState,origin:AnomalyRelayOrigin,receipt:AnomalyRelay
     row=parent;
   }
 }
+/** Returns the new receipt-site count for an authentic prospective packet; never writes receipts. */
+export function prepareAnomalyPriority(world:WorldState){
+  const state=world.anomalyRelays,director=world.storyteller;
+  if(!state||!director||director.style==='still_water'||director.focusActorId!==undefined)return;
+  const originIndex=indexed(state.origins,row=>row.eventId);
+  const origins=new Map(state.origins.filter(origin=>originIndex.get(origin.eventId)===origin&&
+    world.tick-origin.tick<=RUMOR_LIFE&&originValid(world,origin,false)).map(origin=>[origin.eventId,origin]));
+  if(!origins.size)return;
+  const byKey=indexed(state.receipts,keyOf),people=indexed(world.cultivators,row=>row.id);
+  const sites=indexed(world.locations,row=>row.id);
+  const parents=new Map<string,Set<string>|null>();
+  const actual=(actor:Cultivator)=>people.get(actor.id)===actor&&admissibleSite(sites.get(actor.locationId))&&
+    isGrandSiegeFighterPresent(world,actor,actor.locationId);
+  return (sender:Cultivator,listener:Cultivator,packet:Rumor,incoming:Rumor)=>{
+    if(!packet.originEventId||sender===listener)return 0;
+    const origin=origins.get(packet.originEventId);
+    if(!origin||!tagMatches(origin,packet)||!tagMatches(origin,incoming)||
+      byKey.has(receiptKey(origin.eventId,listener.id))||!actual(sender)||!actual(listener))return 0;
+    const parentKey=receiptKey(origin.eventId,sender.id),parent=byKey.get(parentKey);
+    if(!parent||parent.tick!==packet.learnedTick||parent.tick>=world.tick||parent.hops!==packet.hops||
+      parent.confidence!==packet.confidence||parent.channel!==packet.provenance||parent.senderId!==packet.sourceCultivatorId||
+      parent.originalWitnessId!==packet.originSourceCultivatorId||incoming.hops!==parent.hops+1||incoming.hops>4||
+      incoming.learnedTick!==world.tick||incoming.sourceCultivatorId!==sender.id||incoming.confidence<25)return 0;
+    const local=sender.locationId===listener.locationId;
+    if(incoming.provenance!==(local?'conversation':'flying_sword')||
+      !local&&(!sender.sectId||sender.sectId!==listener.sectId||world.tick%3!==0)||
+      incoming.confidence!==Math.floor(parent.confidence*(local?.84:.7)))return 0;
+    if(!parents.has(parentKey)){
+      const chain=lineage(world,origin,parent,byKey,people,sites);
+      parents.set(parentKey,chain?new Set(chain.map(row=>row.siteId)):null);
+    }
+    const prior=parents.get(parentKey);
+    return prior&&prior.size<3&&!prior.has(listener.locationId)?prior.size+1:0;
+  };
+}
+
 export function projectAnomalyRelay(world:WorldState,viewer:Cultivator|undefined):AnomalyRelayView|undefined{
   const state=world.anomalyRelays;
   if(!state||!viewer)return;

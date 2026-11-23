@@ -1,4 +1,4 @@
-import {stampAnomalyRelay,stampAnomalyWitness} from './anomalyRelay';
+import {prepareAnomalyPriority,stampAnomalyRelay,stampAnomalyWitness} from './anomalyRelay';
 import {sealedHeartDemonEventId} from './heartDemonPrivacy';
 import { IMMORTAL_AUCTION_SITE } from './immortalAuctionTerms';
 import { daoPathEventId } from './daoPathTerms';
@@ -96,6 +96,14 @@ export function spreadRumors(world: WorldState): void {
     item.rumors = item.rumors.filter((rumor) => world.tick - rumor.originTick <= RUMOR_LIFETIME);
     return [item.id, item.rumors.filter((rumor) => rumor.learnedTick < world.tick && rumor.hops < MAX_HOPS && rumor.witnessScope !== 'participants' && (!rumor.locationId || !privateSites.has(rumor.locationId))).sort(byValue)];
   }));
+  const prioritizeAnomaly=prepareAnomalyPriority(world);
+  const usedAnomalyOrigins=new Set<string>();
+  // Build from exactly the existing immutable pre-spread packets. A narrow scan avoids changing ordinary early breaks.
+  const anomalyPackets=prioritizeAnomaly&&new Map(live.flatMap(sender=>{
+    const packets=(snapshot.get(sender.id)??[]).filter(packet=>packet.originEventId?.startsWith('evt-')&&
+      packet.subject==='凶兽引动兽潮');
+    return packets.length?[[sender,packets] as const]:[];
+  }));
   // One packet per listener per month; a snapshot prevents same-month cascades.
   for (const listener of live) {
     const seen = new Map(listener.rumors.map((item) => [item.id, item.confidence]));
@@ -118,8 +126,38 @@ export function spreadRumors(world: WorldState): void {
         source={actor:sender,packet:item};
       }
     }
+    let exceptionalOrigin:string|undefined;
+    if(prioritizeAnomaly&&anomalyPackets?.size){
+      let priority:{incoming:Rumor;actor:Cultivator;packet:Rumor;sites:number}|undefined;
+      for(const [sender,packets] of anomalyPackets){
+        if(sender===listener)continue;
+        const local=sender.locationId===listener.locationId;
+        if(!local&&(world.tick%3!==0||!sender.sectId||sender.sectId!==listener.sectId))continue;
+        for(const packet of packets){
+          if(!packet.originEventId||usedAnomalyOrigins.has(packet.originEventId))continue;
+          const confidence=Math.floor(packet.confidence*(local?.84:.7));
+          if(confidence<25||confidence<=(seen.get(packet.id)??0))continue;
+          const incoming:Rumor={...packet,confidence,learnedTick:world.tick,hops:packet.hops+1,
+            provenance:local?'conversation':'flying_sword',sourceCultivatorId:sender.id};
+          const sites=prioritizeAnomaly(sender,listener,packet,incoming);
+          if(!sites||priority&&(sites<priority.sites||sites===priority.sites&&byValue(incoming,priority.incoming)>=0)||
+            ![...listener.rumors.filter(row=>row.id!==incoming.id),incoming].sort(byValue).slice(0,RUMOR_LIMIT).includes(incoming))
+            continue;
+          priority={incoming,actor:sender,packet,sites};
+        }
+      }
+      // If the same delivery would already win, keep it ordinary and don't spend the exceptional origin slot.
+      if(priority&&(best?.id!==priority.incoming.id||best.sourceCultivatorId!==priority.incoming.sourceCultivatorId)){
+        best=priority.incoming;
+        source={actor:priority.actor,packet:priority.packet};
+        exceptionalOrigin=priority.packet.originEventId;
+      }
+    }
     if (best) {
-      if(learn(listener,best,world.tick)&&source)stampAnomalyRelay(world,listener,best,source.actor,source.packet);
+      if(learn(listener,best,world.tick)&&source){
+        stampAnomalyRelay(world,listener,best,source.actor,source.packet);
+        if(exceptionalOrigin)usedAnomalyOrigins.add(exceptionalOrigin);
+      }
       captureHeritageRelay(world, listener, best);
     }
   }
