@@ -1,6 +1,7 @@
 import {activeAvatar} from '../engine/avatarEngine';
 import {isScopedExpeditionGate} from '../engine/expeditionOmenTerms';
-import {ROGUELIKE_ENCOUNTER_CATALOG} from '../engine/roguelikeEncounterCatalog';
+import {ROGUELIKE_ENCOUNTER_CATALOG,roguelikeSettlementNarration} from '../engine/roguelikeEncounterCatalog';
+import {contextualEncounterKind,validEncounterContext} from '../engine/contextualEncounterEvidence';
 import {activeRoguelikeEncounter,roguelikeEncounterRoute} from '../engine/roguelikeEncounterEngine';
 import type {RoguelikeEncounterRecord} from '../types/roguelikeEncounter';
 import type {Cultivator,WorldState} from '../types/world';
@@ -22,7 +23,8 @@ export function projectRoguelikeEncounterStage(world:WorldState, actor:Cultivato
     unique(world.cultivators,actor.id)!==actor||unique(world.roguelikeEncounters??[],record.id)!==record||
     record.actorId!==actor.id||record.siteId!==actor.locationId||
     !Number.isSafeInteger(record.openedTick)||record.openedTick<1||record.openedTick>world.tick||
-    record.id!==`roguelike-encounter-${record.openedTick}-${actor.id}`||!roguelikeEncounterRoute(world,record.fromSiteId,record.siteId))return;
+    record.id!==`roguelike-encounter-${record.openedTick}-${actor.id}`||
+    !(contextualEncounterKind(record.kind)?validEncounterContext(world,record):roguelikeEncounterRoute(world,record.fromSiteId,record.siteId)))return;
   const scene=ROGUELIKE_ENCOUNTER_CATALOG[record.kind];
   const exactReceipt=(phase:'open'|'settled',tick:number,title:string)=>{
     const fact=unique(world.events,`evt-${record.id}-${phase}`);
@@ -43,9 +45,7 @@ export function projectRoguelikeEncounterStage(world:WorldState, actor:Cultivato
       !scene.choices.some(row=>row.choice===choice))return;
     const suffix=choice==='leave'?'转身':record.outcome.success?'得悟':'余波';
     const settled=exactReceipt('settled',world.tick,`${scene.title}：${suffix}`);
-    const narration=choice==='leave'?'你没有伸手，把这一步留给了将来。':
-      record.outcome.success?'你没有白走这一遭。所得所失，都写在这段亲历里。':
-        '此路未如所愿。你从险处抽身，所受的波折都已落在身上。';
+    const narration=roguelikeSettlementNarration(record);
     if(settled?.description!==narration)return;
     pose=choice==='leave'?'idle':pose;
   }else return;

@@ -12,13 +12,15 @@ import {courierCheckpoint} from './sealedCourierEngine';
 import {pilgrimageCheckpoint} from './pilgrimageEngine';
 import {recordMemory} from './memoryEngine';
 import {consumeDirectorNudge,directorSiteIsSafe,liveDirectorNudges} from './director/nudgeIntegrations';
+import {contextualEncounterKind,describeEncounterArrival,locallyBondedBeast,validEncounterContext} from './contextualEncounterEvidence';
 import {regionForPoint} from './simulationRegionGeometry';
 import {ROGUELIKE_ENCOUNTER_CATALOG,admitRoguelikeStorylet,resolveRoguelikeStorylet,roguelikeEncounterChoiceIds,
-  roguelikeStoryletCanUseWitness,selectRoguelikeStorylet} from './roguelikeEncounterCatalog';
+  roguelikeStoryletCanUseWitness,roguelikeSettlementNarration,selectRoguelikeStorylet} from './roguelikeEncounterCatalog';
 import {currentSectGateTrialAuthority,openSectGateTrialStamp,sectGateReceiptText,sectGateReputationDelta} from './sectGateTrialEngine';
 
 export const ROGUELIKE_ENCOUNTER_HISTORY=96;
 export const ROGUELIKE_ENCOUNTER_ACTOR_COOLDOWN=6;
+export const ROGUELIKE_ENCOUNTER_CONTEXT_OPENING_THRESHOLD=30;
 export const ROGUELIKE_ENCOUNTER_NPC_OPENING_THRESHOLD=1; // One in 100 qualifying native arrivals, without touching the simulation RNG.
 type Stamp=Pick<RoguelikeEncounterRecord,'actorId'|'fromSiteId'|'siteId'|'openedTick'>;
 const clamp=(n:number,min:number,max:number)=>Math.min(max,Math.max(min,n));
@@ -74,9 +76,7 @@ function event(world:WorldState,row:RoguelikeEncounterRecord,phase:'open'|'settl
     ...sectGateReceiptText(phase==='settled'?row.choice:undefined),
     category:'intrigue',actorIds:[row.actorId],locationId:row.siteId,witnessScope:'participants'};
   const {title,scene}=ROGUELIKE_ENCOUNTER_CATALOG[row.kind];
-  const description=phase==='open'?scene:row.choice==='leave'?'你没有伸手，把这一步留给了将来。':
-    row.outcome?.success?'你没有白走这一遭。所得所失，都写在这段亲历里。':
-      '此路未如所愿。你从险处抽身，所受的波折都已落在身上。';
+  const description=phase==='open'?scene:roguelikeSettlementNarration(row);
   return {id:`evt-${row.id}-${phase}`,tick:world.tick,year:world.year,month:world.month,
     title:phase==='open'?title:`${title}：${row.choice==='leave'?'转身':row.outcome?.success?'得悟':'余波'}`,
     description,category:'intrigue',actorIds:[row.actorId],locationId:row.siteId,witnessScope:'participants'};
@@ -101,11 +101,25 @@ export function maybeOpenRoguelikeEncounter(world:WorldState,actor:Cultivator,or
     (world.roguelikeEncounters??=[]).push(row);
     return event(world,row,'open');
   }
-  if(!roguelikeEncounterRoute(world,originId,actor.locationId))return undefined;
+  // A redirected story supply must not alter archived worlds that never enabled a director.
+  const contextual=world.storyteller&&describeEncounterArrival(world,actor,originId);
+  if(!contextual&&!roguelikeEncounterRoute(world,originId,actor.locationId))return undefined;
   const destination=exactSite(world,stamp.siteId);
   const ticket=destination&&directorSiteIsSafe(world,destination)?liveDirectorNudges(world).find(row=>
     row.kind==='encounter_ticket'&&row.actorId===actor.id&&row.targetSiteId===stamp.siteId):undefined;
-  if(!guided&&!ticket&&roguelikeEncounterRoll(world,stamp,'opening')>=ROGUELIKE_ENCOUNTER_NPC_OPENING_THRESHOLD)return undefined;
+  if(!guided&&!ticket&&roguelikeEncounterRoll(world,stamp,'opening')>=
+    (contextual?ROGUELIKE_ENCOUNTER_CONTEXT_OPENING_THRESHOLD:ROGUELIKE_ENCOUNTER_NPC_OPENING_THRESHOLD))return undefined;
+  if(contextual){
+    const {kind,subjectId,sourceId,accompanying}=contextual;
+    // The owner just completed a normal journey; make the native bonded following step
+    // at the same arrival, rather than depicting a companion left behind as a participant.
+    if(accompanying)accompanying.locationId=stamp.siteId;
+    const row:RoguelikeEncounterRecord={id:`roguelike-encounter-${world.tick}-${actor.id}`,...stamp,kind,guided,
+      context:{subjectId,...(sourceId?{sourceId}:{})},...(ticket?{directorTicketUntil:ticket.expiresTick}:{}),status:'offered'};
+    (world.roguelikeEncounters??=[]).push(row);
+    if(ticket)consumeDirectorNudge(world,ticket);
+    return event(world,row,'open');
+  }
   const aim=roguelikeEncounterRoll(world,stamp,'kind');
   const witness=roguelikeStoryletCanUseWitness(aim)?world.cultivators.filter(other=>other.id!==actor.id&&other.hp/other.maxHp<.45&&
     stationary(world,other,stamp.siteId)).sort((a,b)=>a.hp/a.maxHp-b.hp/b.maxHp||compare(a.id,b.id))[0]:undefined;
@@ -123,8 +137,10 @@ export function activeRoguelikeEncounter(world:WorldState,actor:Cultivator):Rogu
   const rows=openRows(world).filter(row=>row.actorId===actor.id&&row.status==='offered'&&row.openedTick<=world.tick&&
     world.tick<=row.openedTick+1&&stationary(world,actor,row.siteId)&&
     (row.kind==='sect-gate'?!!currentSectGateTrialAuthority(world,actor,row,stationary):
-      roguelikeEncounterRoute(world,row.fromSiteId,row.siteId)&&
-      !!admitRoguelikeStorylet(row.kind,actor.id,row.kind==='wounded-traveler'?witnessFor(world,row)?.id:undefined)));
+      (contextualEncounterKind(row.kind)?validEncounterContext(world,row,true):
+        roguelikeEncounterRoute(world,row.fromSiteId,row.siteId))&&
+      !!admitRoguelikeStorylet(row.kind,actor.id,row.kind==='wounded-traveler'?witnessFor(world,row)?.id:undefined,
+        contextualEncounterKind(row.kind)?row.kind:undefined)));
   return rows.length===1?rows[0]:undefined;
 }
 export function chooseRoguelikeEncounterDecision(world:WorldState,actor:Cultivator):LLMDecisionPayload|undefined{
@@ -177,9 +193,14 @@ function settle(world:WorldState,actor:Cultivator,encounterId:string,choice:Rogu
   }
 
   const witness=row.kind==='wounded-traveler'?witnessFor(world,row):undefined;
-  const resolved=resolveRoguelikeStorylet(row.kind,choice,roguelikeEncounterRoll(world,row,choice),actor.id,witness?.id);
+  const resolved=resolveRoguelikeStorylet(row.kind,choice,roguelikeEncounterRoll(world,row,choice),actor.id,witness?.id,
+    contextualEncounterKind(row.kind)?row.kind:undefined);
   if(!resolved)return null;
   const {success,effect}=resolved.result;
+  const pet=effect.petHpRate!==undefined&&row.context?locallyBondedBeast(world,actor,row.siteId,row.context.subjectId):undefined;
+  if(effect.petHpRate!==undefined&&!pet)return null;
+  const petBefore=pet?.hp;
+  if(pet&&effect.petHpRate)pet.hp=clamp(pet.hp+Math.round(pet.maxHp*effect.petHpRate),Math.min(1,pet.hp),pet.maxHp);
   const qi=actor.qiProgress,hp=actor.hp,karma=actor.karma,years=actor.lifespan;
   if(effect.qi)actor.qiProgress=clamp(qi+effect.qi,0,100);
   if(effect.hpRate)actor.hp=clamp(hp+Math.round(actor.maxHp*effect.hpRate),Math.min(1,hp),actor.maxHp);
@@ -189,7 +210,8 @@ function settle(world:WorldState,actor:Cultivator,encounterId:string,choice:Rogu
   row.status='resolved';row.resolvedTick=world.tick;row.choice=choice;
   if(authority==='director'&&!row.guided)row.directorChoice=true;
   row.outcome={success,qiDelta:actor.qiProgress-qi,hpDelta:actor.hp-hp,karmaDelta:actor.karma-karma,
-    lifespanDelta:actor.lifespan-years,affinityDelta};
+    lifespanDelta:actor.lifespan-years,affinityDelta,
+    ...(petBefore!==undefined&&pet?{petHpDelta:pet.hp-petBefore}:{})};
   const receipt=event(world,row,'settled');
   if(choice!=='leave')recordMemory(actor,world.tick,`${receipt.title}。\n${receipt.description}`,7,'cultivation',success?3:-2);
   return receipt;
@@ -225,8 +247,8 @@ export function finalizeRoguelikeEncounters(world:WorldState):void{
     if(row.status!=='offered')continue;
     const actor=byActor(world,row.actorId);
     if(world.tick>=row.openedTick+1||!stationary(world,actor,row.siteId)||
-      row.kind!=='sect-gate'&&!admitRoguelikeStorylet(row.kind,row.actorId,
-        row.kind==='wounded-traveler'?witnessFor(world,row)?.id:undefined)||
+      row.kind!=='sect-gate'&&(!validEncounterContext(world,row,true)||!admitRoguelikeStorylet(row.kind,row.actorId,
+        row.kind==='wounded-traveler'?witnessFor(world,row)?.id:undefined,contextualEncounterKind(row.kind)?row.kind:undefined))||
       row.kind==='sect-gate'&&(!actor||!currentSectGateTrialAuthority(world,actor,row,stationary))){
       row.status='expired';row.resolvedTick=world.tick;
     }

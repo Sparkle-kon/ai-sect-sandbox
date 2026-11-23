@@ -1,5 +1,3 @@
-import { projectStoryteller } from '../src/engine/storytellerDirector';
-import type { LLMDecisionPayload, WorldState } from '../src/types/world';
 import { runStoryTriggerAudit } from './storyTriggerAuditRunner';
 import { storyTriggerAuditPhase19_20 } from './storyTriggerAuditPhase19_20';
 import { storyTriggerAuditPhase21_22 } from './storyTriggerAuditPhase21_22';
@@ -20,16 +18,7 @@ const ticks=Number(flags.get('months')??1200);
 const lane=flags.get('lane')??'autonomous';
 if(lane!=='autonomous'&&lane!=='scripted')throw new Error('Audit lane must be autonomous or scripted');
 
-function preferNearbyOpportunity(world:WorldState):Record<string,LLMDecisionPayload>|undefined{
-  const scene=projectStoryteller(world);
-  if(!scene)return undefined;
-  const priorities=['travel','talk','cultivate','rest'] as const;
-  const chosen=priorities.flatMap(move=>scene.options.find(row=>row.decision.storytellerMove===move)??[])[0];
-  if(!chosen)return undefined;
-  return {[scene.actorId]:{...chosen.decision,innerMonologue:'循眼前的机缘走一步。'}};
-}
-
 const result=runStoryTriggerAudit({seed,ticks,probes,
   onProgress(progress){console.error(JSON.stringify({kind:'completed-months',...progress}));},
-  ...(lane==='scripted'?{guidedPolicy:preferNearbyOpportunity}:{})});
+  playHighlights:lane==='scripted'});
 console.log(JSON.stringify(result,null,2));

@@ -240,10 +240,11 @@ export const locationKind = one('sect_hq','spirit_vein','secret_realm','market',
 
 export const roguelikeRecord=structure({
   id,actorId:id,fromSiteId:id,siteId:id,openedTick:tick,kind:one(...ROGUELIKE_ENCOUNTER_KINDS),
-  guided:bool,directorTicketUntil:otick,directorChoice:optional((value,path)=>{if(value!==true)fail(path);}),witnessId:oid,status:one('offered','resolved','expired'),resolvedTick:otick,
+  guided:bool,directorTicketUntil:otick,directorChoice:optional((value,path)=>{if(value!==true)fail(path);}),witnessId:oid,context:optional(structure({subjectId:id,sourceId:oid})),status:one('offered','resolved','expired'),resolvedTick:otick,
   choice:optional(one(...ROGUELIKE_ENCOUNTER_CHOICES)),
   outcome:optional(structure({success:bool,qiDelta:num(-100,100),hpDelta:num(-1_000_000_000,1_000_000_000),
     karmaDelta:num(-200,200),lifespanDelta:num(-1_000_000_000,1_000_000_000),affinityDelta:num(-200,200),
+    petHpDelta:optional(num(-1_000_000_000,0)),
     sectReputationDelta:optional(num(0,100))})),
   sectGate:optional(structure({sectId:id,leaderId:id,possessionUntilTick:tick})),
 });

@@ -22,9 +22,10 @@ const encounterSource: HighlightSource = {
     if (!row) return [];
     const words = ROGUELIKE_ENCOUNTER_CATALOG[row.kind];
     const primary: readonly ConsequenceTag[] = row.kind === 'wounded-traveler' ? ['bond'] :
-      row.kind === 'sect-gate' ? ['reputation'] : ['injury'];
+      row.kind === 'sect-gate' ? ['reputation'] : row.kind === 'river-farewell' ? ['lifespan'] :
+      row.kind === 'snow-shelter' ? [] : ['injury'];
     const high: readonly ConsequenceTag[] = row.kind === 'wounded-traveler' ? ['bond', 'injury'] :
-      row.kind === 'sect-gate' ? ['reputation'] : ['injury', 'lifespan'];
+      row.kind === 'sect-gate' ? ['reputation'] : row.kind === 'beast-guard' ? ['injury'] : ['injury', 'lifespan'];
     return [{ kind: 'encounter', sourceId: row.id, actorId: actor.id, siteId: row.siteId,
       baseWeight: 70, title: words.title, teaser: words.scene, options: words.choices.map(option => ({
         id: option.choice, label: option.label,

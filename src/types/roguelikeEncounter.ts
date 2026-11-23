@@ -1,4 +1,4 @@
-export const ROGUELIKE_ENCOUNTER_KINDS=['sword-cave','wounded-traveler','sealed-scroll','sect-gate'] as const;
+export const ROGUELIKE_ENCOUNTER_KINDS=['sword-cave','wounded-traveler','sealed-scroll','sect-gate','beast-guard','river-farewell','snow-shelter'] as const;
 export const ROGUELIKE_ENCOUNTER_CHOICES=['cautious','bold','leave'] as const;
 export type RoguelikeEncounterKind=(typeof ROGUELIKE_ENCOUNTER_KINDS)[number];
 export type RoguelikeEncounterChoice=(typeof ROGUELIKE_ENCOUNTER_CHOICES)[number];
@@ -11,7 +11,11 @@ export interface RoguelikeEncounterOutcome {
   lifespanDelta:number;
   affinityDelta:number;
   sectReputationDelta?:number;
+  petHpDelta?:number;
 }
+
+export type ContextualEncounterKind='beast-guard'|'river-farewell'|'snow-shelter';
+export interface EncounterContextStamp { subjectId:string; sourceId?:string }
 
 export interface SectGateTrialStamp {
   sectId:string;
@@ -32,6 +36,7 @@ export interface RoguelikeEncounterRecord {
   directorChoice?:true;
   witnessId?:string;
   sectGate?:SectGateTrialStamp;
+  context?:EncounterContextStamp;
   status:'offered'|'resolved'|'expired';
   resolvedTick?:number;
   choice?:RoguelikeEncounterChoice;

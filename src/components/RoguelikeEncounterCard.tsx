@@ -2,11 +2,11 @@ import {SceneStageCanvas} from './SceneStageCanvas';
 import {StoryStageDialogue} from './StoryStageDialogue';
 import type {SceneStageFrame} from './sceneStageModel';
 import {useEffect,useId,useRef} from 'react';
-import {BookOpen,Flame,HandHeart,Mountain} from 'lucide-react';
+import {BookOpen,Flame,HandHeart,Mountain,PawPrint,Lightbulb,House} from 'lucide-react';
 import {ROGUELIKE_ENCOUNTER_CATALOG} from '../engine/roguelikeEncounterCatalog';
 import type {RoguelikeEncounterChoice,RoguelikeEncounterOutcome,RoguelikeEncounterRecord} from '../types/roguelikeEncounter';
 
-const icons={ 'sword-cave':Mountain,'wounded-traveler':HandHeart,'sealed-scroll':BookOpen,'sect-gate':Mountain } as const;
+const icons={ 'sword-cave':Mountain,'wounded-traveler':HandHeart,'sealed-scroll':BookOpen,'sect-gate':Mountain,'beast-guard':PawPrint,'river-farewell':Lightbulb,'snow-shelter':House } as const;
 const optionTone={
   cautious:'border-teal-500/25 text-teal-100 hover:bg-teal-950/55',
   bold:'border-rose-400/30 text-rose-100 hover:bg-rose-950/55',
@@ -16,10 +16,11 @@ const focus='focus-visible:outline focus-visible:outline-2 focus-visible:outline
 const risk={cautious:'稳妥',bold:'冒险',leave:'收手'} as const;
 
 export function encounterOutcomeText(outcome:RoguelikeEncounterOutcome,witnessName?:string):string {
-  const {qiDelta,hpDelta,karmaDelta,lifespanDelta,affinityDelta}=outcome;
+  const {qiDelta,hpDelta,karmaDelta,lifespanDelta,affinityDelta,petHpDelta}=outcome;
   const facts=[
     qiDelta>0?'灵气有所精进':qiDelta<0?'耗去一些灵气':undefined,
     hpDelta>0?'气血渐复':hpDelta<0?'气血受创':undefined,
+    petHpDelta!==undefined&&petHpDelta<0?`随行灵兽受了${-petHpDelta}点伤`:undefined,
     karmaDelta>0?'因这一念添了几分气运':karmaDelta<0?'气运受损':undefined,
     lifespanDelta>0?'寿元有所增长':lifespanDelta<0?'这一下折了些寿元':undefined,
     affinityDelta>0?`与${witnessName??'同路人'}多了一份交情`:

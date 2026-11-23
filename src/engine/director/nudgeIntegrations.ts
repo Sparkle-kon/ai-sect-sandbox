@@ -4,6 +4,7 @@ import { apprenticeshipPhysicallyAt } from '../apprenticeshipPresence';
 import { knownMapLocations, terrainTileAt } from '../terrainEngine';
 import { weatherTravelFriction } from '../weatherEngine';
 import type { DirectorNudge } from './nudge';
+import { publicCampaignStaging } from './campaignNudge';
 
 export const DIRECTOR_TOURNAMENT_TITLE = '坊市问剑会';
 const nameOrder = (a: string, b: string) => a < b ? -1 : a > b ? 1 : 0;
@@ -61,6 +62,15 @@ export interface DirectorTravelPreference {
   readonly reason: DirectorNudge['reason'];
 }
 
+export function seedPublicCampaignTravel(world:WorldState,actor:Cultivator):DirectorNudge|undefined {
+  const tick=world.tick+1;
+  if(!canDirectNpc(world,actor,tick)||world.storyteller?.focusActorId===actor.id)return;
+  const staging=publicCampaignStaging(world,actor,tick);
+  if(!staging||!directorKnownReachableSites(world,actor).includes(staging.site))return;
+  return {kind:'travel_bias',actorId:actor.id,targetSiteId:staging.site.id,weight:43,reason:'sequel',
+    expiresTick:staging.expiresTick};
+}
+
 /** A bounded invitation on actual known routes; never an order or a relocation. */
 export function directorTravelPreference(world: WorldState, actor: Cultivator, tick = world.tick): DirectorTravelPreference | undefined {
   const live = liveDirectorNudges(world, tick);
@@ -74,7 +84,8 @@ export function directorTravelPreference(world: WorldState, actor: Cultivator, t
   const choices = rows.flatMap(row => {
     if (row.kind !== 'travel_bias' && row.kind !== 'encounter_ticket') return [];
     const site = known.get(row.targetSiteId);
-    if (!site || !directorSiteIsSafe(world, site, tick)) return [];
+    if (!site || !directorSiteIsSafe(world, site, tick) ||
+      row.kind==='travel_bias'&&row.reason==='sequel'&&(world.storyteller?.focusActorId===actor.id||publicCampaignStaging(world,actor,tick)?.site!==site)) return [];
     // A waiting encounter is a stronger incentive, but travel remains an ordinary actor decision.
     return [{site, weight: row.kind === 'travel_bias' ? row.weight : 78, reason: row.reason}];
   });

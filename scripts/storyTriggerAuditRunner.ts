@@ -1,6 +1,7 @@
 import { createInitialWorld } from '../src/data/initialWorld';
 import { cloneWorldWithColdHistory } from '../src/engine/coldHistoryEngine';
 import { configureStoryteller, projectStoryteller } from '../src/engine/storytellerDirector';
+import { isHighlight, projectDirectorHighlight, resolveDirectorHighlight } from '../src/engine/director/directorHighlights';
 import { advanceWorldTick } from '../src/engine/worldEngine';
 import type { LLMDecisionPayload, WorldEvent, WorldState } from '../src/types/world';
 import type { AuditedStoryTask, StoryAuditMode, StoryAuditProbe, StoryAuditTurn } from './storyTriggerAuditTerms';
@@ -13,6 +14,8 @@ export interface StoryAuditRunOptions {
   readonly initialWorld?: WorldState;
   /** Optional deterministic legal orders. This measures a scripted policy, not human play. */
   readonly guidedPolicy?: (before: WorldState) => Record<string, LLMDecisionPayload> | undefined;
+  /** Play the current native highlight only. The four routine actions are never scripted by this policy. */
+  readonly playHighlights?: boolean;
   /** Read-only heartbeat from completed native months, not prospective simulated ticks. */
   readonly onProgress?: (snapshot: StoryAuditProgress) => void;
   /** Optional read-only diagnostics over the same exact completed native book as every probe. */
@@ -45,12 +48,19 @@ export interface StoryAuditResult {
   /** Count before the ordinary live-feed retention cap; no prose or model transcript is exported. */
   readonly rawEvents: number;
   readonly counters: readonly StoryAuditCounter[];
-  /** Director proposal/eligible display/completed actions are three different observations. */
+  /** Quiet scenes are retained for baseline replay; these counts are never called highlights. */
   readonly opportunities: Readonly<{
     scheduled: number;
     monthsWithLegalDirectorMenu: number;
     distinctLegalDirectorOffers: number;
     acceptedDirectorOffers: number;
+  }>;
+  readonly highlights: Readonly<{
+    offered: number;
+    kinds: readonly string[];
+    chosen: number;
+    settled: number;
+    maxGapMonths: number | null;
   }>;
   /** Non-cryptographic replay check over ordered month/event/episode identities and a final state summary. */
   readonly fingerprint: string;
@@ -79,11 +89,12 @@ function monthBook(before: WorldState, after: WorldState): void {
 
 /** Run the real offline monthly dispatcher and observe completed batches, never the 120-entry world feed. */
 export function runStoryTriggerAudit({
-  seed, ticks, probes, initialWorld, guidedPolicy, onProgress, onCompletedTurn,
+  seed, ticks, probes, initialWorld, guidedPolicy, playHighlights = false, onProgress, onCompletedTurn,
 }: StoryAuditRunOptions): StoryAuditResult {
   if (!Number.isSafeInteger(seed) || !Number.isSafeInteger(ticks) || ticks < 0) {
     throw new Error('Story audit requires an integer seed and nonnegative integer month count');
   }
+  if (guidedPolicy && playHighlights) throw new Error('Choose one scripted audit policy');
   const counters = new Map<AuditedStoryTask, CounterState>();
   for (const probe of probes) {
     if (counters.has(probe.id)) throw new Error(`Duplicate story audit probe: ${probe.id}`);
@@ -101,12 +112,18 @@ export function runStoryTriggerAudit({
     throw new Error('Story audit source does not match the requested seed or calendar range');
   }
   const startTick = world.tick;
-  const mode = guidedPolicy ? 'scripted' : 'autonomous';
+  const mode = guidedPolicy || playHighlights ? 'scripted' : 'autonomous';
   let rawEvents = 0;
   let monthsWithLegalDirectorMenu = 0;
   const scheduled = new Set<string>();
   const shown = new Set<string>();
   const accepted = new Set<string>();
+  const highpointTicks: number[] = [];
+  const highpointSeen = new Set<string>();
+  const highpointKinds = new Set<string>();
+  const highpointSelections = new Set<string>();
+  const highpointSettlements = new Set<string>();
+  const identify = (row: {kind:string; sourceId:string; actorId:string}) => JSON.stringify([row.kind,row.sourceId,row.actorId]);
   let hash = 0x811c9dc5;
   const fingerprint = (value: readonly unknown[]) => {
     // JSON array framing keeps tuple boundaries distinct; ids are never returned in the result.
@@ -115,6 +132,16 @@ export function runStoryTriggerAudit({
   fingerprint(['start', seed, startTick, world.random.algorithm, world.random.state, world.storyteller?.style, mode]);
 
   for (let month = 0; month < ticks; month++) {
+    const offered=playHighlights&&projectDirectorHighlight(world);
+    if(offered&&isHighlight(offered)){
+      const chosen=offered.options.find(option=>option.consequences.length>0);
+      const next=chosen&&resolveDirectorHighlight(world,offered.key,chosen.id);
+      if(next&&next!==world){
+        highpointSelections.add(identify(offered));
+        if(next.storyteller?.highlights?.at(-1)?.resolutionEventId) highpointSettlements.add(identify(offered));
+        world=next;
+      }
+    }
     const before = world;
     const observed: { events?: readonly WorldEvent[] } = {};
     world = advanceWorldTick(before, guidedPolicy?.(before), undefined, 'utility', undefined, {
@@ -131,6 +158,15 @@ export function runStoryTriggerAudit({
     const d=world.storyteller, proposal=d?.offer, outcome=d?.lastOutcome;
     if(proposal?.openedTick===world.tick)scheduled.add(proposal.id);
     if(outcome?.tick===world.tick)accepted.add(outcome.offerId);
+    const highlight=projectDirectorHighlight(world);
+    if(highlight&&isHighlight(highlight)&&!highpointSeen.has(identify(highlight))){
+      highpointSeen.add(identify(highlight));
+      highpointKinds.add(highlight.kind);
+      highpointTicks.push(world.tick);
+    }
+    for(const row of d?.highlights?.slice(-3)??[]){
+      if(row.resolutionEventId&&row.resolutionTick===world.tick&&highpointSelections.has(identify(row)))highpointSettlements.add(identify(row));
+    }
     const menu=projectStoryteller(world);
     if(menu?.options.length){
       monthsWithLegalDirectorMenu++;
@@ -176,6 +212,9 @@ export function runStoryTriggerAudit({
     seed, mode, startTick, endTick: world.tick, completedTicks, rawEvents,
     opportunities:Object.freeze({scheduled:scheduled.size,monthsWithLegalDirectorMenu,
       distinctLegalDirectorOffers:shown.size,acceptedDirectorOffers:accepted.size}),
+    highlights:Object.freeze({offered:highpointSeen.size,kinds:[...highpointKinds].sort(),chosen:highpointSelections.size,
+      settled:highpointSettlements.size,maxGapMonths:highpointTicks.length===0?null:
+        [...highpointTicks,world.tick].reduce((max,tick,index)=>Math.max(max,tick-(index===0?startTick:highpointTicks[index-1])),0)}),
     counters: Object.freeze([...counters.values()].map(({ probe, seen, firstTick, lastTick }) => Object.freeze({
       id: probe.id, title: probe.title, mode: probe.mode, evidence: probe.evidence,
       count: probe.mode === 'interface' ? null : seen.size,

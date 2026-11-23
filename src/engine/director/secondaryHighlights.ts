@@ -13,7 +13,7 @@ import { villageReunionCommand } from '../villageReunionCognition';
 import { availableBattlefieldAftermathActions } from '../battlefieldAftermath';
 import { battlefieldAftermathCommand } from '../battlefieldAftermathCognition';
 import { availableBellWatchActions } from '../bellWatch';
-import { directorKnownReachableSites } from './nudgeIntegrations';
+import { directorKnownReachableSites, seedPublicCampaignTravel } from './nudgeIntegrations';
 import type { ConsequenceTag, HighlightCandidate, HighlightKind, HighlightSource } from './highlight';
 import type { DirectorNudge } from './nudge';
 
@@ -220,7 +220,7 @@ export const sequelHighlightSource=nativeSource('sequel',(world,actor,tick)=>{
       command:{...battlefieldAftermathCommand(option),innerMonologue:monologue},
     }))));
   return out;
-},undefined,true);
+},seedPublicCampaignTravel,true);
 
 export const SECONDARY_HIGHLIGHT_SOURCES: readonly HighlightSource[] = [
   daoPathHighlightSource, forbiddenArtHighlightSource, bondReunionHighlightSource, sequelHighlightSource,

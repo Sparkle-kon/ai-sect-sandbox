@@ -100,4 +100,19 @@ describe('trigger audit over actual completed native months', () => {
     expect(active.opportunities.acceptedDirectorOffers).toBeGreaterThan(0);
     expect(active.opportunities.acceptedDirectorOffers).toBeLessThanOrEqual(active.opportunities.distinctLegalDirectorOffers);
   });
+  it('runs the new scripted policy only against distinct real high points', () => {
+    const plan = { seed, ticks: 16, probes: [] };
+    const autonomous = runStoryTriggerAudit(plan);
+    const scripted = runStoryTriggerAudit({ ...plan, playHighlights: true });
+    expect(autonomous.highlights.offered).toBeGreaterThan(0);
+    expect(autonomous.highlights.chosen).toBe(0);
+    expect(scripted.highlights.chosen).toBeGreaterThan(0);
+    expect(scripted.highlights.settled).toBeGreaterThan(0);
+    expect(scripted.highlights.settled).toBeLessThanOrEqual(scripted.highlights.chosen);
+    expect(scripted.highlights.chosen).toBeLessThanOrEqual(scripted.highlights.offered);
+    expect(scripted.opportunities.acceptedDirectorOffers).toBeLessThanOrEqual(scripted.opportunities.distinctLegalDirectorOffers);
+    expect(runStoryTriggerAudit({ ...plan, playHighlights: true })).toEqual(scripted);
+    expect(() => runStoryTriggerAudit({ ...plan, playHighlights: true, guidedPolicy: () => undefined })).toThrow(/one scripted/);
+  });
+
 });
