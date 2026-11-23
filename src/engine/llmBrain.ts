@@ -1,3 +1,5 @@
+import { availableAbandonedQuarterActions } from './abandonedQuarter';
+import {exactAbandonedQuarterDecision,abandonedQuarterCommand} from './abandonedQuarterCognition';
 import { availableFurnaceEmergencyActions,furnaceEmergencyCrossingLocked } from './furnaceEmergency';
 import { exactFurnaceEmergencyDecision,furnaceEmergencyCommand } from './furnaceEmergencyCognition';
 import {availableApprenticeshipReunionActions} from './apprenticeshipReunion';
@@ -946,6 +948,15 @@ export function computeHeuristicDecision(
     if(choice)return exactFurnaceEmergencyDecision(furnaceEmergencyCommand(choice),emergency)??
       {chosenAction:'REST',innerMonologue:'先留在实处，不捏造援手。'};
     return {chosenAction:'REST',innerMonologue:'未肯应下援手这一问。'};
+  }
+  const ruins=availableAbandonedQuarterActions(cultivator,world,world.tick);
+  if(ruins.length){
+    if(activeAvatar(world)===cultivator)return {chosenAction:'REST',innerMonologue:'在旧村这一月，由亲到的人自己定。'};
+    const preference=cultivator.hp<cultivator.maxHp*.5?'leave':cultivator.personality==='痴情'?'stay':'inspect';
+    const choice=ruins.find(row=>row.abandonedQuarterMove===preference)??
+      ruins.find(row=>row.abandonedQuarterMove==='inspect')??ruins[0];
+    const exact=exactAbandonedQuarterDecision(abandonedQuarterCommand(choice),ruins);
+    if(exact)return exact;
   }
   const rescue = utilityExpeditionRescueDecision(cultivator, world);
   if (rescue) return rescue;
@@ -2680,6 +2691,14 @@ export async function requestCultivatorLLMDecision(
       parsed=>requestTick===world.tick+1&&activeAvatar(world)!==cultivator&&exactFurnaceEmergencyDecision(parsed,furnaceEmergency)
         ?exactFurnaceEmergencyDecision(parsed,availableFurnaceEmergencyActions(cultivator,world,requestTick)):undefined,160);
   }
+  const ruin=availableAbandonedQuarterActions(cultivator,world,requestTick);
+  if(ruin.length){
+    if(requestTick!==world.tick+1||activeAvatar(world)===cultivator)return undefined;
+    return requestDecisionPrompt(config,requestTick,options,
+      '逐字抄写一项本人确在迁空旧村才有的行动。不能指定旧人口、财物、亲缘、迁徙或见闻结果：'+JSON.stringify(ruin.map(abandonedQuarterCommand)),
+      parsed=>requestTick===world.tick+1&&activeAvatar(world)!==cultivator&&exactAbandonedQuarterDecision(parsed,ruin)
+        ?exactAbandonedQuarterDecision(parsed,availableAbandonedQuarterActions(cultivator,world,requestTick)):undefined,160);
+  }
   const aftermath=availableBattlefieldAftermathActions(cultivator,world,requestTick);
   if(aftermath.length){
     if(requestTick!==world.tick+1||activeAvatar(world)===cultivator)return undefined;
@@ -3195,6 +3214,7 @@ ${JSON.stringify(cultivator.reflections.filter(row=>!sealedHeartDemonReflection(
 ${COGNITIVE_RESPONSE_GUIDE}`;
 
   return requestDecisionPrompt(config, requestTick, options, prompt, (parsed) => {
+          if(parsed&&(Object.hasOwn(parsed,'abandonedQuarterMove')||Object.hasOwn(parsed,'targetAbandonedQuarterId')))return undefined;
           if(parsed&&(Object.hasOwn(parsed,'furnaceEmergencyMove')||Object.hasOwn(parsed,'targetFurnaceEmergencyId')))return undefined;
           if(parsed?.chosenAction==='APPRENTICESHIP_REUNION'){
             if(requestTick!==world.tick+1||activeAvatar(world)===cultivator||!exactApprenticeshipReunionDecision(parsed,apprenticeshipOptions))return undefined;

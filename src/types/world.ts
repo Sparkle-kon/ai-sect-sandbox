@@ -1,4 +1,5 @@
 import type {ApprenticeshipReunionMove,ApprenticeshipReunionState} from './apprenticeshipReunion';
+import type {AbandonedQuarterMove,AbandonedQuarterState} from './abandonedQuarter';
 import type { FurnaceEmergencyMove,FurnaceEmergencyState } from './furnaceEmergency';
 import type {PilgrimageForkMove,PilgrimageForkState} from './pilgrimageFork';
 import type {BattlefieldAftermathMove,BattlefieldAftermathState} from './battlefieldAftermath';
@@ -240,6 +241,7 @@ export type ActionType =
   | 'WORKSHOP_RELEASE'
   | 'WORKSHOP'
   | 'FURNACE_RESERVATION'
+  | 'ABANDONED_QUARTER'
   | 'FURNACE_EMERGENCY'
   | 'FURNACE_SAFETY'
   | 'DAMAGE_ASSURANCE'
@@ -818,6 +820,8 @@ export interface LLMDecisionPayload {
   furnaceSafetyMove?: FurnaceSafetyMove;
   furnaceEmergencyMove?: FurnaceEmergencyMove;
   targetFurnaceEmergencyId?: string;
+  abandonedQuarterMove?: AbandonedQuarterMove;
+  targetAbandonedQuarterId?: string;
   damageAssuranceMove?: DamageAssuranceMove;
   targetDamageAssuranceId?: string;
   targetFurnaceSafetyId?: string;
@@ -3742,6 +3746,7 @@ export interface WorldState {
   furnaceReservations: FurnaceReservationState;
   furnaceSafety: FurnaceSafetyState;
   furnaceEmergencies?: FurnaceEmergencyState;
+  abandonedQuarters?: AbandonedQuarterState;
   damageAssurance: DamageAssuranceState;
   sparring: SparringState;
   expeditionRescues: ExpeditionRescueState;

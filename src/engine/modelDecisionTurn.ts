@@ -1,3 +1,4 @@
+import { availableAbandonedQuarterActions } from './abandonedQuarter';
 import { availableFurnaceEmergencyActions,furnaceEmergencyCrossingLocked } from './furnaceEmergency';
 import {availableApprenticeshipReunionActions} from './apprenticeshipReunion';
 import {availablePilgrimageForkActions} from './pilgrimageFork';
@@ -109,7 +110,8 @@ export function modelDecisionCandidates(world: WorldState): Cultivator[] {
     const apprenticeship=!heart&&!contact&&!encounter&&!destiny&&avatar!==actor&&
       (world.apprenticeshipReunions?.cases.length??0)>0&&availableApprenticeshipReunionActions(actor,world,nextTick).length>0;
     const emergency=!heart&&!contact&&!encounter&&!destiny&&avatar!==actor&&availableFurnaceEmergencyActions(actor,world,nextTick).length>0;
-    const priorScene = !!(heart || contact || encounter || destiny || vacantGate || aftermath || village || fork || apprenticeship || emergency);
+    const ruin=!heart&&!contact&&!encounter&&!destiny&&!emergency&&avatar!==actor&&availableAbandonedQuarterActions(actor,world,nextTick).length>0;
+    const priorScene = !!(heart || contact || encounter || destiny || vacantGate || aftermath || village || fork || apprenticeship || emergency || ruin);
     if (!priorScene && hasQueuedGrandSiegeHero(world, actor)) return false;
     const hero = priorScene ? [] : availableGrandSiegeHeroActions(actor, world);
     if (hero.length) {
@@ -125,7 +127,7 @@ export function modelDecisionCandidates(world: WorldState): Cultivator[] {
     const assembly=!priorScene&&!hero.length&&!flight&&avatar!==actor
       ?availableCampaignAssemblyActions(actor,world,nextTick).filter(row=>row.kind!=='guard'):[];
     // Genuine autonomous offers wake only normal admission guards; a field leader may only negotiate an active march.
-    return (!passive.has(actor.id) || !!heart || !!contact || !!encounter || !!destiny || vacantGate || aftermath || village || fork || apprenticeship || emergency || hero.length > 0 || dungeon || flight || assembly.length>0) &&
+    return (!passive.has(actor.id) || !!heart || !!contact || !!encounter || !!destiny || vacantGate || aftermath || village || fork || apprenticeship || emergency || ruin || hero.length > 0 || dungeon || flight || assembly.length>0) &&
     (!activeCourierForActor(world, actor) || availableCourierHandoffActions(actor, world, nextTick).some(({ courierHandoffMove }) => courierHandoffMove === 'offer')) &&
     !activeDanxiaMedicineEscort(world,actor)&&!activeEscortForActor(world, actor) && !activeRelocationForActor(world, actor) &&
     (!activeSiegeForActor(world, actor)||assembly.some(row=>row.kind==='negotiate')) && (dungeon || isEligibleForOccasionDecision(world, actor, nextTick)) &&

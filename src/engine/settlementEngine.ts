@@ -121,6 +121,7 @@ function log(world: WorldState, village: MortalSettlement, row: Omit<SettlementR
     for(const id of disasterShelterPinnedRecordIds(world))pinned.add(id);
     for(const id of civicMemorialPinnedReliefIds(world))pinned.add(id);
     for(const id of villageReunionPinnedRecruitmentIds(world))pinned.add(id);
+    for(const visit of world.abandonedQuarters?.visits??[])if(visit.formerRecruitmentId)pinned.add(visit.formerRecruitmentId);
     world.settlements.records=world.settlements.records.filter((entry,index)=>index>=tail||pinned.has(entry.id));
   }
   if (actual.kind === 'relief') {

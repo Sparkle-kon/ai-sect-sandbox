@@ -42,6 +42,17 @@ export function writeChronicleScene(fact: ChronicleSceneFact): ChronicleSceneTex
     return {title:`${oldSeat}的旧工坊散了`,
       paragraph:`山门迁到${newSeat}，${oldSeat}的旧工坊章程却留在了过去。旧单不随山门转手，新址也没有接下这些委托。`};
   }
+  if(fact.category==='diplomacy'){
+    const ruin=/^([^：。\r\n]{1,100})：原址成为遗址。原名、账目与旧址仍可核查。$/u.exec(text);
+    if(title==='原址成为遗址'&&ruin){
+      const place=ruin[1];
+      return {title:`${place}旧址`,paragraph:`${place}仍记着那个旧名。翻回先前几页，那里原有人过日子；到这一页，能查见的只剩旧址和簿册。簿上留下的名字，不是今天还住在这里的人。`};
+    }
+    const migration=/^沿此前实际走过且此刻可通的路段迁居 ([1-9][0-9]{0,6}) 人。$/u.exec(text);
+    if(title==='循已证通路迁居'&&migration){
+      return {title:'顺着走过的路迁家',paragraph:`先前走过的路，这一回仍通。${migration[1]}人便顺着那条路换了住处；原处与新处，此后各有一本账。`};
+    }
+  }
   if (fact.category === 'heavenly' && title === '天道沙盒开启：风起陨仙墟' &&
     text === '仙历1001年春，上古陨仙墟灵气暴涨，太虚剑宗、血月魔宗、丹霞谷与天机阁修士纷纷出动，修仙界大幕拉开。') {
     return {title:'陨仙墟异动',paragraph:'那年春天，先有动静的是上古陨仙墟。墟中灵气骤盛，太虚剑宗、血月魔宗、丹霞谷和天机阁的修士纷纷动身。这一卷，便从陨仙墟写起。'};

@@ -13,6 +13,7 @@ import {projectProtagonistFlight} from '../engine/protagonistFlightEngine';
 import {resolveMapDossierFocus,type MapDossierFocusRequest} from './mapDossierFocus';
 import {drawMapCultivatorToken} from './mapCultivatorTokens';
 import {drawMapLandmarkGlyph} from './mapLandmarkGlyphs';
+import {visibleAbandonedQuarterSites} from './abandonedQuarterMap';
 import {makeMapNamePills,drawMapNamePills,measureMapNamePill} from './mapCanvasNamePills';
 import {projectMapSitePins} from './mapSitePinLayout';
 import {buildAscensionMapVfx,drawAscensionMapVfx} from './ascensionSceneVfx';
@@ -438,6 +439,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const forkSegments=useMemo(()=>visiblePilgrimageForkSegments(world,mapView,selected),[world,mapView,selected]);
   const localBattlefieldAftermath=useMemo(()=>selected?projectBattlefieldAftermath(world,selected):undefined,[world,selected]);
   const localVillageReunion=useMemo(()=>selected?projectVillageReunion(world,selected):undefined,[world,selected]);
+  const abandonedQuarterSites=useMemo(()=>visibleAbandonedQuarterSites(world,selected,mapView),[world,selected,mapView]);
   const anomalyRelayMarks=useMemo(()=>visibleAnomalyRelayMarks(world,mapView,selected),[world,mapView,selected]);
   const wildMigrants=useMemo(()=>currentVisibleWildMigrants(world,beastsByLocation),[world,beastsByLocation]);
   const armedBrush = toolsExpanded && !fog && onBrushStroke && brush !== 'browse' ? brush : undefined;
@@ -761,7 +763,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           ctx.save();ctx.strokeStyle='rgba(217,193,123,.5)';ctx.lineWidth=logicalPerCssPixel;
           ctx.beginPath();ctx.moveTo(location.x,location.y);ctx.lineTo(pin.x,pin.y);ctx.stroke();ctx.restore();
         }
-        drawMapLandmarkGlyph(ctx,loc,ownerColor);
+        drawMapLandmarkGlyph(ctx,loc,ownerColor,abandonedQuarterSites.has(loc.id));
         if(anomalyRelayMarks.has(loc.id)){
           const d=logicalPerCssPixel;
           drawAnomalyRelaySeal(ctx,loc.x-19*d,loc.y-13*d,d);
@@ -971,7 +973,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener?.('change',stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, atlasDrawing, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, civicObservation, usedVillageSegments, annotationView, annotationPins, armedBrush, preview, compact, clusterScope, scenicRelief, qiFlow, inspectionEnabled, letters, travel, flightMap, canvasFlights, combatVfx, actorBadgeFacts, hasBadgeQuote, domes, strategic, arenaMarks, dungeonMark, alchemyMarks, daoMarks, auctionMark, realmHalos, clanCeremonies, ascensionMarks, formationFrames, calamityFlows, schoolStrokes, anomalyRelayMarks, forkSegments, furnaceRescueSegments, historical]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, atlasDrawing, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, civicObservation, usedVillageSegments, annotationView, annotationPins, armedBrush, preview, compact, clusterScope, scenicRelief, qiFlow, inspectionEnabled, letters, travel, flightMap, canvasFlights, combatVfx, actorBadgeFacts, hasBadgeQuote, domes, strategic, arenaMarks, dungeonMark, alchemyMarks, daoMarks, auctionMark, realmHalos, clanCeremonies, ascensionMarks, formationFrames, calamityFlows, schoolStrokes, anomalyRelayMarks, abandonedQuarterSites, forkSegments, furnaceRescueSegments, historical]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1582,6 +1584,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
                 {fog && (visibleActorsAtSite.get(location.id) ?? 0) > 0 &&
                   <span className="text-slate-300">· 可见修士 {visibleActorsAtSite.get(location.id)} 位（山河索引可查）</span>}
                 {ascensionMarks.some(mark=>mark.kind==='gate'&&mark.siteId===location.id)&&<span className="text-amber-200">· 仙门接引已实成</span>}
+                {abandonedQuarterSites.has(location.id)&&<span className="text-slate-300">· 原住民已迁尽，来访者按眼下实见另计</span>}
                 {localBattlefieldAftermath?.siteId===location.id&&selected?.locationId===location.id&&
                   <span className="text-amber-200">· 本人亲历的战后尾章</span>}
                 {localVillageReunion?.siteId===location.id&&selected?.locationId===location.id&&

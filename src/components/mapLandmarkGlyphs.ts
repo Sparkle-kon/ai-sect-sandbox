@@ -2,7 +2,7 @@ import type {LocationNode} from '../types/world';
 import {SPIRIT_ROOT_COLORS} from './SpiritRootBadge';
 
 export const MAP_LANDMARK_MAX_RADIUS=22.5;
-export type MapLandmarkMotif='sword-peak'|'pill-cauldron'|'astral-dial'|'blood-moon'|'mountain-gate'|'ancient-portal'|'broken-ravine'|'market-pavilion'|'vein-spring';
+export type MapLandmarkMotif='sword-peak'|'pill-cauldron'|'astral-dial'|'blood-moon'|'mountain-gate'|'ancient-portal'|'broken-ravine'|'market-pavilion'|'vein-spring'|'abandoned-quarter';
 type Site=Pick<LocationNode,'id'|'type'|'spiritRoot'|'spiritQi'|'x'|'y'>;
 type XY=readonly [number,number];
 type Glyph={ink:string;wash:string};
@@ -11,6 +11,7 @@ const icon:Record<MapLandmarkMotif,Glyph>={
   'astral-dial':{ink:'#d1d2ee',wash:'#2a3049'},'blood-moon':{ink:'#ffc1b5',wash:'#482731'},
   'mountain-gate':{ink:'#d7dcc5',wash:'#2d382d'},'ancient-portal':{ink:'#cdd9e9',wash:'#27334e'},
   'broken-ravine':{ink:'#e6b2bf',wash:'#432938'},'market-pavilion':{ink:'#f2d1a2',wash:'#40342c'},
+  'abandoned-quarter':{ink:'#b2bab6',wash:'#2b3334'},
   'vein-spring':{ink:'#b5e5de',wash:'#1c3638'},
 };
 const hex=/^#[0-9a-f]{6}$/iu;
@@ -88,6 +89,12 @@ function drawMotif(ctx:CanvasRenderingContext2D,motif:MapLandmarkMotif){
       path(ctx,[[-7,-2],[-7,7],[7,7],[7,-2]]);
       path(ctx,[[-2.5,7],[-2.5,4],[2.5,4],[2.5,7]]);
       break;
+    case 'abandoned-quarter':
+      path(ctx,[[-10,-.5],[-5,-6],[-1,-4],[2,-6],[10,0]]);
+      path(ctx,[[-8,1],[-8,8],[-3,8]]);
+      path(ctx,[[8,1],[8,8],[3,8]]);
+      path(ctx,[[-2,7],[-.5,3],[2,6]]);
+      break;
     case 'vein-spring':
       gem(ctx,0,-6,2.4);
       for(const y of [-.5,4,8]){
@@ -111,9 +118,9 @@ function drawMotif(ctx:CanvasRenderingContext2D,motif:MapLandmarkMotif){
 }
 
 /** Paint an already-authorized present map site at the exact supplied native/display pin. */
-export function drawMapLandmarkGlyph(ctx:CanvasRenderingContext2D,site:Site,ownerColor?:string):void{
+export function drawMapLandmarkGlyph(ctx:CanvasRenderingContext2D,site:Site,ownerColor?:string,abandonedQuarter=false):void{
   if(!Number.isFinite(site.x)||!Number.isFinite(site.y))return;
-  const motif=mapLandmarkMotif(site),paint=icon[motif];
+  const motif=abandonedQuarter?'abandoned-quarter':mapLandmarkMotif(site),paint=icon[motif];
   if(!paint)return;
   const root=SPIRIT_ROOT_COLORS[site.spiritRoot];
   const rim=ownerColor&&hex.test(ownerColor)?ownerColor:paint.ink;
