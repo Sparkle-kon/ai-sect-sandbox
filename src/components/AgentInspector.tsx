@@ -102,7 +102,8 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
   const profile = !workspaceSection || workspaceSection === 'profile';
   const clan=profile?projectCultivationClans(world,cultivator):undefined;
   const ascended=profile&&cultivator.positionPlane==='immortal'&&!!verifiedImmortalAscension(world,cultivator);
-  const portrait = profile ? projectCultivatorPortrait(world,cultivator) : undefined;
+  const portrait = profile ? projectCultivatorPortrait(world,cultivator,
+    canReadOwnPersona(world,cultivator,allowPersonalThought)?{viewer:cultivator,allowPersonal:true}:undefined) : undefined;
   const cultivation = !workspaceSection || workspaceSection === 'cultivation';
   const ascension=cultivation?projectAscension(world,cultivator):undefined;
   const daoPath=cultivation?projectDaoPath(world,cultivator):undefined;

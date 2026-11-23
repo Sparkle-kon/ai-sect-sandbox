@@ -76,8 +76,10 @@ export function projectMapEntityPopover(world:WorldState,view:View,target:MapEnt
   if(target.kind==='actor'){
     const actor=actorInView(world,view,target.id);
     if(!actor)return undefined;
-    const monologue=livePersonal&&viewerId===actor.id&&activeAvatar(world)===actor?monologueLine(actor):undefined;
-    const portrait=projectMapCultivatorPortrait(world,view,actor);
+    const own=livePersonal&&viewerId===actor.id&&activeAvatar(world)===actor;
+    const monologue=own?monologueLine(actor):undefined;
+    const portrait=projectMapCultivatorPortrait(world,view,actor,
+      {contextual:true,...(own?{viewer:actor,allowPersonal:true}:{})});
     return {kind:'actor',target:{kind:'actor',id:actor.id},name:cap(cleaned(actor.name),80),
       realm:`${actor.realm}${actor.realmStage}层`,hp:actor.hp,maxHp:actor.maxHp,
       ...(portrait?{portrait}:{}),actionLabel:labelPublicMapAction(actor.currentAction),...(monologue?{monologue}:{persona:personaLine(actor,'thought')})};

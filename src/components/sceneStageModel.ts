@@ -121,7 +121,10 @@ export function projectSceneStage(world:WorldState, options?:SceneStageOptions):
   if(!frameDate.historical&&!accepted.length&&focal&&focal.locationId===site.id)accepted.push(focal);
   const pairPose=event&&!frameDate.historical?nativePairPose(event,accepted):undefined;
   const cast:SceneStageActor[]=accepted.flatMap(actor=>{
-    const appearance=projectCultivatorPortrait(world,actor);
+    const appearance=projectCultivatorPortrait(world,actor,{
+      viewer,historical:frameDate.historical,contextual:true,
+      publicEventId:establishing?undefined:event?.id,
+    });
     const name=named(actor.name,40);
     return appearance&&name?[{id:actor.id,name,realm:actor.realm,appearance,pose:pairPose??poseFor(actor)}]:[];
   });

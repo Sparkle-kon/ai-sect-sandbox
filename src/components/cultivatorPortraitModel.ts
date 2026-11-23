@@ -1,9 +1,14 @@
+import { equippedArtifact } from '../engine/artifactEngine';
+import { activeAvatar } from '../engine/avatarEngine';
+import { isChronicleStoryFact } from '../engine/chronicleLead';
+import { activeHeartDemon, isHeartDemonGuided } from '../engine/heartDemonEngine';
 import { isScopedExpeditionGate } from '../engine/expeditionOmenTerms';
 import { isSectActive } from '../engine/sectActivity';
 import { terrainTileAt } from '../engine/terrainEngine';
 import type { CultivationRealm, Cultivator, PersonalityTrait, Sect, SpiritRoot, WorldState } from '../types/world';
 import { mapTransitActorIds } from './mapConvoyView';
-import type { createTerrainMapView } from './terrainMapView';
+import { createTerrainMapView } from './terrainMapView';
+import type { SceneStageSeason,SceneStageTheme } from './sceneStageModel';
 
 type Variant = 0 | 1 | 2 | 3;
 interface PortraitFace {
@@ -16,7 +21,21 @@ interface PortraitFace {
   detail?: { eyeSpread: number; fringeSweep: number; cheekSlope: number };
 }
 type PortraitHalo = { kind: 'gold-wheel' | 'dharma' | 'blood-moon'; color: string };
+type HairStyle=0|1|2|3|4|5|6|7|8|9|10|11;
+export type PortraitExpression='calm'|'joy'|'fight'|'wounded'|'demon';
+export interface PortraitProjectionOptions {
+  readonly viewer?:Cultivator;
+  readonly historical?:boolean;
+  readonly allowPersonal?:boolean;
+  readonly publicEventId?:string;
+  readonly contextual?:true;
+}
 export interface CultivatorPortraitSpec {
+  hairStyle?:HairStyle;
+  accessoryStyle?:Variant;
+  expression?:PortraitExpression;
+  locale?:{theme:SceneStageTheme;season:SceneStageSeason};
+  treasure?:'sword_case'|'gourd'|'lute_case'|'array_disk';
   face: PortraitFace;
   attire: 'neutral' | 'crossed' | 'layered';
   ageBand: 'youth' | 'seasoned' | 'elder';
@@ -94,8 +113,12 @@ function derivePortrait(world: WorldState, actor: Cultivator, sect?: Sect): Cult
   const spirit = roots[actor.spiritRoot] ?? '#a8c6bc';
   const robe = sect && hex.test(sect.color) ? sect.color : fallbackColor;
   const halo = actualHalo(actor, sect);
+  const hairstyle=stir(hash(world.random.seed,actor.id)^0x58ca74d1);
   return {
     face: portraitFace(world.random.seed, actor.id),
+    expression:'calm',
+    hairStyle:(hairstyle%12) as HairStyle,
+    accessoryStyle:variant(hairstyle,19),
     attire: actor.gender === 'man' ? 'crossed' : actor.gender === 'woman' ? 'layered' : 'neutral',
     ageBand: ratio < .25 ? 'youth' : ratio < .65 ? 'seasoned' : 'elder',
     brow: brows[actor.personality] ?? 'level',
@@ -109,13 +132,68 @@ function derivePortrait(world: WorldState, actor: Cultivator, sect?: Sect): Cult
   };
 }
 
+function atmosphere(world: WorldState,siteId:string):NonNullable<CultivatorPortraitSpec['locale']> {
+  const month=world.month;
+  const season=month>=3&&month<=5?'spring':month>=6&&month<=8?'summer':month>=9&&month<=11?'autumn':'winter';
+  const theme=siteId==='loc-taixu'?'sword_peak':siteId==='loc-danxia'?'pill_valley':siteId==='loc-blood'?'blood_abyss':
+    siteId==='loc-vein-north'?'north_vein':siteId==='loc-market'||siteId==='loc-market-east'?'market':'countryside';
+  return {theme,season};
+}
+
+function addPortraitContext(world:WorldState,actor:Cultivator,portrait:CultivatorPortraitSpec,options:PortraitProjectionOptions,
+  view?:TerrainView):CultivatorPortraitSpec {
+  if(options.historical||!actor.alive||!(actor.hp>0)||actor.positionPlane!==undefined)return portrait;
+  const viewer=options.viewer;
+  if(viewer&&uniqueById(world.cultivators).get(viewer.id)!==viewer)return portrait;
+  const frame=options.allowPersonal&&viewer===actor?activeHeartDemon(world,actor):undefined;
+  const guided=frame&&actor.tribulation?.heartGuide?.bindingGeneration===world.playerAvatar.switchAvailableTick&&isHeartDemonGuided(world,actor,frame);
+  const personal=options.allowPersonal&&viewer===actor&&(guided||activeAvatar(world)===actor);
+  if(!view&&!options.contextual&&!options.publicEventId&&!personal)return portrait;
+  const scope=view??createTerrainMapView(world,viewer,viewer!==undefined);
+  const actualSite=uniqueById(world.locations).get(actor.locationId);
+  const site=actualSite&&actualSite.type!=='secret_realm'&&!isScopedExpeditionGate(actualSite)&&
+    scope.isCurrentLocation(actualSite.id)&&scope.seenLocations.includes(actualSite)?actualSite:undefined;
+  const travellers=mapTransitActorIds(world);
+  const live=uniqueById(scope.liveActors),canonical=uniqueById(world.cultivators);
+  const present=(id:string)=>{const other=live.get(id);return other&&canonical.get(id)===other&&other.alive&&other.hp>0&&
+    other.positionPlane===undefined&&other.locationId===site?.id&&!scope.trailPositions.has(id)&&!travellers.has(id)?other:undefined;};
+  if(!site||present(actor.id)!==actor)return portrait;
+  const events=[...uniqueById(world.events).values()].filter(event=>event&&event.witnessScope===undefined&&
+    event.tick===world.tick&&event.year===world.year&&event.month===world.month&&event.locationId===site.id&&
+    isChronicleStoryFact(event,world.tick)&&(!options.publicEventId||event.id===options.publicEventId));
+  if(options.publicEventId&&!events.some(event=>event?.actorIds.includes(actor.id)))return portrait;
+  const battle=events.some(event=>{
+    if(!event||event.category!=='combat'||event.actorIds.length!==2||event.actorIds[0]===event.actorIds[1]||
+      !event.actorIds.includes(actor.id)||!event.actorIds.every(id=>present(id))||
+      !event.duelWinnerId||!event.actorIds.includes(event.duelWinnerId))return false;
+    return event.id===`evt-${world.tick}-${event.actorIds[0]}-duel`;
+  });
+  const joyful=events.some(event=>{
+    if(!event||event.category!=='breakthrough'||event.actorIds.length!==1||event.actorIds[0]!==actor.id)return false;
+    const id=`evt-${world.tick}-${actor.id}-`;
+    const trial=actor.tribulation;
+    const ordinary=event.id===id+'break'&&(event.title===`${actor.name}突破至${actor.realm}${actor.realmStage}层`||
+      actor.realmStage===1&&event.title===`天地异象：${actor.name}晋升${actor.realm}期！`);
+    return ordinary||event.id===id+'tribulation-passed'&&event.title==='天劫圆满'&&!!trial&&trial.id===`trial-${actor.id}-${trial.startedTick}`&&
+      trial.stage==='passed'&&trial.resolvedTick===world.tick&&actor.realm===trial.targetRealm&&actor.realmStage===1;
+  });
+  const wounded=Number.isFinite(actor.maxHp)&&actor.maxHp>0&&actor.hp/actor.maxHp<.45;
+  const expression:PortraitExpression=personal&&frame?'demon':wounded?'wounded':battle?'fight':joyful?'joy':'calm';
+  const item=personal?equippedArtifact(actor):undefined;
+  const treasure=item&&(item.relicSetId?'array_disk':item.spiritRoot==='木'?'gourd':item.spiritRoot==='水'?'lute_case':
+    item.spiritRoot==='金'||item.spiritRoot==='雷'?'sword_case':'array_disk');
+  const hasBackdrop=!!(options.contextual||options.publicEventId||personal)||expression!=='calm';
+  return hasBackdrop?{...portrait,expression,locale:atmosphere(world,site.id),...(treasure?{treasure}:{})}:portrait;
+}
+
 /** Profile may show a canonically selected historical/deceased person, never a detached row. */
-export function projectCultivatorPortrait(world: WorldState, actor?: Cultivator | null): CultivatorPortraitSpec | undefined {
+export function projectCultivatorPortrait(world: WorldState, actor?: Cultivator | null, options?:PortraitProjectionOptions): CultivatorPortraitSpec | undefined {
   if (!actor) return undefined;
   const match = world.cultivators.filter(row => row.id === actor.id);
   if (match.length !== 1 || match[0] !== actor) return undefined;
   const sect = uniqueById(world.sects).get(actor.sectId);
-  return derivePortrait(world, actor, isSectActive(sect) ? sect : undefined);
+  const portrait=derivePortrait(world, actor, isSectActive(sect) ? sect : undefined);
+  return options?addPortraitContext(world,actor,portrait,options):portrait;
 }
 
 function forCurrentMapActors(world: WorldState, view: TerrainView, accepts: (actor: Cultivator, sect?: Sect) => void) {
@@ -138,12 +216,14 @@ function forCurrentMapActors(world: WorldState, view: TerrainView, accepts: (act
 }
 
 /** The map popover receives one small decorative spec only for the same currently painted actor. */
-export function projectMapCultivatorPortrait(world: WorldState, view: TerrainView, actor?: Cultivator | null):
+export function projectMapCultivatorPortrait(world: WorldState, view: TerrainView, actor?: Cultivator | null, options?:PortraitProjectionOptions):
     CultivatorPortraitSpec | undefined {
   if (!actor) return undefined;
   let visible: CultivatorPortraitSpec | undefined;
   forCurrentMapActors(world, view, (candidate, sect) => {
-    if (candidate === actor) visible = derivePortrait(world, actor, sect);
+    if (candidate !== actor) return;
+    const portrait=derivePortrait(world, actor, sect);
+    visible=addPortraitContext(world,actor,portrait,options??{},view);
   });
   return visible;
 }

@@ -11,6 +11,7 @@ import {projectGuidedHeartDemon,queueGuidedHeartDemonChoice,releaseGuidedHeartDe
 import type {WorldState} from '../types/world';
 import type {HeartDemonChoice} from '../types/heartDemon';
 import {HeartDemonTrialTheatre} from './HeartDemonTrialTheatre';
+import {projectCultivatorPortrait} from './cultivatorPortraitModel';
 import {activeDestinyTraitOffer,resolveGuidedDestinyTrait} from '../engine/destinyTraitEngine';
 import {activeRoguelikeEncounter,resolveGuidedRoguelikeChoice} from '../engine/roguelikeEncounterEngine';
 import type {DestinyTraitId} from '../types/destinyTrait';
@@ -91,9 +92,11 @@ export function useFeaturedStoryDecision(simulation:Simulation){
   };
   const heartGuideActor=!preview&&nativeHeart?world.cultivators.find(row=>row.id===nativeHeart.actorId):undefined;
   const heartGuide=heartGuideActor?projectNextStoryGuidance(world,heartGuideActor):undefined;
+  const heartPortrait=heartPending&&heartGuideActor&&!browsing.current&&authority.current===world&&history.current===timeline?
+    projectCultivatorPortrait(world,heartGuideActor,{viewer:heartGuideActor,allowPersonal:true}):undefined;
   const heartCard=heart&&heartScope!==dismissedHeart?
     <HeartDemonTrialTheatre key={heartScope} frame={heart.frame} actorName={heart.actorName} likenessName={heart.likenessName}
-      guidance={heartGuide?.kind==='heart'?heartGuide.line:undefined}
+      guidance={heartGuide?.kind==='heart'?heartGuide.line:undefined} portrait={heartPortrait?.expression==='demon'?heartPortrait:undefined}
       busy={busy} onChoose={chooseHeart} onRelease={releaseHeart} onAdvance={advanceHeart}
       onContinue={()=>{setDismissedHeart(heartScope);setReleaseReceipt(undefined);}}/>:undefined;
   const exactContact=()=>{

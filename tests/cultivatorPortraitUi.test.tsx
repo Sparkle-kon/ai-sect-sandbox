@@ -33,6 +33,28 @@ describe('cultivator portrait SVG',()=>{
     expect(images[2]).toContain('M70 10a43 43');
   });
 
+  it('keeps the comparable paper-doll layers in depth order without shared SVG references',()=>{
+    const image=<CultivatorPortrait portrait={{...base,treasure:'array_disk',halo:{kind:'dharma',color:'#959ae8'}}} presentation="stage"/>;
+    const html=renderToStaticMarkup(<div>{image}{image}</div>);
+    const layers=(html.match(/data-portrait-layer="[^"]+"/g)??[]).map(attribute=>attribute.split('"')[1]);
+    const expected=['scenery','halo','treasure','robe','face','eyes','hair','headpiece'];
+    expect(layers).toEqual([...expected,...expected]);
+    expect(html).not.toMatch(/<image|href=|url\(|\bid=|tabindex=/i);
+    expect(html.match(/aria-hidden="true"/g)).toHaveLength(2);
+  });
+
+  it('renders distinct eyes for five supplied states without rerolling the face or ornaments',()=>{
+    const images=(['calm','joy','fight','wounded','demon'] as const).map(expression=>{
+      const html=renderToStaticMarkup(<CultivatorPortrait portrait={{...base,expression}}/>);
+      const faceExpression=/<g data-portrait-layer="eyes".*?(?=<g data-portrait-layer="hair")/;
+      const eyes=html.match(faceExpression)?.[0];
+      expect(eyes).toContain(`data-portrait-expression="${expression}"`);
+      return [eyes,html.replace(faceExpression,'')];
+    });
+    expect(new Set(images.map(([eyes])=>eyes)).size).toBe(5);
+    expect(new Set(images.map(([,rest])=>rest)).size).toBe(1);
+  });
+
   it('reflects selected portrait geometry without guessing metadata in the renderer',()=>{
     const a=renderToStaticMarkup(<CultivatorPortrait portrait={base}/>);
     const b=renderToStaticMarkup(<CultivatorPortrait portrait={{...base,ageBand:'elder',attire:'layered',

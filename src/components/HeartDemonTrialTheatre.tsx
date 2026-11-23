@@ -1,6 +1,8 @@
 import {useEffect,useId,useRef,useState} from 'react';
 import {Flame,Moon,ScanEye,Scissors} from 'lucide-react';
 import type {HeartDemonChoice,HeartDemonFrame} from '../types/heartDemon';
+import type {CultivatorPortraitSpec} from './cultivatorPortraitModel';
+import {CultivatorPortrait} from './CultivatorPortrait';
 
 const choices=[
   {id:'sever',name:'斩断尘缘',hint:'不应幻象以减轻心负；割舍这一念也可能折损气运。',Icon:Scissors},
@@ -55,6 +57,7 @@ export interface HeartDemonTrialTheatreProps {
   actorName:string;
   likenessName?:string;
   guidance?:string;
+  portrait?:CultivatorPortraitSpec;
   busy:boolean;
   onChoose:(choice:HeartDemonChoice)=>boolean;
   onRelease:()=>boolean;
@@ -62,7 +65,7 @@ export interface HeartDemonTrialTheatreProps {
   onContinue:()=>void;
 }
 
-export function HeartDemonTrialTheatre({frame,actorName,likenessName,guidance,busy,onChoose,onRelease,onAdvance,onContinue}:HeartDemonTrialTheatreProps){
+export function HeartDemonTrialTheatre({frame,actorName,likenessName,guidance,portrait,busy,onChoose,onRelease,onAdvance,onContinue}:HeartDemonTrialTheatreProps){
   const title=useId(),intro=useId(),heading=useRef<HTMLHeadingElement>(null);
   const [message,setMessage]=useState('');
   const result=frame.result;
@@ -78,9 +81,13 @@ export function HeartDemonTrialTheatre({frame,actorName,likenessName,guidance,bu
   return <section aria-labelledby={title} className="relative isolate min-w-0 space-y-2.5 overflow-hidden rounded-2xl border
     border-violet-400/35 bg-gradient-to-br from-violet-950/80 via-slate-950 to-slate-950 p-3.5 text-slate-100 [overflow-wrap:anywhere] sm:p-5">
     <div aria-hidden="true" className="pointer-events-none absolute -right-9 -top-14 -z-10 h-44 w-44 rounded-full border border-violet-200/20 shadow-[0_0_3rem_rgba(167,139,250,.18)]"/>
-    <header className="space-y-1">
+    <header className="flex min-w-0 items-center gap-3">
+      {portrait&&(status==='choosing'||status==='queued')&&
+        <CultivatorPortrait portrait={portrait} presentation="stage" className="h-20 w-[4.4rem]"/>}
+      <div className="min-w-0 space-y-1">
       <p className="flex items-center gap-1.5 text-xs text-violet-200"><Moon size={15} aria-hidden="true" className="shrink-0"/>{actorName} · 劫雷之后</p>
       <h2 id={title} tabIndex={-1} ref={heading} className={`font-serif text-xl font-semibold text-amber-50 sm:text-2xl ${focus}`}>心魔劫</h2>
+      </div>
     </header>
     {apparition&&<>
       <div id={intro} className="space-y-1.5 font-serif text-sm leading-relaxed text-slate-200 sm:text-base">

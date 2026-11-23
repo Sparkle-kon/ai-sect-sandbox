@@ -37,7 +37,10 @@ describe('illustrated stage uses the native proven scene',()=>{
     const subject=world.cultivators.find(row=>row.id===actorId)!;
     const stage=projectSceneStage(world,{eventId:event.id,leadId:cover.lead?.id});
     expect(stage.siteName).toBe(world.locations.find(row=>row.id===event.locationId)?.name);
-    expect(stage.cast).toContainEqual(expect.objectContaining({id:actorId,pose:'labor',appearance:projectCultivatorPortrait(world,subject)}));
+    expect(stage.cast).toContainEqual(expect.objectContaining({
+      id:actorId,pose:'labor',
+      appearance:{...projectCultivatorPortrait(world,subject),locale:{theme:'pill_valley',season:'spring'}},
+    }));
     expect(stage.portrait).toMatchObject({id:actorId,name:subject.name,realm:subject.realm});
     expect(stage.cast.every(({id})=>world.cultivators.some(row=>row.id===id&&row.alive&&row.hp>0&&row.locationId===event.locationId))).toBe(true);
     expect(projectSceneStage(world,{eventId:event.id,leadId:actorId})).toEqual(stage);
