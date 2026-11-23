@@ -4,18 +4,20 @@ import type {SectJobReport} from '../types/sectJobs';
 import type {WorldState} from '../types/world';
 import {CultivatorPortrait} from './CultivatorPortrait';
 import {projectCultivatorPortrait} from './cultivatorPortraitModel';
+import {associatedComicRow,SectComicEffects,type SectComicView} from './SectComicRead';
 import {reportEffectLine,reportExpression,reportTier,reportVoice} from './sectJobReportPresentation';
 
 const control='min-h-11 min-w-0 rounded-md border border-amber-300/45 px-3 py-1.5 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300';
 
-export function SectJobReportStage({world,report,present,onDismiss}:{
-  world:WorldState;report:SectJobReport;present?:ReadonlySet<string>;onDismiss:(report:SectJobReport)=>void;
+export function SectJobReportStage({world,report,present,comic,onDismiss}:{
+  world:WorldState;report:SectJobReport;present?:ReadonlySet<string>;comic?:SectComicView;onDismiss:(report:SectJobReport)=>void;
 }){
   const title=useId();
   const heading=useRef<HTMLHeadingElement>(null),scene=useRef<HTMLElement>(null);
   const [cursor,setCursor]=useState<{report:SectJobReport;index:number}>();
   const progress=useRef<{report:SectJobReport;index:number;done?:true}>();
   const index=cursor?.report===report?cursor.index:0;
+  const comicRow=associatedComicRow(comic,report);
   const rows=useMemo(()=>[...report.rows].sort((a,b)=>reportTier(a).order-reportTier(b).order),[report]);
   const row=rows[index];
 
@@ -30,6 +32,7 @@ export function SectJobReportStage({world,report,present,onDismiss}:{
   },[report,index]);
 
   if(!row)return null;
+  const sceneComic=row===comicRow?comic:undefined;
   const matches=world.cultivators.filter(item=>item.id===row.discipleId);
   const actor=matches.length===1?matches[0]:undefined;
   const name=actor?.name??'姓名未详的弟子';
@@ -63,14 +66,16 @@ export function SectJobReportStage({world,report,present,onDismiss}:{
           <p className="text-xs text-stone-300">{!speaks?'差事留档':atHome?'人在山门':'人未在庭院露面，读其回话'}</p>
         </div>
       </div>
-      {speaks&&<blockquote className="border-l border-amber-400/40 pl-2 font-serif text-sm leading-6 text-stone-100">「{reportVoice(row,actor)}」</blockquote>}
+      {sceneComic&&<p data-sect-comic-report="" className="text-sm leading-6 text-stone-200">{sceneComic.report}</p>}
+      {speaks&&<blockquote className="border-l border-amber-400/40 pl-2 font-serif text-sm leading-6 text-stone-100">「{sceneComic?.quote??reportVoice(row,actor)}」</blockquote>}
       <section aria-label="所得与折损" className="space-y-1 text-xs text-stone-300">
         <h4 className="font-semibold text-amber-100">所得与折损</h4>
         {row.effects.length>0?<ul className="flex flex-wrap gap-1.5">
           {row.effects.map((effect,step)=><li key={step} className={`rounded bg-stone-950/80 px-1.5 py-1 ${effect.amount<0?'text-rose-200':'text-emerald-200'}`}>
             <span className="text-stone-400">{effect.stage==='native'?'办差：':'后续：'}</span>{reportEffectLine(effect)}
           </li>)}
-        </ul>:<p>这一单没有可记的收获或折损。</p>}
+        </ul>:!sceneComic?.effects.length&&<p>这一单没有可记的收获或折损。</p>}
+        {sceneComic&&<SectComicEffects effects={sceneComic.effects}/>}
       </section>
     </article>
     <div className="grid grid-cols-2 gap-2">

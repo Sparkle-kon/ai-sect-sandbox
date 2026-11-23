@@ -1,3 +1,4 @@
+import type { SectComedyState } from './sectComedy';
 import type { SectGrowthState } from './sectGrowth';
 import type { SectJobReport } from './sectJobs';
 export const STARTER_SECT_IDS = ['qingyun-odd-jobs','drunken-sword-hermitage'] as const;
@@ -35,6 +36,7 @@ export interface SectManagementState {
   debt?:ManagementDebt;
   latestReport?:SectJobReport;
   growth?:SectGrowthState;
+  comedy?:SectComedyState;
 }
 
 /** Stable genesis namespace; a new draw is a new lineage, not a changed live roster. */

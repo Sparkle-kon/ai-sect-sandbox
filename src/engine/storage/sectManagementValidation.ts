@@ -1,3 +1,4 @@
+import { sectComedyShape, validateSectComedy } from './sectComedyValidation';
 import { sectGrowthShape, validateSectGrowth } from './sectGrowthValidation';
 import { sectJobReportShape, validateSectJobReport } from './sectJobReportValidation';
 import { STARTER_SECT_IDS, starterSectIdentity } from '../../types/sectManagement';
@@ -18,6 +19,7 @@ export const sectManagementShape = structure({
   debt: optional(structure({ creditorId:id, principal:wealth, dueTick:tick })),
   latestReport: optional(sectJobReportShape),
   growth: optional(sectGrowthShape),
+  comedy: optional(sectComedyShape),
 });
 
 export function validateSectManagement(world: WorldState, fail: (field:string)=>never): void {
@@ -69,4 +71,5 @@ export function validateSectManagement(world: WorldState, fail: (field:string)=>
     return fail('sectManagement.debt');
   if(state.latestReport)validateSectJobReport(world,state.latestReport,fail);
   if(state.growth)validateSectGrowth(world,state,state.growth,fail);
+  if(state.comedy)validateSectComedy(world,state,state.comedy,fail);
 }

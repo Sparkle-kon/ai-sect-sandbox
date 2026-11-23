@@ -1,3 +1,4 @@
+import {settleSectComedyMonth} from '../sectComedy';
 import {advanceSectGrowth} from '../sectGrowth';
 import {ensureManagedSectQuirks} from '../sectQuirkAssignment';
 import { advanceStorytellerDirector, canonicalStorytellerFocus, STORYTELLER_STYLES } from '../storytellerDirector';
@@ -87,17 +88,19 @@ export function runChronicleAndPostTurn(context: WorldTickContext): void {
   settleUpperPassageMortality(nextState);
   settleFrontierMortality(nextState);
   if(nextState.sectManagement){
-    // Review living members and the real treasury only once the native month's losses and income are known.
+    // Judge actual work, obligations and survival first. A line of dialogue cannot change their truth.
     const closingEvents=advanceSectGrowth(nextState,prevState);
-    if(closingEvents.length){
-      for(const event of closingEvents)witnessEvent(nextState,event);
-      newEvents.push(...closingEvents);
-      nextState.events=[...closingEvents,...nextState.events].slice(0,120);
-      archiveChronicleEvents(nextState,[...closingEvents]);
-      completedEvents.push(...closingEvents);
+    ensureManagedSectQuirks(nextState);
+    const moment=settleSectComedyMonth(nextState,prevState);
+    const supplement=moment?[...closingEvents,moment]:[...closingEvents];
+    if(supplement.length){
+      for(const event of supplement)witnessEvent(nextState,event);
+      newEvents.push(...supplement);
+      nextState.events=[...supplement,...nextState.events].slice(0,120);
+      archiveChronicleEvents(nextState,supplement);
+      completedEvents.push(...supplement);
     }
   }
-  ensureManagedSectQuirks(nextState);
   expireRingAudiences(nextState);
   finalizeDestinyTraitOffers(nextState);
   pruneInvalidForbiddenDuelContacts(nextState);

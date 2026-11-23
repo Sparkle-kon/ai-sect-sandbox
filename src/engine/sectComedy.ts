@@ -1,0 +1,163 @@
+import {SECT_COMEDY_TEMPLATES} from '../data/sectComedy';
+import type {SectComedyMatch,SectComedyTemplate,SectComicAppliedEffect,SectComicMoment,SectComicSource} from '../types/sectComedy';
+import type {SectJobReportRow} from '../types/sectJobs';
+import type {Cultivator,WorldEvent,WorldState} from '../types/world';
+import {isGrandSiegeFighterPresent} from './grandSiegePresence';
+import {isSectActive} from './sectActivity';
+import {SECT_JOB_DEFINITIONS} from './sectJobs';
+import {effectiveSectQuirks} from './sectQuirkAssignment';
+import {isRetiredFromService} from './serviceRetirementEngine';
+import {sameGeneratedWorld} from './worldIdentity';
+
+const HISTORY=12;
+export const sectComicEventId=(tick:number,sectId:string)=>`evt-${tick}-${sectId}-comic`;
+const compare=(a:string,b:string)=>a<b?-1:a>b?1:0;
+function priority(seed:number,tick:number,id:string){
+  let value=seed^Math.imul(tick,0x9e3779b1);
+  for(const ch of id)value=Math.imul(value^ch.charCodeAt(0),0x01000193);
+  return (value^(value>>>16))>>>0;
+}
+function unique<T extends {id:string}>(rows:readonly T[],id:string):T|undefined{
+  const matches=rows.filter(row=>row.id===id);
+  return matches.length===1?matches[0]:undefined;
+}
+const alive=(actor:Cultivator)=>actor.alive&&actor.hp>0&&actor.positionPlane!=='immortal'&&!isRetiredFromService(actor);
+const spelling=(name:string)=>name.replace(/[\p{Cc}\p{Cf}\p{Cs}]/gu,' ').trim().slice(0,80);
+
+interface Beat {
+  readonly speaker:Cultivator;
+  readonly source:SectComicSource;
+  readonly siteId?:string;
+  readonly row?:SectJobReportRow;
+}
+interface Candidate extends Beat {
+  readonly template:SectComedyTemplate;
+  readonly score:number;
+  readonly jitter:number;
+}
+function options(world:WorldState):Beat[]{
+  const management=world.sectManagement;
+  if(!management||management.growth?.failure)return [];
+  const sect=unique(world.sects,management.sectId),leader=unique(world.cultivators,management.leaderId);
+  if(!isSectActive(sect)||!leader||sect.leaderId!==leader.id||leader.sectId!==sect.id||!alive(leader))return [];
+  const counts=new Map<string,number>();
+  for(const actor of world.cultivators)counts.set(actor.id,(counts.get(actor.id)??0)+1);
+  const cast=world.cultivators.filter(actor=>counts.get(actor.id)===1&&alive(actor)&&actor.sectId===sect.id&&
+    actor.hp>=actor.maxHp*.3);
+  const beats:Beat[]=[];
+  const report=management.latestReport;
+  if(report?.settledTick===world.tick&&report.openedTick===world.tick-1&&report.sectId===sect.id&&report.leaderId===leader.id){
+    for(const row of report.rows){
+      const speaker=cast.find(actor=>actor.id===row.discipleId);
+      if(!speaker||report.rows.filter(entry=>entry.discipleId===speaker.id).length!==1||
+        row.phase==='performed'&&(!row.tier||row.tier==='disaster'))continue;
+      // The finished board is the authority for a past action, not a claim that either party has returned.
+      const reportEventId=row.sourceEventId;
+      const source:SectComicSource=row.phase==='performed'&&row.tier&&row.tier!=='disaster'?
+        {phase:'performed',jobId:row.jobId,tier:row.tier,...(reportEventId?{reportEventId}:{})}:
+        row.phase!=='performed'?{phase:row.phase,jobId:row.jobId,...(reportEventId?{reportEventId}:{})}:
+        {phase:'ambient',presence:'away'};
+      beats.push({speaker,source,row,...(row.siteId&&row.phase!=='unavailable'?{siteId:row.siteId}:{})});
+    }
+  }
+  // A quiet month may still have living members. This beat needs no completed job or invented return.
+  for(const speaker of cast.length?cast:[leader]){
+    const site=unique(world.locations,speaker.locationId);
+    const physicallyHere=!!site&&isGrandSiegeFighterPresent(world,speaker,site.id)&&site.expeditionOmenId===undefined;
+    const presence=physicallyHere&&site.id===management.homeSiteId?'home':'away';
+    beats.push({speaker,source:{phase:'ambient',presence},...(physicallyHere?{siteId:site.id}:{})});
+  }
+  return beats;
+}
+function matches(world:WorldState,beat:Beat,match:SectComedyMatch){
+  const {source,speaker}=beat;
+  if(source.phase!==match.phase)return false;
+  if(match.quirks?.length){
+    const owned=effectiveSectQuirks(world,speaker);
+    if(!match.quirks.every(id=>owned.includes(id)))return false;
+  }
+  if(match.phase==='ambient')return source.phase==='ambient'&&(!match.presence||source.presence===match.presence);
+  if(source.phase==='ambient'||match.job&&source.jobId!==match.job)return false;
+  return match.phase!=='performed'||source.phase==='performed'&&source.tier===match.tier;
+}
+function effectsFor(world:WorldState,beat:Beat,template:SectComedyTemplate):SectComicAppliedEffect[]|undefined{
+  if(!template.effects.length)return [];
+  if(beat.source.phase!=='performed'||!beat.row)return;
+  const {speaker}=beat,management=world.sectManagement;
+  const wouldApply:SectComicAppliedEffect[]=[];
+  for(const effect of template.effects){
+    if(effect.kind==='qi'){
+      if(!Number.isFinite(speaker.qiProgress)||speaker.qiProgress<0||speaker.qiProgress>100||speaker.positionPlane!==undefined)return;
+      const amount=Math.max(0,Math.min(100,speaker.qiProgress+effect.amount))-speaker.qiProgress;
+      if(!amount)return;
+      wouldApply.push({kind:'qi',amount});
+    }else{
+      if(!management||beat.source.jobId!=='kitchen'||beat.source.tier!=='mishap'||beat.siteId!==management.homeSiteId||
+        speaker.locationId!==management.homeSiteId||!isGrandSiegeFighterPresent(world,speaker,management.homeSiteId)||
+        management.buildings.kitchen<=0||!beat.row.effects.some(row=>row.kind==='herb'&&row.stage==='native'&&row.amount===-1&&
+          (row.herbId==='earth_root'||row.herbId==='jade_leaf')))return;
+      wouldApply.push({kind:'kitchen_damage',amount:-1});
+    }
+  }
+  if(new Set(wouldApply.map(effect=>effect.kind)).size!==wouldApply.length)return;
+  return wouldApply;
+}
+function score(beat:Beat,template:SectComedyTemplate){
+  const {match}=template;
+  const urgency=beat.source.phase==='performed'?beat.source.tier==='windfall'||beat.source.tier==='mishap'?45:24:
+    beat.source.phase==='ambient'?0:12;
+  const specific=(match.quirks?.length??0)*25+(match.phase!=='ambient'&&match.job?9:0);
+  return urgency+specific+(beat.source.phase!=='ambient'?12:0);
+}
+
+/** A comedy beat is a new scoped reaction, never a second settlement of the job it refers to. */
+export function settleSectComedyMonth(world:WorldState,prevWorld:WorldState):WorldEvent|undefined{
+  const management=world.sectManagement;
+  if(!management||!prevWorld.sectManagement||world.tick!==prevWorld.tick+1||!sameGeneratedWorld(world,prevWorld)||
+    management.growth?.failure||management.comedy?.moments.some(moment=>moment.tick===world.tick))return;
+  const history=management.comedy?.moments??[];
+  const recent=new Map(history.map((row,i)=>[row.templateId,i]));
+  const candidates:Candidate[]=[];
+  for(const beat of options(world))for(const template of SECT_COMEDY_TEMPLATES){
+    if(!matches(world,beat,template.match)||effectsFor(world,beat,template)===undefined)continue;
+    candidates.push({...beat,template,score:score(beat,template),jitter:priority(world.random.seed,world.tick,`${template.id}:${beat.speaker.id}`)});
+  }
+  const pick=candidates.sort((a,b)=>(recent.get(a.template.id)??-1)-(recent.get(b.template.id)??-1)||
+    b.score-a.score||a.jitter-b.jitter||compare(a.template.id,b.template.id)||compare(a.speaker.id,b.speaker.id))[0];
+  if(!pick)return;
+  const effects=effectsFor(world,pick,pick.template);
+  if(!effects)return;
+  for(const effect of effects){
+    if(effect.kind==='qi')pick.speaker.qiProgress+=effect.amount;
+    else management.buildings.kitchen+=effect.amount;
+  }
+  const moment:SectComicMoment={tick:world.tick,templateId:pick.template.id,speakerId:pick.speaker.id,
+    source:{...pick.source},effects,...(pick.siteId?{siteId:pick.siteId}:{})};
+  management.comedy={moments:[...history.slice(-(HISTORY-1)),moment]};
+  return {id:sectComicEventId(world.tick,management.sectId),tick:world.tick,year:world.year,month:world.month,
+    actorIds:[pick.speaker.id],witnessScope:'participants',category:'diplomacy',
+    title:'宗门月末一记',description:'这一月的宗门小事已记下。'};
+}
+
+/** Reads only a stored local record. Quote and hook text are never promoted to historical facts. */
+export function projectSectComicMoment(world:WorldState,moment=world.sectManagement?.comedy?.moments.at(-1)){
+  const management=world.sectManagement;
+  if(!management||!moment||moment.tick>world.tick||!management.comedy?.moments.includes(moment))return;
+  const template=SECT_COMEDY_TEMPLATES.find(row=>row.id===moment.templateId);
+  const speaker=unique(world.cultivators,moment.speakerId),sect=unique(world.sects,management.sectId);
+  if(!template||!speaker||!sect)return;
+  const site=moment.siteId?unique(world.locations,moment.siteId):undefined;
+  const jobId=moment.source.phase!=='ambient'?moment.source.jobId:undefined;
+  const speakerName=spelling(speaker.name);
+  const substitute=(text:string)=>text.replace(/\{(name|sect|site|job)\}/gu,(_,field:string)=>(
+    field==='name'?speakerName:field==='sect'?spelling(sect.name):field==='site'?spelling(site?.name??'眼下这处'):
+      jobId?SECT_JOB_DEFINITIONS[jobId].label:'本月的事'
+  ));
+  const proofId=moment.source.phase!=='ambient'?moment.source.reportEventId:undefined;
+  const shareable=proofId?world.events.some(row=>row.id===proofId&&row.tick===moment.tick&&row.witnessScope===undefined):false;
+  const hook=template.chatHook&&((template.chatHook.group==='own')||shareable)?
+    {group:template.chatHook.group,line:substitute(template.chatHook.line)}:undefined;
+  return {moment:structuredClone(moment),templateId:template.id,speakerId:speaker.id,speakerName,
+    report:substitute(template.report),quote:substitute(template.quote),effects:moment.effects.map(row=>({...row})),
+    ...(template.animation?{animation:template.animation}:{}),...(hook?{chatHook:hook}:{})};
+}
