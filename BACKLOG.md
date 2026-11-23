@@ -17,7 +17,7 @@
   - 彻底告别“黑底纯文字网页”式的浅显展示！构建 `src/components/SceneStageCanvas.tsx` 并直接嵌入 `StoryFirstHome.tsx` 与 `CockpitStoryStage.tsx` 的主视觉区（同时保留原有按钮、标题与 ARIA 结构以确保既有测试 100% 通过）。
   - **上方实景舞台画布**：根据当前一幕所在的真实地点（太虚剑峰云海白玉广场、丹霞灵谷药田竹庐、万仙坊市红灯笼青石街、血月魔渊黑石血池、极北寒玉脉雪松古井等），实时绘制 **《星露谷物语》式的 2D 具象场景画卷**（有青草地、石板路、飞檐古建筑、摇曳松竹、冒烟丹炉、流水石桥、四时落花/飘雪粒子），并在场景中画出当前登场修士的 **2D 全身小人 Sprite（有发型、面孔、门派道袍、配剑，以及打坐、挥剑、采药、交谈的生动姿态）**！
   - **下方星露谷式立绘对话框**：在剧情正文左侧常驻展示当前主角或核心登场人物的**大尺寸全彩精绘半身立绘头像框 (`CultivatorPortrait`) + 角色姓名/境界铭牌**，让你一打开游戏就能看到鲜活的人物样貌与修仙世界场景！
-- [ ] **[SV1-2] 地图圆点彻底替换为「星露谷式 2D 全身可动修仙小人 Sprite」(`Canvas2DCharacterSprites`)**：
+- [x] **[SV1-2] 地图圆点彻底替换为「星露谷式 2D 全身可动修仙小人 Sprite」(`Canvas2DCharacterSprites`)**：
   - 构建 `src/components/canvasCharacterSprite.ts` 并接入 `WorldMapCanvas.tsx` 与场景画布：彻底淘汰用“小圆圈/几何玉牌”代替活人的简陋画法！
   - 为每位修士在 Canvas 上绘制 **2D 具象 Q 版/像素风全身小人（head + hair bun/crown + face with eyes + flowing sect robe & sleeves + held/backed sword or staff + flying sword/lotus mount）**。
   - 实现 **4 种具象动作姿态与微动画**：① **待机/游历**（衣袂微摆、御剑悬浮） ② **盘膝吐纳修炼**（盘腿坐于蒲团/莲台，周身环绕上升的五行灵气光点） ③ **挥剑斗法**（持剑前刺/劈砍姿态 + 刀光剑影） ④ **采药/炼丹/劳作**（俯身采摘或炉前控火姿态），人物下方配清晰的半透明墨金姓名与境界铭牌。

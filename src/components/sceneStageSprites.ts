@@ -43,7 +43,7 @@ function sleeve(ctx: Pen,x: number,y: number,flip: number,rotation: number,color
   ctx.restore();
 }
 
-function figure(ctx: Pen,actor: SceneStageActor,time: number,facing: number,phase: number): void {
+export function drawStageFigure(ctx: Pen,actor: Pick<SceneStageActor, 'appearance' | 'pose'>,time: number,facing: number,phase: number): void {
   const {face,palette,attire,ageBand} = actor.appearance;
   const {pose} = actor;
   const ink = shade(face.ink,'#141a26',.44);
@@ -170,7 +170,7 @@ export function drawStageCast(ctx: Pen,actors: readonly SceneStageActor[],time: 
     const x = 319 + (col-(rowSize-1)/2)*spacing + (row % 2 ? 15 : 0);
     const y = 322 - (totalRows-1-row)*dy + (Math.abs(col-(rowSize-1)/2)%1 ? -2 : 2);
     ctx.save(); ctx.translate(Math.round(x),Math.round(y)); ctx.scale(scale,scale);
-    figure(ctx,actors[i],time,col <= (rowSize-1)/2 ? 1 : -1,i*1.61);
+    drawStageFigure(ctx,actors[i],time,col <= (rowSize-1)/2 ? 1 : -1,i*1.61);
     ctx.restore();
   }
 }

@@ -164,3 +164,17 @@ export function projectMapCultivatorPortraits(world: WorldState, view: TerrainVi
   forCurrentMapActors(world, view, (actor, sect) => result.set(actor.id, derivePortrait(world, actor, sect)));
   return result;
 }
+
+/** Bulk appearance for actors already authorized by the caller's presentation scope. Not a visibility grant. */
+export function projectCanonicalCultivatorPortraits(world: WorldState, scopedActors: readonly Cultivator[]):
+    ReadonlyMap<string, CultivatorPortraitSpec> {
+  const result=new Map<string,CultivatorPortraitSpec>();
+  if (!scopedActors.length) return result;
+  const actors=uniqueById(world.cultivators), sects=uniqueById(world.sects);
+  for (const actor of uniqueById(scopedActors).values()) {
+    if (!actor || actors.get(actor.id) !== actor) continue;
+    const sect=sects.get(actor.sectId);
+    result.set(actor.id,derivePortrait(world,actor,isSectActive(sect)?sect:undefined));
+  }
+  return result;
+}

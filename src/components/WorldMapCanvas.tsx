@@ -11,10 +11,11 @@ import {createMapFrameClock} from './mapFrameClock';
 import {buildProtagonistFlightEdges,drawProtagonistFlightEdges,withoutReplacedProtagonistFlightTrajectory} from './protagonistFlightMap';
 import {projectProtagonistFlight} from '../engine/protagonistFlightEngine';
 import {resolveMapDossierFocus,type MapDossierFocusRequest} from './mapDossierFocus';
-import {drawMapCultivatorToken} from './mapCultivatorTokens';
+import {drawCanvasCharacterSprite,mapCharacterSpriteSize} from './canvasCharacterSprite';
+import {buildMapActorSpriteModels} from './mapActorSpriteModel';
 import {drawMapLandmarkGlyph} from './mapLandmarkGlyphs';
 import {visibleAbandonedQuarterSites} from './abandonedQuarterMap';
-import {makeMapNamePills,drawMapNamePills,measureMapNamePill} from './mapCanvasNamePills';
+import {makeMapNamePills,drawMapNamePills,measureMapNamePill,fitActorSpriteHitFootprints,admitPaintedSpritePositions} from './mapCanvasNamePills';
 import {projectMapSitePins} from './mapSitePinLayout';
 import {buildAscensionMapVfx,drawAscensionMapVfx} from './ascensionSceneVfx';
 import {cultivationClanMapSites,drawCultivationClanMapSeal} from './cultivationClanMapMark';
@@ -351,10 +352,6 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     return world.workshopDisbandments.closures.filter(({ originId, tick }) =>
       originId === selected.locationId && tick <= world.tick).at(-1);
   }, [world, selected, isCurrentLocation]);
-  const liveActors = useMemo(() => {
-    const travellers = mapTransitActorIds(world);
-    return travellers.size ? mapView.liveActors.filter(({ id }) => !travellers.has(id)) : mapView.liveActors;
-  }, [world, mapView]);
   const weatherAtVisibleSites = useMemo(() => new Map(seenLocations
     .filter(({ id }) => isCurrentLocation(id))
     .map((site) => [site.id, localQiWeather(world, site)])), [world, seenLocations, isCurrentLocation]);
@@ -445,7 +442,11 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const gestureScope = `${clusterScope}|${selectedCultivatorId ?? ''}|${world.tick}|${world.interventionSequence}|${onBrushStroke ? 'live' : 'read'}`;
   useEffect(() => { abandonGesture(); }, [gestureScope]);
 
-  const actorPositions = useMemo(() => mapActorPositions(seenLocations, liveActors, mapView.trailPositions), [seenLocations, liveActors, mapView.trailPositions]);
+  const candidateActorPositions=useMemo(()=>mapActorPositions(seenLocations,mapView.liveActors,mapView.trailPositions),
+    [seenLocations,mapView.liveActors,mapView.trailPositions]);
+  const spriteModels=useMemo(()=>buildMapActorSpriteModels(world,mapView,candidateActorPositions),[world,mapView,candidateActorPositions]);
+  const actorPositions=useMemo(()=>admitPaintedSpritePositions(candidateActorPositions,spriteModels),
+    [candidateActorPositions,spriteModels]);
 
   const selectedPoint = actorPositions.find(({ actor }) => actor.id === selectedCultivatorId);
   const followedActorId = selectedPoint?.actor.id;
@@ -553,7 +554,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const guardsByLocation = new Map<string, number>();
   const headquarters = new Map(world.sects.map((sect) => [sect.headquartersId, sect]));
   const currentCouncils = new Map(world.councils.filter((record) => record.tick === world.tick).map((record) => [record.sectId, record]));
-  for (const actor of liveActors) {
+  for (const {actor} of actorPositions) {
     if (mapView.trailPositions.has(actor.id)) continue; // Never count a moving pilgrim at its saved departure site.
     if (isGuardOnDuty(actor, world)) {
       guardsByLocation.set(actor.locationId, (guardsByLocation.get(actor.locationId) ?? 0) + 1);
@@ -812,12 +813,13 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           return canvasFlights.draw(ctx,elapsed,animate);
         } finally {ctx.restore();}
       })();
-      const markers = frameActors === actorPositions
-        ? (staticMarkers ??= planActorMarkers(shiftStationary(frameActors), camera, markerSize, selectedCultivatorId))
-        : planActorMarkers(shiftStationary(frameActors), camera, markerSize, selectedCultivatorId);
+      const frameMarkers=()=>fitActorSpriteHitFootprints(
+        planActorMarkers(shiftStationary(frameActors),camera,markerSize,selectedCultivatorId),camera.zoom,spriteModels);
+      const markers=frameActors===actorPositions?(staticMarkers??=frameMarkers()):frameMarkers();
+      const spritePhase=animate&&elapsed>0&&elapsed<Math.min(MOTION_MS,4000)?elapsed/1000:0;
       if(namePillCache?.markers!==markers)namePillCache={markers,plan:makeMapNamePills(markerSize,camera,seenLocations,
         sitePins,isCurrentLocation,territorySemantics.markers,markers,selectedCultivatorId,avatarId??undefined,
-        strategic||compact&&camera.zoom<2,(kind,text)=>measureMapNamePill(ctx,kind,text))};
+        strategic||compact&&camera.zoom<2,(kind,text)=>measureMapNamePill(ctx,kind,text),spriteModels)};
       const {plan}=namePillCache;
       paintedActors.current = { markers,positions:actorPositions,camera,size:markerSize,scope:clusterScope,
         sitePins,siteLabels:plan.siteRects };
@@ -855,7 +857,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
             continue;
           }
           const { actor: cultivator, x: cx, y: cy } = marker.point;
-          const color=sectColors.get(cultivator.sectId)??'#7db8c2';
+          const model=spriteModels.get(cultivator.id);
+          if(!model)continue;
           const isSelected = cultivator.id === selectedCultivatorId;
 
           // Static bolt only, so it stays legible without flashing or motion.
@@ -886,7 +889,15 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
             }
           }
 
-          drawMapCultivatorToken(ctx,cx,cy,cultivator.realm,color);
+          {
+            const mounted=frameActors!==actorPositions&&(presentation.routes.get(cultivator.id)?.points.length??0)>0;
+            ctx.save();
+            try{
+              ctx.setTransform(width/markerSize.width,0,0,height/markerSize.height,0,0);
+              drawCanvasCharacterSprite(ctx,marker.x,marker.y,model,mapCharacterSpriteSize(camera.zoom,isSelected),
+                spritePhase,mounted);
+            }finally{ctx.restore();}
+          }
       }
       if(markerSize.width>0&&markerSize.height>0){
         ctx.save();
@@ -973,7 +984,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener?.('change',stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, heat, presentation, camera, territorySemantics, atlasDrawing, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, boundaryCoverage, civicObservation, usedVillageSegments, annotationView, annotationPins, armedBrush, preview, compact, clusterScope, scenicRelief, qiFlow, inspectionEnabled, letters, travel, flightMap, canvasFlights, combatVfx, actorBadgeFacts, hasBadgeQuote, domes, strategic, arenaMarks, dungeonMark, alchemyMarks, daoMarks, auctionMark, realmHalos, clanCeremonies, ascensionMarks, formationFrames, calamityFlows, schoolStrokes, anomalyRelayMarks, abandonedQuarterSites, forkSegments, furnaceRescueSegments, historical]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, spriteModels, heat, presentation, camera, territorySemantics, atlasDrawing, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, boundaryCoverage, civicObservation, usedVillageSegments, annotationView, annotationPins, armedBrush, preview, compact, clusterScope, scenicRelief, qiFlow, inspectionEnabled, letters, travel, flightMap, canvasFlights, combatVfx, actorBadgeFacts, hasBadgeQuote, domes, strategic, arenaMarks, dungeonMark, alchemyMarks, daoMarks, auctionMark, realmHalos, clanCeremonies, ascensionMarks, formationFrames, calamityFlows, schoolStrokes, anomalyRelayMarks, abandonedQuarterSites, forkSegments, furnaceRescueSegments, historical]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1012,8 +1023,9 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     binding.world===world&&binding.scopeKey===scopeKey&&binding.revision===inspectionRevision&&
     binding.viewerId===selectedCultivatorId&&binding.fog===fog&&inspectionEnabled&&!armedBrush);
   const currentInspection=matchesView(inspection)?inspection:undefined;
-  const inspected=useMemo(()=>currentInspection&&projectMapEntityPopover(world,mapView,currentInspection.target,selectedCultivatorId,!historical,currentInspection.pinned),
-    [world,mapView,currentInspection,selectedCultivatorId,historical]);
+  const inspected=useMemo(()=>currentInspection&&(currentInspection.target.kind!=='actor'||actorById.has(currentInspection.target.id))
+    ?projectMapEntityPopover(world,mapView,currentInspection.target,selectedCultivatorId,!historical,currentInspection.pinned):undefined,
+    [world,mapView,actorById,currentInspection,selectedCultivatorId,historical]);
   useEffect(()=>{
     setInspection(former=>matchesView(former)?former:undefined);
   },[world,scopeKey,inspectionRevision,selectedCultivatorId,fog,inspectionEnabled,armedBrush]);
@@ -1042,7 +1054,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     return true;
   };
   const pinFromIndex=(target:MapEntityTarget,point:MapPoint,trigger:HTMLButtonElement)=>{
-    if(!inspectionEnabled||armedBrush||!projectMapEntityPopover(world,mapView,target,selectedCultivatorId,!historical,false))return;
+    if(!inspectionEnabled||armedBrush||(target.kind==='actor'&&!actorById.has(target.id))||!projectMapEntityPopover(world,mapView,target,selectedCultivatorId,!historical,false))return;
     const screen=mapToScreen(cameraRef.current,point);
     setCluster(undefined);
     setInspection(describeInspection(target,{x:screen.x*100/MAP_WIDTH,y:screen.y*100/MAP_HEIGHT},true,trigger));

@@ -1,6 +1,7 @@
+import {mapCharacterSpriteSize} from './canvasCharacterSprite';
 import type {LocationNode,MapPoint} from '../types/world';
 import {mapToScreen,MAP_HEIGHT,MAP_WIDTH,type MapCamera} from './mapCamera';
-import {CLUSTER_RADIUS_PX,type MapActorMarker,type MarkerViewport} from './mapActorClusters';
+import {CLUSTER_RADIUS_PX,type MapActorMarker,type MapActorPoint,type MarkerViewport} from './mapActorClusters';
 import {planMapLabels,type MapLabelCandidate,type MapLabelObstacle,type MapLabelPlacement,type MapLabelRect} from './mapLabelLayout';
 import type {MapTerritoryMarker} from './mapTerritorySemantics';
 import {SPIRIT_ROOT_COLORS} from './SpiritRootBadge';
@@ -14,10 +15,26 @@ export interface MapNamePillPlan{
   readonly badgeBlockers:readonly MapLabelRect[];
 }
 
+/** The same model scope admits painting, hit-testing, and the accessible actor index. */
+export function admitPaintedSpritePositions(positions:readonly MapActorPoint[],sprites:ReadonlyMap<string,unknown>):MapActorPoint[]{
+  return positions.filter(({actor})=>sprites.has(actor.id));
+}
+
+/** Preserve the original cluster/selected order and centers; hit-test the full painted solo sprite. */
+export function fitActorSpriteHitFootprints(markers:readonly MapActorMarker[],zoom:number,
+  sprites:ReadonlyMap<string,unknown>):MapActorMarker[]{
+  return markers.map(marker=>{
+    if(marker.kind!=='actor'||!sprites.has(marker.point.actor.id))return marker;
+    // Radius of the containing circle covers the corners of the square painted footprint.
+    const paintedRadius=Math.SQRT1_2*mapCharacterSpriteSize(zoom,marker.selected);
+    return paintedRadius>marker.mouseRadius?{...marker,mouseRadius:paintedRadius}:marker;
+  });
+}
+
 export function makeMapNamePills(size:MarkerViewport,camera:MapCamera,sites:readonly LocationNode[],
   sitePins:ReadonlyMap<string,MapPoint>,current:(id:string)=>boolean,territories:readonly MapTerritoryMarker[],
   markers:readonly MapActorMarker[],selectedId:string|null,avatarId:string|undefined,quiet:boolean,
-  measure:(kind:MapLabelPlacement['kind'],text:string)=>number):MapNamePillPlan{
+  measure:(kind:MapLabelPlacement['kind'],text:string)=>number,sprites?:ReadonlyMap<string,unknown>):MapNamePillPlan{
   const candidates:MapLabelCandidate[]=[],obstacles:MapLabelObstacle[]=[],siteObstacles:MapLabelRect[]=[];
   const titles=new Map<string,Text>();
   const css=(point:MapPoint)=>{
@@ -41,13 +58,15 @@ export function makeMapNamePills(size:MarkerViewport,camera:MapCamera,sites:read
   }
   for(const marker of markers){
     const selected=marker.kind==='actor'&&marker.point.actor.id===selectedId;
+    if(marker.kind==='actor'&&sprites&&!sprites.has(marker.point.actor.id))continue;
     const radius=marker.kind==='cluster'?CLUSTER_RADIUS_PX+2:
-      Math.max(marker.mouseRadius+2,(selected?22:13)*camera.zoom*size.width/MAP_WIDTH);
+      Math.max(mapCharacterSpriteSize(camera.zoom,selected)/2+1,(selected?22:13)*camera.zoom*size.width/MAP_WIDTH);
     obstacles.push({rect:rect(marker,radius)});
     if(marker.kind!=='actor')continue;
     const actor=marker.point.actor,possessed=actor.id===avatarId;
     if(quiet&&!selected&&!possessed)continue;
-    add('actor',actor.id,marker,{title:actor.name,...(possessed?{tag:'临身',tone:'#fde68a'}:{}),selected},
+    add('actor',actor.id,marker,{title:actor.name,tag:possessed?`${actor.realm} · 临身`:actor.realm,
+      ...(possessed?{tone:'#fde68a'}:{tone:'#b5dbc8'}),selected},
       radius+4,selected?10:possessed?5:0);
   }
   for(const territory of territories)add('territory',territory.id,css(territory.point),{title:territory.code,dim:true},4);

@@ -1,7 +1,7 @@
 import {describe,expect,it} from 'vitest';
 import {createInitialWorld} from '../src/data/initialWorld';
-import {makeMapNamePills} from '../src/components/mapCanvasNamePills';
-import {planActorMarkers} from '../src/components/mapActorClusters';
+import {fitActorSpriteHitFootprints,makeMapNamePills} from '../src/components/mapCanvasNamePills';
+import {pickActorMarker,planActorMarkers} from '../src/components/mapActorClusters';
 import {resolveMapEntityHit} from '../src/components/mapEntityHit';
 import {DEFAULT_CAMERA,MAP_HEIGHT,MAP_WIDTH,mapToScreen} from '../src/components/mapCamera';
 import {mapLabelRectsOverlap} from '../src/components/mapLabelLayout';
@@ -52,5 +52,28 @@ describe('one honest, collision-free label plane',()=>{
   it('does not expose another live pin for a remembered, no longer current position',()=>{
     const world=createInitialWorld(),view=createTerrainMapView(world,undefined,false);
     expect(projectMapSitePins(view.seenLocations,id=>id!==marketId,DEFAULT_CAMERA,{width:390,height:234}).size).toBe(0);
+  });
+});
+
+
+describe('sprite paint, name and hit geometry share the same CSS anchor',()=>{
+  it.each([360,390])('keeps full solo hit geometry and unchanged cluster order at %i CSS pixels',width=>{
+    const world=createInitialWorld(),actor=world.cultivators[0],size={width,height:width*.6};
+    const paint=[{actor,x:500,y:300},...world.cultivators.slice(1,3).map(copy=>({actor:copy,x:70,y:75}))];
+    const markers=planActorMarkers(paint,DEFAULT_CAMERA,size,actor.id);
+    const models=new Map([[actor.id,true]]);
+    const fitted=fitActorSpriteHitFootprints(markers,DEFAULT_CAMERA.zoom,models);
+    expect(fitted.map(row=>[row.key,row.x,row.y])).toEqual(markers.map(row=>[row.key,row.x,row.y]));
+    expect(fitted[0]).toBe(markers[0]);
+    const selected=fitted.at(-1)!;
+    expect(selected.kind).toBe('actor');
+    const corner={x:selected.x+13,y:selected.y+13};
+    expect(pickActorMarker(markers,corner,false)).toBeUndefined();
+    expect(pickActorMarker(fitted,corner,false)).toBe(selected);
+    expect(pickActorMarker(fitted,corner,true)).toBe(selected);
+    const names=makeMapNamePills(size,DEFAULT_CAMERA,[],new Map(),()=>true,[],fitted,actor.id,undefined,true,measure,models);
+    expect(names.pills).toHaveLength(1);
+    expect(names.pills[0]).toMatchObject({title:actor.name,tag:actor.realm});
+    expect(mapLabelRectsOverlap(names.pills[0].rect,{x:selected.x-14,y:selected.y-14,width:28,height:28})).toBe(false);
   });
 });
