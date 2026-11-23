@@ -70,7 +70,10 @@ describe('strategic dome coupled to an actual sect facility',()=>{
     const {built}=fixture();
     const story=renderToStaticMarkup(<App/>);
     expect(story).toContain('data-story-home');
-    expect(story.match(/<button\b/g)).toHaveLength(2);
+    expect(story.match(/<button\b/g)).toHaveLength(3);
+    expect(story.match(/<button[^>]*aria-label="启用仙乐"[^>]*aria-pressed="false"[^>]*>/g)).toHaveLength(1);
+    expect(story).toMatch(/>看下个月<\/button>/);
+    expect(story).toMatch(/>\s*走进故事\s*<\/button>/);
     for(const scopeKey of ['ordinary:map','cockpit:map']){
       const map=renderToStaticMarkup(<WorldMapCanvas world={built} selectedCultivatorId={leader} onSelectCultivator={()=>undefined}
         scopeKey={scopeKey} compact fogEnabled/>);

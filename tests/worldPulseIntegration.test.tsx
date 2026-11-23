@@ -26,9 +26,12 @@ function actualClash(){
 }
 
 describe('world pulse across actual story, cockpit and ordinary sandbox surfaces',()=>{
-  it('leaves the default two-button story alone and uses one matching status strip in both advanced surfaces',()=>{
+  it('keeps both default story actions and uses one matching status strip in both advanced surfaces',()=>{
     const story=renderToStaticMarkup(<App/>);
-    expect(story.match(/<button\b/g)).toHaveLength(2);
+    expect(story.match(/<button\b/g)).toHaveLength(3);
+    expect(story.match(/<button[^>]*aria-label="启用仙乐"[^>]*aria-pressed="false"[^>]*>/g)).toHaveLength(1);
+    expect(story).toMatch(/>看下个月<\/button>/);
+    expect(story).toMatch(/>\s*走进故事\s*<\/button>/);
     expect(story).toContain('data-story-home');
     expect(story).not.toContain('天地气运');
     expect(story).not.toContain('在地图定位');

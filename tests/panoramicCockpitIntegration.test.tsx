@@ -36,7 +36,8 @@ function visibleCockpit(world:WorldState,selectedId:string){
 describe('panoramic cockpit integration',()=>{
   it('keeps the ordinary mobile opening story-only and the existing map workspace contract',()=>{
     const first=renderToStaticMarkup(<App />);
-    expect(first.match(/<button\b/g)).toHaveLength(2);
+    expect(first.match(/<button\b/g)).toHaveLength(3);
+    expect(first.match(/<button[^>]*aria-label="启用仙乐"[^>]*aria-pressed="false"[^>]*>/g)).toHaveLength(1);
     expect(first).toContain('data-story-home');
     expect(first).toMatch(/>看下个月<\/button>/u);
     expect(first).toMatch(/>\s*走进故事\s*<\/button>/u);

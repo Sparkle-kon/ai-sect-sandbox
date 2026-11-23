@@ -51,7 +51,7 @@
   - 升级 `DungeonExpeditionRead.tsx`：将秘境探索从纯文字按钮升级为**可视化的 2D 地宫房间地图**——画出「外围灵草园 → 上古符文阵门 → 禁地妖王祭坛」的石室通道、宝箱、阵法光幕、修士小人当前所在的房间位置，以及盘踞在深处的巨型妖王 Boss 2D 具象形象与血条。
 - [x] **[SV2-4] 昼夜晨昏光影、四时节气天气粒子与全屏天地异象演出 (`DayNightWeatherParticles & CelestialPhenomena`)**：
   - 为 `WorldMapCanvas`、`SceneStageCanvas` 与 `LocalCourtyardCanvas` 引入细腻的氛围光影层：春季落英桃花瓣随风飘落、夏季阵雨涟漪与林间流萤、秋季金枫飘叶、冬季寒玉脉漫天飞雪；当世有人破入元婴/化神/飞升时，画面浮现祥云金莲与霞光万道。
-- [ ] **[SV2-5] 原生 Web Audio 国风程序化古琴音景与法术打击音效系统 (`ProceduralXianxiaSoundscape`)**：
+- [x] **[SV2-5] 原生 Web Audio 国风程序化古琴音景与法术打击音效系统 (`ProceduralXianxiaSoundscape`)**：
   - 构建零外部音频文件依赖、基于浏览器 `AudioContext` 合成的 `src/engine/soundscapeEngine.ts`（顶栏配显眼的「仙乐/静音」开关，测试环境自动静默）：合成悠扬的**五声音阶（宫商角徵羽）古琴泛音与洞箫意境音、清晨山门钟声、御剑破空风声、飞剑金铁交鸣声、丹成清脆玉磬声、以及九重雷劫的低频雷鸣**。
 
 ### SV3　迈向大型游戏的 Engine 2.0 架构解耦与线上预览站全量发布 (Engine 2.0 Architecture & Live Site Sync)

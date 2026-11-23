@@ -7,9 +7,10 @@ import { GodConsole } from '../src/components/GodConsole';
 import { createInitialWorld } from '../src/data/initialWorld';
 
 describe('mobile-first sandbox workspaces', () => {
-  it('shows only Continue and More on the story-first public entry', () => {
+  it('keeps Continue and More as the story actions beside an initially muted audio toggle', () => {
     const html = renderToStaticMarkup(<App />);
-    expect(html.match(/<button\b/g)).toHaveLength(2);
+    expect(html.match(/<button\b/g)).toHaveLength(3);
+    expect(html.match(/<button[^>]*aria-label="启用仙乐"[^>]*aria-pressed="false"[^>]*>/g)).toHaveLength(1);
     expect(html).toMatch(/>看下个月<\/button>/);
     expect(html).toMatch(/>\s*走进故事\s*<\/button>/);
     expect(html).toContain('data-story-home');

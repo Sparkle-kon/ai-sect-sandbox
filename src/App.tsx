@@ -1,3 +1,4 @@
+import {SoundscapeToggle,useSoundscape} from './components/useSoundscape';
 import {useLastRosterStory} from './components/useLastRosterStory';
 import {useBanquetSeatStory} from './components/useBanquetSeatStory';
 import {useNightDoorStory} from './components/useNightDoorStory';
@@ -685,7 +686,18 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   const clearWorldPulse=(token:number)=>setPulseFocus(current=>current?.token===token?undefined:current);
   const pulseStrip=worldPulse&&<WorldPulseBar view={worldPulse} historical={Boolean(preview)}
     canFocus={!immersive} onFocusAlert={focusWorldPulse}/>;
-  if(cockpitOpen)return <PanoramicCockpitView world={visibleWorld} stageViewer={selectedCultivator} titleRef={cockpitHeading} exit={cockpitSwitch} statusStrip={pulseStrip} stageOverride={featuredStoryCard} subplot={guidance.subplot} branchScene={furnaceEmergency??vacantGate??nightDoor??lastRoster??boundaryGap??abandonedQuarter??pavilionFire??pilgrimageFork??battlefieldAftermath??apprenticeshipReunion??villageReunion??wildMigration??mercyReunion??farewellLanding??frontierGorge??schoolFormDuel??flightCard??passageScene??banquetStory??campaignAssembly??anomalyRelay}
+  const soundViewer=cockpitOpen||dashboardOpen?selectedCultivator:activeAvatar(world);
+  const soundStage=!cockpitOpen&&!dashboardOpen&&!storyEntryOpen&&!featuredStoryCard&&!storyHome?.scene?.earlier
+    ?storyHome?.scene:undefined;
+  const soundFacts=soundStage?world.events.filter(event=>event.id===soundStage.eventId&&event.tick===world.tick&&
+    event.year===world.year&&event.month===world.month&&event.witnessScope===undefined&&
+    (event.category==='combat'||event.category==='death'||event.category==='breakthrough')):[];
+  const soundFact=soundFacts.length===1?soundFacts[0]:undefined;
+  const sound=useSoundscape({world:visibleWorld,scopeKey:`${viewScopeKey}:${saveContextVersion.current}`,
+    viewer:soundViewer,siteId:!soundViewer?soundFact?.locationId:undefined,sourceId:!soundViewer?soundFact?.id:undefined,
+    historical:Boolean(preview),fog:soundViewer?true:undefined});
+  const soundToggle=<SoundscapeToggle sound={sound}/>;
+  if(cockpitOpen)return <PanoramicCockpitView world={visibleWorld} stageViewer={selectedCultivator} titleRef={cockpitHeading} exit={<div className="flex flex-wrap justify-end gap-2">{soundToggle}{cockpitSwitch}</div>} statusStrip={pulseStrip} stageOverride={featuredStoryCard} subplot={guidance.subplot} branchScene={furnaceEmergency??vacantGate??nightDoor??lastRoster??boundaryGap??abandonedQuarter??pavilionFire??pilgrimageFork??battlefieldAftermath??apprenticeshipReunion??villageReunion??wildMigration??mercyReunion??farewellLanding??frontierGorge??schoolFormDuel??flightCard??passageScene??banquetStory??campaignAssembly??anomalyRelay}
     time={{historical:Boolean(preview),running:isRunning,busy:cockpitBusy||storyDecisionPending,onStep:()=>void handleStepTick(),
       onToggleAutoplay:toggleStoryAutoplay,onReturnLive:()=>handleTimelinePreview(null),onOpenTimeline:()=>{
         openWorkspace('chronicle');rememberFold('chronicle','timeline');setStoryEntryOpen(false);
@@ -723,7 +735,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   const nextGuide=guidanceActor?projectNextStoryGuidance(world,guidanceActor):undefined;
   if (storyHome) return <main data-story-home data-story-turn={storyHome.calendar.tick} className="min-h-dvh bg-slate-950 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
     <div className="mx-auto flex max-w-[76rem] flex-wrap justify-end gap-2 px-4 empty:hidden">
-      {cockpitSwitch}
+      {soundToggle}{cockpitSwitch}
       {!storyEntryOpen&&<DesktopSandboxEntrance onOpen={openDashboard} disabled={isStepping||fastForwardLocked}/>}
     </div>
     {featuredStoryCard??(storyEntryOpen?<PlayerStoryEntry titleRef={storyEntryHeading} role={projectStoryPlayerRole(world,storyHome.lead)}
@@ -752,7 +764,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
               <p className="break-words text-xs text-slate-300">仙历 {visibleWorld.year}年{visibleWorld.month}月 · 在世 {aliveCount} · 已陨落 {visibleWorld.cultivators.length - aliveCount}</p>
             </div>
           </div>
-          {cockpitSwitch}
+          {soundToggle}{cockpitSwitch}
           <button type="button" disabled={isStepping || fastForwardLocked} onClick={backToStory}
             className={`${action} bg-slate-800 text-amber-100`}>回到故事</button>
           <div aria-label="推演控制" data-control-dock="repeat" className={`flex flex-wrap items-center gap-1.5 ${handedness === 'default' && workspace !== 'map' && !preview && !isRunning ? 'max-sm:hidden' : ''}`}>

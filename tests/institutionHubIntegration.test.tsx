@@ -25,7 +25,10 @@ const idsIn=(markup:string)=>Array.from(markup.matchAll(/data-institution-leaf="
 describe('grouped institution hubs reuse the existing workspace and leaf authority',()=>{
   it('preserves the recognizable three tool entry points and wide-independent mobile initial section routing',()=>{
     const initial=renderToStaticMarkup(<App/>);
-    expect(initial.match(/<button\b/g)).toHaveLength(2);
+    expect(initial.match(/<button\b/g)).toHaveLength(3);
+    expect(initial.match(/<button[^>]*aria-label="启用仙乐"[^>]*aria-pressed="false"[^>]*>/g)).toHaveLength(1);
+    expect(initial).toMatch(/>看下个月<\/button>/);
+    expect(initial).toMatch(/>\s*走进故事\s*<\/button>/);
     expect(initial).toContain('data-story-home');
     for(const [workspace,leaf,label] of [
       ['sect','oaths','天道契书与宗门仲裁'],
