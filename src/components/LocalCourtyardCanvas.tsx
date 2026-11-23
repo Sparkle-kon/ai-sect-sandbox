@@ -1,3 +1,4 @@
+import {drawSeasonalAtmosphere} from './seasonalAtmosphereRenderer';
 import {useEffect,useId,useMemo,useRef,useState} from 'react';
 import {drawLocalCourtyard} from './localCourtyardRenderer';
 import {hitLocalCourtyard,type LocalCourtyardPlan,type LocalCourtyardTarget} from './localCourtyardModel';
@@ -45,24 +46,61 @@ export function LocalCourtyardCanvas({plan,onReturn,onFocusActor}:LocalCourtyard
     if(!selected&&chosen)setChosen(undefined);
   },[chosen,selected]);
   useEffect(()=>{
-    const el=canvas.current;
-    if(!el)return;
-    const context=el.getContext('2d');
-    if(!context)return;
-    const paint=()=>{
-      const rect=el.getBoundingClientRect();
-      if(rect.width<=0||rect.height<=0)return;
-      const dpr=Math.max(1,Math.min(2,el.ownerDocument.defaultView?.devicePixelRatio??1));
-      const w=Math.max(1,Math.round(rect.width*dpr)),h=Math.max(1,Math.round(rect.height*dpr));
+    const el=canvas.current,win=el?.ownerDocument.defaultView;
+    if(!el||!win)return;
+    let pen:CanvasRenderingContext2D|null;
+    try{pen=el.getContext('2d');}catch{return;}
+    if(!pen)return;
+    const context=pen,doc=el.ownerDocument,motion=win.matchMedia?.('(prefers-reduced-motion: reduce)');
+    const budget=2100,interval=1000/12;
+    let raf:number|undefined,started:number|undefined,last=-Infinity,visible=true,spent=false,width=0,height=0;
+    const canAnimate=()=>!!plan.atmosphere&&!plan.atmosphere.historical&&!motion?.matches&&!doc.hidden&&visible&&
+      typeof win.requestAnimationFrame==='function'&&width>0&&height>0;
+    const paint=(time=0)=>{
+      if(!(width>0&&height>0))return;
+      context.setTransform(el.width/plan.width,0,0,el.height/plan.height,0,0);
+      drawLocalCourtyard(context,plan,plan.width,plan.height,time);
+      if(plan.atmosphere)drawSeasonalAtmosphere(context,plan.atmosphere,{x:0,y:0,width:plan.width,height:plan.height},time);
+    };
+    const stop=()=>{
+      if(raf!==undefined)win.cancelAnimationFrame(raf);
+      raf=undefined;
+    };
+    const frame=(now:number)=>{
+      raf=undefined;
+      if(!canAnimate()){paint();return;}
+      started??=now;
+      const elapsed=now-started;
+      if(elapsed>=budget){spent=true;paint();return;}
+      if(now-last>=interval){last=now;paint(elapsed);}
+      raf=win.requestAnimationFrame(frame);
+    };
+    const refresh=()=>{
+      stop();
+      const rect=el.getBoundingClientRect(),dpr=Math.max(1,Math.min(2,Number.isFinite(win.devicePixelRatio)?win.devicePixelRatio:1));
+      width=Number.isFinite(rect.width)?Math.min(960,Math.max(0,rect.width)):0;
+      height=Number.isFinite(rect.height)?Math.min(600,Math.max(0,rect.height)):0;
+      if(!(width>0&&height>0))return;
+      const w=Math.max(1,Math.round(width*dpr)),h=Math.max(1,Math.round(height*dpr));
       if(w!==el.width)el.width=w;
       if(h!==el.height)el.height=h;
-      context.setTransform(w/plan.width,0,0,h/plan.height,0,0);
-      drawLocalCourtyard(context,plan,plan.width,plan.height,0);
+      paint();
+      if(canAnimate()&&!spent)raf=win.requestAnimationFrame(frame);
     };
-    paint();
-    const observer=typeof ResizeObserver==='function'?new ResizeObserver(paint):undefined;
-    observer?.observe(el);
-    return ()=>observer?.disconnect();
+    const resize=typeof ResizeObserver==='function'?new ResizeObserver(refresh):undefined;
+    const onScreen=typeof IntersectionObserver==='function'?new IntersectionObserver(entries=>{
+      const shown=entries.find(entry=>entry.target===el)?.isIntersecting;
+      if(shown===undefined||shown===visible)return;
+      visible=shown;refresh();
+    }):undefined;
+    resize?.observe(el);onScreen?.observe(el);
+    win.addEventListener('resize',refresh);doc.addEventListener('visibilitychange',refresh);
+    motion?.addEventListener?.('change',refresh);refresh();
+    return ()=>{
+      stop();resize?.disconnect();onScreen?.disconnect();
+      win.removeEventListener('resize',refresh);doc.removeEventListener('visibilitychange',refresh);
+      motion?.removeEventListener?.('change',refresh);
+    };
   },[plan]);
 
   return <section aria-labelledby={title} data-local-courtyard=""

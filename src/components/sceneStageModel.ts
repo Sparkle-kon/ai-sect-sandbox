@@ -1,3 +1,4 @@
+import {projectAtmosphere,type AtmosphereFrame} from './seasonalAtmosphereModel';
 import {activeAvatar} from '../engine/avatarEngine';
 import {publicChronicleSceneEvents} from '../engine/chronicleLead';
 import {isScopedExpeditionGate} from '../engine/expeditionOmenTerms';
@@ -26,6 +27,7 @@ export interface SceneStageFrame {
   readonly cast:readonly SceneStageActor[];
   readonly portrait?:SceneStageActor;
   readonly historical:boolean;
+  readonly atmosphere?:AtmosphereFrame;
   readonly establishing?:true;
 }
 export interface SceneStageOptions {
@@ -83,14 +85,18 @@ function nativePairPose(event:WorldEvent,actors:readonly Cultivator[]):SceneStag
 export function projectSceneStage(world:WorldState, options?:SceneStageOptions):SceneStageFrame {
   const actors=unique(world.cultivators);
   const viewer=options?.viewer;
-  const base:SceneStageFrame={theme:'countryside',season:season(world.month),cast:[],historical:!!options?.historical};
+  const nativeSeason=season(world.month),historical=!!options?.historical;
+  const base:SceneStageFrame={theme:'countryside',season:nativeSeason,cast:[],historical,
+    atmosphere:projectAtmosphere(world,{surface:'stage',season:nativeSeason,historical})};
   if(viewer&&(actors.get(viewer.id)!==viewer||!living(viewer)))return base;
   const homepage=options===undefined?projectStoryHomepage(world):undefined;
   const requestedId=options?.eventId??homepage?.scene?.eventId;
   const event=requestedId?exactScene(world,requestedId):undefined;
   if(requestedId&&!event)return base;
   const past=!!event&&event.tick<world.tick;
-  const frameDate={...base,historical:base.historical||past,season:season(event?.month??world.month)};
+  const datedSeason=season(event?.month??world.month),datedHistory=base.historical||past;
+  const frameDate={...base,historical:datedHistory,season:datedSeason,
+    atmosphere:datedHistory?projectAtmosphere(world,{surface:'stage',season:datedSeason,historical:true}):base.atmosphere};
   const view=createTerrainMapView(world,viewer,viewer!==undefined);
   const sites=unique(world.locations);
   const stationary=(actor:Cultivator|undefined):actor is Cultivator=>
@@ -130,5 +136,7 @@ export function projectSceneStage(world:WorldState, options?:SceneStageOptions):
   });
   const portrait=cast[0];
   return {...frameDate,theme:motif(site),siteId:site.id,siteName:named(site.name,40),
+    atmosphere:projectAtmosphere(world,{surface:'stage',view,viewer,siteId:site.id,sourceId:event?.id,
+      historical:frameDate.historical,season:frameDate.season}),
     ...(event?{sourceId:event.id}:{}),...(establishing?{establishing:true as const}:{}),cast,...(portrait?{portrait}:{})};
 }

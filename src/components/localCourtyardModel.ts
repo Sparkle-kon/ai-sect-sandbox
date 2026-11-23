@@ -1,3 +1,4 @@
+import {projectAtmosphere,type AtmosphereFrame} from './seasonalAtmosphereModel';
 import {isScopedExpeditionGate} from '../engine/expeditionOmenTerms';
 import {isSectActive} from '../engine/sectActivity';
 import {availableSettlementActions,visibleSettlements} from '../engine/settlementEngine';
@@ -27,6 +28,7 @@ export interface LocalCourtyardVillager extends Position {
 }
 export interface LocalCourtyardPlan {
   readonly siteId:string;readonly siteName:string;readonly theme:SceneStageTheme;readonly season:SceneStageSeason;
+  readonly atmosphere?:AtmosphereFrame;
   readonly columns:16;readonly rows:10;readonly width:640;readonly height:400;
   readonly tiles:readonly LocalCourtyardTile[];readonly facilities:readonly LocalCourtyardFacility[];
   readonly actors:readonly LocalCourtyardActor[];readonly villagers:readonly LocalCourtyardVillager[];
@@ -164,7 +166,8 @@ export function buildLocalCourtyard(world:WorldState,view:NativeMapView,siteId:s
     level.set(cell,rank+1);
     return {...anchor,x:anchor.x+(pile>1?(rank/(pile-1)-.5)*24:0)};
   };
-  return {siteId,siteName:safe(site.name),theme,season:currentSeason(world.month),columns,rows,width,height,tiles,facilities,
+  return {siteId,siteName:safe(site.name),theme,season:currentSeason(world.month),
+    atmosphere:projectAtmosphere(world,{surface:'courtyard',view,viewer:options.viewer,siteId}),columns,rows,width,height,tiles,facilities,
     actors:actors.map(({action:_,...actor},i)=>({...actor,...position(i)})),villagers:volunteers.map((person,i)=>({...person,...position(i+actors.length)})),
     ...(population===undefined?{}:{population})};
 }

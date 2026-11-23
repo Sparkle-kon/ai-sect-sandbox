@@ -1,3 +1,4 @@
+import {drawSeasonalAtmosphere} from './seasonalAtmosphereRenderer';
 import {useEffect,useRef} from 'react';
 import type {SceneStageFrame} from './sceneStageModel';
 import {drawSceneStage} from './sceneStageRenderer';
@@ -22,6 +23,7 @@ export function SceneStageCanvas({frame}:{frame:SceneStageFrame}){
       if(!width||!height)return;
       ctx.setTransform(element.width/width,0,0,element.height/height,0,0);
       drawSceneStage(ctx,frame,width,height,time);
+      if(frame.atmosphere)drawSeasonalAtmosphere(ctx,frame.atmosphere,{x:0,y:0,width,height},time);
     };
     const animate=(now:number)=>{
       raf=0;

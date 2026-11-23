@@ -10,6 +10,7 @@ import {createInitialWorld} from '../src/data/initialWorld';
 
 const artwork=vi.hoisted(()=>vi.fn());
 vi.mock('../src/components/localCourtyardRenderer',()=>({drawLocalCourtyard:artwork}));
+vi.mock('../src/components/seasonalAtmosphereRenderer',()=>({drawSeasonalAtmosphere:vi.fn()}));
 
 function button(root:ParentNode,text:string) {
   const node=Array.from(root.querySelectorAll<HTMLButtonElement>('button'))
@@ -36,6 +37,7 @@ it.each([360,390])('maps the painted touch location and the semantic buttons to 
   const rect=new DOMRect(12,83,width,width*5/8);
   const canvasRect=vi.spyOn(HTMLCanvasElement.prototype,'getBoundingClientRect').mockReturnValue(rect);
   vi.spyOn(window,'devicePixelRatio','get').mockReturnValue(3);
+  vi.stubGlobal('matchMedia',()=>({matches:true,addEventListener:()=>{},removeEventListener:()=>{}}));
   artwork.mockClear();
   try {
     await act(async()=>root.render(<LocalCourtyardCanvas plan={plan} onReturn={caller}/>));

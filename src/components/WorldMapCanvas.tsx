@@ -1,3 +1,5 @@
+import {projectAtmosphere} from './seasonalAtmosphereModel';
+import {drawSeasonalAtmosphere} from './seasonalAtmosphereRenderer';
 import {drawFurnaceEmergencyRescueSegments,visibleFurnaceEmergencyRescueSegments} from './furnaceEmergencyMapView';
 import {drawPilgrimageForkSegments,visiblePilgrimageForkSegments} from './pilgrimageForkMapView';
 import {projectBattlefieldAftermath} from '../engine/battlefieldAftermath';
@@ -345,6 +347,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       .map(({ siteId }) => siteId));
   }, [world, selected]);
   const { seenLocations, isCurrentLocation } = mapView;
+  const atmosphere=useMemo(()=>projectAtmosphere(world,{surface:'map',view:mapView,
+    viewer:fog?selected:undefined,historical}),[world,mapView,selected,fog,historical]);
   const clanCeremonies=useMemo(()=>cultivationClanMapSites(world,isCurrentLocation,!!preview),[world,isCurrentLocation,preview]);
   const realmHalos=useMemo(()=>projectMapCultivatorHalos(world,mapView),[world,mapView]);
   const auctionMark=useMemo(()=>immortalAuctionMapMark(world,isCurrentLocation,!!preview),[world,isCurrentLocation,preview]);
@@ -509,6 +513,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   }, [actorPositions, mapView.trailPositions]);
   const playback = useRef<{ source: WorldState['mapPresentation']; start: number } | undefined>();
   const formationPlayback=useRef<{scope:string;start:number}>();
+  const atmospherePlayback=useRef<{world:WorldState;scope:string;start:number}>();
   const selectedScheme = selected?.activeScheme;
   const selectedSect = selected && world.sects.find((sect) => sect.id === selected.sectId);
   const avatarId = activeAvatar(world)?.id;
@@ -653,6 +658,46 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       playback.current = { source: world.mapPresentation, start: epoch };
     }
     const motionStart = playback.current?.start ?? epoch;
+    if(atmospherePlayback.current?.world!==world||atmospherePlayback.current.scope!==clusterScope){
+      atmospherePlayback.current={world,scope:clusterScope,start:epoch};
+    }
+    const atmosphereStart=atmospherePlayback.current.start;
+    const atmosphereLifetime=2100;
+    const inViewport=(point:{x:number;y:number},viewCamera:MapCamera)=>{
+      const screen=mapToScreen(viewCamera,point);
+      return screen.x>=0&&screen.y>=0&&screen.x<width&&screen.y<height;
+    };
+    const cellWidth=width/world.terrain.columns,cellHeight=height/world.terrain.rows;
+    const atmospherePatches=atmosphere.sites.flatMap(site=>{
+      const tile=terrainTileAt(world,site.x,site.y);
+      if(!tile)return [];
+      const frame={...atmosphere,kind:site.kind,intensity:site.intensity,north:site.north,phenomena:[]};
+      return [{site,frame,rect:{x:tile.col*cellWidth,y:tile.row*cellHeight,width:cellWidth,height:cellHeight}}];
+    });
+    const ceremonies=atmosphere.phenomena.map(phenomenon=>({
+      site:phenomenon,frame:{...atmosphere,kind:'平息' as const,intensity:0,north:false,phenomena:[phenomenon]},
+      rect:{x:phenomenon.x-96,y:phenomenon.y-84,width:192,height:104},
+    }));
+    const atmosphereVisible=(viewCamera:MapCamera)=>qiFlow.clip.length>0&&
+      (atmospherePatches.some(({site})=>inViewport(site,viewCamera))||ceremonies.some(({site})=>inViewport(site,viewCamera)));
+    const atmosphereMoving=(now:number)=>now-atmosphereStart<atmosphereLifetime&&atmosphereVisible(cameraRef.current);
+    const paintAtmosphere=(now:number,animate:boolean,viewCamera:MapCamera)=>{
+      if(!atmosphereVisible(viewCamera))return;
+      const elapsed=animate?now-atmosphereStart:0;
+      const phase=elapsed>=0&&elapsed<atmosphereLifetime?Math.floor(elapsed/125)*125:0;
+      ctx.save();
+      try{
+        ctx.beginPath();
+        for(const {x,y,width,height} of qiFlow.clip)ctx.rect(x,y,width,height);
+        ctx.clip();
+        for(const {site,frame,rect} of atmospherePatches)if(inViewport(site,viewCamera)){
+          drawSeasonalAtmosphere(ctx,frame,rect,phase);
+        }
+        for(const {site,frame,rect} of ceremonies)if(inViewport(site,viewCamera)){
+          drawSeasonalAtmosphere(ctx,frame,rect,phase);
+        }
+      }finally{ctx.restore();}
+    };
     const formationScope=formationFrames.length?JSON.stringify([clusterScope,formationFrames.map(frame=>frame.sourceId)]):'';
     if(formationPlayback.current?.scope!==formationScope)formationPlayback.current={
       scope:formationScope,start:epoch,
@@ -692,6 +737,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       // Native combat/travel may ask for faster repaints; ambient motion stays on its own lower cadence.
       const scenicDelay=mapScenicFrameDelay({moving:false,heat:false,ambient:qiFlow.hasMotion,width:markerSize.width});
       const scenicPhase=animate&&Number.isFinite(scenicDelay)?Math.floor(phase*1350/scenicDelay)*scenicDelay/1350:0;
+      paintAtmosphere(timestamp,animate,camera);
       drawQiFlow(ctx,qiFlow,scenicPhase,animate,logicalPerCssPixel);
       if(domes.length&&qiFlow.clip.length){
         ctx.save();
@@ -983,19 +1029,22 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
     let stopFrame:(()=>void)|undefined;
     let previous=0;
     let wasMoving=false;
+    let wasAtmospheric=false;
     const active=()=>!historical&&mapScenicAnimationAllowed({reducedMotion:preference?.matches,pageVisible:!document.hidden,
       surfaceActive:inspectionEnabled,width:markerSize.width,height:markerSize.height});
     const run = (now: number) => {
       if(!active())return false;
       const elapsed=now-motionStart;
       const moving=movingAt(now);
-      const delay=mapScenicFrameDelay({moving,heat,ambient:qiFlow.hasMotion,width:markerSize.width});
-      if(now-previous>=delay||wasMoving&&!moving){
+      const atmospheric=atmosphereMoving(now);
+      const delay=mapScenicFrameDelay({moving,heat,ambient:qiFlow.hasMotion||atmospheric,width:markerSize.width});
+      if(now-previous>=delay||wasMoving&&!moving||wasAtmospheric&&!atmospheric){
         draw(now/1350,elapsed,true,now);
         previous=now;
       }
       wasMoving=moving;
-      return heat||moving||qiFlow.hasMotion;
+      wasAtmospheric=atmospheric;
+      return heat||moving||qiFlow.hasMotion||atmospheric;
     };
     const stopOrStart = () => {
       stopFrame?.();
@@ -1003,8 +1052,9 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       const now=frameClock.now(),animate=active();
       previous=now;
       wasMoving=movingAt(now);
+      wasAtmospheric=atmosphereMoving(now);
       draw(0,now-motionStart,animate,now);
-      if(animate&&(heat||wasMoving||qiFlow.hasMotion))stopFrame=frameClock.start('scene',run);
+      if(animate&&(heat||wasMoving||qiFlow.hasMotion||wasAtmospheric))stopFrame=frameClock.start('scene',run);
     };
     preference?.addEventListener?.('change',stopOrStart);
     document.addEventListener('visibilitychange',stopOrStart);
@@ -1025,7 +1075,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       preference?.removeEventListener?.('change',stopOrStart);
       document.removeEventListener('visibilitychange', stopOrStart);
     };
-  }, [world, selectedCultivatorId, mapView, actorPositions, spriteModels, heat, presentation, camera, territorySemantics, atlasDrawing, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, boundaryCoverage, civicObservation, usedVillageSegments, annotationView, annotationPins, armedBrush, preview, compact, clusterScope, scenicRelief, facades, qiFlow, inspectionEnabled, letters, travel, flightMap, canvasFlights, combatVfx, actorBadgeFacts, hasBadgeQuote, domes, strategic, arenaMarks, dungeonMark, alchemyMarks, daoMarks, auctionMark, realmHalos, clanCeremonies, ascensionMarks, formationFrames, calamityFlows, schoolStrokes, anomalyRelayMarks, abandonedQuarterSites, forkSegments, furnaceRescueSegments, historical]);
+  }, [world, selectedCultivatorId, mapView, actorPositions, spriteModels, heat, presentation, camera, territorySemantics, atlasDrawing, hazards, convoys, villageSupplyCheckpoints, routeWarningMarks, escortedCaravan, formationLines, pilgrimageMark, campMarks, extractionMarks, boundaryMarks, boundaryCoverage, civicObservation, usedVillageSegments, annotationView, annotationPins, armedBrush, preview, compact, clusterScope, scenicRelief, facades, qiFlow, atmosphere, inspectionEnabled, letters, travel, flightMap, canvasFlights, combatVfx, actorBadgeFacts, hasBadgeQuote, domes, strategic, arenaMarks, dungeonMark, alchemyMarks, daoMarks, auctionMark, realmHalos, clanCeremonies, ascensionMarks, formationFrames, calamityFlows, schoolStrokes, anomalyRelayMarks, abandonedQuarterSites, forkSegments, furnaceRescueSegments, historical]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
