@@ -12,6 +12,7 @@ export interface MapEntityPopoverProps {
   actions:readonly MapEntityAction[];
   onClose:()=>void;
   onFocus:()=>void;
+  onOpenCourtyard?:(trigger:HTMLButtonElement)=>void;
   onCommit:(action:MapEntityAction,whisperText?:string)=>boolean;
 }
 
@@ -45,7 +46,7 @@ export function reviewMapEntityAction(review:Reviewed|undefined,data:MapEntityRe
   return matches.length===1?matches[0]:undefined;
 }
 
-export function MapEntityPopover({data,anchor,pinned,readOnly=false,actions,onClose,onFocus,onCommit}:MapEntityPopoverProps) {
+export function MapEntityPopover({data,anchor,pinned,readOnly=false,actions,onClose,onFocus,onOpenCourtyard,onCommit}:MapEntityPopoverProps) {
   const title=useId(),details=useId(),hp=useId(),confirm=useId(),messageId=useId();
   const close=useRef<HTMLButtonElement>(null),messageField=useRef<HTMLTextAreaElement>(null),reviewHeading=useRef<HTMLParagraphElement>(null);
   const [draft,setDraft]=useState<Reviewed>();
@@ -137,6 +138,8 @@ export function MapEntityPopover({data,anchor,pinned,readOnly=false,actions,onCl
       <button type="button" className={`${button} flex items-center gap-1.5`} onClick={onFocus}>
         <Crosshair aria-hidden="true" className="h-4 w-4"/>{data.kind==='actor'?'聚焦追踪':'聚焦此地'}
       </button>
+      {data.kind==='site'&&onOpenCourtyard&&<button type="button" className={button}
+        onClick={event=>onOpenCourtyard(event.currentTarget)}>本地图景</button>}
       {!readOnly&&menu.map((action,index)=><button type="button" key={index} className={`${button} flex items-center gap-1.5`}
         aria-pressed={reviewed===action} onClick={()=>{setDraft({data,action});setNotice(undefined);setMessage('');}}>
         <Sparkles aria-hidden="true" className="h-3.5 w-3.5"/>{actionLabel(action)}

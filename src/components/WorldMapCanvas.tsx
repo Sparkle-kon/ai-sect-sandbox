@@ -83,6 +83,8 @@ import {planMapActorBadgeLayout} from './mapActorBadgeLayout';
 import {drawMapActorBadges,MAP_ACTOR_BUBBLE_FONT} from './mapActorBadgeDraw';
 import { projectMapTerritories } from './mapTerritorySemantics';
 import {MapEntityPopover} from './MapEntityPopover';
+import {LocalCourtyardCanvas} from './LocalCourtyardCanvas';
+import {buildLocalCourtyard} from './localCourtyardModel';
 import {resolveMapEntityHit,type MapEntityPaintedFrame} from './mapEntityHit';
 import {availableMapEntityActions,projectMapEntityPopover,type MapEntityAction,type MapEntityTarget} from './mapEntityPopoverModel';
 import {interpolatePulseCamera,resolveWorldPulseFocusSite,WORLD_PULSE_CAMERA_DURATION_MS,type WorldPulseFocusRequest} from './mapPulseFocus';
@@ -146,6 +148,13 @@ interface MapInspection extends MapEntityPopoverBinding {
   trigger?:HTMLButtonElement;
 }
 
+interface LocalCourtyardBinding {
+  siteId:string;
+  scopeKey:string;revision:number;
+  viewerId:string|null;
+  fog:boolean;
+  trigger:HTMLButtonElement;
+}
 interface WorldMapCanvasProps {
   world: WorldState;
   historical?:boolean;
@@ -195,6 +204,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   const [camera, setCamera] = useState(DEFAULT_CAMERA);
   const [strategicMode,setStrategicMode]=useState<StrategicCameraMode>();
   const [inspection,setInspection]=useState<MapInspection>();
+  const [courtyard,setCourtyard]=useState<LocalCourtyardBinding>();
+  const returningCourtyard=useRef<HTMLButtonElement>();
   const [annotationView, setAnnotationView] = useState<typeof import('./mapAnnotationView')>();
   const hasNotes = Boolean(world.annotations?.notes.length);
   useEffect(() => {
@@ -1059,6 +1070,39 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
   useEffect(()=>{
     setInspection(former=>matchesView(former)?former:undefined);
   },[world,scopeKey,inspectionRevision,selectedCultivatorId,fog,inspectionEnabled,armedBrush]);
+  // Ordinary monthly ticks replace the world object; a save/branch/preview revision invalidates the visit.
+  const courtyardScope=courtyard&&courtyard.scopeKey===scopeKey&&courtyard.revision===inspectionRevision&&
+    courtyard.viewerId===selectedCultivatorId&&courtyard.fog===fog;
+  const courtyardSiteId=(courtyardScope?courtyard.siteId:undefined)??
+    (currentInspection?.pinned&&inspected?.kind==='site'?inspected.target.id:undefined);
+  const admittedCourtyard=useMemo(()=>courtyardSiteId&&inspectionEnabled&&!armedBrush&&!historical?
+    buildLocalCourtyard(world,mapView,courtyardSiteId,{viewer:selected,historical}):undefined,
+    [courtyardSiteId,inspectionEnabled,armedBrush,historical,world,mapView,selected]);
+  const courtyardFrame=courtyardScope?admittedCourtyard:undefined;
+  const closeCourtyard=()=>{
+    if(!courtyard)return;
+    returningCourtyard.current=courtyard.trigger;
+    setCourtyard(undefined);
+  };
+  useEffect(()=>{
+    if(courtyardFrame)return;
+    if(courtyard){
+      setCourtyard(undefined);
+      const doc=canvasRef.current?.ownerDocument;
+      if(doc?.activeElement!==doc?.body)return;
+      canvasRef.current?.focus({preventScroll:true});
+      return;
+    }
+    const trigger=returningCourtyard.current;
+    if(!trigger)return;
+    returningCourtyard.current=undefined;
+    (trigger.isConnected?trigger:canvasRef.current)?.focus({preventScroll:true});
+  },[courtyard,courtyardFrame]);
+  const openCourtyard=(trigger:HTMLButtonElement)=>{
+    if(!currentInspection?.pinned||inspected?.kind!=='site'||!admittedCourtyard||
+      admittedCourtyard.siteId!==inspected.target.id||historical||courtyardFrame)return;
+    setCourtyard({siteId:admittedCourtyard.siteId,scopeKey,revision:inspectionRevision,viewerId:selectedCultivatorId,fog,trigger});
+  };
   const dismissal=()=>{
     setInspection(undefined);
     const trigger=currentInspection?.trigger;
@@ -1275,6 +1319,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         </div>
       </div>
 
+      <div hidden={Boolean(courtyardFrame)}>
       <p id={keyboardHelp} className="sr-only">{'方向键平移，加号或减号缩放，Home 复位，F 定位所选修士。山河索引可定位，亦可检视眼前修士和地点。'}{atlasDrawing.borders.length>0?'当前可见的域界与跨界路标也可在山河索引的路径与行程中定位。':''}</p>
       <div className="relative" data-map-canvas-frame="">
         <canvas
@@ -1305,7 +1350,8 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           key={`${currentInspection.scopeKey}:${currentInspection.revision}:${world.tick}:${world.interventionSequence}:${currentInspection.target.kind}:${currentInspection.target.id}:${currentInspection.pinned}`}
           data={inspected} anchor={currentInspection.anchor} pinned={currentInspection.pinned} readOnly={fog||!onEntityIntervention}
           actions={currentInspection.pinned&&!fog&&onEntityIntervention?availableMapEntityActions(world,mapView,currentInspection.target):[]}
-          onClose={dismissal} onFocus={focusInspection} onCommit={commitInspection}/>}
+          onClose={dismissal} onFocus={focusInspection} onCommit={commitInspection}
+          onOpenCourtyard={currentInspection.pinned&&inspected.kind==='site'&&admittedCourtyard?.siteId===inspected.target.id?openCourtyard:undefined}/>}
       </div>
       <StrategicMinimap world={world} view={mapView} camera={camera} strategic={strategic}
         onToggle={toggleStrategy} onPoint={locateMiniMap}/>
@@ -1762,6 +1808,15 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       </>}
       </div>
       </details>
+      </div>
+      {courtyardFrame&&<LocalCourtyardCanvas plan={courtyardFrame} onReturn={closeCourtyard}
+        onFocusActor={id=>{
+          if(!courtyardFrame.actors.some(actor=>actor.id===id)||!actorById.has(id))return false;
+          closeCourtyard();
+          locateActor(id);
+          setFollowsSelection(true);
+          return true;
+        }}/>}
     </div>
   );
 };
