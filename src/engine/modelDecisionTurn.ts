@@ -1,3 +1,4 @@
+import {availableNightDoorActions} from './nightDoor';
 import {availableBoundaryGapActions} from './boundaryGap';
 import { availableAbandonedQuarterActions } from './abandonedQuarter';
 import { availableFurnaceEmergencyActions,furnaceEmergencyCrossingLocked } from './furnaceEmergency';
@@ -113,7 +114,8 @@ export function modelDecisionCandidates(world: WorldState): Cultivator[] {
     const emergency=!heart&&!contact&&!encounter&&!destiny&&avatar!==actor&&availableFurnaceEmergencyActions(actor,world,nextTick).length>0;
     const ruin=!heart&&!contact&&!encounter&&!destiny&&!emergency&&avatar!==actor&&availableAbandonedQuarterActions(actor,world,nextTick).length>0;
     const gap=!heart&&!contact&&!encounter&&!destiny&&!emergency&&avatar!==actor&&availableBoundaryGapActions(actor,world,nextTick).length>0;
-    const priorScene = !!(heart || contact || encounter || destiny || vacantGate || aftermath || village || fork || apprenticeship || emergency || ruin || gap);
+    const door=!heart&&!contact&&!encounter&&!destiny&&!emergency&&avatar!==actor&&availableNightDoorActions(actor,world,nextTick).length>0;
+    const priorScene = !!(heart || contact || encounter || destiny || vacantGate || aftermath || village || fork || apprenticeship || emergency || ruin || gap || door);
     if (!priorScene && hasQueuedGrandSiegeHero(world, actor)) return false;
     const hero = priorScene ? [] : availableGrandSiegeHeroActions(actor, world);
     if (hero.length) {
@@ -129,7 +131,7 @@ export function modelDecisionCandidates(world: WorldState): Cultivator[] {
     const assembly=!priorScene&&!hero.length&&!flight&&avatar!==actor
       ?availableCampaignAssemblyActions(actor,world,nextTick).filter(row=>row.kind!=='guard'):[];
     // Genuine autonomous offers wake only normal admission guards; a field leader may only negotiate an active march.
-    return (!passive.has(actor.id) || !!heart || !!contact || !!encounter || !!destiny || vacantGate || aftermath || village || fork || apprenticeship || emergency || ruin || gap || hero.length > 0 || dungeon || flight || assembly.length>0) &&
+    return (!passive.has(actor.id) || !!heart || !!contact || !!encounter || !!destiny || vacantGate || aftermath || village || fork || apprenticeship || emergency || ruin || gap || door || hero.length > 0 || dungeon || flight || assembly.length>0) &&
     (!activeCourierForActor(world, actor) || availableCourierHandoffActions(actor, world, nextTick).some(({ courierHandoffMove }) => courierHandoffMove === 'offer')) &&
     !activeDanxiaMedicineEscort(world,actor)&&!activeEscortForActor(world, actor) && !activeRelocationForActor(world, actor) &&
     (!activeSiegeForActor(world, actor)||assembly.some(row=>row.kind==='negotiate')) && (dungeon || isEligibleForOccasionDecision(world, actor, nextTick)) &&

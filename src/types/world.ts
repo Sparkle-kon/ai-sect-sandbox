@@ -1,4 +1,5 @@
 import type {ApprenticeshipReunionMove,ApprenticeshipReunionState} from './apprenticeshipReunion';
+import type {NightDoorMove,NightDoorState} from './nightDoor';
 import type {ReliefHomecomingState} from './reliefHomecoming';
 import type {BoundaryGapMove,BoundaryGapState} from './boundaryGap';
 import type {AbandonedQuarterMove,AbandonedQuarterState} from './abandonedQuarter';
@@ -243,6 +244,7 @@ export type ActionType =
   | 'WORKSHOP_RELEASE'
   | 'WORKSHOP'
   | 'FURNACE_RESERVATION'
+  | 'NIGHT_DOOR'
   | 'BOUNDARY_GAP'
   | 'ABANDONED_QUARTER'
   | 'FURNACE_EMERGENCY'
@@ -827,6 +829,8 @@ export interface LLMDecisionPayload {
   targetAbandonedQuarterId?: string;
   boundaryGapMove?: BoundaryGapMove;
   targetBoundaryGapId?: string;
+  nightDoorMove?: NightDoorMove;
+  targetNightDoorId?: string;
   damageAssuranceMove?: DamageAssuranceMove;
   targetDamageAssuranceId?: string;
   targetFurnaceSafetyId?: string;
@@ -3754,6 +3758,7 @@ export interface WorldState {
   abandonedQuarters?: AbandonedQuarterState;
   boundaryGapResponses?: BoundaryGapState;
   reliefHomecomings?: ReliefHomecomingState;
+  nightDoors?: NightDoorState;
   damageAssurance: DamageAssuranceState;
   sparring: SparringState;
   expeditionRescues: ExpeditionRescueState;

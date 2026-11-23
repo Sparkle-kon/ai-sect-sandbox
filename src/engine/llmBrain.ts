@@ -1,3 +1,5 @@
+import {availableNightDoorActions} from './nightDoor';
+import {exactNightDoorDecision,nightDoorCommand} from './nightDoorCognition';
 import {projectReliefHomecoming} from './reliefHomecoming';
 import { availableBoundaryGapActions } from './boundaryGap';
 import {exactBoundaryGapDecision,boundaryGapCommand} from './boundaryGapCognition';
@@ -951,6 +953,16 @@ export function computeHeuristicDecision(
     if(choice)return exactFurnaceEmergencyDecision(furnaceEmergencyCommand(choice),emergency)??
       {chosenAction:'REST',innerMonologue:'先留在实处，不捏造援手。'};
     return {chosenAction:'REST',innerMonologue:'未肯应下援手这一问。'};
+  }
+  const door=availableNightDoorActions(cultivator,world,world.tick);
+  if(door.length){
+    if(activeAvatar(world)===cultivator)return {chosenAction:'REST',innerMonologue:'门前这句话，得由本人亲口说。'};
+    const preferences=cultivator.hp<cultivator.maxHp*.50?['shelter','accept','identify','close','cross','escort']:
+      cultivator.personality==='诡诈'?['close','identify','accept','cross','shelter','escort']:
+      ['identify','shelter','accept','cross','escort','close'];
+    const choice=preferences.flatMap(move=>door.find(row=>row.nightDoorMove===move)??[])[0];
+    const exact=choice&&exactNightDoorDecision(nightDoorCommand(choice),door);
+    if(exact)return exact;
   }
   const boundaryGap=availableBoundaryGapActions(cultivator,world,world.tick);
   if(boundaryGap.length){
@@ -2703,6 +2715,14 @@ export async function requestCultivatorLLMDecision(
       parsed=>requestTick===world.tick+1&&activeAvatar(world)!==cultivator&&exactFurnaceEmergencyDecision(parsed,furnaceEmergency)
         ?exactFurnaceEmergencyDecision(parsed,availableFurnaceEmergencyActions(cultivator,world,requestTick)):undefined,160);
   }
+  const door=availableNightDoorActions(cultivator,world,requestTick);
+  if(door.length){
+    if(requestTick!==world.tick+1||activeAvatar(world)===cultivator)return undefined;
+    return requestDecisionPrompt(config,requestTick,options,
+      '只原样抄本人确在驿舍门前的一项许可。不把疑似旧识当作真实身份；不替对方答应，不填写住进、脚步、他人姓名或最后结果：'+JSON.stringify(door.map(nightDoorCommand)),
+      parsed=>requestTick===world.tick+1&&activeAvatar(world)!==cultivator&&exactNightDoorDecision(parsed,door)
+        ?exactNightDoorDecision(parsed,availableNightDoorActions(cultivator,world,requestTick)):undefined,160);
+  }
   const gap=availableBoundaryGapActions(cultivator,world,requestTick);
   if(gap.length){
     if(requestTick!==world.tick+1||activeAvatar(world)===cultivator)return undefined;
@@ -3236,6 +3256,7 @@ ${JSON.stringify(cultivator.reflections.filter(row=>!sealedHeartDemonReflection(
 ${COGNITIVE_RESPONSE_GUIDE}`;
 
   return requestDecisionPrompt(config, requestTick, options, prompt, (parsed) => {
+          if(parsed&&(Object.hasOwn(parsed,'nightDoorMove')||Object.hasOwn(parsed,'targetNightDoorId')))return undefined;
           if(parsed&&(Object.hasOwn(parsed,'boundaryGapMove')||Object.hasOwn(parsed,'targetBoundaryGapId')))return undefined;
           if(parsed&&(Object.hasOwn(parsed,'abandonedQuarterMove')||Object.hasOwn(parsed,'targetAbandonedQuarterId')))return undefined;
           if(parsed&&(Object.hasOwn(parsed,'furnaceEmergencyMove')||Object.hasOwn(parsed,'targetFurnaceEmergencyId')))return undefined;

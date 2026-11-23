@@ -1,3 +1,4 @@
+import {nightDoorGuestHeld} from './nightDoorBeds';
 import type {DisasterShelter,DisasterShelterOption,DisasterShelterParty} from '../types/disasterShelter';
 import type {Cultivator,LLMDecisionPayload,MortalSettlement,RouteWarningHazardProof,WorldEvent,WorldState} from '../types/world';
 import {
@@ -50,7 +51,7 @@ const sameParty=(a:DisasterShelterParty,b:DisasterShelterParty)=>a.actorId===b.a
 function roomAvailable(world:WorldState,hostId:string,guestId:string,tick:number){
   const seasonal=world.seasonalHousing.claims.filter(row=>seasonalHousingRoomHeld(row,tick));
   const disaster=caseRows(world).filter(disasterShelterRoomHeld);
-  return !seasonal.some(row=>row.guestId===guestId)&&!disaster.some(row=>row.guest.actorId===guestId)&&
+  return !nightDoorGuestHeld(world,guestId,tick)&&!seasonal.some(row=>row.guestId===guestId)&&!disaster.some(row=>row.guest.actorId===guestId)&&
     seasonal.filter(row=>row.settlementId===hostId).length+disaster.filter(row=>row.host.settlementId===hostId).length<
     housingVacantCapacity(world,hostId,tick);
 }

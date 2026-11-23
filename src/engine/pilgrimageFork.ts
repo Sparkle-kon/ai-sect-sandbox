@@ -1,4 +1,4 @@
-import type {Cultivator,LLMDecisionPayload,LocationNode,MapPoint,PilgrimageJourney,WorldEvent,WorldState} from '../types/world';
+import type {Cultivator,LLMDecisionPayload,LocationNode,MapHazard,MapPoint,PilgrimageJourney,WorldEvent,WorldState} from '../types/world';
 import type {PilgrimageForkChoice,PilgrimageForkOption,PilgrimageForkRecord,PilgrimageForkView} from '../types/pilgrimageFork';
 import {isScopedExpeditionGate} from './expeditionOmenTerms';
 import {findMapPath} from './mapMotionEngine';
@@ -136,7 +136,11 @@ export function resolvePilgrimageForkAction(world:WorldState,actor:Cultivator,de
   return events;
 }
 
-export function advancePilgrimageForks(world:WorldState):WorldEvent[]{
+interface ForkEvidenceObserver {
+  blocked(world:WorldState,fork:PilgrimageForkRecord,choice:PilgrimageForkChoice,hazard:MapHazard):void;
+  arrived(world:WorldState,fork:PilgrimageForkRecord,choice:PilgrimageForkChoice,event:WorldEvent):void;
+}
+export function advancePilgrimageForks(world:WorldState,observer?:ForkEvidenceObserver):WorldEvent[]{
   const events:WorldEvent[]=[];
   for(const fork of world.pilgrimageForks?.forks??[])for(const choice of fork.choices){
     if(choice.status!=='waiting'&&choice.status!=='traveling')continue;
@@ -155,7 +159,17 @@ export function advancePilgrimageForks(world:WorldState):WorldEvent[]{
         Math.abs(tile.col-beforeTile.col)+Math.abs(tile.row-beforeTile.row)>1||same(previous,point))break;
       through++;
     }
-    if(through===index)continue;
+    if(through===index){
+      if(observer&&choice.paidStones===PILGRIMAGE_LEG_COST&&index>0&&path[index+1]){
+        const current=terrainTileAt(world,path[index].x,path[index].y),next=terrainTileAt(world,path[index+1].x,path[index+1].y);
+        if(current&&next&&Math.abs(current.col-next.col)+Math.abs(current.row-next.row)===1){
+          const cause=world.mapHazards.find(hazard=>hazard.tileId===next.id&&hazard.intensity>=2&&
+            hazard.createdTick<=world.tick&&hazard.expiresTick>world.tick);
+          if(cause)observer.blocked(world,fork,choice,cause);
+        }
+      }
+      continue;
+    }
     if(choice.paidStones===0){
       const start=terrainTileAt(world,path[0].x,path[0].y);
       if(!path.slice(1,through+1).some(point=>terrainTileAt(world,point.x,point.y)?.id!==start?.id))continue;
@@ -170,7 +184,9 @@ export function advancePilgrimageForks(world:WorldState):WorldEvent[]{
     actor.exploredTileIds=[...new Set([...actor.exploredTileIds,...tiles])];
     if(through===path.length-1){
       actor.locationId=dest.id;choice.status='arrived';noteTerrainVisit(world,actor);
-      events.push(receipt(world,fork,choice,'arrived'));
+      const arrival=receipt(world,fork,choice,'arrived');
+      events.push(arrival);
+      observer?.arrived(world,fork,choice,arrival);
     }
   }
   return events;

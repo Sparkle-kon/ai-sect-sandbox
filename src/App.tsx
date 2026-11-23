@@ -1,3 +1,4 @@
+import {useNightDoorStory} from './components/useNightDoorStory';
 import {projectReliefHomecoming,projectReliefHomecomingLead} from './engine/reliefHomecoming';
 import {useBoundaryGapStory} from './components/useBoundaryGapStory';
 import {useAbandonedQuarterStory} from './components/useAbandonedQuarterStory';
@@ -330,6 +331,8 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   const vacantGate=useVacantGateStory(simulation,(!dashboardOpen||cockpitOpen)&&!storyEntryOpen,selectedCultivator);
   const battlefieldAftermath=useBattlefieldAftermathStory(simulation,(!dashboardOpen||cockpitOpen)&&!storyEntryOpen,selectedCultivator);
   const pilgrimageFork=usePilgrimageForkStory(simulation,(!dashboardOpen||cockpitOpen)&&!storyEntryOpen,selectedCultivator);
+  const nightDoor=useNightDoorStory(simulation,!storyEntryOpen&&(!dashboardOpen||cockpitOpen||workspace==='map'||workspace==='chronicle'),selectedCultivator,
+    cockpitOpen?'cockpit':dashboardOpen?workspace:'story');
   const boundaryGap=useBoundaryGapStory(simulation,!storyEntryOpen&&(!dashboardOpen||cockpitOpen||workspace==='map'||workspace==='chronicle'),selectedCultivator,
     cockpitOpen?'cockpit':dashboardOpen?workspace:'story');
   const abandonedQuarter=useAbandonedQuarterStory(simulation,!storyEntryOpen&&(!dashboardOpen||cockpitOpen||workspace==='map'||workspace==='chronicle'),selectedCultivator,
@@ -676,7 +679,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   const clearWorldPulse=(token:number)=>setPulseFocus(current=>current?.token===token?undefined:current);
   const pulseStrip=worldPulse&&<WorldPulseBar view={worldPulse} historical={Boolean(preview)}
     canFocus={!immersive} onFocusAlert={focusWorldPulse}/>;
-  if(cockpitOpen)return <PanoramicCockpitView world={visibleWorld} titleRef={cockpitHeading} exit={cockpitSwitch} statusStrip={pulseStrip} stageOverride={featuredStoryCard} subplot={guidance.subplot} branchScene={furnaceEmergency??vacantGate??boundaryGap??abandonedQuarter??pavilionFire??pilgrimageFork??battlefieldAftermath??apprenticeshipReunion??villageReunion??wildMigration??mercyReunion??farewellLanding??frontierGorge??schoolFormDuel??flightCard??passageScene??banquetStory??campaignAssembly??anomalyRelay}
+  if(cockpitOpen)return <PanoramicCockpitView world={visibleWorld} titleRef={cockpitHeading} exit={cockpitSwitch} statusStrip={pulseStrip} stageOverride={featuredStoryCard} subplot={guidance.subplot} branchScene={furnaceEmergency??vacantGate??nightDoor??boundaryGap??abandonedQuarter??pavilionFire??pilgrimageFork??battlefieldAftermath??apprenticeshipReunion??villageReunion??wildMigration??mercyReunion??farewellLanding??frontierGorge??schoolFormDuel??flightCard??passageScene??banquetStory??campaignAssembly??anomalyRelay}
     time={{historical:Boolean(preview),running:isRunning,busy:cockpitBusy||storyDecisionPending,onStep:()=>void handleStepTick(),
       onToggleAutoplay:toggleStoryAutoplay,onReturnLive:()=>handleTimelinePreview(null),onOpenTimeline:()=>{
         openWorkspace('chronicle');rememberFold('chronicle','timeline');setStoryEntryOpen(false);
@@ -701,7 +704,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
         resolvePublicDialogue={publicRead?.dialogue.event} category={chronicleFilter} onCategoryChange={setChronicleFilter}/>
     </React.Suspense>}/>;
 
-  const activeReadingScene=furnaceEmergency??vacantGate??boundaryGap??abandonedQuarter??pavilionFire??dungeonFork??pilgrimageFork??battlefieldAftermath??apprenticeshipReunion??villageReunion??wildMigration??mercyReunion??farewellLanding??frontierGorge??nightHunt??schoolFormDuel??calamityArray??battlefieldRevisit??witnessInquiry??campaignAssembly??
+  const activeReadingScene=furnaceEmergency??vacantGate??nightDoor??boundaryGap??abandonedQuarter??pavilionFire??dungeonFork??pilgrimageFork??battlefieldAftermath??apprenticeshipReunion??villageReunion??wildMigration??mercyReunion??farewellLanding??frontierGorge??nightHunt??schoolFormDuel??calamityArray??battlefieldRevisit??witnessInquiry??campaignAssembly??
     flightCard??passageScene??banquetStory??anomalyRelay;
   const isUrgentPublicScene=storyHome?.scene&&!storyHome.scene.earlier&&world.events.some(event=>event.id===storyHome.scene?.eventId&&
     (event.category==='combat'||event.category==='death'||event.category==='breakthrough'));
@@ -769,8 +772,8 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
       </header>
       {pulseStrip&&<div className="mx-auto w-full max-w-[76rem] px-2.5 pt-2 sm:px-4">{pulseStrip}</div>}
 
-      {(featuredStoryCard??furnaceEmergency??boundaryGap??abandonedQuarter??flightCard??passageScene??(preview?schoolFormDuel:undefined))&&
-        <div className="mx-auto w-full max-w-2xl px-3 pt-3">{featuredStoryCard??furnaceEmergency??boundaryGap??abandonedQuarter??flightCard??passageScene??schoolFormDuel}</div>}
+      {(featuredStoryCard??furnaceEmergency??nightDoor??boundaryGap??abandonedQuarter??flightCard??passageScene??(preview?schoolFormDuel:undefined))&&
+        <div className="mx-auto w-full max-w-2xl px-3 pt-3">{featuredStoryCard??furnaceEmergency??nightDoor??boundaryGap??abandonedQuarter??flightCard??passageScene??schoolFormDuel}</div>}
       <SandboxWorkspace active={workspace} onChange={openWorkspace} autoFocusTab={!(trail || chronicleReturn)}
         hideActiveContent={Boolean(trail && !focusTarget)} panelLead={trail && <div className="mb-2 flex min-w-0 flex-wrap items-center gap-2">
           <button type="button" data-control-dock="back" ref={backRef} onClick={returnToChronicle} className={`${action} bg-slate-800 text-amber-100`}>返回原纪事</button>

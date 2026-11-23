@@ -1,3 +1,4 @@
+import {nightDoorBedsHeld,nightDoorGuestHeld,nightDoorHouseholdHeld} from './nightDoorBeds';
 import type {Cultivator,HousingClaim,HousingMove,LLMDecisionPayload,RouteWarningHazardProof,SeasonalHousingState,VillageWorkProject,WorldEvent,WorldState} from '../types/world';
 import {routeWarningHazardValid} from './routeWarningProof';
 import {courierActedThisTick} from './sealedCourierEngine';
@@ -59,14 +60,15 @@ export function housingVacantCapacity(world:WorldState,villageId:string,tick:num
   const village=world.settlements.villages.find(row=>row.id===villageId);
   if(!village||village.population<1||!publicSite(world,village.locationId))return 0;
   const maintained=world.villageWorks.projects.filter(row=>eligibleProject(row,villageId,tick)).length*VILLAGE_WORK_RULES.shelter.capacityGain;
-  return Math.max(0,Math.min(maintained,village.capacity-village.population));
+  return Math.max(0, Math.min(maintained,village.capacity-village.population)-nightDoorBedsHeld(world,villageId,tick));
 }
 export const seasonalHousingRoomHeld=(row:HousingClaim,tick:number)=>usesRoom(row)&&tick<row.seasonEndTick&&
   (row.status==='occupied'||row.arriveByTick!==undefined&&tick<row.arriveByTick);
 function roomAvailable(world:WorldState,claim:Pick<HousingClaim,'guestId'|'householdId'|'settlementId'>,tick:number){
   const holds=world.seasonalHousing.claims.filter(row=>seasonalHousingRoomHeld(row,tick));
   const disasters=world.disasterShelter?.cases.filter(disasterShelterRoomHeld)??[];
-  if(disasters.some(row=>row.guest.actorId===claim.guestId))return false;
+  if(disasters.some(row=>row.guest.actorId===claim.guestId)||nightDoorGuestHeld(world,claim.guestId,tick)||
+    nightDoorHouseholdHeld(world,claim.householdId,tick))return false;
   return !holds.some(row=>row.guestId===claim.guestId||row.householdId===claim.householdId)&&
     holds.filter(row=>row.settlementId===claim.settlementId).length+
     disasters.filter(row=>row.host.settlementId===claim.settlementId).length<housingVacantCapacity(world,claim.settlementId,tick);
