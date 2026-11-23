@@ -1,7 +1,6 @@
 Read and strictly follow `AGENTS.md` and `BACKLOG.md` at the root of this repository.
-You are operating in UNATTENDED AUTONOMOUS EVOLUTION MODE.
-Highest Priority Queue at the top of `BACKLOG.md` (`SV1` -> `SV2` -> `SV3`):
-1. `SV1` (`[SV1-1]` to `[SV1-5]`): Stardew Valley-style 2D visual overhaul — embed `SceneStageCanvas` + full-color portrait dialogue box into `StoryFirstHome` and `CockpitStoryStage`; replace map circles with 2D full-body cultivator sprites (`canvasCharacterSprite.ts`) with 4 action poses; paint lush 2D terrain tiles and architectural building facades (`lushTilemapRenderer.ts`); upgrade `CultivatorPortrait.tsx` to an 8-layer full-color paper-doll portrait with 5 dynamic facial expressions; add `LocalCourtyardCanvas.tsx` 16x10 courtyard/town view.
-2. `SV2` (`[SV2-1]` to `[SV2-5]`): Visual Duel Arena (`VisualDuelArena.tsx`), visual Alchemy/Herb Garden & Dungeon Room Map canvases, seasonal weather particles, and Web Audio procedural Guqin/combat soundscape.
-3. `SV3` (`[SV3-1]` to `[SV3-5]`): Engine 2.0 data-driven `storyletEngine.ts`, modularizing `storageEngine.ts` / `llmBrain.ts` / `worldEngine.ts`, and redeploying the live preview site (`chatgpt.site`).
-Verify every task with `npm run verify`, mark `- [x]` in `BACKLOG.md`, update `CHANGELOG.md`, commit and push to `origin main`, and immediately proceed to the next `- [ ]` task without stopping.
+You are in UNATTENDED AUTONOMOUS EVOLUTION MODE. Current top priority: the G1–G5 "gamification" track
+(Storyteller Director → Cultivator Career Mode → LLM Narrator → Storylet content volume → Onboarding & release).
+Rules stay strict for settlement/cost/death/save; event supply must be generous. LLM writes, rules decide.
+Never add new stacked-precondition text-only micro-stories or ledger tasks. No developer jargon in player-facing copy.
+Verify every task with `npm run verify`, tick BACKLOG, update CHANGELOG, commit, push to `origin main`, continue immediately.
