@@ -23,7 +23,7 @@ function PortraitHalo({halo}:{halo:NonNullable<CultivatorPortraitSpec['halo']>})
 export function CultivatorPortrait({portrait,className='h-[4.5rem] w-16',presentation}:PortraitProps){
   const stage=presentation==='stage';
   return <svg aria-hidden="true" focusable="false" viewBox="0 0 120 136" width={120} height={136}
-    className={`block shrink-0 overflow-hidden rounded-lg ${stage?'brightness-110 saturate-[1.22]':''} ${className}`} data-cultivator-portrait="">
+    className={`xianxia-portrait block shrink-0 overflow-hidden rounded-lg ${stage?'brightness-110 saturate-[1.22]':''} ${className}`} data-cultivator-portrait="">
     <PortraitScenery portrait={portrait} stage={stage}/>
     {portrait.halo&&<PortraitHalo halo={portrait.halo}/>}
     <PortraitTreasure portrait={portrait}/>

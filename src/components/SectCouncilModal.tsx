@@ -100,7 +100,7 @@ export function SectCouncilModal({ world, open, busy, onClose, onConvene, notice
       ref={dialogRef}
       aria-labelledby={titleId}
       onCancel={(event) => { event.preventDefault(); onClose(); }}
-      className="m-auto max-h-[85vh] w-[min(94vw,44rem)] overflow-y-auto rounded-2xl border border-violet-400/40 bg-slate-950 p-0 text-slate-100 shadow-2xl backdrop:bg-black/70"
+      className="xianxia-frame xianxia-dialog m-auto max-h-[85vh] w-[min(94vw,44rem)] overflow-y-auto rounded-2xl border border-violet-400/40 bg-slate-950 p-0 text-slate-100 shadow-2xl backdrop:bg-black/70"
     >
       <div className="space-y-4 p-4 sm:p-5">
         <header className="flex items-start justify-between gap-4 border-b border-slate-800 pb-3">

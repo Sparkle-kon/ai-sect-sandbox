@@ -1,6 +1,7 @@
 import { BookOpen, ChevronDown, Globe2, Landmark, Map, Users } from 'lucide-react';
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
 import type { KeyboardEvent, ReactNode, Ref } from 'react';
+import {XianxiaInkScene} from './XianxiaInkScene';
 import { chooseWorkspaceSection } from './workspacePreferences';
 
 export const SANDBOX_VIEWS = [
@@ -40,12 +41,12 @@ export function SandboxWorkspace({ active, onChange, views, panelLead, autoFocus
   };
   return (
     <>
-      <nav aria-label="沙盒工作区" className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-800 bg-slate-950/95 pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] backdrop-blur lg:static lg:border-t-0 lg:border-b lg:pb-0">
+      <nav aria-label="沙盒工作区" className="xianxia-nav xianxia-dock fixed inset-x-0 bottom-0 z-30 border-t border-slate-800 bg-slate-950/95 pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] backdrop-blur lg:static lg:border-t-0 lg:border-b lg:pb-0">
         <div role="tablist" aria-label="工作区" onKeyDown={key} className="mx-auto grid w-full max-w-6xl grid-cols-5 gap-1 px-2 py-1 sm:px-4 lg:w-fit lg:gap-3">
           {SANDBOX_VIEWS.map(({ id, label, Icon }, index) => (
             <button key={id} id={`${uid}-tab-${id}`} ref={(node) => { buttons.current[index] = node; }}
               type="button" role="tab" aria-selected={active === id} aria-controls={`${uid}-panel-${id}`} tabIndex={active === id ? 0 : -1}
-              onClick={() => change(id)} className={`flex min-h-11 min-w-0 flex-col items-center justify-center gap-0.5 rounded-md px-0.5 text-[11px] font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300 sm:text-xs lg:flex-row lg:gap-2 lg:px-6 ${active === id ? 'bg-amber-400/15 text-amber-200' : 'text-slate-300 hover:bg-slate-800'}`}>
+              onClick={() => change(id)} className={`xianxia-tab flex min-h-11 min-w-0 flex-col items-center justify-center gap-0.5 rounded-md px-0.5 text-[11px] font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300 sm:text-xs lg:flex-row lg:gap-2 lg:px-6 ${active === id ? 'bg-amber-400/15 text-amber-200' : 'text-slate-300 hover:bg-slate-800'}`}>
               <Icon aria-hidden="true" className="h-4 w-4" />{label}
             </button>
           ))}
@@ -55,6 +56,9 @@ export function SandboxWorkspace({ active, onChange, views, panelLead, autoFocus
         {SANDBOX_VIEWS.map(({ id }) => <section key={id} id={`${uid}-panel-${id}`} role="tabpanel" aria-labelledby={`${uid}-tab-${id}`}
           hidden={active !== id} className="min-w-0" data-workspace={id}>
           {active === id && panelLead}
+          {active === id && !hideActiveContent && <div className="xianxia-frame xianxia-masthead mb-2 overflow-hidden">
+            <XianxiaInkScene variant={id === 'world' ? 'civic' : id} className="xianxia-masthead-art"/>
+          </div>}
           {id === 'map' && <MapWorkspaceContent hidden={active === id && hideActiveContent}>{views.map}</MapWorkspaceContent>}
           {id !== 'map' && active === id && !hideActiveContent && views[id]}
         </section>)}
@@ -97,7 +101,7 @@ function listenDesktopWorkspace(change: () => void) {
   return () => media.removeListener(change);
 }
 const mobileWorkspaceSnapshot = () => false;
-const accordionButton = 'flex min-h-11 w-full min-w-0 items-center justify-between gap-2 break-words rounded-md border px-3 text-left text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300';
+const accordionButton = 'xianxia-control flex min-h-11 w-full min-w-0 items-center justify-between gap-2 break-words rounded-md border px-3 text-left text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300';
 
 export function WorkspaceSections({ label, sections, initialOpen, rememberedOpen, forcedOpen, onOpenChange, headingRef, moreAfterContent = false }: {
   label: string; sections: WorkspaceSection[]; initialOpen?: string; rememberedOpen?: string | null;
@@ -147,8 +151,8 @@ export function WorkspaceSections({ label, sections, initialOpen, rememberedOpen
   );
 
   const mobileMore = !isForced && secondary.length > 0 ? (
-    <details ref={more} className="min-w-0 rounded-md border border-slate-800 bg-slate-950/60">
-      <summary ref={moreSummary} className="min-h-11 cursor-pointer rounded-md px-3 py-3 text-xs font-semibold text-slate-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300">更多内容</summary>
+    <details ref={more} className="xianxia-frame min-w-0 rounded-md border border-slate-800 bg-slate-950/60">
+      <summary ref={moreSummary} className="xianxia-control min-h-11 cursor-pointer rounded-md px-3 py-3 text-xs font-semibold text-slate-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300">更多内容</summary>
       <div className="min-w-0 space-y-1 px-2 pb-2">
         {secondary.map((item) => <div key={item.id} className="min-w-0">{trigger(item)}{pane(item)}</div>)}
       </div>

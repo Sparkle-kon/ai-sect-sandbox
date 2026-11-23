@@ -77,7 +77,7 @@ export function MapSidebarDossier({data,onReadActor,onFocus,onCommit}:MapSidebar
   };
 
   return <aside aria-label="当前修士" aria-labelledby={heading}
-    className="min-w-0 self-start space-y-3 overflow-hidden rounded-xl border border-amber-900/50 bg-gradient-to-br from-amber-950/25 via-slate-950 to-slate-950 p-3.5 text-slate-200 [overflow-wrap:anywhere] sm:p-4">
+    className="xianxia-frame min-w-0 self-start space-y-3 overflow-hidden rounded-xl border border-amber-900/50 bg-gradient-to-br from-amber-950/25 via-slate-950 to-slate-950 p-3.5 text-slate-200 [overflow-wrap:anywhere] sm:p-4">
     <header className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1 border-b border-amber-900/45 pb-2.5">
       <h2 id={heading} className="font-serif text-sm font-semibold tracking-wide text-amber-100">舆图人物</h2>
       <p className="text-xs text-amber-200">{data.leadName?`本卷主角：${data.leadName}`:'尚无主角'}</p>

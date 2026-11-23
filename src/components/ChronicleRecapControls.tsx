@@ -82,7 +82,7 @@ export function ChronicleRecapControls({recap,loadRecap,readerRef,world,chapterI
         }
       }}>本卷小回顾</button>
     {open&&<dialog id={dialogId} ref={dialog} aria-labelledby={titleId}
-      className="m-auto max-h-[min(82dvh,40rem)] w-[calc(100%_-_1.5rem)] max-w-xl overflow-auto rounded-xl border border-amber-200/30 bg-slate-950 p-3 text-slate-100 backdrop:bg-slate-950/80 sm:p-4"
+      className="xianxia-frame xianxia-dialog m-auto max-h-[min(82dvh,40rem)] w-[calc(100%_-_1.5rem)] max-w-xl overflow-auto rounded-xl border border-amber-200/30 bg-slate-950 p-3 text-slate-100 backdrop:bg-slate-950/80 sm:p-4"
       onCancel={event=>{event.preventDefault();close();}}>
       <header className="mb-2 flex flex-wrap items-center justify-between gap-x-2">
         <h4 id={titleId} ref={title} tabIndex={-1} className="font-serif text-base font-semibold text-amber-100 outline-none">本卷小回顾</h4>

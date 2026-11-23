@@ -38,7 +38,7 @@ export function WorldPulseBar({view,historical=false,canFocus=true,onFocusAlert}
   const more=Math.max(0,view.additionalRisks)+Math.max(view.risks.length-rows.length,0);
 
   return <section aria-labelledby={heading}
-    className="w-full min-w-0 space-y-2 rounded-xl border border-teal-300/20 bg-slate-950/90 px-3 py-2 text-slate-100 [overflow-wrap:anywhere]">
+    className="xianxia-frame w-full min-w-0 space-y-2 rounded-xl border border-teal-300/20 bg-slate-950/90 px-3 py-2 text-slate-100 [overflow-wrap:anywhere]">
     <div className="grid min-w-0 grid-cols-2 gap-x-3 gap-y-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,.85fr)_minmax(0,1fr)] lg:items-center">
       <div className="min-w-0">
         <h2 id={heading} className="flex flex-wrap items-center gap-x-1.5 text-xs font-semibold tracking-wide text-amber-100">

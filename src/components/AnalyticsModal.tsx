@@ -258,7 +258,7 @@ export function AnalyticsModal({ world, history, open, onClose }: {
   if (!analysis) return null;
   const { coverage, population, treasury, mortality, hallOfFame } = analysis;
   return (
-    <dialog ref={dialog} aria-labelledby={titleId} className="m-auto max-h-[88vh] w-[min(94vw,56rem)] overflow-auto rounded-2xl border border-indigo-500/40 bg-slate-950 p-0 text-slate-100 shadow-2xl backdrop:bg-black/70"
+    <dialog ref={dialog} aria-labelledby={titleId} className="xianxia-frame xianxia-dialog m-auto max-h-[88vh] w-[min(94vw,56rem)] overflow-auto rounded-2xl border border-indigo-500/40 bg-slate-950 p-0 text-slate-100 shadow-2xl backdrop:bg-black/70"
       onCancel={(event) => { event.preventDefault(); onClose(); }}>
       <div className="space-y-3 p-3 sm:p-5">
         <header className="flex items-start justify-between gap-3 border-b border-slate-800 pb-2">

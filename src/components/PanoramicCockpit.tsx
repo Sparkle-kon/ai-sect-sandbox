@@ -10,7 +10,7 @@ export interface PanoramicCockpitProps {
   chronicle:ReactNode;
 }
 
-const surface='min-w-0 rounded-2xl border border-amber-200/15 bg-[#121720]/95 shadow-[0_12px_48px_#05070b80]';
+const surface='xianxia-frame min-w-0 rounded-2xl border border-amber-200/15 bg-[#121720]/95 shadow-[0_12px_48px_#05070b80]';
 const focus='focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300';
 const detailBody='min-w-0 rounded-sm xl:min-h-0 xl:overflow-y-auto xl:overscroll-contain xl:[scrollbar-gutter:stable]';
 const detailSlot='min-w-0 space-y-2 p-2 sm:p-3 xl:flex xl:min-h-0 xl:flex-col';
@@ -19,7 +19,7 @@ const panelTitle='min-w-0 text-sm font-semibold tracking-[0.12em] text-amber-100
 export function PanoramicCockpit({map,timeControls,stage,inspector,relationships,chronicle}:PanoramicCockpitProps){
   const id=useId();
   return <section aria-labelledby={`${id}-title`}
-    className="relative isolate mx-auto w-full min-w-0 max-w-[192rem] rounded-[1.5rem] border border-amber-200/20 bg-[#0b1019] p-2 text-slate-100 sm:p-4 2xl:p-6">
+    className="xianxia-frame relative isolate mx-auto w-full min-w-0 max-w-[192rem] rounded-[1.5rem] border border-amber-200/20 bg-[#0b1019] p-2 text-slate-100 sm:p-4 2xl:p-6">
     <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 rounded-[inherit] bg-[radial-gradient(ellipse_at_15%_0%,#41443350,transparent_49%),radial-gradient(ellipse_at_75%_8%,#27244b65,transparent_44%)]"/>
     <header className="relative mb-3 flex min-w-0 flex-wrap items-end justify-between gap-x-5 gap-y-2 border-b border-amber-100/15 px-2 pb-3 sm:mb-4 sm:px-3">
       <div className="min-w-0">

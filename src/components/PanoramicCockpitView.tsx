@@ -17,7 +17,7 @@ export function CockpitModeSwitch({active,disabled,onSwitch}:{
   const wide=useViewportAtLeast(DESKTOP_WORKSPACE_WIDTH);
   if(!wide&&!active)return null;
   return <button type="button" disabled={disabled} onClick={onSwitch}
-    className={`inline-flex min-h-11 min-w-0 items-center gap-2 rounded-lg border border-amber-200/35 bg-gradient-to-br from-amber-950/45 to-slate-950 px-3 text-sm font-semibold text-amber-100 hover:border-amber-200/80 hover:text-amber-50 disabled:opacity-50 ${focus}`}>
+    className={`xianxia-control inline-flex min-h-11 min-w-0 items-center gap-2 rounded-lg border border-amber-200/35 bg-gradient-to-br from-amber-950/45 to-slate-950 px-3 text-sm font-semibold text-amber-100 hover:border-amber-200/80 hover:text-amber-50 disabled:opacity-50 ${focus}`}>
     {!active&&<Compass size={16} aria-hidden="true" className="shrink-0 text-amber-300"/>}
     {active?'故事书卷':'全息大盘'}
   </button>;
@@ -29,7 +29,7 @@ export function DesktopSandboxEntrance({onOpen,disabled}:{
   const wide=useViewportAtLeast(DESKTOP_WORKSPACE_WIDTH);
   if(!wide)return null;
   return <button type="button" disabled={disabled} onClick={onOpen}
-    className={`inline-flex min-h-11 max-w-full items-center gap-2 rounded-lg border border-teal-200/40 bg-gradient-to-br from-teal-900/65 to-slate-950 px-3 text-sm font-semibold text-teal-100 hover:border-teal-200/80 hover:text-teal-50 disabled:opacity-50 ${focus}`}>
+    className={`xianxia-control inline-flex min-h-11 max-w-full items-center gap-2 rounded-lg border border-teal-200/40 bg-gradient-to-br from-teal-900/65 to-slate-950 px-3 text-sm font-semibold text-teal-100 hover:border-teal-200/80 hover:text-teal-50 disabled:opacity-50 ${focus}`}>
     <MapIcon size={16} aria-hidden="true" className="shrink-0 text-teal-200"/>
     进入沙盒
   </button>;
@@ -50,8 +50,8 @@ interface PanoramicCockpitViewProps extends Omit<PanoramicCockpitProps,'timeCont
 export function PanoramicCockpitView({world,stageViewer,titleRef,time,exit,statusStrip,stageOverride,subplot,branchScene,...slots}:PanoramicCockpitViewProps){
   const opening=highDramaPreset(world.builtinScenarioOrigin?.id);
   return <main data-panoramic-cockpit data-cockpit-tick={world.tick}
-    className="min-h-dvh bg-slate-950 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
-    <header className="mx-auto flex max-w-[192rem] items-center justify-between gap-3 px-4 py-2 text-amber-100">
+    className="xianxia-shell min-h-dvh bg-slate-950 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
+    <header className="xianxia-header mx-auto flex max-w-[192rem] items-center justify-between gap-3 px-4 py-2 text-amber-100">
       <div className="min-w-0">
         <h1 ref={titleRef} tabIndex={-1} className="font-serif text-lg font-semibold tracking-widest">天道沙盒</h1>
         {opening&&<p className="break-words text-xs text-amber-100/80">{opening.title}</p>}

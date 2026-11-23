@@ -72,3 +72,176 @@
     overscroll-behavior-y: contain;
   }
 }
+
+/* The ink skin opts in at semantic surfaces; it does not restyle the Canvas,
+   Tailwind utilities, or native controls elsewhere in the simulation. */
+.xianxia-shell {
+  --ink-floor: #0d1515;
+  --ink-panel: #131f20;
+  --ink-raised: #1c2a2a;
+  --ink-ivory: #f7edd7;
+  --ink-muted: #cec2a8;
+  --ink-rule: #8e7952;
+  --ink-gold: #e3c082;
+  --ink-focus: #f9d893;
+  --ink-paper: #ead8b5;
+  --ink-paper-text: #32241a;
+  background-color: var(--ink-floor);
+  background-image: radial-gradient(ellipse at 20% 0%, #312b215c, transparent 34rem);
+  color: var(--ink-ivory);
+}
+
+.xianxia-header {
+  border-bottom-color: var(--ink-rule, #8e7952);
+}
+
+.xianxia-frame {
+  --ink-corner: var(--ink-rule, #8e7952);
+  background-color: var(--ink-panel, #131f20);
+  /* Short stopped rules give the corners a carved frame without an overlay. */
+  background-image:
+    linear-gradient(var(--ink-corner), var(--ink-corner)),
+    linear-gradient(var(--ink-corner), var(--ink-corner)),
+    linear-gradient(var(--ink-corner), var(--ink-corner)),
+    linear-gradient(var(--ink-corner), var(--ink-corner)),
+    linear-gradient(145deg, #7f624b14, transparent 58%);
+  background-position: left 3px top 3px, left 3px top 3px, right 3px bottom 3px, right 3px bottom 3px, center;
+  background-size: .8rem 1px, 1px .8rem, .8rem 1px, 1px .8rem, 100% 100%;
+  background-repeat: no-repeat;
+  border-color: var(--ink-rule, #8e7952);
+  box-shadow: inset 0 0 0 1px #fff8db0a;
+}
+
+.xianxia-dialog {
+  --ink-corner: var(--ink-gold, #e3c082);
+  box-shadow: 0 .8rem 2.5rem #0009, inset 0 0 0 1px #fff8db12;
+}
+
+.xianxia-masthead {
+  min-inline-size: 0;
+  color: var(--ink-ivory, #f7edd7);
+  border: 1px solid var(--ink-rule, #8e7952);
+  overflow-wrap: anywhere;
+}
+
+.xianxia-masthead-art {
+  max-inline-size: 100%;
+  min-inline-size: 0;
+  pointer-events: none;
+}
+
+.xianxia-portrait {
+  outline: 1px solid var(--ink-rule, #8e7952);
+  outline-offset: -1px;
+}
+
+.xianxia-nav {
+  color: var(--ink-ivory, #f7edd7);
+  background-color: var(--ink-floor, #0d1515);
+  border-color: var(--ink-rule, #8e7952);
+}
+
+.xianxia-tab,
+.xianxia-control {
+  min-block-size: 44px;
+  min-inline-size: 44px;
+  max-inline-size: 100%;
+  overflow-wrap: anywhere;
+}
+
+.xianxia-tab {
+  /* Five equal columns still fit at narrow widths or with text enlargement. */
+  min-inline-size: min(44px, 100%);
+  color: var(--ink-muted, #cec2a8);
+}
+
+.xianxia-tab:is([aria-selected="true"], [aria-current]:not([aria-current="false"]), [data-selected="true"]) {
+  color: var(--ink-ivory, #f7edd7);
+  background-color: var(--ink-raised, #1c2a2a);
+  box-shadow: inset 0 -3px 0 var(--ink-gold, #e3c082);
+  font-weight: 700;
+}
+
+.xianxia-primary {
+  background-color: var(--ink-gold, #e3c082);
+  color: var(--ink-paper-text, #32241a);
+  border-color: var(--ink-gold, #e3c082);
+}
+
+.xianxia-parchment {
+  background: linear-gradient(110deg, #f7e8c8, var(--ink-paper, #ead8b5) 72%);
+  color: var(--ink-paper-text, #32241a);
+  border: 1px solid #a68651;
+  border-inline-start: .225rem double #775530;
+  border-radius: .375rem;
+  padding: .625rem .75rem;
+  overflow-wrap: anywhere;
+}
+
+/* The opt-in prose carries its own palette (not pale utility-colored text). */
+.xianxia-parchment > :is(span, em, strong) {
+  color: inherit;
+}
+
+@media (hover: hover) {
+  :is(.xianxia-tab, .xianxia-control):hover:not(:disabled, [aria-disabled="true"]) {
+    text-decoration: underline;
+    text-underline-offset: .2em;
+  }
+  .xianxia-primary:hover:not(:disabled, [aria-disabled="true"]) {
+    background-color: var(--ink-focus, #f9d893);
+  }
+}
+
+:is(.xianxia-tab, .xianxia-control, .xianxia-primary):focus-visible {
+  /* Inset ring remains visible inside scrolling panels and the mobile dock. */
+  outline: 2px solid var(--ink-focus, #f9d893);
+  outline-offset: -3px;
+}
+
+.xianxia-primary:focus-visible {
+  outline-color: var(--ink-paper-text, #32241a);
+}
+
+:is(.xianxia-tab, .xianxia-control):is(:disabled, [aria-disabled="true"]) {
+  cursor: not-allowed;
+  text-decoration: none;
+}
+
+@media (max-width: 639.98px) {
+  .xianxia-dock {
+    background-color: var(--ink-floor, #0d1515);
+    border-color: var(--ink-rule, #8e7952);
+  }
+
+  .xianxia-parchment { padding-inline: .625rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :is(.xianxia-tab, .xianxia-control, .xianxia-primary, .xianxia-frame, .xianxia-masthead-art) {
+    animation: none;
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  :is(.xianxia-frame, .xianxia-nav, .xianxia-dock, .xianxia-parchment) {
+    border-color: CanvasText;
+  }
+
+  .xianxia-portrait { outline-color: CanvasText; }
+
+  .xianxia-tab:is([aria-selected="true"], [aria-current]:not([aria-current="false"]), [data-selected="true"]) {
+    text-decoration: underline;
+    text-underline-offset: .2em;
+  }
+
+  :is(.xianxia-tab, .xianxia-control, .xianxia-primary):focus-visible {
+    outline-color: Highlight;
+  }
+
+  :is(.xianxia-tab, .xianxia-control, .xianxia-primary):is(:disabled, [aria-disabled="true"]) {
+    opacity: 1;
+    color: GrayText;
+  }
+}

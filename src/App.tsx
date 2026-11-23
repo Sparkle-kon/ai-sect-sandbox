@@ -114,7 +114,7 @@ interface ChronicleTrail extends ChronicleFeedReturn {
   revision: number;
 }
 const chronicleWorkspace = { site: 'map', actor: 'people', sect: 'sect' } as const;
-const action = 'inline-flex min-h-11 items-center justify-center gap-1.5 rounded-md px-3 text-xs font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300 disabled:opacity-40';
+const action = 'xianxia-control inline-flex min-h-11 items-center justify-center gap-1.5 rounded-md px-3 text-xs font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300 disabled:opacity-40';
 
 export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, initialCockpit = false }) => {
   const [cockpitOpen,setCockpitOpen]=useState(initialCockpit);
@@ -733,7 +733,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   const guidanceActor=!preview&&storyHome&&!activeReadingScene&&!reliefHomecoming
     ?activeAvatar(world)??world.cultivators.find(actor=>actor.id===storyHome.lead?.id)??selectedCultivator:undefined;
   const nextGuide=guidanceActor?projectNextStoryGuidance(world,guidanceActor):undefined;
-  if (storyHome) return <main data-story-home data-story-turn={storyHome.calendar.tick} className="min-h-dvh bg-slate-950 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
+  if (storyHome) return <main data-story-home data-story-turn={storyHome.calendar.tick} className="xianxia-shell min-h-dvh bg-slate-950 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
     <div className="mx-auto flex max-w-[76rem] flex-wrap justify-end gap-2 px-4 empty:hidden">
       {soundToggle}{cockpitSwitch}
       {!storyEntryOpen&&<DesktopSandboxEntrance onOpen={openDashboard} disabled={isStepping||fastForwardLocked}/>}
@@ -749,11 +749,11 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   </main>;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col pt-[env(safe-area-inset-top)]"
+    <div className="xianxia-shell min-h-screen bg-slate-950 text-slate-100 flex flex-col pt-[env(safe-area-inset-top)]"
       data-controls-hand={handedness} data-controls-workspace={workspace}
       data-controls-repeat={handedness !== 'default' || workspace === 'map' || Boolean(preview) || isRunning}
       data-controls-map-tools={workspace === 'map' && !(trail && !focusTarget)} data-controls-back={Boolean(trail)}>
-      <header className="border-b border-slate-800 bg-slate-900/80">
+      <header className="xianxia-header border-b border-slate-800 bg-slate-900/80">
         <div className="mx-auto flex w-full max-w-[76rem] flex-wrap items-center justify-between gap-2 py-2 pl-[max(.75rem,env(safe-area-inset-left))] pr-[max(.75rem,env(safe-area-inset-right))] sm:pl-[max(1rem,env(safe-area-inset-left))] sm:pr-[max(1rem,env(safe-area-inset-right))]">
           <div className="flex min-w-0 items-center gap-2">
             <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-amber-500/40 bg-amber-500/20">
