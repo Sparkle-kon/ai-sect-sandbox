@@ -1,3 +1,6 @@
+import {useState} from 'react';
+import {AlchemyWorkshopCanvas} from './AlchemyWorkshopCanvas';
+import type {AlchemyWorkshopFrame} from './alchemyWorkshopVisualModel';
 import { projectLocalSeedCulture, projectSeedCulture } from '../engine/seedCultureEngine';
 import { SEED_LOT_UNITS, SEED_PLOT_UNITS, SEED_READY_TICKS, SEED_SOURCE_HERBS } from '../engine/seedCultureTerms';
 import type { Cultivator, SeedPlot, SeedWeather, WorldState } from '../types/world';
@@ -12,15 +15,17 @@ function SeedReading({ reading }: { reading: SeedWeather }) {
   return <span>第 {reading.tick} 轮：{reading.season} · {reading.kind} · 强度 {number(reading.intensity * 100)}% · 土地灵气 {number(reading.soilQi)}</span>;
 }
 
-export function SeedCulturePanel({ world, cultivator }: { world: WorldState; cultivator: Cultivator }) {
+export function SeedCulturePanel({ world, cultivator,workshop }: { world: WorldState; cultivator: Cultivator;workshop?:AlchemyWorkshopFrame }) {
+  const [open,setOpen]=useState(false);
   const local = projectLocalSeedCulture(world, cultivator);
   const { lots, plots } = projectSeedCulture(world, cultivator);
   if (!local && !lots.length && !plots.length) return null;
   const batchNumbers = new Map(lots.map(({ id }, index) => [id, index + 1]));
 
-  return <details className="min-w-0 rounded border border-emerald-400/25 bg-slate-950/60">
+  return <details className="min-w-0 rounded border border-emerald-400/25 bg-slate-950/60" onToggle={event=>setOpen(event.currentTarget.open)}>
     <summary className="min-h-11 cursor-pointer break-words px-3 py-2.5 text-xs font-semibold text-emerald-100">留种与实测试验</summary>
     <div className="min-w-0 space-y-2 break-words px-3 pb-3 text-xs leading-relaxed text-slate-300">
+      {workshop?.garden&&<AlchemyWorkshopCanvas key={workshop.siteId} frame={workshop} kind="garden" active={open}/>}
       {local && <p>本地田圃实况：生长中 {local.growing} 圃 · 实熟待收 {local.ready} 圃。不公开持有人、种册或产量。</p>}
       {lots.length > 0 && <section aria-label="本人种册与小样实测" className="space-y-1.5">
         <h5 className="font-semibold text-emerald-100">本人种册与小样实测</h5>

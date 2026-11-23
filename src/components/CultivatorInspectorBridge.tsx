@@ -6,7 +6,7 @@ const AgentInspector=lazy(async()=>({default:(await import('./AgentInspector')).
 
 type InspectorProps=ComponentProps<typeof OriginalInspector>;
 type Section=Extract<NonNullable<InspectorProps['workspaceSection']>,'profile'|'cultivation'|'mind'>;
-export function CultivatorInspectorBridge({panels,section,...view}:Pick<InspectorProps,'world'|'cultivator'|'onSelectCultivator'>&{
+export function CultivatorInspectorBridge({panels,section,...view}:Pick<InspectorProps,'world'|'cultivator'|'onSelectCultivator'|'historical'>&{
   panels:CultivatorInspectorPanels;section:Section;
 }){
   return <Suspense fallback={<p role="status">载入修士档案…</p>}>

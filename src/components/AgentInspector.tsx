@@ -53,6 +53,7 @@ const ScriptureEditionPanel = React.lazy(async () => ({ default: (await import('
 const RelicSetPanel = React.lazy(async () => ({ default: (await import('./RelicSetPanel')).RelicSetPanel }));
 
 interface AgentInspectorProps {
+  historical?:boolean;
   allowPersonalThought?:boolean;
   publicBonds?:readonly PublicBondArc[];
   personalBonds?:PersonalBondRead;
@@ -76,7 +77,7 @@ interface AgentInspectorProps {
 
 export const AgentInspector: React.FC<AgentInspectorProps> = ({
   world,
-  cultivator,
+  cultivator,historical=false,
   onSelectCultivator, workspaceSection, artifactSalvage,
   medicineControls,
   seasonReviewControls,
@@ -286,7 +287,7 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
       {scriptureCatalog?.original && <React.Suspense fallback={<p role="status" className="text-xs text-slate-400">载入经义校勘…</p>}>
         <ScriptureEditionPanel world={world} actor={cultivator} catalog={scriptureCatalog} />
       </React.Suspense>}
-      <AlchemyPanel world={world} cultivator={cultivator} location={location} heavenlyAlchemyControls={heavenlyAlchemyControls} />
+      <AlchemyPanel world={world} cultivator={cultivator} location={location} historical={historical} heavenlyAlchemyControls={heavenlyAlchemyControls} />
       </>}
       {mind && <>
       <RecollectionPanel world={world} actorId={cultivator.id} />

@@ -1,3 +1,7 @@
+import {useMemo,useState} from 'react';
+import {AlchemyWorkshopCanvas} from './AlchemyWorkshopCanvas';
+import {projectAlchemyWorkshop,type AlchemyWorkshopFrame} from './alchemyWorkshopVisualModel';
+import {createTerrainMapView} from './terrainMapView';
 import {HeavenlyAlchemyRead,type HeavenlyAlchemyControls} from './HeavenlyAlchemyRead';
 import {projectHeavenlyAlchemy} from '../engine/heavenlyAlchemyEngine';
 import type { Cultivator, HerbId, LocationNode, PillId, WorldState } from '../types/world';
@@ -38,14 +42,16 @@ function Inventory<Id extends string>({
   );
 }
 
-function RecipeBook({ cultivator, location, safety }: {
-  cultivator: Cultivator; location: LocationNode | undefined; safety: FurnaceSafetyView | undefined;
+function RecipeBook({ cultivator, location, safety,workshop }: {
+  cultivator: Cultivator; location: LocationNode | undefined; safety: FurnaceSafetyView | undefined;workshop?:AlchemyWorkshopFrame;
 }) {
+  const [open,setOpen]=useState(false);
   const furnaceGrade = safety?.installedGrade ?? 0;
   const closed = safety !== undefined && safety.status !== 'open';
   return (
-    <details className="rounded border border-slate-800/80 bg-slate-950/50 px-2 py-1.5">
+    <details className="rounded border border-slate-800/80 bg-slate-950/50 px-2 py-1.5" onToggle={event=>setOpen(event.currentTarget.open)}>
       <summary className="cursor-pointer text-xs text-slate-200">查看丹方 · {PILLS.length} 种</summary>
+      {workshop?.furnace&&<AlchemyWorkshopCanvas key={workshop.siteId} frame={workshop} kind="furnace" active={open}/>}
       <p className="mt-1 text-[11px] text-slate-400">
         {closed ? `装设 ${furnaceGrade} 阶，本回合停用，不能炼丹。` : <>
           {location ? (furnaceGrade > 0 ? `当前丹炉：${furnaceGrade} 阶` : '当前地点无丹炉') : '无可查的当前地点丹炉'}
@@ -79,8 +85,13 @@ function RecipeBook({ cultivator, location, safety }: {
   );
 }
 
-export function AlchemyPanel({ world, cultivator, location, heavenlyAlchemyControls }: { world: WorldState; cultivator: Cultivator; location: LocationNode | undefined; heavenlyAlchemyControls?:HeavenlyAlchemyControls }) {
+export function AlchemyPanel({ world, cultivator, location, heavenlyAlchemyControls,historical=false }: { world: WorldState; cultivator: Cultivator; location: LocationNode | undefined; heavenlyAlchemyControls?:HeavenlyAlchemyControls;historical?:boolean }) {
   const viewer = world.cultivators.find(({ id }) => id === cultivator.id);
+  const terrain=useMemo(()=>viewer===cultivator&&viewer.alive&&!historical&&location?.id===viewer.locationId&&
+    world.locations.includes(location)?createTerrainMapView(world,viewer,true):undefined,
+    [world,viewer,cultivator,location,historical]);
+  const workshop=useMemo(()=>terrain&&viewer
+    ?projectAlchemyWorkshop(world,terrain,viewer.locationId,{viewer,historical}):undefined,[world,terrain,viewer,historical]);
   const heavenly = viewer===cultivator?projectHeavenlyAlchemy(world,viewer):undefined;
   const safety = location && projectFurnaceSafety(world, viewer, location.id);
   const presentLocation = cultivator.alive && (location?.furnaceGrade === 0 || safety) ? location : undefined;
@@ -108,9 +119,10 @@ export function AlchemyPanel({ world, cultivator, location, heavenlyAlchemyContr
           {cultivator.alive ? '当前未在可查地点，无法查看当地丹炉和灵草。' : '修士已陨落，不再查看当地丹炉和灵草。'}
         </p>
       )}
-      {viewer && <SeedCulturePanel world={world} cultivator={viewer} />}
-      {heavenly&&<HeavenlyAlchemyRead key={`${heavenly.actorId}:${heavenly.siteId}`} view={heavenly} tick={world.tick} controls={heavenlyAlchemyControls}/>}
-      <RecipeBook cultivator={cultivator} location={presentLocation} safety={safety} />
+      {viewer && <SeedCulturePanel world={world} cultivator={viewer} workshop={workshop} />}
+      {heavenly&&<HeavenlyAlchemyRead key={`${heavenly.actorId}:${heavenly.siteId}`} view={heavenly} tick={world.tick} controls={historical?undefined:heavenlyAlchemyControls} workshop={workshop}
+        previewWorkshop={terrain&&viewer&&!historical?option=>projectAlchemyWorkshop(world,terrain,heavenly.siteId,{viewer,heatPreview:option}):undefined}/>}
+      <RecipeBook cultivator={cultivator} location={presentLocation} safety={safety} workshop={!heavenly?workshop:undefined} />
     </section>
   );
 }

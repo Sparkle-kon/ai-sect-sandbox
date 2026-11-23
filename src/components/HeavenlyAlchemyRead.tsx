@@ -1,3 +1,5 @@
+import {AlchemyWorkshopCanvas} from './AlchemyWorkshopCanvas';
+import type {AlchemyWorkshopFrame} from './alchemyWorkshopVisualModel';
 import {useEffect,useId,useRef,useState} from 'react';
 import type {HeavenlyAlchemyOption,HeavenlyAlchemyView} from '../engine/heavenlyAlchemyEngine';
 
@@ -21,9 +23,14 @@ function FurnaceSeal(){
 }
 
 type Guide=(option:HeavenlyAlchemyOption)=>Promise<void>;
+type BrewOption=Extract<HeavenlyAlchemyOption,{heavenlyAlchemyMove:'brew'}>;
+const swatch={
+  calm:['青焰','bg-emerald-300'],balanced:['金焰','bg-amber-300'],fierce:['紫焰','bg-violet-300'],
+} as const;
 
-function FurnaceChoices({recipeId,options,disabled,guide}:{
+function FurnaceChoices({recipeId,options,disabled,guide,onPreview,onEndPreview}:{
   recipeId:HeavenlyRecipeId;options:readonly HeavenlyAlchemyOption[];disabled:boolean;guide:Guide;
+  onPreview?:(option:BrewOption)=>void;onEndPreview?:(option:BrewOption)=>void;
 }){
   const label=useId();
   const recipe=HEAVENLY_ALCHEMY_RECIPES[recipeId];
@@ -38,8 +45,15 @@ function FurnaceChoices({recipeId,options,disabled,guide}:{
       {options.map(option=>{
         if(option.heavenlyAlchemyMove!=='brew'||option.targetHeavenlyRecipeId!==recipeId)return null;
         const heat=HEAVENLY_ALCHEMY_HEAT[option.heavenlyAlchemyHeat];
-        return <button key={option.heavenlyAlchemyHeat} type="button" className={control} disabled={disabled} onClick={()=>void guide(option)}>
+        const [color,swatchClass]=swatch[option.heavenlyAlchemyHeat];
+        return <button key={option.heavenlyAlchemyHeat} type="button" className={control} disabled={disabled}
+          onMouseEnter={()=>onPreview?.(option)} onMouseLeave={()=>onEndPreview?.(option)}
+          onFocus={()=>onPreview?.(option)} onBlur={()=>onEndPreview?.(option)}
+          onClick={()=>{onEndPreview?.(option);void guide(option);}}>
           <span className="block font-semibold">{heat.name}</span>
+          {onPreview&&<span className="flex flex-wrap items-center gap-1 text-xs text-slate-200">
+            <span aria-hidden="true" className={`size-2 rounded-full ${swatchClass}`}/>{color}示意
+          </span>}
           <span className="block text-xs leading-relaxed text-slate-300">{heat.description}</span>
         </button>;
       })}
@@ -83,10 +97,13 @@ function HeavenlyAlchemyStock({view,live,disabled,guide}:{
   </section>;
 }
 
-export function HeavenlyAlchemyRead({view,controls,tick}:{
-  view:HeavenlyAlchemyView;tick?:number;controls?:HeavenlyAlchemyControls;
+export function HeavenlyAlchemyRead({view,controls,tick,workshop,previewWorkshop}:{
+  view:HeavenlyAlchemyView;tick?:number;controls?:HeavenlyAlchemyControls;workshop?:AlchemyWorkshopFrame;
+  previewWorkshop?:(option:BrewOption)=>AlchemyWorkshopFrame|undefined;
 }){
   const title=useId();
+  const [open,setOpen]=useState(false);
+  const [preview,setPreview]=useState<{view:HeavenlyAlchemyView;option:BrewOption}>();
   const [guiding,setGuiding]=useState(false);
   const [failed,setFailed]=useState(false);
   const inFlight=useRef(false);
@@ -105,20 +122,26 @@ export function HeavenlyAlchemyRead({view,controls,tick}:{
     finally {inFlight.current=false;if(mounted.current)setGuiding(false);}
   };
   const live=!!controls?.guide;
+  const canPreview=live&&!disabled&&workshop?.furnace?.status==='open'&&!!previewWorkshop;
+  const previewed=canPreview&&preview?.view===view&&view.options.includes(preview.option)?previewWorkshop(preview.option):undefined;
+  const stage=previewed?.furnace?.mode==='preview'?previewed:workshop;
+  const beginPreview=canPreview?(option:BrewOption)=>setPreview({view,option}):undefined;
+  const endPreview=canPreview?(option:BrewOption)=>setPreview(previous=>previous?.option===option?undefined:previous):undefined;
   const recipes=[...new Set(view.options.filter(option=>option.heavenlyAlchemyMove==='brew').map(option=>option.targetHeavenlyRecipeId))];
-  if(!view.attempts.length&&!view.stock.length&&!(live&&recipes.length))return null;
-  return <details aria-labelledby={title} className="min-w-0 rounded-lg border border-amber-300/30 bg-gradient-to-b from-amber-950/25 to-slate-950/75 px-3">
+  if(!workshop?.furnace&&!view.attempts.length&&!view.stock.length&&!(live&&recipes.length))return null;
+  return <details aria-labelledby={title} onToggle={event=>{setOpen(event.currentTarget.open);if(!event.currentTarget.open)setPreview(undefined);}} className="min-w-0 rounded-lg border border-amber-300/30 bg-gradient-to-b from-amber-950/25 to-slate-950/75 px-3">
     <summary id={title} className="flex min-h-11 cursor-pointer items-center gap-2 font-serif text-base font-semibold text-amber-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300">
       <FurnaceSeal/>高阶火候 · 炉边听雷
     </summary>
     <div className="min-w-0 space-y-3 pb-3" aria-busy={disabled}>
+      {stage?.furnace&&<AlchemyWorkshopCanvas frame={stage} kind="furnace" active={open}/>}
       {live&&view.options.length>0&&<p className="text-xs text-slate-300">{guiding?'正在行过这一月…':'选一项，行过一月。火候不同，成色仍待出炉。'}</p>}
       {view.ward&&<p className="rounded-md border border-amber-300/25 px-2 py-1.5 text-xs text-amber-100">
         渡劫护持尚在{tick!==undefined?` · 余 ${Math.max(0,view.ward.expiresTick-tick)} 月`:''}。
       </p>}
       <HeavenlyAlchemyReceipts view={view}/>
       {live&&recipes.map(recipeId=><FurnaceChoices key={recipeId} recipeId={recipeId} options={view.options}
-        disabled={disabled} guide={guide}/>)}
+        disabled={disabled} guide={guide} onPreview={beginPreview} onEndPreview={endPreview}/>)}
       <HeavenlyAlchemyStock view={view} live={live} disabled={disabled} guide={guide}/>
       {failed&&<p role="status" className="text-xs text-amber-200">此事未成，请核对当前炉位、灵草与灵石。</p>}
     </div>

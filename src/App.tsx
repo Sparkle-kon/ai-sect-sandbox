@@ -461,7 +461,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
     simulation,selectedCultivator,cockpitOpen,dashboardOpen,storyEntryOpen,workspace,onSelectCultivator:setSelectedCultivatorId,
     onClearAvatarNotice:()=>setAvatarNotice(undefined),
   });
-  const inspect=(section:'profile'|'cultivation'|'mind')=><CultivatorInspectorBridge world={visibleWorld}
+  const inspect=(section:'profile'|'cultivation'|'mind')=><CultivatorInspectorBridge world={visibleWorld} historical={Boolean(preview)}
     cultivator={selectedCultivator} onSelectCultivator={setSelectedCultivatorId} section={section} panels={guidance.inspector}/>;
   const openWorkspace = (next: WorkspaceId) => {
     if (workspace !== next) {
