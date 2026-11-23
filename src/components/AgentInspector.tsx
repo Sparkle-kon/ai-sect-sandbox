@@ -277,7 +277,7 @@ export const AgentInspector: React.FC<AgentInspectorProps> = ({
       <SectEconomyPanel cultivator={cultivator} sect={sect} world={world} medicineControls={medicineControls} seasonReviewControls={seasonReviewControls} />
       <SectDiplomacyPanel sect={sect} world={world} />
       </>}
-      {!workspaceSection && <WorldOccasionsPanel world={world} cultivator={cultivator} />}
+      {!workspaceSection && <WorldOccasionsPanel world={world} cultivator={cultivator} historical={historical} />}
       {profile && <SpiritBeastPanel world={world} cultivator={cultivator} location={location} beasts={world.spiritBeasts ?? []} />}
       {cultivation && <>
       <TribulationPanel cultivator={cultivator} />

@@ -1,8 +1,10 @@
+import {DungeonBoardCanvas} from './DungeonBoardCanvas';
+import type {DungeonBoardFrame} from './dungeonBoardModel';
 import {VisualDuelArena} from './VisualDuelArena';
 import type {VisualDuelArenaFrame} from './visualDuelArenaModel';
 import {useId,useRef,useState} from 'react';
 import type {DungeonMove,DungeonOutcome,DungeonStep} from '../types/expeditionDungeon';
-import type {ExpeditionDungeonView} from '../engine/expeditionDungeonEngine';
+import type {DungeonOption,ExpeditionDungeonView} from '../engine/expeditionDungeonEngine';
 
 const rooms=['garden','hall','sanctum'] as const;
 type Room=typeof rooms[number];
@@ -28,7 +30,9 @@ function DungeonMap({at,visited}:{at?:Room;visited:ReadonlySet<Room>}){
   </ol>;
 }
 
-type DungeonExpeditionOption=ExpeditionDungeonView['options'][number];
+type DungeonExpeditionOption=DungeonOption;
+const sameOption=(a:DungeonOption,b:DungeonOption)=>a.action===b.action&&a.dungeonMove===b.dungeonMove&&
+  a.targetOccasionId===b.targetOccasionId&&a.targetDungeonRoomId===b.targetDungeonRoomId;
 export interface DungeonExpeditionControls {
   busy?:boolean;
   guide?:(option:DungeonExpeditionOption)=>Promise<boolean>;
@@ -54,22 +58,31 @@ function stepText(step:DungeonStep){
   }
 }
 
-export function DungeonExpeditionRead({view,viewerId,tick,named,controls,duel}:{
+export function DungeonExpeditionRead({view,viewerId,tick,named,controls,duel,board,artActive=true}:{
   view:ExpeditionDungeonView;viewerId:string;tick:number;named:(id:string)=>string;controls?:DungeonExpeditionControls;duel?:VisualDuelArenaFrame;
+  board?:DungeonBoardFrame;artActive?:boolean;
 }){
   const titleId=useId();
   const [failed,setFailed]=useState(false);
   const [advancing,setAdvancing]=useState(false);
   const pendingRef=useRef(false);
-  const mine=view.members.find(member=>member.actorId===viewerId);
+  const members=board?board.members:view.members;
+  const steps=board?board.steps:view.steps;
+  const outcome=board?board.outcome:view.outcome;
+  const mine=members.find(member=>member.actorId===viewerId);
   const inside=mine!==undefined&&mine.leftTick===undefined;
+  const at=board?board.at:inside?view.room:undefined;
+  const allowed=board?board.historical||outcome?[]:view.options.filter(option=>board.options.filter(row=>sameOption(row,option)).length===1)
+    :view.options;
+  const admittedDuel=board?board.at==='sanctum'&&board.boss&&!board.historical&&duel?.kind==='dungeon'&&duel.siteId===board.siteId&&duel.tick===board.tick&&!duel.historical?duel:undefined:duel;
+  const boss=board?board.boss:inside&&view.room!=='garden'?{hp:view.bossHp,maxHp:view.bossMaxHp}:undefined;
   const busy=!!controls?.busy||advancing;
   const visited=new Set<Room>();
   if(mine)visited.add('garden');
   if((inside&&view.room!=='garden')||view.steps.some(step=>step.actorId===viewerId&&(step.move==='strike'||step.move==='claim')))visited.add('hall');
   if((inside&&view.room==='sanctum')||view.steps.some(step=>step.actorId===viewerId&&step.move==='claim'))visited.add('sanctum');
   const onAdvance=async(option:DungeonExpeditionOption)=>{
-    if(!controls?.guide||busy||pendingRef.current||!view.options.includes(option))return;
+    if(!controls?.guide||busy||pendingRef.current||!allowed.includes(option))return;
     pendingRef.current=true;
     setAdvancing(true);
     setFailed(false);
@@ -80,33 +93,35 @@ export function DungeonExpeditionRead({view,viewerId,tick,named,controls,duel}:{
     <header>
       <p className="text-xs font-semibold tracking-wider text-cyan-300">秘境行路</p>
       <h4 id={titleId} className="font-serif text-base font-semibold text-cyan-50">
-        {inside?roomLabels[view.room]:'古境三重门'}
+        {at?roomLabels[at]:'古境三重门'}
       </h4>
-      {!view.outcome&&<p className="mt-1 text-xs text-slate-300">距秘境关闭 {Math.max(0,view.expiresTick-tick)} 月。</p>}
+      {!outcome&&!board?.historical&&mine?.leftTick===undefined&&
+        <p className="mt-1 text-xs text-slate-300">距秘境关闭 {Math.max(0,(board?.expiresTick??view.expiresTick)-tick)} 月。</p>}
     </header>
-    <DungeonMap visited={visited} at={inside?view.room:undefined}/>
-    {duel&&<VisualDuelArena frame={duel}/>}
-    {!duel?.right.hp&&inside&&view.room!=='garden'&&<div className="flex min-w-0 flex-wrap items-center gap-2 text-sm text-cyan-100">
-      <span>护宝妖王：{view.bossHp} / {view.bossMaxHp} 气血</span>
-      <meter aria-label="护宝妖王气血" min={0} max={view.bossMaxHp} value={view.bossHp} className="h-2 w-24 accent-cyan-300"/>
+    {board?<DungeonBoardCanvas frame={board} active={artActive}/>:<DungeonMap visited={visited} at={at}/>}
+    {admittedDuel&&<VisualDuelArena frame={admittedDuel}/>}
+    {!admittedDuel?.right.hp&&boss&&<div className="flex min-w-0 flex-wrap items-center gap-2 text-sm text-cyan-100">
+      <span>护宝妖王：{boss.hp} / {boss.maxHp} 气血</span>
+      <meter aria-label="护宝妖王气血" min={0} max={boss.maxHp} value={boss.hp} className="h-2 w-24 accent-cyan-300"/>
     </div>}
-    {view.outcome&&<p role="status" className="text-sm text-slate-200">{outcomeText[view.outcome]}</p>}
-    {view.members.length>0&&<ul aria-label="此行探者" className="space-y-1 text-xs text-slate-300">
-      {view.members.map(member=><li key={member.actorId} className="[overflow-wrap:anywhere]">
-        {named(member.actorId)}{member.actorId===viewerId?'（本人）':''}{!view.outcome&&view.leaderId===member.actorId?' · 领路':''}：{member.exit?exitText[member.exit]:'仍在秘境'}
+    {outcome&&<p role="status" className="text-sm text-slate-200">{outcomeText[outcome]}</p>}
+    {members.length>0&&<ul aria-label="此行探者" className="space-y-1 text-xs text-slate-300">
+      {members.map(member=><li key={member.actorId} className="[overflow-wrap:anywhere]">
+        {named(member.actorId)}{member.actorId===viewerId?'（本人）':''}{!board&&!outcome&&view.leaderId===member.actorId?' · 领路':''}：
+        {member.exit?exitText[member.exit]:board?(member.actorId===viewerId&&board.at?'仍在秘境':'见于此行实录'):'仍在秘境'}
         {typeof member.hpLost==='number'&&member.hpLost>0?` · 实损 ${member.hpLost} 气血`:''}
       </li>)}
     </ul>}
-    {view.steps.length>0&&<details className="rounded border border-slate-800 px-2">
+    {steps.length>0&&<details className="rounded border border-slate-800 px-2">
       <summary className="min-h-11 cursor-pointer py-2 text-sm text-slate-200">查看此行实录</summary>
       <ol className="space-y-1 pb-2 text-xs text-slate-300">
-        {view.steps.map(step=><li key={step.eventId} className="[overflow-wrap:anywhere]">{named(step.actorId)}：{stepText(step)}</li>)}
+        {steps.map(step=><li key={step.eventId} className="[overflow-wrap:anywhere]">{named(step.actorId)}：{stepText(step)}</li>)}
       </ol>
     </details>}
-    {controls?.guide&&view.options.length>0&&<div aria-busy={busy} className="space-y-2">
+    {controls?.guide&&allowed.length>0&&<div aria-busy={busy} className="space-y-2">
       <p className="text-xs text-slate-300">{advancing?'正在继续此行…':'选一项，行过一月。'}</p>
       <div role="group" aria-label="此刻可行" className="flex flex-wrap gap-2">
-        {view.options.map(option=><button type="button" key={option.dungeonMove} className={choice} disabled={busy}
+        {allowed.map(option=><button type="button" key={option.dungeonMove} className={choice} disabled={busy}
           onClick={()=>void onAdvance(option)}>{moveText[option.dungeonMove]}</button>)}
       </div>
     </div>}

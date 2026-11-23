@@ -1,3 +1,5 @@
+import {useState} from 'react';
+import {projectDungeonBoard} from './dungeonBoardModel';
 import {projectVisualDuelArena} from './visualDuelArenaModel';
 import {createTerrainMapView} from './terrainMapView';
 import {DungeonExpeditionRead,type DungeonExpeditionControls} from './DungeonExpeditionRead';
@@ -42,6 +44,7 @@ function OmenReceipts({ rows }: { rows: readonly ExpeditionOmenView[] }) {
 
 
 export function WorldOccasionsPanel({ world, cultivator, arenaControls, dungeonControls, historical=false }: { world: WorldState; cultivator: Cultivator; arenaControls?:TournamentArenaControls; dungeonControls?:DungeonExpeditionControls; historical?:boolean }) {
+  const [expanded,setExpanded]=useState(false);
   const names = new Map(world.cultivators.map(({ id, name }) => [id, name]));
   const places = new Map(world.locations.map(({ id, name }) => [id, name]));
   const named = (id: string) => names.get(id) ?? '修士未详';
@@ -57,7 +60,9 @@ export function WorldOccasionsPanel({ world, cultivator, arenaControls, dungeonC
     <section className="space-y-2 pt-2 border-t border-slate-800" aria-label="天下盛会与秘境">
       <h4 className="text-xs font-semibold text-slate-200">天下盛会与秘境</h4>
       {open.length + recent.length + clues.length === 0 ? <p className="text-[11px] text-slate-400">尚无盛会或远征记录。</p> : (
-        <details className="rounded border border-slate-800/80 bg-slate-950/50 px-2 py-1.5">
+        <details className="rounded border border-slate-800/80 bg-slate-950/50 px-2 py-1.5" onToggle={event=>{
+          if(event.target===event.currentTarget)setExpanded(event.currentTarget.open);
+        }}>
           <summary className="min-h-11 cursor-pointer py-2 text-xs text-slate-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300">查看盛会 · 活跃 {open.length} 场 · 近期结案 {recent.length} 场</summary>
           <ul className="mt-2 space-y-2">
             {[...open, ...recent].map((occasion) => {
@@ -74,7 +79,8 @@ export function WorldOccasionsPanel({ world, cultivator, arenaControls, dungeonC
                   siteName={places.get(arena.siteId)} championName={occasion.championId?named(occasion.championId):undefined} controls={arenaControls}/></li>;
               }
               const dungeon=viewer&&occasion.kind==='expedition'?projectExpeditionDungeon(world,viewer,occasion.id):undefined;
-              const duel=dungeon?projectVisualDuelArena(world,terrain,{kind:'dungeon',occasionId:occasion.id},{viewer,historical}):undefined;
+              const board=dungeon&&viewer?projectDungeonBoard(world,terrain,occasion.id,{viewer,historical}):undefined;
+              const duel=board?.boss&&!historical?projectVisualDuelArena(world,terrain,{kind:'dungeon',occasionId:occasion.id},{viewer,historical}):undefined;
               const linkedOmen = occasion.omenId !== undefined;
               const expeditionResults = linkedOmen
                 ? occasion.expeditions.filter(({ cultivatorId }) => cultivatorId === viewer?.id)
@@ -107,8 +113,9 @@ export function WorldOccasionsPanel({ world, cultivator, arenaControls, dungeonC
                     ))}
                   </ol>
                 )}
-                {dungeon&&viewer&&<DungeonExpeditionRead view={dungeon} viewerId={viewer.id} tick={world.tick} named={named} controls={dungeonControls} duel={duel}/>}
-                {!dungeon&&expeditionResults.length > 0 && (
+                {dungeon&&board&&viewer&&<DungeonExpeditionRead view={dungeon} board={board} artActive={expanded}
+                  viewerId={viewer.id} tick={world.tick} named={named} controls={historical?undefined:dungeonControls} duel={duel}/>}
+                {!board&&expeditionResults.length > 0 && (
                   <ul className="max-h-40 overflow-y-auto space-y-1" aria-label="秘境远征结果">
                     {expeditionResults.map((result, index) => (
                       <li key={`${result.cultivatorId}-${result.tick}-${index}`}>
