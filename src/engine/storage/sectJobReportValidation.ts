@@ -1,6 +1,7 @@
 import { SECT_JOB_TIERS, type SectJobReport, type SectJobReportEffect, type SectJobReportRow } from '../../types/sectJobs';
 import type { ChronicleAnchor, WorldState } from '../../types/world';
 import { SECT_JOB_IDS } from '../sectQuirkCatalog';
+import { sectFestivalForJob, sectMonthAt } from '../sectFestivals';
 import { arr, fail as rejectShape, id, num, oid, one, optional, SAVE_COLLECTION_LIMIT, structure, tick, type Validator } from './primitives';
 
 const amount = num(-100, 100);
@@ -20,10 +21,10 @@ export const sectJobReportShape=structure({
 
 function nativeAmount(row:SectJobReportRow,effect:SectJobReportEffect):boolean{
   switch(effect.kind){
-    case 'qi': return effect.amount>0&&(row.jobId==='cultivate'&&effect.amount<=100||row.jobId==='kitchen'&&effect.amount<=3);
+    case 'qi': return effect.amount>0&&((row.jobId==='cultivate'||row.jobId==='festival-review')&&effect.amount<=100||row.jobId==='kitchen'&&effect.amount<=3);
     case 'herb': return row.jobId==='gather'&&(effect.amount===1||effect.amount===2)||
       row.jobId==='kitchen'&&effect.amount===-1&&(effect.herbId==='jade_leaf'||effect.herbId==='earth_root');
-    case 'contribution': return row.jobId==='guard'&&effect.amount>0&&effect.amount<=3;
+    case 'contribution': return (row.jobId==='guard'||row.jobId==='festival-debt')&&effect.amount>0&&effect.amount<=3;
     case 'hp': return false;
   }
 }
@@ -40,11 +41,20 @@ function followUpAmount(row:SectJobReportRow,effect:SectJobReportEffect):boolean
 
 function matchesExactJobId(row:SectJobReportRow,tick:number):boolean{
   const prefix=`evt-${tick}-${row.discipleId}-`;
-  if(row.phase!=='performed')return true;
+  // Seasonal routes cannot be persisted as completed trades, and a travelled recruit
+  // is not an enrollment. Retained event/ledger evidence is checked separately.
+  if(row.jobId==='festival-market'){
+    return row.phase!=='performed'&&(row.sourceEventId===undefined||
+      row.sourceEventId.startsWith(`evt-${tick}-market-order-`)||row.sourceEventId===`${prefix}explore`);
+  }
+  if(row.phase!=='performed')return !sectFestivalForJob(row.jobId)||row.sourceEventId===undefined||row.sourceEventId===`${prefix}explore`;
   switch(row.jobId){
     case 'explore': return row.sourceEventId===undefined||row.sourceEventId===`${prefix}explore`;
     case 'gather': return row.sourceEventId===`${prefix}alchemy`;
     case 'kitchen': return row.sourceEventId===`${prefix}management-kitchen`;
+    case 'festival-recruit': return row.sourceEventId?.startsWith(`evt-settlement-${tick}-recruitment-`)===true;
+    case 'festival-social': return row.sourceEventId===`${prefix}social`;
+    case 'festival-debt': return row.sourceEventId===`${prefix}management-festival-debt`;
     case 'guard': return row.sourceEventId===`${prefix}management-guard`||row.sourceEventId===`${prefix}guard_duty`;
     default:return true;
   }
@@ -54,7 +64,26 @@ function matchesReceipt(world:WorldState,report:SectJobReport,row:SectJobReportR
   const {settledTick}=report;
   const calendar=world.year*12+world.month-(world.tick-settledTick);
   if(event.tick!==settledTick||event.year*12+event.month!==calendar)return false;
-  if(event.locationId!==undefined)return event.locationId===row.siteId&&event.actorIds.includes(row.discipleId);
+  if(event.locationId!==undefined){
+    if(event.locationId!==row.siteId||!event.actorIds.includes(row.discipleId))return false;
+    if(row.jobId==='festival-recruit'&&row.phase==='performed'){
+      const record=world.settlements.records.find(entry=>`evt-${entry.id}`===event.id);
+      return event.category==='diplomacy'&&event.actorIds.length===2&&event.actorIds[0]===row.discipleId&&
+        (!record||record.tick===settledTick&&record.kind==='recruitment'&&record.actorId===row.discipleId&&
+          record.cultivatorId===event.actorIds[1]&&record.sectId===report.sectId);
+    }
+    if(row.jobId==='festival-social'&&row.phase==='performed')
+      return event.category==='diplomacy'&&event.actorIds.length===2&&event.actorIds[0]===row.discipleId;
+    if(row.jobId==='festival-debt'&&row.phase==='performed')
+      return event.category==='diplomacy'&&event.actorIds.length===1&&
+        (!('witnessScope' in event)||event.witnessScope==='participants');
+    if(row.jobId==='festival-market'&&event.id.startsWith(`evt-${settledTick}-market-order-`)){
+      const order=world.markets.orders.find(entry=>event.id===`evt-${settledTick}-market-${entry.id}`);
+      return event.category==='diplomacy'&&event.actorIds.length===1&&
+        (!order||order.side==='sell'&&order.actorId===row.discipleId&&order.locationId===row.siteId&&order.placedTick===settledTick);
+    }
+    return true;
+  }
   // The sealed courier deliberately hides identities and location in its raw shell. Check its
   // matching actual holder/clock without reading private content; no other roomless event qualifies.
   return row.jobId==='deliver'&&row.phase==='on_route'&&event.category==='diplomacy'&&event.actorIds.length===0&&
@@ -102,6 +131,11 @@ export function validateSectJobReport(
     if(!knownActors.has(row.discipleId)||row.discipleId===report.leaderId||seenActors.has(row.discipleId))
       return fail('sectManagement.latestReport.disciples');
     seenActors.add(row.discipleId);
+    const festival=sectFestivalForJob(row.jobId);
+    if(festival&&(sectMonthAt(world,report.settledTick)!==festival.month||
+      row.jobId==='festival-review'&&(report.settledTick-state.foundedTick<12||(report.settledTick-state.foundedTick)%12!==0)||
+      row.jobId==='festival-debt'&&(state.starterId!=='qingyun-odd-jobs'||report.settledTick-state.foundedTick<6)))
+      return fail('sectManagement.latestReport.festival');
     if(row.phase==='unavailable'&&(row.siteId!==undefined||row.sourceEventId!==undefined)||
         row.phase!=='unavailable'&&(row.siteId===undefined||!sites.has(row.siteId))||
         (row.phase==='performed')!==(row.tier!==undefined)||
@@ -123,6 +157,9 @@ export function validateSectJobReport(
       effectKeys.add(key);
       if(effect.stage==='follow_up')followUps++;
     }
+    if(row.phase==='performed'&&(row.jobId==='festival-review'&&!effectKeys.has('native:qi')||
+        row.jobId==='festival-debt'&&!effectKeys.has('native:contribution')))
+      return fail('sectManagement.latestReport.effects');
     if(followUps!==(row.tier!==undefined&&row.tier!=='success'?1:0))
       return fail('sectManagement.latestReport.effects');
   }

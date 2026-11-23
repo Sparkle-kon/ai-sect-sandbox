@@ -3,14 +3,15 @@ import {SECT_JOB_TIERS,type SectJobObservation,type SectJobReportEffect,type Sec
 import type {ManagementBuildingId} from '../types/sectManagement';
 import type {Cultivator,SpiritRoot,WorldState} from '../types/world';
 import {effectiveSectQuirks} from './sectQuirkAssignment';
-import {combineSectJobModifiers,type SectJobId} from './sectQuirkCatalog';
+import {sectFestivalForJob} from './sectFestivals';
+import {BASE_SECT_JOB_IDS,combineSectJobModifiers,type SectJobId} from './sectQuirkCatalog';
 
 type Odds=Readonly<Record<SectJobTier,number>>;
 type JobProfile={readonly base:Odds;readonly building:ManagementBuildingId;readonly roots:readonly SpiritRoot[]};
 function odds(success:number,windfall:number,mishap:number,disaster:number):Odds{
   return {success,windfall,mishap,disaster};
 }
-const PROFILES:Readonly<Record<SectJobId,JobProfile>>={
+const PROFILES:Readonly<Record<typeof BASE_SECT_JOB_IDS[number],JobProfile>>={
   gather:{base:odds(57,20,18,5),building:'hall',roots:['木','水']},
   explore:{base:odds(52,19,22,7),building:'trainingGround',roots:['雷','水']},
   cultivate:{base:odds(72,12,14,2),building:'library',roots:['天灵根']},
@@ -31,7 +32,8 @@ const canDisaster=(actor:Cultivator)=>Number.isFinite(actor.hp)&&Number.isFinite
 
 /** Integer weights, not percentages. A consequence with no actual room has zero weight. */
 export function sectJobOutcomeOdds(world:WorldState,actor:Cultivator,job:SectJobId):Odds{
-  const settings=PROFILES[job];
+  const style=sectFestivalForJob(job)?.replaces??job;
+  const settings=PROFILES[style as keyof typeof PROFILES];
   const level=Math.max(0,Math.min(6,world.sectManagement?.buildings[settings.building]??0));
   const skill=Math.max(0,REALM_ORDER.indexOf(actor.realm))*2+Math.floor(actor.realmStage/3);
   const root=settings.roots.includes(actor.spiritRoot)?4:0;

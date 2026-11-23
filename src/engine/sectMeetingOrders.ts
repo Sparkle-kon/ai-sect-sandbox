@@ -1,18 +1,21 @@
 import type {SectJobAssignment,SectJobEvidence,SectJobObservation,SectJobPlan} from '../types/sectJobs';
 import type {Cultivator,WorldEvent,WorldState} from '../types/world';
 import {SECT_JOB_IDS} from './sectQuirkCatalog';
-import {eligibleSectDisciples,observeSectJob,settleSectJobChore} from './sectJobs';
+import {eligibleSectDisciples,observeSectJob,quoteSectJob,settleSectJobChore} from './sectJobs';
+import {sectFestivalForJob} from './sectFestivals';
 import {canFinishSectPairBlame} from './sectPairDrama';
 import type {SectPairDramaPlan} from '../types/sectPairDrama';
 
 /** Read and copy the player's whole board at once. A duplicate or foreign disciple voids that board. */
 export function quoteSectMeetingOrders(world:WorldState, rows:readonly SectJobAssignment[]):readonly SectJobAssignment[]|undefined {
   if(!world.sectManagement||!Array.isArray(rows))return undefined;
-  const eligible=new Set(eligibleSectDisciples(world).map(actor=>actor.id));
+  const eligible=new Map(eligibleSectDisciples(world).map(actor=>[actor.id,actor]));
   const seen=new Set<string>(),orders:SectJobAssignment[]=[];
   for(const row of rows){
     if(!row||typeof row!=='object'||Object.keys(row).length!==2||!Object.hasOwn(row,'discipleId')||!Object.hasOwn(row,'jobId')||
       !eligible.has(row.discipleId)||!SECT_JOB_IDS.includes(row.jobId)||seen.has(row.discipleId))return undefined;
+    const actor=eligible.get(row.discipleId);
+    if(!actor||sectFestivalForJob(row.jobId)&&quoteSectJob(world,actor,row.jobId).kind==='blocked')return undefined;
     seen.add(row.discipleId);
     orders.push(Object.freeze({discipleId:row.discipleId,jobId:row.jobId}));
   }

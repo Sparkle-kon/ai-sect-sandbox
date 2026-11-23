@@ -14,12 +14,18 @@ import {availableSectEconomyActions} from './sectEconomyEngine';
 import {availableSettlementActions} from './settlementEngine';
 import {availableSparringActions} from './sparringEngine';
 import {isRetiredFromService} from './serviceRetirementEngine';
-import {SECT_JOB_IDS,type SectJobId} from './sectQuirkCatalog';
+import {SECT_FESTIVALS,sectFestivalDebtDue,sectFestivalForJob,sectFestivalReviewDue,sectMonthAt} from './sectFestivals';
+import {BASE_SECT_JOB_IDS,SECT_JOB_IDS,type SectJobId} from './sectQuirkCatalog';
 
 export {SECT_JOB_IDS,type SectJobId} from './sectQuirkCatalog';
 export type {SectJobAssignment,SectJobDefinition,SectJobEvidence,SectJobObservation,SectJobPlan,SectJobReportEffect} from '../types/sectJobs';
 
 const card=(id:SectJobId,label:string,intent:string):SectJobDefinition=>({id,label,intent});
+const festivalCard=(id:typeof SECT_FESTIVALS[number]['jobId']):SectJobDefinition=>{
+  const entry=SECT_FESTIVALS.find(row=>row.jobId===id);
+  if(!entry)throw new Error('Unknown seasonal job');
+  return card(id,entry.jobLabel,entry.intent);
+};
 export const SECT_JOB_DEFINITIONS:Readonly<Record<SectJobId,SectJobDefinition>>={
   gather:card('gather','下山采药','有灵草便采，身边没有就先寻药圃。'),
   explore:card('explore','外出历练','挑一处认得的地方走走。机缘有没有，到了才知。'),
@@ -31,6 +37,11 @@ export const SECT_JOB_DEFINITIONS:Readonly<Record<SectJobId,SectJobDefinition>>=
   recruit:card('recruit','下山招新','先去有村社的地方访人。入门要对方也愿意。'),
   challenge:card('challenge','去别宗踢馆','在场才能请人切磋，还得对方肯接这招。'),
   matchmaking:card('matchmaking','参加联谊','与现场道友说说话，结不结缘不由一席话定。'),
+  'festival-review':festivalCard('festival-review'),
+  'festival-recruit':festivalCard('festival-recruit'),
+  'festival-social':festivalCard('festival-social'),
+  'festival-debt':festivalCard('festival-debt'),
+  'festival-market':festivalCard('festival-market'),
 };
 const herbNames:Readonly<Record<HerbId,string>>={jade_leaf:'翡翠灵叶',earth_root:'地脉灵根',star_bloom:'星辉花',shadow_moss:'幽影苔'};
 const compare=(a:string,b:string)=>a<b?-1:a>b?1:0;
@@ -89,18 +100,73 @@ function homeChore(world:WorldState,actor:Cultivator,jobId:'kitchen'|'guard'):Se
   return {kind:'chore',phase:'performed',chore:jobId,siteId:site.id,decision};
 }
 
-export function planSectJob(world:WorldState,actor:Cultivator,jobId:SectJobId):SectJobPlan {
+export function visibleSectJobDefinitions(world:WorldState):readonly SectJobDefinition[]{
+  const actionTick=world.tick+1;
+  const seasonal=SECT_FESTIVALS.find(entry=>entry.month===sectMonthAt(world,actionTick));
+  const unlocked=seasonal&&(seasonal.id!=='review'||sectFestivalReviewDue(world,actionTick))&&
+    (seasonal.id!=='debt'||sectFestivalDebtDue(world,actionTick));
+  return [...BASE_SECT_JOB_IDS.map(id=>SECT_JOB_DEFINITIONS[id]),...(unlocked?[SECT_JOB_DEFINITIONS[seasonal.jobId]]:[])];
+}
+
+export function quoteSectJob(world:WorldState,actor:Cultivator,jobId:SectJobId):SectJobPlan{
+  return planSectJobForTick(world,actor,jobId,world.tick+1);
+}
+
+export function planSectJob(world:WorldState,actor:Cultivator,jobId:SectJobId):SectJobPlan{
+  return planSectJobForTick(world,actor,jobId,world.tick);
+}
+
+function planSectJobForTick(world:WorldState,actor:Cultivator,jobId:SectJobId,actionTick:number):SectJobPlan {
   if(!SECT_JOB_IDS.includes(jobId)||!eligibleSectDisciples(world).includes(actor))return unavailable('此人不在本宗这次晨会的名册上。');
   const here=unique(world.locations,actor.locationId);
   if(!here||!holdable(world,actor,here))return unavailable('此人另有要事在身，这次差事先搁下。');
+  const seasonal=sectFestivalForJob(jobId);
+  if(seasonal&&sectMonthAt(world,actionTick)!==seasonal.month)return unavailable('这项节令差事已不在当月。');
   const known=()=>directorKnownReachableSites(world,actor);
   const toward=(type:LocationNode['type'])=>travel(known().find(site=>site.type===type));
   const localTalk=(differentSect:boolean)=>{
     const target=rankOrdinaryIntents(world,actor).find(option=>option.action==='SOCIALIZE'&&
       (!differentSect||world.cultivators.some(row=>row.id===option.targetCultivatorId&&row.sectId!==actor.sectId)));
-    return target?.action==='SOCIALIZE'?native({chosenAction:'SOCIALIZE',targetCultivatorId:target.targetCultivatorId,innerMonologue:inward},here.id,jobId==='matchmaking'?'performed':'on_route'):undefined;
+    return target?.action==='SOCIALIZE'?native({chosenAction:'SOCIALIZE',targetCultivatorId:target.targetCultivatorId,innerMonologue:inward},here.id,jobId==='matchmaking'||jobId==='festival-social'?'performed':'on_route'):undefined;
   };
   switch(jobId){
+    case 'festival-recruit':{
+      const calm=(site:LocationNode)=>world.settlements.villages.some(village=>village.locationId===site.id&&
+        village.population>0&&village.stress<30);
+      if(calm(here)){
+        const volunteer=availableSettlementActions(actor,world,actionTick).find(row=>row.action==='RECRUIT_SETTLER');
+        if(volunteer)return native({chosenAction:'RECRUIT_SETTLER',targetSettlementId:volunteer.targetSettlementId,
+          targetVolunteerId:volunteer.targetVolunteerId,innerMonologue:'春招先问本人的心意。'},here.id);
+        return unavailable('这里暂无可自愿入门的人，或领事弟子不能办入门礼。');
+      }
+      return travel(known().find(calm))??unavailable('没有走得通的安稳村社。');
+    }
+    case 'festival-social':
+    case 'festival-market':{
+      const date=actionTick===world.tick?world:{...world,tick:actionTick};
+      const open=(site:LocationNode)=>site.type==='market'&&!marketClosureReason(world,site.id)&&!marketClosureReason(date,site.id);
+      if(!open(here))return travel(known().find(open))??unavailable('眼下没有认得路的开市坊间。');
+      if(jobId==='festival-social')return localTalk(true)??unavailable('这处没有可当面论道的外门道友。');
+      const order=availableMarketActions(actor,world).find(row=>row.action==='PLACE_MARKET_SELL'&&
+        world.markets.orders.some(bid=>bid.side==='buy'&&bid.status==='open'&&bid.actorId!==actor.id&&
+          bid.locationId===here.id&&bid.good===row.marketGood&&bid.expiresTick>actionTick&&bid.remaining>=1&&
+          bid.limitPrice>=row.marketLimitPrice&&bid.escrowStones>=row.marketLimitPrice));
+      if(order?.action==='PLACE_MARKET_SELL')return native({chosenAction:'PLACE_MARKET_SELL',marketGood:order.marketGood,
+        marketQuantity:order.marketQuantity,marketLimitPrice:order.marketLimitPrice,innerMonologue:'对照同地买价，再挂一份货。'},here.id,'on_route');
+      return unavailable('带来的货暂无合适的同地买价。');
+    }
+    case 'festival-review':{
+      const active=authority(world);
+      if(!active||!sectFestivalReviewDue(world,actionTick))return unavailable('本门尚未轮到这一回年考。');
+      if(here.id!==active.home.id)return travel(known().find(site=>site===active.home))??unavailable('回山的路现在走不通。');
+      if(actor.qiProgress>=100)return unavailable('这位弟子气已充盈，无须再演这一场。');
+      return native({chosenAction:'CULTIVATE',innerMonologue:'先把门里的功课练熟。'},here.id);
+    }
+    case 'festival-debt':{
+      if(!sectFestivalDebtDue(world,actionTick))return unavailable('眼下没有到期余款。');
+      const guard=homeChore(world,actor,'guard');
+      return guard.kind==='chore'?{...guard,chore:'festival-debt',decision:{chosenAction:'REST',innerMonologue:'候账时先守好山门。'}}:guard;
+    }
     case 'gather':{
       const choice=availableAlchemy(actor,world).find(row=>row.action==='GATHER_HERBS');
       if(choice?.targetHerbId)return native({chosenAction:'GATHER_HERBS',targetHerbId:choice.targetHerbId,innerMonologue:inward},here.id);
@@ -162,21 +228,22 @@ export function snapshotSectJobEvidence(world:WorldState,actor:Cultivator):SectJ
     contribution:actor.contribution,...(site?{siteHerbs:{...site.herbs}}:{})};
 }
 
-function choreId(world:WorldState,actor:Cultivator,chore:'kitchen'|'guard'){
+function choreId(world:WorldState,actor:Cultivator,chore:'kitchen'|'guard'|'festival-debt'){
   return `evt-${world.tick}-${actor.id}-management-${chore}`;
 }
 export function settleSectJobChore(world:WorldState,actor:Cultivator,plan:Extract<SectJobPlan,{kind:'chore'}>):WorldEvent|undefined{
   const active=authority(world);
   if(!active||actor.currentAction!=='REST'||actor.locationId!==plan.siteId||active.home.id!==plan.siteId||
     !eligibleSectDisciples(world).includes(actor))return;
-  const current=homeChore(world,actor,plan.chore),id=choreId(world,actor,plan.chore);
-  if(current.kind!=='chore'||current.siteId!==plan.siteId||world.events.some(event=>event.id===id))return;
+  const current=plan.chore==='festival-debt'?planSectJob(world,actor,'festival-debt'):homeChore(world,actor,plan.chore);
+  const id=choreId(world,actor,plan.chore);
+  if(current.kind!=='chore'||current.chore!==plan.chore||current.siteId!==plan.siteId||world.events.some(event=>event.id===id))return;
   const base={id,tick:world.tick,year:world.year,month:world.month,locationId:plan.siteId,witnessScope:'participants'} as const;
-  if(plan.chore==='guard'){
+  if(plan.chore==='guard'||plan.chore==='festival-debt'){
     const before=actor.contribution;
-    rewardContribution(actor,world,2);
+    rewardContribution(actor,world,plan.chore==='festival-debt'?3:2);
     if(actor.contribution<=before)return;
-    return {...base,category:'diplomacy',actorIds:[actor.id],title:'山门这一班',
+    return {...base,category:'diplomacy',actorIds:[actor.id],title:plan.chore==='festival-debt'?'山门候账':'山门这一班',
       description:`${actor.name}在山门留守，门中记下${actor.contribution-before}点贡献。`};
   }
   const herb=ingredient(active.home),present=diners(world,actor,active.home);
@@ -257,7 +324,7 @@ export function observeSectJob(world:WorldState,actor:Cultivator,assignment:Sect
   if(plan.kind==='chore'){
     if(validEvent?.id!==choreId(world,actor,plan.chore)||actor.locationId!==plan.siteId)
       return blocked('这回没能完成山上的差事。');
-    if(plan.chore==='guard')return result('performed',validEvent.description,contribution);
+    if(plan.chore==='guard'||plan.chore==='festival-debt')return result('performed',validEvent.description,contribution);
     const site=unique(world.locations,plan.siteId);
     const costs=(['earth_root','jade_leaf'] as const).flatMap((herbId):SectJobReportEffect[]=>{
       if(!site||!before.siteHerbs||site.herbs[herbId]-before.siteHerbs[herbId]!==-1)return [];
@@ -289,6 +356,6 @@ export function observeSectJob(world:WorldState,actor:Cultivator,assignment:Sect
   if(receipt==='tendered')return result('on_route','已携货到场，对方未到，货还在手里。');
   const action=decision.chosenAction;
   const preliminary=action==='PLACE_MARKET_SELL'||action==='SEALED_COURIER'||action==='SPARRING'||
-    action==='SOCIALIZE'&&assignment.jobId!=='matchmaking';
+    action==='SOCIALIZE'&&assignment.jobId!=='matchmaking'&&assignment.jobId!=='festival-social';
   return result(preliminary?'on_route':'performed',workLine(assignment.jobId,action),action==='GUARD_DUTY'?contribution:undefined);
 }

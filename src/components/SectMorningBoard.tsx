@@ -1,6 +1,7 @@
 import type {SectReactionCue} from '../types/sectReaction';
 import {useEffect,useMemo,useRef,useState,type DragEvent,type ReactNode} from 'react';
-import {SECT_JOB_DEFINITIONS,eligibleSectDisciples,planSectJob} from '../engine/sectJobs';
+import {SECT_JOB_DEFINITIONS,eligibleSectDisciples,quoteSectJob,visibleSectJobDefinitions} from '../engine/sectJobs';
+import {projectSectFestivals} from '../engine/sectFestivals';
 import type {SectJobAssignment,SectJobObservation} from '../types/sectJobs';
 import type {Cultivator,WorldState} from '../types/world';
 import {LocalCourtyardCanvas} from './LocalCourtyardCanvas';
@@ -13,7 +14,6 @@ type Draft=ReadonlyMap<string,JobId>;
 type BoundDraft={world:WorldState;orders:Draft};
 type Walk={actor:LocalCourtyardActor;job:JobId;dx:number;dy:number;sequence:number};
 const empty:Draft=new Map();
-const jobs=Object.values(SECT_JOB_DEFINITIONS);
 const dragType='application/x-tian-dao-disciple';
 const card='xianxia-frame min-w-0 rounded-xl border border-amber-300/25 bg-slate-950/75 px-3 py-3 [overflow-wrap:anywhere]';
 const control='min-h-11 min-w-0 rounded-md border border-amber-300/35 text-amber-100 hover:bg-amber-950/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300 disabled:opacity-50';
@@ -52,6 +52,8 @@ export function SectMorningBoard({world,busy,plan,moving,onConfirmJobs,buildings
   world:WorldState;busy:boolean;plan?:LocalCourtyardPlan;moving?:ReadonlySet<string>;onConfirmJobs:ConfirmSectJobs;buildings:ReactNode;observations?:readonly SectJobObservation[];reaction?:SectReactionCue;
 }){
   const members=useMemo(()=>eligibleSectDisciples(world),[world]);
+  const jobs=useMemo(()=>visibleSectJobDefinitions(world),[world]);
+  const festivals=useMemo(()=>projectSectFestivals(world),[world]);
   const sprites=useMemo(()=>new Map(plan?.actors.map(row=>[row.id,row])),[plan]);
   const memberById=useMemo(()=>new Map(members.map(row=>[row.id,row])),[members]);
   const [selected,setSelected]=useState<{world:WorldState;id:string}>();
@@ -68,17 +70,17 @@ export function SectMorningBoard({world,busy,plan,moving,onConfirmJobs,buildings
   const actor=selected?.world===world?memberById.get(selected.id):undefined;
   const blocked=busy||pending===world||committed===world;
   const draftOrders=draft?.world===world?draft.orders:empty;
-  const usable=(member:Cultivator,job:JobId)=>planSectJob(world,member,job).kind!=='blocked';
+  const usable=(member:Cultivator,job:JobId)=>quoteSectJob(world,member,job).kind!=='blocked';
   const locked=()=>busy||flight.current?.world===world||committed===world||latest.current!==world;
   const [dragging,setDragging]=useState<{world:WorldState;id:string}>();
   const dragMember=dragging?.world===world?memberById.get(dragging.id):undefined;
   const jobFocus=dragMember??actor;
-  const currentPlans=useMemo(()=>new Map(jobFocus?jobs.map(job=>[job.id,planSectJob(world,jobFocus,job.id)]):[]),
-    [world,jobFocus]);
+  const currentPlans=useMemo(()=>new Map(jobFocus?jobs.map(job=>[job.id,quoteSectJob(world,jobFocus,job.id)]):[]),
+    [world,jobFocus,jobs]);
 
   const assign=(member:Cultivator,job:JobId,destination:HTMLElement)=>{
     if(locked()||memberById.get(member.id)!==member)return;
-    const candidate=planSectJob(world,member,job);
+    const candidate=quoteSectJob(world,member,job);
     if(candidate.kind==='blocked'){setNotice({world,text:`${SECT_JOB_DEFINITIONS[job].label}：${candidate.reason}`});return;}
     setSelected({world,id:member.id});setNotice(undefined);
     setDraft(previous=>{
@@ -178,6 +180,18 @@ export function SectMorningBoard({world,busy,plan,moving,onConfirmJobs,buildings
     </section>
     <section className={card} aria-label="晨会差事">
       <h2 className="font-serif text-lg font-semibold text-amber-100">掌门晨会</h2>
+      {festivals.length>0&&<details className="mt-1 rounded-md border border-amber-300/25 bg-amber-950/20 px-2">
+        <summary className="min-h-11 cursor-pointer content-center text-xs text-amber-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300">
+          江湖节庆{festivals[0]&&` · ${festivals[0].month}月 ${festivals[0].title}`}
+        </summary>
+        <ul aria-label="江湖节庆日历" className="space-y-2 pb-2 text-xs text-slate-200">
+          {festivals.map(festival=><li key={festival.id}>
+            <span className="text-amber-100">{festival.year}年{festival.month}月 · {festival.title}</span>
+            {jobs.some(job=>job.id===festival.jobId)&&<span className="ml-1 text-amber-200">本次晨会有此差事</span>}
+            <p className="mt-0.5">{festival.detail}</p>
+          </li>)}
+        </ul>
+      </details>}
       <p aria-live="polite" className="my-1.5 text-sm text-slate-200">
         {actor?<>{actor.name}：{selectedJob?SECT_JOB_DEFINITIONS[selectedJob].label:'还没领差事'}{selectedPlan?.kind==='native'&&selectedPlan.phase==='on_route'&&(selectedPlan.decision.chosenAction==='EXPLORE'?' · 先赶路':' · 先办前一程')}</>:
           members.length?'先点弟子，再点差事牌。':'眼下没有可派工的弟子。'}
@@ -186,14 +200,16 @@ export function SectMorningBoard({world,busy,plan,moving,onConfirmJobs,buildings
       <div className="grid min-w-0 grid-cols-2 gap-1.5">
         {jobs.map(job=>{
           const candidate=currentPlans.get(job.id),ready=candidate&&candidate.kind!=='blocked';
+          const seasonal=festivals.find(festival=>festival.jobId===job.id);
           const currentMarker=activeWalk?.job===job.id?activeWalk:undefined;
           const assigned=members.filter(member=>draftOrders.get(member.id)===job.id);
           return <button key={job.id} type="button" aria-label={job.label} title={candidate?.kind==='blocked'?candidate.reason:job.intent} disabled={blocked}
-            aria-disabled={blocked||!jobFocus} data-unavailable={jobFocus&&!ready||undefined} className={`${control} relative break-words px-2 py-1.5 text-left text-sm aria-disabled:opacity-60 ${currentMarker?'pr-10':''}`}
+            aria-disabled={blocked||!jobFocus} data-festival-job={seasonal?.id} data-unavailable={jobFocus&&!ready||undefined} className={`${control} relative break-words px-2 py-1.5 text-left text-sm aria-disabled:opacity-60 ${currentMarker?'pr-10':''}`}
             onDragOver={event=>{if(!blocked&&drag.current?.world===world&&usable(drag.current.actor,job.id)){
               event.preventDefault();event.dataTransfer.dropEffect='move';
             }}} onDrop={event=>drop(event,job.id)} onClick={event=>{if(actor)assign(actor,job.id,event.currentTarget);}}>
             {job.label}
+            {seasonal&&<span className="block text-xs text-amber-200">节庆差事</span>}
             {jobFocus&&!ready&&<span className="block text-xs text-slate-400">暂不能领</span>}
             {assigned.length>0&&<span className="block text-xs text-amber-200">{assigned.map(member=>member.name).join('、')}</span>}
             {currentMarker&&<PlanningSprite key={currentMarker.sequence} walk={currentMarker}/>}

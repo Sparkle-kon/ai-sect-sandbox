@@ -2,6 +2,7 @@ import { findSectComedyTemplate } from '../../data/sectComedy';
 import type { SectComedyState, SectComicMoment } from '../../types/sectComedy';
 import type { SectManagementState } from '../../types/sectManagement';
 import type { WorldState } from '../../types/world';
+import {sectFestivalForJob,sectMonthAt} from '../sectFestivals';
 import { SECT_JOB_IDS } from '../sectQuirkCatalog';
 import { arr, fail as rejectShape, id, num, oid, one, structure, tick, type Validator } from './primitives';
 
@@ -63,7 +64,8 @@ export function validateSectComedy(
         authored.match.quirks?.some(quirk=>!speaker.quirks?.includes(quirk)))
       return fail('sectManagement.comedy.identity');
     const {source}=row,{match}=authored;
-    if(match.phase!==source.phase||
+    const seasonal=source.phase==='ambient'?undefined:sectFestivalForJob(source.jobId);
+    if(seasonal&&sectMonthAt(world,row.tick)!==seasonal.month||match.phase!==source.phase||
         source.phase==='ambient'&&(
           match.phase!=='ambient'||match.presence!==undefined&&match.presence!==source.presence||
           source.presence==='home'&&row.siteId!==state.homeSiteId||source.presence==='away'&&row.siteId===state.homeSiteId)||

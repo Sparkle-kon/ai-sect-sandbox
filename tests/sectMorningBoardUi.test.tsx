@@ -175,3 +175,52 @@ it.each([false,true])('keeps the projected assignment sprite usable when reduced
     else Reflect.deleteProperty(HTMLCanvasElement.prototype,'animate');
   }
 });
+
+it('keeps the five festival dates folded and only offers the upcoming month’s seasonal card',async()=>{
+  const {world}=fixture();
+  const february={...world,month:2};
+  const confirm=vi.fn().mockResolvedValue(true);
+  const {host,render,cleanup}=mount(february,confirm);
+  try{
+    await render();
+    const board=host.querySelector('[aria-label="晨会差事"]');
+    const yearbook=board?.querySelector('[aria-label="江湖节庆日历"]');
+    const disclosure=yearbook?.closest('details');
+    if(!board||!yearbook||!disclosure)throw Error('Expected the compact calendar in the morning board');
+    expect(disclosure.open).toBe(false);
+    expect(disclosure.querySelector('summary')?.textContent).toContain('3月');
+    expect(yearbook.querySelectorAll('li')).toHaveLength(5);
+    expect([...yearbook.querySelectorAll('li')].filter(row=>row.textContent?.includes('本次晨会有此差事'))).toHaveLength(1);
+    const card=board.querySelector('button[data-festival-job]');
+    expect(card?.getAttribute('aria-label')).toBeTruthy();
+    expect(card?.textContent).toContain('节庆差事');
+    expect(board.querySelector('.grid')?.querySelectorAll('button')).toHaveLength(11);
+    await render({...world,tick:world.tick+1,month:3});
+    expect(board.querySelector('button[data-festival-job]')).toBeNull();
+    expect(board.querySelector('.grid')?.querySelectorAll('button')).toHaveLength(10);
+  }finally{await cleanup();}
+});
+
+it('lets a mobile disciple select the January duty before New Year, then retires that card in January',async()=>{
+  const {world,disciples:[first]}=fixture();
+  const december={...world,tick:world.tick+11,month:12};
+  const confirm=vi.fn().mockResolvedValue(true);
+  const {host,render,cleanup}=mount(december,confirm);
+  try{
+    await render();
+    const mobile=host.querySelector('[aria-label="庭院弟子"]');
+    const board=host.querySelector('[aria-label="晨会差事"]');
+    const card=board?.querySelector<HTMLButtonElement>('button[data-festival-job]');
+    if(!board||!mobile||!card)throw Error('Expected the upcoming January seasonal duty');
+    expect(board.querySelector('[aria-label="江湖节庆日历"]')?.textContent).toContain(`${world.year+1}年1月`);
+    await act(async()=>findButton(mobile,`点选 ${first.name}`).click());
+    expect(card.textContent).not.toContain('暂不能领');
+    await act(async()=>card.click());
+    expect(card.textContent).toContain(first.name);
+    await act(async()=>findButton(board,'开晨会，过一个月').click());
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(confirm).toHaveBeenCalledWith(december,[{discipleId:first.id,jobId:'festival-review'}]);
+    await render({...world,tick:december.tick+1,year:world.year+1,month:1});
+    expect(board.querySelector('button[data-festival-job]')).toBeNull();
+  }finally{await cleanup();}
+});

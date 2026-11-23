@@ -1,6 +1,9 @@
 import {SECT_QUIRK_IDS,SECT_QUIRK_NAMES,type SectQuirkId} from '../types/sectManagement';
 
-export const SECT_JOB_IDS=['gather','explore','cultivate','stall','kitchen','guard','deliver','recruit','challenge','matchmaking'] as const;
+import {SECT_FESTIVALS,sectFestivalForJob} from './sectFestivals';
+
+export const BASE_SECT_JOB_IDS=['gather','explore','cultivate','stall','kitchen','guard','deliver','recruit','challenge','matchmaking'] as const;
+export const SECT_JOB_IDS=[...BASE_SECT_JOB_IDS,...SECT_FESTIVALS.map(entry=>entry.jobId)] as const;
 export type SectJobId=typeof SECT_JOB_IDS[number];
 export type QuirkOrdinaryAction='REST'|'CULTIVATE'|'SOCIALIZE'|'EXPLORE'|'GATHER_HERBS';
 export interface SectJobModifiers {readonly success:number;readonly mishap:number;readonly windfall:number}
@@ -50,7 +53,7 @@ const clamp=(value:number,cap:number)=>Math.max(-cap,Math.min(cap,value));
 export function combineSectJobModifiers(ids:readonly SectQuirkId[]|undefined,job:SectJobId):SectJobModifiers{
   const sum={success:0,mishap:0,windfall:0};
   for(const id of canonicalSectQuirks(ids)){
-    const effect=SECT_QUIRK_CATALOG[id].jobModifiers[job];
+    const effect=SECT_QUIRK_CATALOG[id].jobModifiers[sectFestivalForJob(job)?.replaces??job];
     if(effect){sum.success+=effect.success;sum.mishap+=effect.mishap;sum.windfall+=effect.windfall;}
   }
   return odds(clamp(sum.success,40),clamp(sum.mishap,40),clamp(sum.windfall,40));

@@ -527,6 +527,7 @@ export function runOrdinaryActorAction(
     const required=requiredBeforeOrdinaryDecision(cultivator,nextState);
     if(possible.kind!=='blocked'&&(!required||matchesSectJobDecision(possible.decision,required))){
       plannedJob=possible;
+      if(modelProposal&&!matchesSectJobDecision(possible.decision,modelProposal))modelOrdinaryReplaced=true;
       provided=possible.decision;
     }else if(possible.kind==='blocked'){
       sectMeeting.observations.set(cultivator.id,{...job,tick:nextState.tick,phase:'unavailable',line:possible.reason});

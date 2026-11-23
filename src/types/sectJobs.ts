@@ -6,7 +6,7 @@ export interface SectJobDefinition {readonly id:SectJobId;readonly label:string;
 export type SectJobPhase='performed'|'on_route'|'unavailable';
 export type SectJobPlan =
   | {readonly kind:'native';readonly phase:'performed'|'on_route';readonly decision:LLMDecisionPayload;readonly siteId?:string}
-  | {readonly kind:'chore';readonly phase:'performed';readonly chore:'kitchen'|'guard';readonly decision:LLMDecisionPayload;readonly siteId:string}
+  | {readonly kind:'chore';readonly phase:'performed';readonly chore:'kitchen'|'guard'|'festival-debt';readonly decision:LLMDecisionPayload;readonly siteId:string}
   | {readonly kind:'blocked';readonly reason:string};
 export interface SectJobEvidence {
   readonly tick:number;readonly discipleId:string;readonly siteId:string;readonly qi:number;

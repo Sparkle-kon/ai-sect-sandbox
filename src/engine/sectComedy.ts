@@ -3,6 +3,7 @@ import type {SectComedyMatch,SectComedyTemplate,SectComicAppliedEffect,SectComic
 import type {SectJobReportRow} from '../types/sectJobs';
 import type {Cultivator,WorldEvent,WorldState} from '../types/world';
 import {isGrandSiegeFighterPresent} from './grandSiegePresence';
+import {sectFestivalForJob,sectMonthAt} from './sectFestivals';
 import {isSectActive} from './sectActivity';
 import {SECT_JOB_DEFINITIONS} from './sectJobs';
 import {effectiveSectQuirks} from './sectQuirkAssignment';
@@ -52,6 +53,8 @@ function options(world:WorldState):Beat[]{
       if(!speaker||report.rows.filter(entry=>entry.discipleId===speaker.id).length!==1||
         row.phase==='performed'&&(!row.tier||row.tier==='disaster'))continue;
       // The finished board is the authority for a past action, not a claim that either party has returned.
+      const seasonal=sectFestivalForJob(row.jobId);
+      if(seasonal&&sectMonthAt(world,report.settledTick)!==seasonal.month)continue;
       const reportEventId=row.sourceEventId;
       const source:SectComicSource=row.phase==='performed'&&row.tier&&row.tier!=='disaster'?
         {phase:'performed',jobId:row.jobId,tier:row.tier,...(reportEventId?{reportEventId}:{})}:
@@ -107,7 +110,7 @@ function score(beat:Beat,template:SectComedyTemplate){
   const urgency=beat.source.phase==='performed'?beat.source.tier==='windfall'||beat.source.tier==='mishap'?45:24:
     beat.source.phase==='ambient'?0:12;
   const specific=(match.quirks?.length??0)*25+(match.phase!=='ambient'&&match.job?9:0);
-  return urgency+specific+(beat.source.phase!=='ambient'?12:0);
+  return urgency+specific+(beat.source.phase!=='ambient'?12:0)+(match.phase!=='ambient'&&match.job&&sectFestivalForJob(match.job)?60:0);
 }
 
 /** A comedy beat is a new scoped reaction, never a second settlement of the job it refers to. */
@@ -146,6 +149,8 @@ export function projectSectComicMoment(world:WorldState,moment=world.sectManagem
   const template=SECT_COMEDY_TEMPLATES.find(row=>row.id===moment.templateId);
   const speaker=unique(world.cultivators,moment.speakerId),sect=unique(world.sects,management.sectId);
   if(!template||!speaker||!sect)return;
+  const seasonal=moment.source.phase==='ambient'?undefined:sectFestivalForJob(moment.source.jobId);
+  if(seasonal&&sectMonthAt(world,moment.tick)!==seasonal.month)return;
   const site=moment.siteId?unique(world.locations,moment.siteId):undefined;
   const jobId=moment.source.phase!=='ambient'?moment.source.jobId:undefined;
   const speakerName=spelling(speaker.name);
