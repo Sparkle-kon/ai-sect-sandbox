@@ -1,7 +1,7 @@
 Read and strictly follow `AGENTS.md` and `BACKLOG.md` at the root of this repository.
 You are operating in UNATTENDED AUTONOMOUS EVOLUTION MODE.
-Priority Queue at top of `BACKLOG.md`:
-1. `UI1` (`[UI1-1]` to `[UI1-5]`): Eliminate all map text/node collisions, soften checkerboard grid, restyle/collapse the minimap so it never covers Blood Moon Abyss, fill the 80% empty right sidebar in the Map workspace with a rich portrait/stats/monologue/god-actions dossier, and redeploy the live preview site (`chatgpt.site`) if deployment tools are available.
-2. `N1` (`[N1-1]` to `[N1-5]`): Serialized Novel Pacing — make chapters feel like true serialized novels where NOT every paragraph tries to be a dramatic climax; use 70% calm mundane cultivation/travel/seasonal transitions to frame 1-2 expanded focal scenes per chapter, with chapter-to-chapter continuity and book-page typography.
-3. Continue sequentially through `P18-9`, `P18-10`, `Phase 19`, and `Phase 20`.
+Highest Priority Queue at the top of `BACKLOG.md` (`SV1` -> `SV2` -> `SV3`):
+1. `SV1` (`[SV1-1]` to `[SV1-5]`): Stardew Valley-style 2D visual overhaul — embed `SceneStageCanvas` + full-color portrait dialogue box into `StoryFirstHome` and `CockpitStoryStage`; replace map circles with 2D full-body cultivator sprites (`canvasCharacterSprite.ts`) with 4 action poses; paint lush 2D terrain tiles and architectural building facades (`lushTilemapRenderer.ts`); upgrade `CultivatorPortrait.tsx` to an 8-layer full-color paper-doll portrait with 5 dynamic facial expressions; add `LocalCourtyardCanvas.tsx` 16x10 courtyard/town view.
+2. `SV2` (`[SV2-1]` to `[SV2-5]`): Visual Duel Arena (`VisualDuelArena.tsx`), visual Alchemy/Herb Garden & Dungeon Room Map canvases, seasonal weather particles, and Web Audio procedural Guqin/combat soundscape.
+3. `SV3` (`[SV3-1]` to `[SV3-5]`): Engine 2.0 data-driven `storyletEngine.ts`, modularizing `storageEngine.ts` / `llmBrain.ts` / `worldEngine.ts`, and redeploying the live preview site (`chatgpt.site`).
 Verify every task with `npm run verify`, mark `- [x]` in `BACKLOG.md`, update `CHANGELOG.md`, commit and push to `origin main`, and immediately proceed to the next `- [ ]` task without stopping.
