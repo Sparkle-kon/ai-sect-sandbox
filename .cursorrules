@@ -1,6 +1,5 @@
-Read `AGENTS.md`, `BACKLOG.md`, and `docs/design/H-sect-comedy-guide.md` before coding.
-UNATTENDED AUTONOMOUS EVOLUTION MODE. Current top priority: H-track (comedic sect management + cultivation group chat / moments / livestream), tone = classical xianxia + moderate humor.
-Execute H1 → H2 → H3 → H4 → H5 in order, one commit per task. Player assigns quirky disciples to monthly jobs and watches per-disciple reports; the jianghu gossips in group chats; player posts as leader or sock puppet.
-Settlement stays strictly rule-driven and deterministic; character speech may exaggerate and may be LLM-generated but only affects the world via structured intents. Narrator never invents facts.
-Reuse existing Cultivator/Sect/tick pipeline/courtyard/sprites/portraits/duel arena. All new content is data. No developer jargon in player copy, no stacked-precondition micro-stories.
+Read `AGENTS.md`, `BACKLOG.md`, and `docs/design/H6-comedy-consequence-guide.md` before coding.
+UNATTENDED AUTONOMOUS EVOLUTION MODE. Current top priority: H6 "make the jokes actually happen" (H6-1 → H6-7), one commit per task.
+The truth rule means the narrator must not invent facts; it does not forbid funny things from happening. Comedy templates must change the world through rules (recruits, items, building damage, relations, recurring visits, sequels), then report text states those concrete facts and the quote carries the punchline.
+Away jobs resolve as same-month round trips. No disclaimer-style copy. Do not cap consequences at ±1/±2.
 Verify with `npm run verify`, tick BACKLOG, update CHANGELOG, commit, push to `origin main`, continue immediately.

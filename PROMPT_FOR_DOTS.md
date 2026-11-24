@@ -1,24 +1,20 @@
-# PROMPT_FOR_DOTS.md — H 线转向指令（复制整段发给 GPT Dots）
+# PROMPT_FOR_DOTS.md — H6 指令（复制整段发给 GPT Dots）
 
 ```markdown
 Target GitHub Repository: https://github.com/Sparkle-kon/ai-sect-sandbox
 
-MAJOR DIRECTION CHANGE. Stop the current G-track task after committing whatever is already verified.
+Great work finishing all 20 H-track tasks overnight. A review found two problems that keep the game from being fun. New top priority: H6 "make the jokes actually happen".
 
-1. `git pull --rebase origin main`, then read `AGENTS.md`, `BACKLOG.md`, and **`docs/design/H-sect-comedy-guide.md`** completely before coding.
+1. `git pull --rebase origin main`, then read `AGENTS.md`, `BACKLOG.md`, and **`docs/design/H6-comedy-consequence-guide.md`** before coding.
 
-2. User feedback (verbatim, translated): "The gameplay is still mediocre — just clicking around one item after another. No immersion, no humor, no identity at all."
+2. Findings (version f426a82):
+   - Of 86 comedy templates, **68 have no effect at all**; the rest are only qi ±1/±2 (17) or kitchen damage (1). `SectComedyEffect` even hard-caps qi to -2|-1|1|2. Zero templates recruit anyone, gain/lose items, change sect relations, or leave a sequel. Report text is vague ("另有进益", "有些不顺"). The guide's flagship example (lost glutton brings back a demon-sect cook) was never implemented.
+   - Across 12 fresh games (6 seeds × 2 starter sects), the six away jobs (历练/摆摊/送货/招新/踢馆/联谊) are **100% still travelling in month one**; gate guard is blocked in 24 of 42 cases.
 
-3. The user chose a new direction: **Comedic sect management + cultivation-world group chat / moments feed / livestream** (references: Amazing Cultivation Simulator, Hero's Adventure / 大侠立志传). Tone: classical Chinese xianxia base with moderate, tasteful humor — no internet meme spam, no crude jokes.
+3. Key correction: the truth rule means **the narrator must not invent facts** — it does NOT mean funny things cannot happen. Make each template **actually change the world through rules** (recruit a quirky stranger, bring back a weird item, damage any building, sour relations with the rival sect, schedule a recurring NPC visit or a sequel), then narrate those real facts concretely. The disciple's quote carries the punchline.
 
-   Pitch: the player inherits a nearly bankrupt sect, leads a bunch of disciples with comedic quirks (glutton, directionally hopeless, socially anxious, chatterbox, miser, jinx, coward-king…), assigns them monthly jobs, watches them fail hilariously or succeed by accident, while the whole jianghu gossips, roasts and livestreams it in group chats — and the player can post as the sect leader or via sock-puppet alts.
+4. Execute H6-1 → H6-7 in order, one commit per task:
+   H6-1 expand effects & rule settlement (single pending field for visits/sequels) → H6-2 rewrite templates: ≥70% with non-qi consequences, ≥10 combo templates with consequences, ≥4 recruitable oddballs, concrete report text → H6-3 ≥20 templates with sequel/visit, sequels may offer 2–3 choices, recurring NPCs quote the original incident → H6-4 away jobs resolve as same-month round trips with map trails; gate guard available from start; publish first-month availability stats → H6-5 courtyard idle life, click-to-poke quips, live pill-cat → H6-6 LLM-written return reports (default on when API configured, fact-checked, fallback, budgeted) → H6-7 remove disclaimer-style copy and run a 12-month rotating-assignment playtest, write `docs/h6-playtest.md` meeting the acceptance numbers in the guide.
 
-4. Two-layer truth rule: settlement (stones, injuries, realm, death, relations, buildings) stays strictly rule-driven and deterministic. Character speech (chat, moments, danmaku, report quotes) may exaggerate, brag, lie, or spread rumors, and may be LLM-generated, but can only affect the world through structured intents settled by rules. The narrator never invents facts.
-
-5. Execute the H-track at the top of `BACKLOG.md` in order, **one commit per task**:
-   H1-1 starter sect & default entry → H1-2 12 data-driven quirks → H1-3 morning-meeting job assignment (drag on desktop, tap on mobile, sprites walk to job cards) → H1-4 per-disciple return reports with expressions and 4 outcome tiers → H1-5 sect growth, debt, annual review, fail/restart → H2 comedy template library (≥60, ≥10 combos), recurring gag NPCs, comic expressions/animations, disciple drama → H3 chat UI, LLM-driven chat (optional token burner), leader & sock-puppet posting with intent parsing, moments feed, Tianji livestream → H4 raids, tabloid, festival calendar → H5 onboarding ≤60s, copy cleanup, real-browser playtest & redeploy.
-
-   Reuse everything that exists: disciples are `Cultivator`, sect is `Sect`, months advance via `tickStagePipeline`, reuse courtyard canvas, sprites, portraits, duel arena, gazette. All new content is data. G2-1/2/3 and G4-2 are merged into H and already ticked.
-
-6. For every task: implement fully, deterministic tests (mock LLM), `npm run verify`, tick BACKLOG, write CHANGELOG in fun, player-readable Chinese, commit, `git push origin main`, continue immediately. Never stop to ask.
+5. For every task: implement fully, deterministic tests (mock LLM), `npm run verify`, tick BACKLOG, CHANGELOG in fun player-readable Chinese (no disclaimers), commit, `git push origin main`, continue immediately. Never stop to ask.
 ```
