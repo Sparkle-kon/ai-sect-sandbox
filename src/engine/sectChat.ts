@@ -10,7 +10,7 @@ import {sectRecurringEventId,sectRecurringIdentity,type SectRecurringRole} from 
 import type {Cultivator,WorldEvent,WorldState} from '../types/world';
 import {isChronicleStoryFact} from './chronicleLead';
 import {isSectActive} from './sectActivity';
-import {sectComicEventId} from './sectComedy';
+import {projectSectComicMoment,sectComicEventId} from './sectComedy';
 import {onLowerPlane} from './upperPassageIsolation';
 import {sameGeneratedWorld} from './worldIdentity';
 import {projectSectAliasRivalReply} from './sectPlayerChatMemory';
@@ -152,10 +152,14 @@ export function settleSectChatMonth(world:WorldState,prevWorld:WorldState,comple
   };
   const comedy=managed.comedy?.moments.find(row=>row.tick===world.tick);
   const comicSpeaker=comedy&&actors.get(comedy.speakerId);
-  if(comedy&&chatActor(comicSpeaker)&&liveDisciple(comicSpeaker)&&templates.get(comedy.templateId)?.chatHook?.group==='own'&&
-    exactPrivateMarker(retained,sectComicEventId(world.tick,managed.sectId),world.tick,[comicSpeaker.id]))
-    drafts.push({roomId:'own',senderId:comicSpeaker.id,about:{kind:'comic',templateId:comedy.templateId},
-      audience:audience(comicSpeaker.id,leader.id)});
+  if(comedy&&chatActor(comicSpeaker)&&liveDisciple(comicSpeaker)&&
+    exactPrivateMarker(retained,sectComicEventId(world.tick,managed.sectId),world.tick,[comicSpeaker.id])){
+    const rumor=projectSectComicMoment(world,comedy)?.rumorHook;
+    const room=rumor?.group??(templates.get(comedy.templateId)?.chatHook?.group==='own'?'own':undefined);
+    if(room&&room!=='leaders')drafts.push({roomId:room,senderId:comicSpeaker.id,
+      about:{kind:'comic',templateId:comedy.templateId,...(rumor?{rumor:1 as const}:{})},
+      ...(room==='own'?{audience:audience(comicSpeaker.id,leader.id)}:{})});
+  }
   if(recurring)for(const role of recurringRoles){
     const note=managed.recurring?.encounters.find(row=>row.tick===world.tick&&row.role===role&&row.entityId===recurring[role]);
     const actor=note&&actors.get(note.entityId);
@@ -295,11 +299,17 @@ export function projectSectChat(world:WorldState):readonly SectChatRoomView[]{
           if(roomId===about.kindOfGreeting&&(roomId!=='own'||managed.foundingDiscipleIds.includes(actor.id)))text=GREETINGS[about.kindOfGreeting][post.variant];
           break;
         case 'comic':{
-          if(roomId!=='own')break;
+          if(roomId==='leaders')break;
           const template=templates.get(about.templateId);
           const beat=managed.comedy?.moments.find(row=>row.tick===post.tick&&row.templateId===about.templateId&&row.speakerId===actor.id);
-          if(template?.chatHook?.group!=='own'||!beat||
+          if(!beat||
             !exactPrivateMarker(events,sectComicEventId(post.tick,managed.sectId),post.tick,[actor.id]))break;
+          if(about.rumor){
+            const voice=projectSectComicMoment(world,beat)?.rumorHook;
+            if(voice?.group===roomId)text=voice.line;
+            break;
+          }
+          if(roomId!=='own'||template?.chatHook?.group!=='own')break;
           // Only independent ambient quips may reuse original hook text. Work-hook variants never
           // repeat the job, result, private site or any person mentioned in the original aside.
           text=template.match.phase==='ambient'&&!/[{}]/.test(template.chatHook.line)?template.chatHook.line:COMIC_NEUTRAL[post.variant];

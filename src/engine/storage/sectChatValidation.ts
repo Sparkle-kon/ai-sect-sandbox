@@ -9,7 +9,7 @@ import { arr, fail as rejectShape, id, one, optional, structure, tick, type Vali
 
 const greetingShape=structure({kind:one('room_greeting'),kindOfGreeting:one('own','market','jiuzhou')});
 const publicShape=structure({kind:one('public_event'),eventId:id,eventTick:tick,knowledge:one('witness','rumor')});
-const comicShape=structure({kind:one('comic'),templateId:id});
+const comicShape=structure({kind:one('comic'),templateId:id,rumor:optional(one(1))});
 const recurringShape=structure({kind:one('recurring'),role:one('wang','rival','ancestor','host'),outcome:one(...SECT_RECURRING_OUTCOMES)});
 const shapes={room_greeting:greetingShape,public_event:publicShape,comic:comicShape,recurring:recurringShape};
 const source:Validator=(value,path)=>{
@@ -129,7 +129,14 @@ export function validateSectChat(world:WorldState,management:SectManagementState
         const marker=world.events.filter(event=>event.id===markerId);
         const moments=management.comedy?.moments??[];
         const moment=moments.find(row=>row.tick===entry.tick);
-        if(entry.roomId!=='own'||findSectComedyTemplate(about.templateId)?.chatHook?.group!=='own'||
+        const template=findSectComedyTemplate(about.templateId);
+        const rumorRoom=about.rumor&&entry.roomId!=='leaders'&&template?.effects.some(effect=>effect.kind==='rumor'&&effect.group===entry.roomId);
+        const originalProof=moment&&moment.source.phase==='performed'&&moment.source.reportEventId;
+        const proof=originalProof?world.events.find(event=>event.id===originalProof):undefined;
+        if(entry.source!=='template'||(about.rumor?!rumorRoom||moment&&!moment.effects.some(effect=>effect.kind==='rumor'&&effect.group===entry.roomId)||
+            entry.roomId!=='own'&&moment&&(proof?proof.witnessScope!==undefined||proof.tick!==entry.tick||!proof.actorIds.includes(entry.senderId):
+              !originalProof||withinHotTail(world,entry.tick))
+            :entry.roomId!=='own'||template?.chatHook?.group!=='own')||
             moment&&(moment.speakerId!==entry.senderId||moment.templateId!==about.templateId)||
             !moment&&(entry.tick===world.tick||moments.length&&entry.tick>=moments[0].tick)||
             marker.length>1||!marker.length&&withinHotTail(world,entry.tick)||

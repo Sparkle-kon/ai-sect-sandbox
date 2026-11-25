@@ -95,7 +95,7 @@ export function SectJobReportStage({world,report,present,comic,drama,onDismiss,o
             <span className="text-stone-400">{effect.stage==='native'?'办差：':'后续：'}</span>{reportEffectLine(effect)}
           </li>)}
         </ul>:!sceneComic?.effects.length&&<p>这一趟账上没记下得失。</p>}
-        {sceneComic&&<SectComicEffects effects={sceneComic.effects}/>}
+        {sceneComic&&<SectComicEffects effects={sceneComic.effects} world={world}/>}
       </section>
       {drama&&dramaVisible&&<SectPairDramaRead drama={drama}/>}
     </article>

@@ -1,10 +1,15 @@
 import { findSectComedyTemplate } from '../../data/sectComedy';
-import type { SectComedyState, SectComicMoment } from '../../types/sectComedy';
+import {COMEDY_ITEM_IDS,COMEDY_MAX_EFFECTS,COMEDY_PENDING_LIMIT,COMEDY_PET_IDS,COMEDY_RECRUIT_IDS,
+  type SectComedyEffect,type SectComedyState,type SectComicAppliedEffect,type SectComicMoment} from '../../types/sectComedy';
+import {MANAGEMENT_BUILDING_IDS} from '../../types/sectManagement';
+import {SECT_RECURRING_ROLES} from '../../types/sectRecurring';
+import {SECT_CHAT_ROOMS} from '../../types/sectChat';
+import {comedyDueTick,comedyIdentity,comedyRecurringIds,comedyRelationTarget} from '../sectComedyTerms';
 import type { SectManagementState } from '../../types/sectManagement';
 import type { WorldState } from '../../types/world';
 import {sectFestivalForJob,sectMonthAt} from '../sectFestivals';
 import { SECT_JOB_IDS } from '../sectQuirkCatalog';
-import { arr, fail as rejectShape, id, num, oid, one, structure, tick, type Validator } from './primitives';
+import { arr, fail as rejectShape, id, num, oid, one, optional, structure, tick, type Validator } from './primitives';
 
 const jobId=one(...SECT_JOB_IDS);
 const ambient=structure({phase:one('ambient'),presence:one('home','away')});
@@ -20,16 +25,76 @@ const source:Validator=(value,path)=>{
     default:return rejectShape(`${path}.phase`);
   }
 };
-const qi=structure({kind:one('qi'),amount:num(-2,2)});
-const kitchen=structure({kind:one('kitchen_damage'),amount:one(-1)});
-const effect:Validator=(value,path)=>{
-  if(!value||typeof value!=='object'||!('kind' in value))return rejectShape(path);
-  return (value.kind==='kitchen_damage'?kitchen:qi)(value,path);
+const amount=num(-1_000_000_000,1_000_000_000,true);
+const visit={npc:one(...SECT_RECURRING_ROLES),dueTick:tick};
+const sequel={templateId:id,dueTick:tick};
+const pendingOrigin={originTick:tick,originTemplateId:id,effectIndex:num(0,COMEDY_MAX_EFFECTS-1,true),speakerId:id,siteId:oid};
+const effects:Record<SectComicAppliedEffect['kind'],Validator>={
+  qi:structure({kind:one('qi'),amount:num(-100,100)}),
+  stones:structure({kind:one('stones'),amount}),
+  fame:structure({kind:one('fame'),amount}),
+  debt:structure({kind:one('debt'),amount}),
+  injury:structure({kind:one('injury'),amount:num(-1_000_000_000,0)}),
+  kitchen_damage:structure({kind:one('kitchen_damage'),amount:one(-1)}),
+  building_damage:structure({kind:one('building_damage'),building:one(...MANAGEMENT_BUILDING_IDS),amount:one(-1)}),
+  herb:structure({kind:one('herb'),herb:one('jade_leaf','earth_root','star_bloom','shadow_moss'),amount:num(-10_000,10_000,true)}),
+  item:structure({kind:one('item'),template:one(...COMEDY_ITEM_IDS),itemId:id}),
+  item_loss:structure({kind:one('item_loss'),template:one(...COMEDY_ITEM_IDS),itemId:id}),
+  sect_relation:structure({kind:one('sect_relation'),targetSectId:id,amount:num(-200,200)}),
+  recruit:structure({kind:one('recruit'),template:one(...COMEDY_RECRUIT_IDS),actorId:id}),
+  pet:structure({kind:one('pet'),template:one(...COMEDY_PET_IDS),beastId:id}),
+  visit:structure({kind:one('visit'),...visit}),
+  sequel:structure({kind:one('sequel'),...sequel}),
+  rumor:structure({kind:one('rumor'),group:one(...SECT_CHAT_ROOMS)}),
 };
-const moment=structure({tick,templateId:id,speakerId:id,siteId:oid,source,effects:arr(2,effect)});
+const effect:Validator=(value,path)=>{
+  if(!value||typeof value!=='object'||!('kind' in value)||typeof value.kind!=='string'||
+    !Object.hasOwn(effects,value.kind))return rejectShape(path);
+  return effects[value.kind as SectComicAppliedEffect['kind']](value,path);
+};
+const pendingVisit=structure({kind:one('visit'),...visit,...pendingOrigin});
+const pendingSequel=structure({kind:one('sequel'),...sequel,...pendingOrigin});
+const pending:Validator=(value,path)=>{
+  if(!value||typeof value!=='object'||!('kind' in value))return rejectShape(path);
+  return (value.kind==='visit'?pendingVisit:pendingSequel)(value,path);
+};
+const moment=structure({tick,templateId:id,speakerId:id,siteId:oid,source,effects:arr(COMEDY_MAX_EFFECTS,effect)});
 const recentMonthCount=12;
-export const sectComedyShape=structure({moments:arr(recentMonthCount,moment)});
+export const sectComedyShape=structure({moments:arr(recentMonthCount,moment),pending:optional(arr(COMEDY_PENDING_LIMIT,pending))});
 
+const signed=(received:number,offered:number)=>received!==0&&Math.sign(received)===Math.sign(offered)&&
+  Math.abs(received)<=Math.abs(offered)+1e-9;
+function matchesEffect(world:WorldState,state:SectManagementState,row:Omit<SectComicMoment,'effects'>,index:number,
+  applied:SectComicAppliedEffect,offered:SectComedyEffect):boolean{
+  const {source}=row;
+  switch(applied.kind){
+    case 'qi':return offered.kind==='qi'&&signed(applied.amount,offered.amount);
+    case 'stones':case 'fame':case 'debt':return offered.kind===applied.kind&&applied.amount===offered.amount&&applied.amount!==0;
+    case 'herb':return offered.kind==='herb'&&applied.herb===offered.herb&&applied.amount===offered.amount&&applied.amount!==0;
+    case 'injury':return offered.kind==='injury'&&applied.amount<0;
+    case 'kitchen_damage':return offered.kind==='kitchen_damage'&&source.phase==='performed'&&source.tier==='mishap'&&
+      source.jobId==='kitchen'&&row.siteId===state.homeSiteId;
+    case 'building_damage':return offered.kind==='building_damage'&&applied.building===offered.building;
+    case 'sect_relation':return offered.kind==='sect_relation'&&applied.targetSectId!==state.sectId&&
+      world.sects.some(sect=>sect.id===applied.targetSectId)&&
+      (offered.target==='host_sect'?!!row.siteId:comedyRelationTarget(world,row,offered.target)===applied.targetSectId)&&
+      signed(applied.amount,offered.amount);
+    case 'item':return offered.kind==='item'&&applied.template===offered.template&&
+      applied.itemId===comedyIdentity(state.sectId,'item',`${row.tick}-${index}`);
+    case 'item_loss':return offered.kind==='item_loss'&&applied.template===offered.template&&
+      applied.itemId.startsWith(comedyIdentity(state.sectId,'item',''));
+    case 'recruit':return offered.kind==='recruit'&&applied.template===offered.template&&
+      applied.actorId===comedyIdentity(state.sectId,'recruit',offered.template)&&
+      world.cultivators.some(actor=>actor.id===applied.actorId);
+    case 'pet':return offered.kind==='pet'&&applied.template===offered.template&&
+      applied.beastId===(offered.template==='pill-cat'?comedyRecurringIds(world)?.cat:comedyIdentity(state.sectId,'pet',offered.template));
+    case 'visit':return offered.kind==='visit'&&applied.npc===offered.npc&&
+      applied.dueTick===comedyDueTick(world.random.seed,row,index,offered.afterMonths);
+    case 'sequel':return offered.kind==='sequel'&&applied.templateId===offered.templateId&&!!findSectComedyTemplate(applied.templateId)&&
+      applied.dueTick===comedyDueTick(world.random.seed,row,index,offered.afterMonths);
+    case 'rumor':return offered.kind==='rumor'&&applied.group===offered.group&&applied.group!=='leaders';
+  }
+}
 function matchesDatedReport(world:WorldState,state:SectManagementState,row:SectComicMoment):boolean {
   const comic=row.source,report=state.latestReport;
   if(comic.phase==='ambient')return true;
@@ -85,17 +150,28 @@ export function validateSectComedy(
           event.actorIds.length!==1||event.actorIds[0]!==row.speakerId))
       return fail('sectManagement.comedy.receipt');
 
-    const seen=new Set<string>();
-    if(row.effects.length!==authored.effects.length||source.phase!=='performed'&&row.effects.length)
+    if(row.effects.length!==authored.effects.length||
+      source.phase!=='performed'&&!(source.phase==='ambient'&&source.presence==='home')&&row.effects.length||
+      row.effects.some((applied,index)=>!matchesEffect(world,state,row,index,applied,authored.effects[index])))
       return fail('sectManagement.comedy.effects');
-    for(const applied of row.effects){
-      if(seen.has(applied.kind)||!authored.effects.some(offered=>{
-        if(applied.kind==='qi')return offered.kind==='qi'&&applied.amount!==0&&Math.sign(applied.amount)===Math.sign(offered.amount)&&
-          Math.abs(applied.amount)<=Math.abs(offered.amount)+1e-9;
-        return offered.kind==='kitchen_damage'&&applied.amount===-offered.amount&&
-          source.phase==='performed'&&source.tier==='mishap'&&source.jobId==='kitchen'&&row.siteId===state.homeSiteId;
-      }))return fail('sectManagement.comedy.effects');
-      seen.add(applied.kind);
-    }
+  }
+  const queued=new Set<string>();
+  for(const row of comedy.pending??[]){
+    const key=`${row.originTick}:${row.effectIndex}`;
+    const origin=comedy.moments.find(moment=>moment.tick===row.originTick);
+    const effect=findSectComedyTemplate(row.originTemplateId)?.effects[row.effectIndex];
+    const context={tick:row.originTick,templateId:row.originTemplateId,speakerId:row.speakerId,siteId:row.siteId,
+      source:{phase:'ambient' as const,presence:'home' as const}};
+    if(queued.has(key)||row.originTick<=state.foundedTick||row.originTick>world.tick||
+      !speakers.has(row.speakerId)||row.siteId!==undefined&&!sites.has(row.siteId)||
+      origin&&(origin.templateId!==row.originTemplateId||origin.speakerId!==row.speakerId||origin.siteId!==row.siteId||
+        origin.effects[row.effectIndex]?.kind!==row.kind)||
+      !effect||!matchesEffect(world,state,context,row.effectIndex,row,effect))
+      return fail('sectManagement.comedy.pending');
+    queued.add(key);
+  }
+  for(const origin of comedy.moments)for(const [index,effect] of origin.effects.entries()){
+    if((effect.kind==='visit'||effect.kind==='sequel')&&effect.dueTick>world.tick&&!queued.has(`${origin.tick}:${index}`))
+      return fail('sectManagement.comedy.pending');
   }
 }

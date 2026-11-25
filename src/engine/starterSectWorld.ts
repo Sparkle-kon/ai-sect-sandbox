@@ -1,3 +1,5 @@
+import {COMEDY_RECRUITS} from '../data/sectComedy/consequences';
+import type {ComedyRecruitId} from '../types/sectComedy';
 import {adjustRelationship} from './relationships';
 import {ensureManagedSectQuirks} from './sectQuirkAssignment';
 import {createInitialWorld,REALM_BASE_POWER,REALM_LIFESPAN} from '../data/initialWorld';
@@ -93,6 +95,13 @@ function resident(details:Pick<Cultivator,'id'|'name'|'gender'|'spiritRoot'|'per
     herbs:{jade_leaf:0,earth_root:0,star_bloom:0,shadow_moss:0},pills:{foundation:0,golden:0,barrier:0,heart_poison:0},
     pillToxicity:0,exploredTileIds:[],artifacts:[],memories:[],coreMemories:[],memorySequence:0,reflections:[],rumors:[],alive:true,
   };
+}
+
+export function createComedyRecruit(template:ComedyRecruitId,id:string,home:LocationNode):Cultivator {
+  const {name,gender,spiritRoot,personality,quirks,origin,realm}=COMEDY_RECRUITS[template];
+  const recruit=resident({id,name,gender,spiritRoot,personality},home,'disciple');
+  return {...recruit,realm,quirks:[...quirks],title:origin,age:24,lifespan:REALM_LIFESPAN[realm],
+    combatPower:REALM_BASE_POWER[realm],...(realm==='筑基'?{maxHp:260,hp:260}:{})};
 }
 
 /** Confirming a preview creates one new native faction and its actual local bodies at the first dated month. */

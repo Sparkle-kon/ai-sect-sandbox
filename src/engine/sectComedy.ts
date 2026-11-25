@@ -1,5 +1,5 @@
-import {SECT_COMEDY_TEMPLATES} from '../data/sectComedy';
-import type {SectComedyMatch,SectComedyTemplate,SectComicAppliedEffect,SectComicMoment,SectComicSource} from '../types/sectComedy';
+import {findSectComedyTemplate,SECT_COMEDY_TEMPLATES} from '../data/sectComedy';
+import type {SectComedyMatch,SectComedyTemplate,SectComicMoment,SectComicSource} from '../types/sectComedy';
 import type {SectJobReportRow} from '../types/sectJobs';
 import type {Cultivator,WorldEvent,WorldState} from '../types/world';
 import {isGrandSiegeFighterPresent} from './grandSiegePresence';
@@ -8,16 +8,13 @@ import {isSectActive} from './sectActivity';
 import {SECT_JOB_DEFINITIONS} from './sectJobs';
 import {effectiveSectQuirks} from './sectQuirkAssignment';
 import {isRetiredFromService} from './serviceRetirementEngine';
+import {planComedyEffects} from './sectComedyEffects';
+import {comedyPriority,comedyRelationTarget,type ComedyContext} from './sectComedyTerms';
 import {sameGeneratedWorld} from './worldIdentity';
 
 const HISTORY=12;
 export const sectComicEventId=(tick:number,sectId:string)=>`evt-${tick}-${sectId}-comic`;
 const compare=(a:string,b:string)=>a<b?-1:a>b?1:0;
-function priority(seed:number,tick:number,id:string){
-  let value=seed^Math.imul(tick,0x9e3779b1);
-  for(const ch of id)value=Math.imul(value^ch.charCodeAt(0),0x01000193);
-  return (value^(value>>>16))>>>0;
-}
 function unique<T extends {id:string}>(rows:readonly T[],id:string):T|undefined{
   const matches=rows.filter(row=>row.id===id);
   return matches.length===1?matches[0]:undefined;
@@ -32,6 +29,7 @@ interface Beat {
   readonly row?:SectJobReportRow;
 }
 interface Candidate extends Beat {
+  readonly context:ComedyContext;
   readonly template:SectComedyTemplate;
   readonly score:number;
   readonly jitter:number;
@@ -83,27 +81,21 @@ function matches(world:WorldState,beat:Beat,match:SectComedyMatch){
   if(source.phase==='ambient'||match.job&&source.jobId!==match.job)return false;
   return match.phase!=='performed'||source.phase==='performed'&&source.tier===match.tier;
 }
-function effectsFor(world:WorldState,beat:Beat,template:SectComedyTemplate):SectComicAppliedEffect[]|undefined{
-  if(!template.effects.length)return [];
-  if(beat.source.phase!=='performed'||!beat.row)return;
-  const {speaker}=beat,management=world.sectManagement;
-  const wouldApply:SectComicAppliedEffect[]=[];
-  for(const effect of template.effects){
-    if(effect.kind==='qi'){
-      if(!Number.isFinite(speaker.qiProgress)||speaker.qiProgress<0||speaker.qiProgress>100||speaker.positionPlane!==undefined)return;
-      const amount=Math.max(0,Math.min(100,speaker.qiProgress+effect.amount))-speaker.qiProgress;
-      if(!amount)return;
-      wouldApply.push({kind:'qi',amount});
-    }else{
-      if(!management||beat.source.jobId!=='kitchen'||beat.source.tier!=='mishap'||beat.siteId!==management.homeSiteId||
-        speaker.locationId!==management.homeSiteId||!isGrandSiegeFighterPresent(world,speaker,management.homeSiteId)||
-        management.buildings.kitchen<=0||!beat.row.effects.some(row=>row.kind==='herb'&&row.stage==='native'&&row.amount===-1&&
-          (row.herbId==='earth_root'||row.herbId==='jade_leaf')))return;
-      wouldApply.push({kind:'kitchen_damage',amount:-1});
-    }
+function contextFor(world:WorldState,beat:Beat,template:SectComedyTemplate):ComedyContext{
+  return {tick:world.tick,templateId:template.id,speakerId:beat.speaker.id,
+    source:beat.source,...(beat.siteId?{siteId:beat.siteId}:{})};
+}
+function effectsFor(world:WorldState,beat:Beat,template:SectComedyTemplate,context:ComedyContext){
+  if(template.effects.length&&beat.source.phase!=='performed'&&
+    !(beat.source.phase==='ambient'&&beat.source.presence==='home'))return;
+  if(template.effects.some(effect=>effect.kind==='kitchen_damage')){
+    const management=world.sectManagement;
+    if(!management||beat.source.phase!=='performed'||beat.source.jobId!=='kitchen'||beat.source.tier!=='mishap'||
+      beat.siteId!==management.homeSiteId||!isGrandSiegeFighterPresent(world,beat.speaker,management.homeSiteId)||
+      !beat.row?.effects.some(row=>row.kind==='herb'&&row.stage==='native'&&row.amount===-1&&
+        (row.herbId==='earth_root'||row.herbId==='jade_leaf')))return;
   }
-  if(new Set(wouldApply.map(effect=>effect.kind)).size!==wouldApply.length)return;
-  return wouldApply;
+  return planComedyEffects(world,context,template.effects);
 }
 function score(beat:Beat,template:SectComedyTemplate){
   const {match}=template;
@@ -122,21 +114,27 @@ export function settleSectComedyMonth(world:WorldState,prevWorld:WorldState):Wor
   const recent=new Map(history.map((row,i)=>[row.templateId,i]));
   const candidates:Candidate[]=[];
   for(const beat of options(world))for(const template of SECT_COMEDY_TEMPLATES){
-    if(!matches(world,beat,template.match)||effectsFor(world,beat,template)===undefined)continue;
-    candidates.push({...beat,template,score:score(beat,template),jitter:priority(world.random.seed,world.tick,`${template.id}:${beat.speaker.id}`)});
+    if(!matches(world,beat,template.match))continue;
+    candidates.push({...beat,template,context:contextFor(world,beat,template),score:score(beat,template),
+      jitter:comedyPriority(world.random.seed,world.tick,`${template.id}:${beat.speaker.id}`)});
   }
-  const pick=candidates.sort((a,b)=>(recent.get(a.template.id)??-1)-(recent.get(b.template.id)??-1)||
-    b.score-a.score||a.jitter-b.jitter||compare(a.template.id,b.template.id)||compare(a.speaker.id,b.speaker.id))[0];
-  if(!pick)return;
-  const effects=effectsFor(world,pick,pick.template);
-  if(!effects)return;
-  for(const effect of effects){
-    if(effect.kind==='qi')pick.speaker.qiProgress+=effect.amount;
-    else management.buildings.kitchen+=effect.amount;
+  const ordered=candidates.sort((a,b)=>(recent.get(a.template.id)??-1)-(recent.get(b.template.id)??-1)||
+    b.score-a.score||a.jitter-b.jitter||compare(a.template.id,b.template.id)||compare(a.speaker.id,b.speaker.id));
+  // An invalid scene is skipped atomically. Give the same job and outcome the first chance at a fallback.
+  const first=ordered[0];
+  if(!first)return;
+  const sameBeat=(candidate:Candidate)=>candidate.row===first.row&&candidate.speaker.id===first.speaker.id&&
+    candidate.source.phase===first.source.phase;
+  let pick:Candidate|undefined,planned:ReturnType<typeof planComedyEffects>;
+  for(const candidate of [...ordered.filter(sameBeat),...ordered.filter(candidate=>!sameBeat(candidate))]){
+    const candidatePlan=effectsFor(world,candidate,candidate.template,candidate.context);
+    if(candidatePlan){pick=candidate;planned=candidatePlan;break;}
   }
-  const moment:SectComicMoment={tick:world.tick,templateId:pick.template.id,speakerId:pick.speaker.id,
-    source:{...pick.source},effects,...(pick.siteId?{siteId:pick.siteId}:{})};
-  management.comedy={moments:[...history.slice(-(HISTORY-1)),moment]};
+  if(!pick||!planned)return;
+  planned.commit();
+  const moment:SectComicMoment={...pick.context,source:{...pick.source},effects:planned.applied};
+  const pending=[...(management.comedy?.pending??[]),...planned.pending];
+  management.comedy={moments:[...history.slice(-(HISTORY-1)),moment],...(pending.length?{pending}:{})};
   return {id:sectComicEventId(world.tick,management.sectId),tick:world.tick,year:world.year,month:world.month,
     actorIds:[pick.speaker.id],witnessScope:'participants',category:'diplomacy',
     title:'宗门月末一记',description:'这一月的宗门小事已记下。'};
@@ -146,7 +144,7 @@ export function settleSectComedyMonth(world:WorldState,prevWorld:WorldState):Wor
 export function projectSectComicMoment(world:WorldState,moment=world.sectManagement?.comedy?.moments.at(-1)){
   const management=world.sectManagement;
   if(!management||!moment||moment.tick>world.tick||!management.comedy?.moments.includes(moment))return;
-  const template=SECT_COMEDY_TEMPLATES.find(row=>row.id===moment.templateId);
+  const template=findSectComedyTemplate(moment.templateId);
   const speaker=unique(world.cultivators,moment.speakerId),sect=unique(world.sects,management.sectId);
   if(!template||!speaker||!sect)return;
   const seasonal=moment.source.phase==='ambient'?undefined:sectFestivalForJob(moment.source.jobId);
@@ -154,15 +152,19 @@ export function projectSectComicMoment(world:WorldState,moment=world.sectManagem
   const site=moment.siteId?unique(world.locations,moment.siteId):undefined;
   const jobId=moment.source.phase!=='ambient'?moment.source.jobId:undefined;
   const speakerName=spelling(speaker.name);
-  const substitute=(text:string)=>text.replace(/\{(name|sect|site|job)\}/gu,(_,field:string)=>(
+  const rival=world.sects.find(row=>row.id===comedyRelationTarget(world,moment,'rival'));
+  const substitute=(text:string)=>text.replace(/\{(name|sect|site|job|rivalSect)\}/gu,(_,field:string)=>(
     field==='name'?speakerName:field==='sect'?spelling(sect.name):field==='site'?spelling(site?.name??'眼下这处'):
-      jobId?SECT_JOB_DEFINITIONS[jobId].label:'本月的事'
+      field==='rivalSect'?spelling(rival?.name??'邻宗'):jobId?SECT_JOB_DEFINITIONS[jobId].label:'本月的事'
   ));
   const proofId=moment.source.phase!=='ambient'?moment.source.reportEventId:undefined;
   const shareable=proofId?world.events.some(row=>row.id===proofId&&row.tick===moment.tick&&row.witnessScope===undefined):false;
   const hook=template.chatHook&&((template.chatHook.group==='own')||shareable)?
     {group:template.chatHook.group,line:substitute(template.chatHook.line)}:undefined;
+  const rumor=template.effects.find(effect=>effect.kind==='rumor'&&moment.effects.some(row=>row.kind==='rumor'&&row.group===effect.group));
+  const rumorHook=rumor?.kind==='rumor'&&(rumor.group==='own'||shareable)
+    ?{group:rumor.group,line:substitute(rumor.line)}:undefined;
   return {moment:structuredClone(moment),templateId:template.id,speakerId:speaker.id,speakerName,
     report:substitute(template.report),quote:substitute(template.quote),effects:moment.effects.map(row=>({...row})),
-    ...(template.animation?{animation:template.animation}:{}),...(hook?{chatHook:hook}:{})};
+    ...(rumorHook?{rumorHook}:{}),...(template.animation?{animation:template.animation}:{}),...(hook?{chatHook:hook}:{})};
 }

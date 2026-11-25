@@ -10,7 +10,7 @@ export type SectChatVariant=typeof SECT_CHAT_VARIANTS[number];
 
 export type SectChatSource =
   | {readonly kind:'public_event';readonly eventId:string;readonly eventTick:number;readonly knowledge:'witness'|'rumor'}
-  | {readonly kind:'comic';readonly templateId:string}
+  | {readonly kind:'comic';readonly templateId:string;readonly rumor?:1}
   | {readonly kind:'recurring';readonly role:Exclude<SectRecurringRole,'cat'>;readonly outcome:SectRecurringOutcome}
   | {readonly kind:'room_greeting';readonly kindOfGreeting:'own'|'market'|'jiuzhou'};
 interface SectChatPostBase {

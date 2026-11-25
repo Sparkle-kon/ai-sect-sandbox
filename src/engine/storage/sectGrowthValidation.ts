@@ -5,11 +5,11 @@ import { num, one, optional, SAVE_COLLECTION_LIMIT, structure, tick, wealth } fr
 
 const rating=one(...SECT_RATINGS);
 const stipendTreasuryLimit=50_000;
-const originalPrincipal=80;
+const debtLimit=1_000_000_000;
 export const sectGrowthShape=structure({
   closing:structure({
-    tick, treasury:wealth, overduePrincipal:num(0,originalPrincipal,true),
-    closingNet:num(-originalPrincipal,1_000_000_000), livingDisciples:num(0,SAVE_COLLECTION_LIMIT,true),
+    tick, treasury:wealth, overduePrincipal:num(0,debtLimit,true),
+    closingNet:num(-debtLimit,1_000_000_000), livingDisciples:num(0,SAVE_COLLECTION_LIMIT,true),
     negativeMonths:num(0,3,true),
   }),
   review:optional(structure({
@@ -30,7 +30,7 @@ export function validateSectGrowth(
 ):void {
   const {closing,review,failure}=growth;
   const dueTick=state.foundedTick+6;
-  const afterDue=state.starterId==='qingyun-odd-jobs'&&closing.tick>dueTick;
+  const afterDue=closing.tick>dueTick;
   // The native treasury cannot be negative; unpaid debt is counted here only as an obligation.
   // Later repayment can make the current principal *smaller* than the closing snapshot.
   if(closing.tick<=state.foundedTick||closing.tick>world.tick||
@@ -38,7 +38,8 @@ export function validateSectGrowth(
       closing.livingDisciples>world.cultivators.length-1||
       (closing.closingNet<0)!==(closing.negativeMonths>0)||
       (!afterDue&&closing.overduePrincipal!==0)||
-      (afterDue&&state.debt!==undefined&&closing.overduePrincipal<state.debt.principal)||
+      (state.debt!==undefined&&closing.tick>state.debt.dueTick&&
+        (state.debt.comedyAdjustedTick??0)<closing.tick&&closing.overduePrincipal<state.debt.principal)||
       closing.negativeMonths>Math.max(0,closing.tick-dueTick))
     return fail('sectManagement.growth.closing');
   if(review){

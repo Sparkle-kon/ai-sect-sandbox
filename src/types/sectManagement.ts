@@ -28,6 +28,7 @@ export interface ManagementDebt {
   readonly creditorId:string;
   principal:number;
   readonly dueTick:number;
+  readonly comedyAdjustedTick?:number;
 }
 
 export interface SectManagementState {

@@ -23,7 +23,7 @@ export const sectManagementShape = structure({
   draw: one(0,1),
   foundingDiscipleIds: arr(5,id),
   buildings: structure({ hall:building, kitchen:building, furnace:building, trainingGround:building, gate:building, library:building }),
-  debt: optional(structure({ creditorId:id, principal:wealth, dueTick:tick })),
+  debt: optional(structure({ creditorId:id, principal:wealth, dueTick:tick, comedyAdjustedTick:optional(tick) })),
   latestReport: optional(sectJobReportShape),
   growth: optional(sectGrowthShape),
   comedy: optional(sectComedyShape),
@@ -77,11 +77,16 @@ export function validateSectManagement(world: WorldState, fail: (field:string)=>
         !creditor.alive||creditor.hp<=0||creditor.locationId!=='loc-market'||creditor.positionPlane!==undefined||
         creditor.sectId===sect.id)return fail('sectManagement.foundingBodies');
   }
-  // The original note can only be paid down; no borrowing or deadline rewrite in this lane.
-  if(state.debt&&(state.starterId!=='qingyun-odd-jobs'||state.debt.creditorId!==creditor.id||
-      !Number.isInteger(state.debt.principal)||state.debt.principal<1||state.debt.principal>80||
-      state.debt.dueTick!==state.foundedTick+6))
-    return fail('sectManagement.debt');
+  // Earlier saves have the original six-month note. Comedic obligations retain the same creditor.
+  if(state.debt){
+    const {creditorId,principal,dueTick,comedyAdjustedTick}=state.debt;
+    if(creditorId!==creditor.id||!Number.isSafeInteger(principal)||principal<1||
+      (comedyAdjustedTick===undefined
+        ?state.starterId!=='qingyun-odd-jobs'||principal>80||dueTick!==state.foundedTick+6
+        :comedyAdjustedTick<=state.foundedTick||comedyAdjustedTick>world.tick||
+          dueTick<state.foundedTick+6||dueTick>comedyAdjustedTick+6))
+      return fail('sectManagement.debt');
+  }
   if(world.tick===state.foundedTick&&(state.starterId==='qingyun-odd-jobs'?
       state.debt?.principal!==80||state.debt?.dueTick!==state.foundedTick+6:state.debt!==undefined))
     return fail('sectManagement.debt');
