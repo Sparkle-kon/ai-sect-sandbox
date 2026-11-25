@@ -3,6 +3,7 @@ import type {SectLiveCommand} from './types/sectLive';
 import type {SectMomentCommand} from './types/sectMoments';
 import {projectSectChat} from './engine/sectChat';
 import {managedRestartSeed} from './engine/timelineEngine';
+import type {SectComedyChoiceCommand} from './types/sectComedy';
 import type {SectGrowthCommand} from './types/sectGrowth';
 import type {SectJobAssignment,SectJobReport} from './types/sectJobs';
 import {SectManagementHome} from './components/SectManagementHome';
@@ -784,6 +785,8 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
     return true;
   };
   const canManage=(expected:WorldState)=>managerView==='opening'&&expected===world&&!!world.sectManagement&&managerIsCurrent();
+  const chooseComedy=(expected:WorldState,command:SectComedyChoiceCommand):boolean=>
+    canManage(expected)&&simulation.manageSectComedy(expected,timeline,managerRevision,command);
   const manageGrowth=(expected:WorldState,command:SectGrowthCommand):boolean=>
     canManage(expected)&&simulation.manageSectGrowth(expected,timeline,managerRevision,command);
   const manageMoment=async(expected:WorldState,command:SectMomentCommand):Promise<boolean>=>
@@ -810,7 +813,7 @@ export const App: React.FC<AppProps> = ({ initialWorkspace, initialSection, init
   if(managerView==='opening')return <SectManagementHome world={world} titleRef={managerHeading} busy={managerBlocked}
     onStart={startManagedSect} onOpen={openFromManager} onConfirmJobs={confirmSectJobs} observations={simulation.sectJobObservations}
     onSkipFirstMeeting={showFirstMeeting?()=>setFirstMeeting(undefined):undefined}
-    report={currentSectReport} onDismissReport={dismissSectReport} onManagementAction={manageGrowth} onRestart={restartManaged} restartSeed={restartSeed}
+    report={currentSectReport} onDismissReport={dismissSectReport} onManagementAction={manageGrowth} onComedyChoice={chooseComedy} onRestart={restartManaged} restartSeed={restartSeed}
     chatScope={viewScopeKey} onOpenChatSource={openChatSource} chatModel={{config:llmConfig,onChange:simulation.changeLlmConfig}}
     chatPosting={simulation.sectPlayerPosting} momentsAction={manageMoment} liveAction={manageLive} challengeAction={manageChallenge}/>;
   if(managerView==='saves')return <main className="xianxia-shell min-h-dvh bg-slate-950 text-slate-100 px-4 py-3">

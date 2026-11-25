@@ -87,7 +87,7 @@ function saveRoundTrip(world: WorldState) {
 
 describe('同门关系插曲经过真实晨会和月步', () => {
   it('两个本可当值的同门互相甩锅，没人开灶，也不会记成完成', () => {
-    const { world, second, pair } = establishedRelations('contrarian', 'coward_king');
+    const { world, first, second, pair } = establishedRelations('contrarian', 'coward_king');
     const original = encodeEraWorldSave(world);
     for (const id of pair) {
       expect(planSectJob(world, actor(world, id), 'kitchen')).toMatchObject({
@@ -95,6 +95,7 @@ describe('同门关系插曲经过真实晨会和月步', () => {
       });
     }
     const ordinary = structuredClone(world);
+    actor(ordinary, first).quirks = ['shy'];
     actor(ordinary, second).quirks = ['neat_freak'];
     const withoutBlame = month(ordinary, jobs(pair, 'kitchen'));
     const actual = month(world, jobs(pair, 'kitchen'));
@@ -120,7 +121,7 @@ describe('同门关系插曲经过真实晨会和月步', () => {
     expect(encodeEraWorldSave(world)).toBe(original);
   });
 
-  it('异工、异地、独自一人、无关系、未成年、以及强制渡劫不会形成配对', () => {
+  it('异工、异地、独自一人、未成年、以及强制渡劫不会形成配对；普通同门可以搭档', () => {
     const { world, first, second, pair } = establishedRelations('lovestruck', 'neat_freak');
     const assignments = jobs(pair, 'cultivate');
     expect(management(month(world, [assignments[0], { ...assignments[1], jobId: 'kitchen' }]).next).pairDrama).toBeUndefined();
@@ -137,7 +138,7 @@ describe('同门关系插曲经过真实晨会和月步', () => {
     const strangers = structuredClone(world);
     const prior = relationship(strangers, first, second);
     strangers.relationships = strangers.relationships.filter(row => row !== prior);
-    expect(management(month(strangers, assignments).next).pairDrama).toBeUndefined();
+    expect(management(month(strangers, assignments).next).pairDrama).toMatchObject({kind:'rivalry',outcome:'completed'});
     const duplicate = structuredClone(world);
     const duplicateEdge = relationship(duplicate, first, second);
     if (!duplicateEdge) throw new Error('Expected the prior native edge');

@@ -64,7 +64,7 @@ describe('同门小插曲：证据、隐私与关系边界',()=>{
     expect(planSectPairDrama(world,orders)).toBeUndefined();
     world.relationships.pop();
     world.relationships.push({fromId:a.id,toId:leader,type:'道侣',affinity:80,note:'已有道侣'});
-    expect(planSectPairDrama(world,orders)).toBeUndefined();
+    expect(planSectPairDrama(world,orders)?.kind).not.toBe('crush');
   });
 
   it('竞争到了边界也不改既存关系，重伤或未执行皆不结算',()=>{

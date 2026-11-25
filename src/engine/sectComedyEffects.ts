@@ -1,4 +1,5 @@
 import {COMEDY_ITEMS,COMEDY_PETS} from '../data/sectComedy/consequences';
+import {isSectComedySequel} from '../data/sectComedy/scenes/continuations';
 import {findSectComedyTemplate} from '../data/sectComedy';
 import {COMEDY_MAX_EFFECTS,COMEDY_PENDING_LIMIT,type SectComedyEffect,type SectComedyPending,
   type SectComicAppliedEffect} from '../types/sectComedy';
@@ -18,7 +19,7 @@ const clamp=(n:number,lo:number,hi:number)=>Math.min(hi,Math.max(lo,n));
 
 /** Stage only the touched accounts. Repeated costs see the staged balances; no journal, visitor,
  * person or asset reaches the real world unless the entire authored beat is legal. */
-export function planComedyEffects(world:WorldState,ctx:ComedyContext,effects:readonly SectComedyEffect[]){
+export function planComedyEffects(world:WorldState,ctx:ComedyContext,effects:readonly SectComedyEffect[],receiptId?:string){
   if(effects.length>COMEDY_MAX_EFFECTS||ctx.tick!==world.tick)return;
   if(!effects.length)return {applied:[] as SectComicAppliedEffect[],pending:[] as SectComedyPending[],commit:()=>{}};
   const m=world.sectManagement,actor=world.cultivators.find(row=>row.id===ctx.speakerId);
@@ -33,7 +34,7 @@ export function planComedyEffects(world:WorldState,ctx:ComedyContext,effects:rea
   const diplomacy=new Map<string,number>();
   const herbs={...actor.herbs},artifacts=[...actor.artifacts],buildings={...m.buildings};
   let hp=actor.hp,qi=actor.qiProgress,stones=sect.spiritStones,fame=sect.reputation,debt=m.debt&&{...m.debt};
-  const refId=`evt-${ctx.tick}-${sect.id}-comic`;
+  const refId=receiptId??`evt-${ctx.tick}-${sect.id}-comic`;
   function flow(good:'stone'|keyof Cultivator['herbs'],amount:number){
     const account=good==='stone'?flowSect(sect!.id):flowActor(actor!.id);
     const base={mechanism:'sect_economy',reason:'sect_comedy',refId,good,amount:Math.abs(amount),
@@ -155,7 +156,7 @@ export function planComedyEffects(world:WorldState,ctx:ComedyContext,effects:rea
       case 'sequel': {
         const dueTick=comedyDueTick(world.random.seed,ctx,index,effect.afterMonths);
         if(dueTick===undefined||queued.length+(m.comedy?.pending?.length??0)>=COMEDY_PENDING_LIMIT)return;
-        if(effect.kind==='visit'&&!effect.reason.trim()||effect.kind==='sequel'&&!findSectComedyTemplate(effect.templateId))return;
+        if(effect.kind==='visit'&&!effect.reason.trim()||effect.kind==='sequel'&&!isSectComedySequel(effect.templateId)&&!findSectComedyTemplate(effect.templateId))return;
         const continuation=effect.kind==='visit'?{kind:'visit' as const,npc:effect.npc,dueTick}:
           {kind:'sequel' as const,templateId:effect.templateId,dueTick};
         queued.push({...continuation,originTick:ctx.tick,originTemplateId:ctx.templateId,effectIndex:index,speakerId:ctx.speakerId,

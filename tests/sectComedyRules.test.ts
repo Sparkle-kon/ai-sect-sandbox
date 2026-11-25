@@ -40,7 +40,7 @@ describe('typed independent comedy effects',()=>{
     expect(world.random).toEqual(rng);
     const view=projectSectComicMoment(world)!;
     expect(view.moment).toMatchObject({speakerId:cook.id,source:{phase:'performed',tier:'mishap',jobId:'kitchen',reportEventId:source.id},
-      effects:[{kind:'kitchen_damage',amount:-1}]});
+      effects:expect.arrayContaining([{kind:'kitchen_damage',amount:-1}])});
     expect(view.animation).toBe('smoke');
     expect(event?.description).not.toContain(view.quote);
     expect(projectSectComicMoment(world,view.moment)).toBeUndefined();

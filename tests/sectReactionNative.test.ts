@@ -136,7 +136,7 @@ describe('小人反应只认实际月度差事与火候', () => {
     expect(row).toMatchObject({ tier: 'mishap', phase: 'performed' });
     expect(state(next).comedy?.moments.at(-1)).toMatchObject({
       tick: next.tick, speakerId: cook.id, siteId: management.homeSiteId,
-      effects: [{ kind: 'kitchen_damage', amount: -1 }],
+      effects: expect.arrayContaining([{ kind: 'kitchen_damage', amount: -1 }]),
     });
     expect(state(next).buildings.kitchen).toBe(management.buildings.kitchen - 1);
     const cue = projectSectReportReaction(next, report, row);

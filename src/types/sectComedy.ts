@@ -41,7 +41,12 @@ export type SectComedyFollowUp =
 export type SectComedyPending=SectComedyFollowUp&{
   readonly originTick:number;readonly originTemplateId:string;readonly effectIndex:number;
   readonly speakerId:string;readonly siteId?:string;
+  readonly arrival?:{
+    readonly tick:number;readonly visitorId?:string;
+    readonly choice?:{readonly id:string;readonly tick:number;readonly effects:readonly SectComicAppliedEffect[]};
+  };
 };
+export interface SectComedyChoiceCommand {readonly id:string;readonly choiceId:string}
 export type SectComicAppliedEffect =
   | {readonly kind:'qi'|'stones'|'fame'|'debt'|'injury';readonly amount:number}
   | {readonly kind:'kitchen_damage';readonly amount:-1}

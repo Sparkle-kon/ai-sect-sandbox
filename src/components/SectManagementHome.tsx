@@ -5,6 +5,7 @@ import {lazy,Suspense,useCallback,useId,useMemo,useRef,useState,type RefObject} 
 import {projectSectRecurring} from '../engine/sectRecurring';
 import {projectSectPairDrama} from '../engine/sectPairDrama';
 import {projectSectComicMoment} from '../engine/sectComedy';
+import {SectComedyContinuations,type SectComedyChoiceAction} from './SectComedyContinuations';
 import {associatedComicRow,SectComicAside} from './SectComicRead';
 import {projectSectGrowth,quoteSectGrowthCommand} from '../engine/sectGrowth';
 import type {SectGrowthCommand} from '../types/sectGrowth';
@@ -49,6 +50,7 @@ export interface SectManagementHomeProps {
   report?:SectJobReport;
   onDismissReport?:(report:SectJobReport)=>void;
   titleRef?:RefObject<HTMLHeadingElement>;
+  onComedyChoice?:SectComedyChoiceAction;
   onManagementAction?:(expectedWorld:WorldState,command:SectGrowthCommand)=>boolean;
   onRestart?:(expectedWorld:WorldState,starterId:StarterSectId,draw:StarterDraw)=>boolean;
   restartSeed?:number;
@@ -232,7 +234,7 @@ function ManagedCourtyard({world,busy,onTick,onConfirmJobs,onSkipFirstMeeting,ob
   </>;
 }
 
-export function SectManagementHome({world,busy=false,onStart,onOpen,onTick,onConfirmJobs,onSkipFirstMeeting,observations,report,onDismissReport,titleRef,onManagementAction,onRestart,restartSeed,chatScope,onOpenChatSource,chatModel,chatPosting,momentsAction,liveAction,challengeAction}:SectManagementHomeProps){
+export function SectManagementHome({world,busy=false,onStart,onOpen,onTick,onConfirmJobs,onSkipFirstMeeting,observations,report,onDismissReport,titleRef,onManagementAction,onComedyChoice,onRestart,restartSeed,chatScope,onOpenChatSource,chatModel,chatPosting,momentsAction,liveAction,challengeAction}:SectManagementHomeProps){
   const sect=world.sects.find(row=>row.id===world.sectManagement?.sectId);
   const growth=useMemo(()=>projectSectGrowth(world),[world]);
   const [restarting,setRestarting]=useState<WorldState>();
@@ -271,6 +273,7 @@ export function SectManagementHome({world,busy=false,onStart,onOpen,onTick,onCon
         sect?<div className="grid min-w-0 items-start gap-3 min-[1440px]:grid-cols-[minmax(0,1fr)_19rem]">
           <div className="min-w-0 space-y-3"><ManagedCourtyard world={world} busy={busy} onTick={onTick} onConfirmJobs={onConfirmJobs} onSkipFirstMeeting={onSkipFirstMeeting}
             observations={observations} report={report} onDismissReport={onDismissReport} growth={growth} command={command}/>
+            <SectComedyContinuations world={world} busy={busy} action={onComedyChoice}/>
             {challengeAction&&chatKey&&<Suspense fallback={null}>
               <SectChallengePanel key={chatKey} world={world} busy={busy||pendingReport}
                 onRequest={(expected,discipleId,defenderSectId)=>challengeAction(expected,{kind:'request',discipleId,defenderSectId})}

@@ -18,20 +18,19 @@ interface PairTemplate {
   readonly title:string;
   readonly voices:readonly [string,string];
   readonly quirks?:readonly SectQuirkId[];
-  readonly both?:boolean;
 }
 const TEMPLATES:readonly PairTemplate[]=[
   {kind:'blame',types:['同门','竞争'],minimum:-59,maximum:40,affinity:-2,title:'一差两推',
-    quirks:['drama','contrarian','jinx','coward_king'],both:true,
+    quirks:['drama','contrarian','jinx','coward_king'],
     voices:['我只等同门先开口，哪知这门道竟有人同我想到一处。','分明说好谁先出声谁先动手。我倒盼自己嘴再快些。']},
   {kind:'crush',types:['同门','挚友'],minimum:15,maximum:100,affinity:1,title:'一句未说出口',
     quirks:['lovestruck'],
     voices:['原想多问道友一句，临到开口，竟只问了句这月几日。','差事已回完了。还有别的事么？']},
-  {kind:'rivalry',types:['竞争'],minimum:-59,maximum:79,affinity:1,title:'差毕还要分高下',
-    voices:['下回且再排一处。我不争先，但要知道是谁第二。','师门自有考评，何苦另立一榜，还把自己的名字写头一行。']},
-  {kind:'prank',types:['挚友'],minimum:20,maximum:100,affinity:2,title:'谢礼留到下回',
+  {kind:'prank',types:['挚友','同门'],minimum:0,maximum:100,affinity:2,title:'谢礼留到下回',
     quirks:['drama','chatterbox','jinx'],
     voices:['今儿这点小玩笑，明日定不会再使同一招。','这份盛情我先记下。下个月一定原样奉还。']},
+  {kind:'rivalry',types:['竞争','同门','挚友'],minimum:-59,maximum:79,affinity:1,title:'差毕还要分高下',
+    voices:['下回且再排一处。我不争先，但要知道是谁第二。','师门自有考评，何苦另立一榜，还把自己的名字写头一行。']},
 ];
 const isChore=(jobId:SectJobId):jobId is 'kitchen'|'guard'=>jobId==='kitchen'||jobId==='guard';
 const edgeMatches=(edge:RelationshipEdge,a:string,b:string)=>
@@ -66,13 +65,19 @@ function localChores(world:WorldState,pair:Pair,jobId:SectJobId,siteId:string){
   });
 }
 
+function plainPair(world:WorldState,pair:Pair):RelationshipEdge|undefined{
+  const [fromId,toId]=ids(pair);
+  const rows=world.relationships.filter(row=>edgeMatches(row,fromId,toId));
+  if(rows.length)return rows.length===1?rows[0]:undefined;
+  return {fromId,toId,type:'同门',affinity:0,note:'同领一桩差事。'};
+}
 function initiator(world:WorldState,pair:Pair,edge:RelationshipEdge,template:PairTemplate):Cultivator|undefined{
   if(!Number.isFinite(edge.affinity)||!template.types.includes(edge.type)||
     edge.affinity<template.minimum||edge.affinity>template.maximum)return;
   const eligible=template.quirks
     ? pair.filter(actor=>actor.quirks?.some(quirk=>template.quirks?.includes(quirk)))
     : pair;
-  if(template.both&&eligible.length!==2)return;
+
   if(template.kind==='crush'){
     const [a,b]=ids(pair);
     if(eligible.length!==1||world.relationships.some(row=>row.type==='道侣'&&
@@ -87,13 +92,15 @@ export function planSectPairDrama(world:WorldState,orders:ReadonlyMap<string,Sec
   const roster=eligibleSectDisciples(world).filter(actor=>orders.get(actor.id)?.discipleId===actor.id&&
     nearby(world,actor,actor.locationId));
   for(const template of TEMPLATES){
+    if(template.kind==='rivalry'&&world.tick%3===0)continue;
     for(const [index,first] of roster.entries()){
       const order=orders.get(first.id),siteId=first.locationId;
       if(!order||!siteExists(world,siteId))continue;
       for(const second of roster.slice(index+1)){
         const peer=orders.get(second.id);
         if(!peer||peer.jobId!==order.jobId||second.locationId!==siteId)continue;
-        const pair:Pair=[first,second],pairIds=ids(pair),edge=relationship(world,pairIds);
+        const pair:Pair=[first,second],pairIds=ids(pair),edge=plainPair(world,pair);
+        if(template.kind==='blame'&&!relationship(world,pairIds)&&!pair.some(actor=>actor.quirks?.includes('jinx')))continue;
         const lead=edge&&initiator(world,pair,edge,template);
         if(!lead||template.kind==='blame'&&!localChores(world,pair,order.jobId,siteId))continue;
         return {tick:world.tick+1,pair:pairIds,initiatorId:lead.id,kind:template.kind,jobId:order.jobId,siteId};
@@ -104,7 +111,7 @@ export function planSectPairDrama(world:WorldState,orders:ReadonlyMap<string,Sec
 
 function activeDrama(world:WorldState,plan:SectPairDramaPlan){
   if(world.tick!==plan.tick)return;
-  const pair=members(world,plan),edge=relationship(world,plan.pair),template=TEMPLATES.find(row=>row.kind===plan.kind);
+  const pair=members(world,plan),edge=pair&&plainPair(world,pair),template=TEMPLATES.find(row=>row.kind===plan.kind);
   if(!pair||!edge||!template||initiator(world,pair,edge,template)?.id!==plan.initiatorId)return;
   return {pair,edge,template};
 }
@@ -141,7 +148,7 @@ export function settleSectPairDrama(world:WorldState,plan:SectPairDramaPlan,repo
   if(world.events.some(event=>event.id===id))return;
   const before=active.edge.affinity,delta=boundedDelta(active.edge,active.template.affinity);
   if(delta!==0)adjustRelationship(world,...plan.pair,delta,active.edge.type);
-  managed.pairDrama={...plan,sectId:managed.sectId,outcome:aborted?'aborted':'completed',affinityChange:active.edge.affinity-before};
+  managed.pairDrama={...plan,sectId:managed.sectId,outcome:aborted?'aborted':'completed',affinityChange:(relationship(world,plan.pair)?.affinity??before)-before};
   const privateBeat=plan.kind==='crush';
   return {id,tick:world.tick,year:world.year,month:world.month,category:'diplomacy',witnessScope:'participants',
     title:SECT_PAIR_DRAMA_EVENT_TITLE,description:SECT_PAIR_DRAMA_EVENT_DESCRIPTION,

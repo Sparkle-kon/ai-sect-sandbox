@@ -1,4 +1,4 @@
-import {COMEDY_MAX_DELAY,type SectComicMoment} from '../types/sectComedy';
+import {COMEDY_MAX_DELAY,type SectComedyPending,type SectComicMoment} from '../types/sectComedy';
 import {starterSectIdentity} from '../types/sectManagement';
 import {sectRecurringIdentity} from '../types/sectRecurring';
 import type {WorldState} from '../types/world';
@@ -27,3 +27,7 @@ export function comedyRelationTarget(world:WorldState,ctx:ComedyContext,tag:'riv
     world.locations.find(site=>site.id===ctx.siteId)?.ownerSectId;
 }
 
+
+export const comedyFollowUpKey=(row:SectComedyPending)=>`${row.originTick}-${row.effectIndex}`;
+export const comedyFollowUpEventId=(sectId:string,row:SectComedyPending,choice:boolean)=>
+  `evt-${row.originTick}-${sectId}-comedy-return-${row.effectIndex}${choice?'-answer':''}`;

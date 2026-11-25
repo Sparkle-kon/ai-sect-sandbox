@@ -1,10 +1,11 @@
+import {COMEDY_SEQUELS,isSectComedySequel} from '../../data/sectComedy/scenes/continuations';
 import { findSectComedyTemplate } from '../../data/sectComedy';
 import {COMEDY_ITEM_IDS,COMEDY_MAX_EFFECTS,COMEDY_PENDING_LIMIT,COMEDY_PET_IDS,COMEDY_RECRUIT_IDS,
   type SectComedyEffect,type SectComedyState,type SectComicAppliedEffect,type SectComicMoment} from '../../types/sectComedy';
 import {MANAGEMENT_BUILDING_IDS} from '../../types/sectManagement';
 import {SECT_RECURRING_ROLES} from '../../types/sectRecurring';
 import {SECT_CHAT_ROOMS} from '../../types/sectChat';
-import {comedyDueTick,comedyIdentity,comedyRecurringIds,comedyRelationTarget} from '../sectComedyTerms';
+import {comedyDueTick,comedyFollowUpEventId,comedyIdentity,comedyRecurringIds,comedyRelationTarget} from '../sectComedyTerms';
 import type { SectManagementState } from '../../types/sectManagement';
 import type { WorldState } from '../../types/world';
 import {sectFestivalForJob,sectMonthAt} from '../sectFestivals';
@@ -28,7 +29,7 @@ const source:Validator=(value,path)=>{
 const amount=num(-1_000_000_000,1_000_000_000,true);
 const visit={npc:one(...SECT_RECURRING_ROLES),dueTick:tick};
 const sequel={templateId:id,dueTick:tick};
-const pendingOrigin={originTick:tick,originTemplateId:id,effectIndex:num(0,COMEDY_MAX_EFFECTS-1,true),speakerId:id,siteId:oid};
+
 const effects:Record<SectComicAppliedEffect['kind'],Validator>={
   qi:structure({kind:one('qi'),amount:num(-100,100)}),
   stones:structure({kind:one('stones'),amount}),
@@ -52,6 +53,9 @@ const effect:Validator=(value,path)=>{
     !Object.hasOwn(effects,value.kind))return rejectShape(path);
   return effects[value.kind as SectComicAppliedEffect['kind']](value,path);
 };
+const arrival=structure({tick,visitorId:oid,choice:optional(structure({id,tick,effects:arr(COMEDY_MAX_EFFECTS,effect)}))});
+const pendingOrigin={originTick:tick,originTemplateId:id,effectIndex:num(0,COMEDY_MAX_EFFECTS-1,true),speakerId:id,siteId:oid,
+  arrival:optional(arrival)};
 const pendingVisit=structure({kind:one('visit'),...visit,...pendingOrigin});
 const pendingSequel=structure({kind:one('sequel'),...sequel,...pendingOrigin});
 const pending:Validator=(value,path)=>{
@@ -90,7 +94,7 @@ function matchesEffect(world:WorldState,state:SectManagementState,row:Omit<SectC
       applied.beastId===(offered.template==='pill-cat'?comedyRecurringIds(world)?.cat:comedyIdentity(state.sectId,'pet',offered.template));
     case 'visit':return offered.kind==='visit'&&applied.npc===offered.npc&&
       applied.dueTick===comedyDueTick(world.random.seed,row,index,offered.afterMonths);
-    case 'sequel':return offered.kind==='sequel'&&applied.templateId===offered.templateId&&!!findSectComedyTemplate(applied.templateId)&&
+    case 'sequel':return offered.kind==='sequel'&&applied.templateId===offered.templateId&&(isSectComedySequel(applied.templateId)||!!findSectComedyTemplate(applied.templateId))&&
       applied.dueTick===comedyDueTick(world.random.seed,row,index,offered.afterMonths);
     case 'rumor':return offered.kind==='rumor'&&applied.group===offered.group&&applied.group!=='leaders';
   }
@@ -168,6 +172,32 @@ export function validateSectComedy(
         origin.effects[row.effectIndex]?.kind!==row.kind)||
       !effect||!matchesEffect(world,state,context,row.effectIndex,row,effect))
       return fail('sectManagement.comedy.pending');
+    const arrival=row.arrival;
+    if(arrival){
+      const recipient=state.leaderId,guest=row.kind==='visit'?comedyRecurringIds(world)?.[row.npc]:undefined;
+      const expected=row.kind==='visit'&&row.npc!=='cat'?[recipient,guest]:[recipient];
+      const validMarker=(tick:number,choice:boolean)=>{
+        const id=comedyFollowUpEventId(state.sectId,row,choice);
+        const events=world.events.filter(event=>event.id===id);
+        const insideTail=world.events.length<120||world.events.some(event=>event.tick<tick);
+        if(events.length!==1)return events.length===0&&!insideTail;
+        const event=events[0],audience=choice?[recipient]:expected;
+        return event.tick===tick&&event.year*12+event.month===world.year*12+world.month-(world.tick-tick)&&
+          event.locationId===state.homeSiteId&&event.category==='diplomacy'&&event.witnessScope==='participants'&&
+          event.actorIds.length===audience.length&&event.actorIds.every((id,index)=>id===audience[index]);
+      };
+      if(arrival.tick<row.dueTick||arrival.tick>Math.min(row.dueTick+4,state.growth?.failure?.tick??world.tick)||
+        arrival.visitorId!==guest||row.kind==='visit'&&(!guest||arrival.choice!==undefined)||
+        !validMarker(arrival.tick,false))return fail('sectManagement.comedy.arrival');
+      if(arrival.choice){
+        const choice=arrival.choice,authored=row.kind==='sequel'?COMEDY_SEQUELS[row.templateId]?.choices.find(row=>row.id===choice.id):undefined;
+        const actionContext={...context,tick:choice.tick,speakerId:recipient,siteId:state.homeSiteId};
+        if(!authored||choice.tick<arrival.tick||choice.tick>world.tick||choice.tick-arrival.tick>=12||
+          choice.effects.length!==authored.effects.length||choice.effects.some((applied,index)=>
+            !matchesEffect(world,state,actionContext,index,applied,authored.effects[index]))||!validMarker(choice.tick,true))
+          return fail('sectManagement.comedy.choice');
+      }
+    }
     queued.add(key);
   }
   for(const origin of comedy.moments)for(const [index,effect] of origin.effects.entries()){
