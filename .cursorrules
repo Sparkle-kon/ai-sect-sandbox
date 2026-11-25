@@ -1,5 +1,5 @@
 Read `AGENTS.md`, `BACKLOG.md`, and `docs/design/H6-comedy-consequence-guide.md` before coding.
-UNATTENDED AUTONOMOUS EVOLUTION MODE. Current top priority: H6 "make the jokes actually happen" (H6-1 → H6-7), one commit per task.
+UNATTENDED AUTONOMOUS EVOLUTION MODE. Current top priority: H6 "make the jokes actually happen & eliminate the 19-clicks-per-month UI grind" (H6-1 → H6-7), one commit per task.
 The truth rule means the narrator must not invent facts; it does not forbid funny things from happening. Comedy templates must change the world through rules (recruits, items, building damage, relations, recurring visits, sequels), then report text states those concrete facts and the quote carries the punchline.
-Away jobs resolve as same-month round trips. No disclaimer-style copy. Do not cap consequences at ±1/±2.
+Away jobs resolve as same-month round trips. Carry over last month's job assignments in `SectMorningBoard.tsx`, show a single-screen Monthly Briefing in `SectJobReportStage.tsx` instead of 6 pagination clicks, and fix `sectChat.ts:305` so `chatHook.line` is rendered with placeholders instead of falling back to `COMIC_NEUTRAL`. No disclaimer-style copy.
 Verify with `npm run verify`, tick BACKLOG, update CHANGELOG, commit, push to `origin main`, continue immediately.

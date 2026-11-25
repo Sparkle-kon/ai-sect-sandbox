@@ -41,6 +41,31 @@
 
 H5-3 试玩验收只派了三次"闭关"，慢差事基本没被验到。
 
+### 0.3 "每月点 19 次"的操作地狱与"5/6 空白汇报"（源码级定位）
+
+逐行审计 UI 与结算代码，定位到玩家抱怨"都是一个个点来点去，毫无沉浸感和喜感"的四个直接代码根因：
+
+1. **派工每月清空 + 桌面端藏起弟子列表（`src/components/SectMorningBoard.tsx`）**：
+   - 第 75 行：`const draftOrders = draft?.world === world ? draft.orders : empty;` —— 因为 `draft` 绑定了 `world` 引用，每过一个月 `world` 更新，**上月派好的差事全部归零**！6 个弟子每月都要重新点选 6 次弟子 + 6 次差事牌（12 次点击）。
+   - 第 181 行：`<ul className="mb-2 flex flex-wrap gap-1.5 lg:hidden" aria-label="庭院弟子">` —— 桌面端（`lg` 以上）居然把弟子列表 `lg:hidden` 隐藏了，逼玩家在庭院画布里找浮动小字点人！
+2. **月末强制点 6 次「下一位」，且 5/6 的弟子没有桥段（`src/components/SectJobReportStage.tsx` + `src/engine/sectComedy.ts`）**：
+   - `sectComedy.ts` 第 128 行：`settleSectComedyMonth` 每月**全宗门只挑 1 条桥段（`candidates[0]`）**！
+   - 结果在 `SectJobReportStage.tsx` 的单人翻页器（`第 1 / 6 位` → 点 6 次「下一位」）中，**6 个弟子只有 1 个人有 `sceneComic`**，其余 5 个人全部退化为 `sectJobReportPresentation.ts` 第 41 行的 4 句公文套话（`"掌门，弟子照吩咐办了，且向您交代一声。"`）！
+   - 12 次派工点击 + 1 次过月 + 6 次翻页 = **每月重复点击 19 次，却只看到 5 页公文和 1 页无后果闲聊**。
+3. **`sectChat.ts` 第 305 行把喜剧 `chatHook` 自我阉割成了废话**：
+   - `src/engine/sectChat.ts` 第 305 行写着：
+     ```ts
+     text = template.match.phase==='ambient' && !/[{}]/.test(template.chatHook.line)
+       ? template.chatHook.line
+       : COMIC_NEUTRAL[post.variant];
+     ```
+   - 这行代码导致**所有差事桥段（`phase !== 'ambient'`）以及所有带 `{name}` / `{site}` / `{job}` 的 `chatHook.line` 被当场丢弃**，全部替换成了 `COMIC_NEUTRAL` 那 4 句毫无意义的茶馆废话（`"且留一句闲笔。话写得太满，下个月的我不好落款。"`）！
+4. **群聊、直播弹幕、小报丢人榜写成了"安监局公文"（`sectChatVoices.ts` / `sectLiveLines.ts` / `tianjiTabloid.ts`）**：
+   - `sectChatVoices.ts` 第 19–22 行：群聊见闻全是 `"听闻「{title}」。我没在场，先把这句传话记在边上。"`。
+   - `sectLiveLines.ts` 第 9 行：炸炉直播弹幕居然是 `"先看人有无大碍，再来算这一炉账。"`。
+   - `tianjiTabloid.ts` 第 117 行：江湖小报丢人榜连炸炉弟子的名字都不写，只写 `"炉先响了，丹没出炉。本报只记这声响，不拿伤势取笑。"`。
+   - `SectChatPanel.tsx` 第 17 行：`WIDE = '(min-width: 1440px)'` 导致 1280px/1366px 常规笔记本屏幕默认把群聊收起在页面最底下，根本看不见。
+
 ---
 
 ## 1. 原则：桥段 = 一个真实发生的小事件
@@ -242,7 +267,47 @@ function planErrand(world: WorldState, actor: Cultivator, job: SectJobId): SectJ
 
 ---
 
-## 6. 庭院日常生气
+## 6. 彻底消灭"每月点 19 次"与"群聊自我阉割"（必改代码点）
+
+### 6.1 晨会派工默认沿用上月 + 桌面端常驻弟子排班表（`SectMorningBoard.tsx`）
+
+1. **默认继承上月差事**：
+   - 不要在 `world` 翻月后把 `draftOrders` 重置为空 `Map`（修掉 `SectMorningBoard.tsx:75`）。
+   - 新月份打开晨会时，自动读取每位弟子上月的差事（若该差事本月仍可派，直接预填入 `draftOrders`），并提供「一键沿用上月差事，直接过一个月」快捷操作。玩家只需要调整想改的那 1–2 个弟子，**每月操作从 12 次点击降为 1 次点击**。
+2. **桌面端显示清晰弟子名册与怪癖标签**：
+   - 去掉 `SectMorningBoard.tsx:181` 的 `lg:hidden` 隐藏逻辑！在所有屏幕尺寸下都清晰展示弟子排班列表（头像 + 姓名 + 怪癖标签 + 当前预派差事 + 快捷切换），同时保留画布点选/拖拽。
+
+### 6.2 月末回话改为"焦点大戏 + 同屏一览"，废除强制点 6 次「下一位」（`SectJobReportStage.tsx` + `sectComedy.ts`）
+
+1. **一屏看完全宗月末汇报（`SectJobReportStage.tsx`）**：
+   - 把现在强制点 6 次「下一位」的单人翻页器，改为**一屏总览的《月末回山简报》**：
+     - **顶部「本月焦点奇遇」（1–2 桩）**：大立绘表情 + 动画反应 + 完整桥段汇报文 + 弟子嘴硬金句 + 结构化得失标签（若有后续选泽则直接在卡片上展示 2–3 个抉择按钮）。
+     - **下方「同门差事一览」**：其余弟子以紧凑卡片/列表同屏展示，**每个人都有根据其怪癖 × 差事 × 档位生成的具体一句话事由与个性回话**（彻底删除 `sectJobReportPresentation.ts:41` 里那 4 句干瘪的 `plain[tier]` 公文套话！）。
+     - 底部只需 **1 个主按钮（「知道了，回晨会」）** 即可翻篇（保留点击任意弟子切换顶部大立绘查看详情的能力，但绝不强制点 6 次「下一位」）。
+
+### 6.3 修复 `sectChat.ts:305` 自我阉割 Bug，重做群聊/弹幕/小报台词库
+
+1. **立即修复 `src/engine/sectChat.ts` 第 305 行**：
+   - 删除 `COMIC_NEUTRAL` 降级逻辑！把：
+     ```ts
+     // ❌ 错误：把所有差事桥段和带占位符的 chatHook 全丢掉换成废话
+     text = template.match.phase==='ambient' && !/[{}]/.test(template.chatHook.line)
+       ? template.chatHook.line
+       : COMIC_NEUTRAL[post.variant];
+     ```
+     改为**调用与 `projectSectComicMoment` 相同的占位符替换函数（填入真实的 `{name}`、`{sect}`、`{site}`、`{job}`、`{rivalSect}`）渲染 `template.chatHook.line`**，让桥段自带的群聊梗 100% 真正发到群里！
+2. **重写 `sectChatVoices.ts`、`sectLiveLines.ts`、`sectMomentLines.ts`、`tianjiTabloid.ts` 的冷淡公文腔**：
+   - `sectChatVoices.ts`：彻底替换 `"听闻「{title}」。我没在场，先把这句传话记在边上。"` 这类免责公文；按发言人性格（狂傲/苟道/吃货/中二/财迷/话痨）和事件类型写出有修仙江湖味、会起哄、会眼红、会吐槽的群聊发言。
+   - `sectLiveLines.ts`：炸炉、渡劫、大比、踢馆弹幕要有真正的修仙直播间气氛（如炸炉：`"丹房喜提露天通风！"`、`"黑烟里飞出来的是丹还是丹童？"`、`"王掌柜连夜把修炉砖涨了三成"`），禁止安监局口吻。
+   - `tianjiTabloid.ts`：江湖小报的「丢人榜」「头条」「黑马」必须**连名带姓**写出当事修士、所属宗门与狼狈细节（如 `"${actorName}在${siteName}开炉，丹没见着，炉盖先上了房梁"`），严禁再写 `"本报只记这声响，不拿伤势取笑"`。
+3. **群聊侧栏常驻断点降至 `1024px`（`SectChatPanel.tsx:17` & `SectManagementHome.tsx:271`）**：
+   - 将 `min-[1440px]` 降至 `lg`（`1024px`），让常规笔记本与桌面显示器打开游戏就能同屏看到右侧实时跳动的仙门群聊、朋友圈与直播间。
+4. **放宽双人同差事闹剧触发门槛（`sectPairDrama.ts`）**：
+   - 只要两名弟子同派一处差事，即便只是普通同门关系或单方带怪癖，也能高概率触发搭伙甩锅、抢功、互相拆台或暗生情愫，不再要求苛刻的 `both: true` 双怪癖交集。
+
+---
+
+## 7. 庭院日常生气
 
 - 没派工时弟子在庭院里闲逛、扫地、打盹、凑在一起说话，头顶偶尔冒出 `ambient` 桥段的一句话。
 - **点一下弟子**：冒出一句符合怪癖的话（不推进时间，不改世界）。
