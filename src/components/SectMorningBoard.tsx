@@ -5,6 +5,11 @@ import {projectSectFestivals} from '../engine/sectFestivals';
 import type {SectJobAssignment,SectJobObservation} from '../types/sectJobs';
 import type {Cultivator,WorldState} from '../types/world';
 import {SectFirstMeetingHint,type FirstMeetingStep} from './SectFirstMeetingHint';
+import {SectQuirkBadges} from './SectQuirkBadges';
+import {sectQuirkLabels} from './sectQuirkLabels';
+import {CultivatorPortrait} from './CultivatorPortrait';
+import {projectCultivatorPortrait} from './cultivatorPortraitModel';
+import {courtyardQuip} from './sectJobReportPresentation';
 import {LocalCourtyardCanvas} from './LocalCourtyardCanvas';
 import {drawCanvasCharacterSprite} from './canvasCharacterSprite';
 import type {LocalCourtyardActor,LocalCourtyardPlan} from './localCourtyardModel';
@@ -50,14 +55,33 @@ function PlanningSprite({walk}:{walk:Walk}){
   return <canvas ref={marker} aria-hidden="true" width="40" height="40" className="pointer-events-none absolute bottom-0 right-0 z-20 h-9 w-9"/>;
 }
 
-export function SectMorningBoard({world,busy,plan,moving,onConfirmJobs,buildings,observations,reaction,onSkipFirstMeeting}:{
-  world:WorldState;busy:boolean;plan?:LocalCourtyardPlan;moving?:ReadonlySet<string>;onConfirmJobs:ConfirmSectJobs;buildings:ReactNode;observations?:readonly SectJobObservation[];reaction?:SectReactionCue;onSkipFirstMeeting?:()=>void;
+export function SectMorningBoard({world,busy,plan,moving,onConfirmJobs,buildings,observations,reaction,onSkipFirstMeeting,cat}:{
+  world:WorldState;busy:boolean;plan?:LocalCourtyardPlan;moving?:ReadonlySet<string>;onConfirmJobs:ConfirmSectJobs;buildings:ReactNode;observations?:readonly SectJobObservation[];reaction?:SectReactionCue;onSkipFirstMeeting?:()=>void;cat?:ReactNode;
 }){
   const members=useMemo(()=>eligibleSectDisciples(world),[world]);
   const jobs=useMemo(()=>visibleSectJobDefinitions(world),[world]);
   const festivals=useMemo(()=>projectSectFestivals(world),[world]);
   const sprites=useMemo(()=>new Map(plan?.actors.map(row=>[row.id,row])),[plan]);
   const memberById=useMemo(()=>new Map(members.map(row=>[row.id,row])),[members]);
+  const carried=useMemo<Draft>(()=>{
+    const management=world.sectManagement,report=management?.latestReport;
+    if(!report||report.settledTick!==world.tick||report.sectId!==management?.sectId||report.leaderId!==management.leaderId)return empty;
+    const active=new Set(jobs.map(job=>job.id));
+    const orders=new Map<string,JobId>();
+    for(const row of report.rows){
+      const actor=memberById.get(row.discipleId);
+      if(actor&&active.has(row.jobId)&&quoteSectJob(world,actor,row.jobId).kind!=='blocked')orders.set(actor.id,row.jobId);
+    }
+    return orders;
+  },[jobs,memberById,world]);
+  const portraits=useMemo(()=>new Map(members.map(member=>[member.id,projectCultivatorPortrait(world,member)])),[members,world]);
+  const [poke,setPoke]=useState<{world:WorldState;actorId:string;line:string;sequence:number}>();
+  const taps=useRef(0);
+  useEffect(()=>{
+    if(!poke||poke.world!==world)return;
+    const timer=setTimeout(()=>setPoke(current=>current===poke?undefined:current),3600);
+    return ()=>clearTimeout(timer);
+  },[poke,world]);
   const [selected,setSelected]=useState<{world:WorldState;id:string}>();
   const [draft,setDraft]=useState<BoundDraft>();
   const [walk,setWalk]=useState<Walk>();
@@ -72,7 +96,7 @@ export function SectMorningBoard({world,busy,plan,moving,onConfirmJobs,buildings
   const meetingTitle=useRef<HTMLHeadingElement>(null);
   const actor=selected?.world===world?memberById.get(selected.id):undefined;
   const blocked=busy||pending===world||committed===world;
-  const draftOrders=draft?.world===world?draft.orders:empty;
+  const draftOrders=draft?.world===world?draft.orders:carried;
   const usable=(member:Cultivator,job:JobId)=>quoteSectJob(world,member,job).kind!=='blocked';
   const locked=()=>busy||flight.current?.world===world||committed===world||latest.current!==world;
   const [dragging,setDragging]=useState<{world:WorldState;id:string}>();
@@ -87,7 +111,7 @@ export function SectMorningBoard({world,busy,plan,moving,onConfirmJobs,buildings
     if(candidate.kind==='blocked'){setNotice({world,text:`${SECT_JOB_DEFINITIONS[job].label}：${candidate.reason}`});return;}
     setSelected({world,id:member.id});setNotice(undefined);
     setDraft(previous=>{
-      const orders=new Map(previous?.world===world?previous.orders:empty);
+      const orders=new Map(previous?.world===world?previous.orders:carried);
       orders.set(member.id,job);return {world,orders};
     });
     const sprite=sprites.get(member.id);
@@ -102,6 +126,11 @@ export function SectMorningBoard({world,busy,plan,moving,onConfirmJobs,buildings
   const select=(id:string)=>{
     if(locked()||!memberById.has(id))return;
     setSelected({world,id});setNotice(undefined);
+    const member=memberById.get(id);
+    if(member){
+      const tap=taps.current++;
+      setPoke({world,actorId:id,line:courtyardQuip(member,tap),sequence:tap});
+    }
   };
   const dragStart=(event:DragEvent<HTMLButtonElement>,member:Cultivator)=>{
     if(locked()||!sprites.has(member.id)||!event.dataTransfer){event.preventDefault();return;}
@@ -120,7 +149,7 @@ export function SectMorningBoard({world,busy,plan,moving,onConfirmJobs,buildings
   const undo=()=>{
     if(locked()||!actor||!draftOrders.has(actor.id))return;
     setDraft(previous=>{
-      const orders=new Map(previous?.world===world?previous.orders:empty);
+      const orders=new Map(previous?.world===world?previous.orders:carried);
       orders.delete(actor.id);return {world,orders};
     });
     setWalk(previous=>previous?.actor.id===actor.id?undefined:previous);setNotice(undefined);
@@ -157,6 +186,7 @@ export function SectMorningBoard({world,busy,plan,moving,onConfirmJobs,buildings
     namedOrder&&namedJob?{kind:'confirm',name:namedOrder.name,job:SECT_JOB_DEFINITIONS[namedJob].label}:
       actor?{kind:'job',name:actor.name,practice:usable(actor,'cultivate')}:{kind:'disciple'}:undefined;
   const activeWalk=draft?.world===world?walk:undefined;
+  const inheriting=carried.size>0&&draft?.world!==world;
   const inside=members.filter(member=>sprites.has(member.id));
   const outside=members.filter(member=>!sprites.has(member.id));
   const settled=observations?.flatMap(row=>{
@@ -168,23 +198,32 @@ export function SectMorningBoard({world,busy,plan,moving,onConfirmJobs,buildings
   const chip=(member:Cultivator,desktop:boolean)=><button type="button" aria-label={`点选 ${member.name}`}
     aria-pressed={actor===member} disabled={blocked} data-morning-disciple={desktop?'sprite':'name'}
     className={`${control} px-2 text-xs aria-pressed:border-amber-300 aria-pressed:bg-amber-950 ${desktop?'pointer-events-auto relative hidden min-w-11 cursor-grab border-transparent bg-transparent lg:block':'bg-slate-950/80'}${firstStep?.kind==='disciple'?hintHighlight:''}`}
-    draggable={desktop&&!blocked} onDragStart={event=>dragStart(event,member)} onDragEnd={dragEnd} onClick={()=>select(member.id)}>
-    {desktop?<span className="pointer-events-none absolute left-1/2 top-8 max-w-24 -translate-x-1/2 truncate rounded bg-slate-950/90 px-1.5 py-0.5 text-xs text-amber-100">{member.name}</span>:member.name}
+    draggable={sprites.has(member.id)&&!blocked} onDragStart={event=>dragStart(event,member)} onDragEnd={dragEnd} onClick={()=>select(member.id)}>
+    {desktop?<span className="pointer-events-none absolute left-1/2 top-8 max-w-24 -translate-x-1/2 truncate rounded bg-slate-950/90 px-1.5 py-0.5 text-xs text-amber-100">{member.name}</span>:<span className="flex min-w-0 items-center gap-1.5 text-left">
+      {portraits.get(member.id)&&<CultivatorPortrait portrait={portraits.get(member.id)!} className="h-9 w-8 shrink-0"/>}
+      <span className="min-w-0"><span className="block font-semibold">{member.name}</span>
+      <span className="block text-amber-200">{draftOrders.has(member.id)?SECT_JOB_DEFINITIONS[draftOrders.get(member.id)!].label:'自行安排'}</span>
+      <SectQuirkBadges labels={sectQuirkLabels(member.quirks)}/></span>
+    </span>}
   </button>;
 
   return <div data-sect-morning="" className="grid min-w-0 items-start gap-3 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
     {firstStep&&onSkipFirstMeeting&&<SectFirstMeetingHint step={firstStep} onSkip={()=>{onSkipFirstMeeting();meetingTitle.current?.focus({preventScroll:true});}}/>}
     <section className={card} aria-label="宗门庭院">
-      {plan?<LocalCourtyardCanvas plan={plan} embedded reaction={reaction} renderActor={person=>{
-        const member=memberById.get(person.id);return member?chip(member,true):null;
+      {plan?<LocalCourtyardCanvas plan={plan} embedded reaction={reaction} idleLife={!blocked} renderActor={person=>{
+        const member=memberById.get(person.id);
+        const quip=poke?.world===world&&poke.actorId===person.id?poke:undefined;
+        return member?<>{chip(member,true)}{quip&&<span key={quip.sequence} className="pointer-events-none absolute bottom-full left-1/2 z-30 w-32 -translate-x-1/2 rounded border border-amber-300/30 bg-stone-950/95 p-1.5 text-xs text-amber-50">{quip.line}</span>}</>:null;
       }}/>:<p className="text-sm text-slate-300">此刻未见山门内的景象。</p>}
-      {inside.length>0&&<ul className="mb-2 flex flex-wrap gap-1.5 lg:hidden" aria-label="庭院弟子">
+      {inside.length>0&&<ul className="mb-2 grid max-h-64 grid-cols-2 gap-1.5 overflow-y-auto" aria-label="庭院弟子">
         {inside.map(member=><li key={member.id}>{chip(member,false)}</li>)}
       </ul>}
       {outside.length>0&&<div className="mb-2 flex flex-wrap items-center gap-1.5" role="group" aria-label="不在庭院的弟子">
         <span className="text-xs text-slate-300">不在庭院：</span>{outside.map(member=><span className="inline-flex items-center gap-1" key={member.id}>{chip(member,false)}
           <span className="text-xs text-slate-400">{moving?.has(member.id)?'在路上':member.locationId!==plan?.siteId?'在外':'未入席'}</span></span>)}
       </div>}
+      {poke?.world===world&&!sprites.has(poke.actorId)&&<p aria-live="polite" className="mb-2 rounded bg-stone-950 px-2 py-1 text-xs text-amber-100">{poke.line}</p>}
+      {cat}
       {buildings}
     </section>
     <section className={card} aria-label="晨会差事">
@@ -229,7 +268,7 @@ export function SectMorningBoard({world,busy,plan,moving,onConfirmJobs,buildings
       <p className="my-2 text-xs text-slate-300">已派 {draftOrders.size} 人，{remaining} 人自行安排。</p>
       {notice?.world===world&&<p role="status" className="mb-2 text-sm text-rose-200">{notice.text}</p>}
       <button type="button" className={`${control} w-full px-3 text-sm font-semibold${firstStep?.kind==='confirm'?hintHighlight:''}`} disabled={blocked} onClick={()=>void confirm()}>
-        {pending===world||committed===world?'晨会已交卷':'开晨会，过一个月'}
+        {pending===world||committed===world?'晨会已交卷':inheriting?'沿用上月差事并过月':'开晨会，过一个月'}
       </button>
       {settled.length>0&&<details className="mt-2 rounded-md border border-amber-300/20 px-2">
         <summary className="min-h-11 cursor-pointer content-center text-sm text-amber-100">上月差事 · {settled.length} 件</summary>

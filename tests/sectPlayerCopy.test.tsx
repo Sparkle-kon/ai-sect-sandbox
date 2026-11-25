@@ -82,7 +82,7 @@ it('keeps on-screen and assistive copy readable at the sect opening, a genuine j
     await game.waitFor('[data-sect-report]');
     expect(game.host.querySelector('[data-sect-report]')?.textContent).toContain('闭关修炼');
     assertCopy('actual report',game.host);
-    await game.press('听完，回晨会');
+    await game.press('知道了，回晨会');
     await game.waitFor('[data-sect-chat]');
     const drawer=game.host.querySelector('[data-sect-chat]');
     if(!drawer)throw Error('Missing the actual chat drawer');

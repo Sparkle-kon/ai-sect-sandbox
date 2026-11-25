@@ -110,6 +110,10 @@ export function advanceSpiritBeasts(world: WorldState, rng: () => number): World
   const sites = world.locations.filter(wilderness);
   for (const beast of world.spiritBeasts) {
     if (!beast.alive || beast.hp <= 0) continue;
+    const managed=world.sectManagement;
+    // This guest has a real courtyard stay. Let it finish while the current invitation or treat is warm.
+    if(managed&&!beast.tamedBy&&beast.id===`${managed.sectId}-pill-cat`&&beast.locationId===managed.homeSiteId&&
+      beast.nextActionTick>=world.tick)continue;
     const owner = beast.tamedBy ? world.cultivators.find((person) => person.id === beast.tamedBy && live(person)) : undefined;
     if (owner) {
       if (world.locations.some(({ id }) => id === owner.locationId)) beast.locationId = owner.locationId;

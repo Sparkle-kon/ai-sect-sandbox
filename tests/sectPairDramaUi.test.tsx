@@ -70,14 +70,13 @@ it('shows both attributed voices on just one related report, with signed facts o
     expect(facts?.textContent).toContain('看守山门');
     expect(facts?.textContent).toContain('交情 +1');
     expect(facts?.querySelector('blockquote')).toBeNull();
-    expect([...stage.querySelectorAll('button')].map(node=>node.textContent)).toEqual(['下一位','跳过汇报']);
+    expect([...stage.querySelectorAll('button')].filter(button=>button.textContent==='知道了，回晨会')).toHaveLength(1);
 
     const serialized=JSON.stringify(world);
-    await act(async()=>stage.querySelector('button')?.click());
-    expect(stage.querySelector('[data-sect-pair-drama]')).toBeNull();
-    expect(host.querySelector('[data-sect-comic-aside] [data-sect-pair-drama]')).not.toBeNull();
+    await act(async()=>stage.querySelector<HTMLButtonElement>('button[aria-pressed="false"]')?.click());
+    expect(stage.querySelector('[data-sect-pair-drama]')).not.toBeNull();
     expect(host.querySelectorAll('[data-sect-pair-drama]')).toHaveLength(1);
-    const skip=[...stage.querySelectorAll('button')].find(button=>button.textContent==='跳过汇报');
+    const skip=[...stage.querySelectorAll('button')].find(button=>button.textContent==='知道了，回晨会');
     await act(async()=>skip?.click());
     const aside=host.querySelector<HTMLDetailsElement>('[data-sect-comic-aside]');
     expect(aside?.open).toBe(false);
@@ -134,6 +133,6 @@ it('labels a failed joint duty honestly and keeps its loss separate from the exc
     expect(scene?.querySelector('[aria-label="同办得失"]')?.textContent).toContain('交情 −2');
     const individual=stage.querySelector('[aria-label="所得与折损"]');
     expect(individual?.querySelector('li')).toBeNull();
-    expect(individual?.textContent).toContain('这一趟账上没记下得失');
+    expect(individual?.textContent).toContain('这一回账册空着');
   }finally{await cleanup();}
 });

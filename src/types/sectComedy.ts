@@ -81,5 +81,6 @@ export interface SectComicMoment {
 }
 export interface SectComedyState {
   readonly moments:readonly SectComicMoment[];
+  readonly catBond?:{readonly feeds:number;readonly fedTick?:number;readonly shooedTick?:number;readonly returnedTick?:number};
   readonly pending?:readonly SectComedyPending[];
 }

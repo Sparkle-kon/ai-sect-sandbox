@@ -38,7 +38,7 @@ function mount(){
   };
   const pick=async()=>{
     const actor=host.querySelector<HTMLButtonElement>(`${meeting} button[data-morning-disciple="name"]`);
-    const name=actor?.textContent?.trim();
+    const name=actor?.getAttribute('aria-label')?.replace(/^点选 /u,'');
     if(!actor||!name)throw Error('No named disciple available for the first meeting');
     await act(async()=>actor.click());
     return name;
@@ -101,10 +101,14 @@ it.each([false,true])('shows the named disciple’s settled order after real tap
     expect(returned?.querySelector('h3')?.textContent).toBe(name);
     expect(returned?.textContent).toContain('闭关修炼');
     expect(returned?.querySelector('[aria-label="所得与折损"] li')?.textContent).toMatch(/真气进度.*\+[1-9]/);
-    await game.press('听完，回晨会');
+    await game.press('知道了，回晨会');
     await game.waitForElement(meeting);
     expect(game.stage()).toBeUndefined();
-    expect(game.host.textContent).toContain('已派 0 人');
+    expect(game.host.textContent).toContain('已派 1 人');
+    await game.press('沿用上月差事并过月');
+    await game.waitForElement(report);
+    expect(game.host.textContent).toContain('仙历 1001 年 3 月');
+    expect(game.host.querySelector(report)?.textContent).toContain(name);
   }finally{await game.cleanup();}
 },12000);
 

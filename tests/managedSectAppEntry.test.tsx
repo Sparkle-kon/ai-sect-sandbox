@@ -82,9 +82,10 @@ it('runs an actual monthly assignment from the default board and does not advanc
     expect(host.textContent).not.toContain('仙历 1001 年 3 月');
     await when(()=>!!host.querySelector('[data-sect-report]'));
     expect(host.querySelector('[data-sect-report]')?.textContent).toContain('闭关修炼');
-    await press(host,'跳过汇报');
+    await press(host,'知道了，回晨会');
     await when(()=>!!host.querySelector('[data-sect-morning]'));
-    expect(host.textContent).toContain('已派 0 人');
+    expect(host.textContent).toContain('已派 1 人');
+    expect(host.textContent).toContain('沿用上月差事并过月');
     await press(host,'更多','summary');
     await press(host,'故事书卷');
     await press(host,'回掌门台');

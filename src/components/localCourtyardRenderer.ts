@@ -362,14 +362,31 @@ function backdrop(ctx:Pen,frame:LocalCourtyardPlan,c:Ink,time:number):void{
   }
 }
 
-export function drawLocalCourtyard(ctx:Pen,frame:LocalCourtyardPlan,width:number,height:number,timeMs:number):void {
+export function drawLocalCourtyard(ctx:Pen,frame:LocalCourtyardPlan,width:number,height:number,timeMs:number,idleLife=false):void {
   if(!Number.isFinite(width)||!Number.isFinite(height)||width<=0||height<=0)return;
   const t=Number.isFinite(timeMs)?Math.max(0,timeMs)/1000:0,c=theme[frame.theme];
   ctx.save();ctx.scale(width/frame.width,height/frame.height);
   rect(ctx,c.shadow,0,0,frame.width,frame.height);
   backdrop(ctx,frame,c,t);
   for(const site of frame.facilities)facilityPaint(ctx,site,c,t);
-  for(const person of frame.actors)drawCanvasCharacterSprite(ctx,person.x,person.y,person.sprite,35,t);
+  for(const [index,person] of frame.actors.entries()){
+    const phase=timeMs>0&&idleLife&&person.sprite.pose==='idle'?(timeMs+index*1741)%14500:0;
+    const stroll=phase>9000?Math.sin((phase-9000)/5500*Math.PI):0;
+    drawCanvasCharacterSprite(ctx,person.x+stroll*(index%2?6:-6),person.y+(phase>9000?Math.sin(phase/170):0),
+      person.sprite,35,t,false,stroll>0);
+    if(phase>3200&&phase<4200){
+      ctx.fillStyle='rgba(252,211,119,.8)';
+      if(index%3===0){
+        ctx.save();ctx.translate(person.x+14,person.y+7);
+        ctx.rotate(Math.sin(phase/175)*.6);
+        ctx.fillRect(-1,-15,1.4,16);ctx.fillRect(-3,0,6,3);ctx.restore();
+      }else if(index%3===1){
+        for(let i=0;i<3;i++)ctx.fillRect(person.x-4+i*4,person.y-25,1.8,1.8);
+      }else{
+        ctx.font='8px serif';ctx.fillText('Z',person.x+8,person.y-19);ctx.fillText('z',person.x+13,person.y-23);
+      }
+    }
+  }
   for(const person of frame.villagers)civilian(ctx,person,t);
   drawCourtyardQuirkTags(ctx,frame);
 

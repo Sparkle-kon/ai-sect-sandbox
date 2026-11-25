@@ -26,7 +26,7 @@ function visit(world:WorldState,home:Home,row:Extract<SectComedyPending,{kind:'v
   if(!entity)return;
   if(row.npc==='cat'){
     const cat=world.spiritBeasts.find(beast=>beast.id===entity);
-    if(!cat?.alive||cat.hp<=0||cat.tamedBy&&cat.locationId!==home.site.id)return;
+    if(!cat?.alive||cat.hp<=0||(home.m.comedy?.catBond?.shooedTick??-3)+2>world.tick||cat.tamedBy&&cat.locationId!==home.site.id)return;
     const from=world.locations.find(site=>site.id===cat.locationId);
     if(!from||!directorSiteIsSafe(world,from))return;
     cat.locationId=home.site.id;

@@ -134,7 +134,7 @@ export function settleSectComedyMonth(world:WorldState,prevWorld:WorldState):Wor
   planned.commit();
   const moment:SectComicMoment={...pick.context,source:{...pick.source},effects:planned.applied};
   const pending=[...(management.comedy?.pending??[]),...planned.pending];
-  management.comedy={moments:[...history.slice(-(HISTORY-1)),moment],...(pending.length?{pending}:{})};
+  management.comedy={...management.comedy,moments:[...history.slice(-(HISTORY-1)),moment],...(pending.length?{pending}:{})};
   return {id:sectComicEventId(world.tick,management.sectId),tick:world.tick,year:world.year,month:world.month,
     actorIds:[pick.speaker.id],witnessScope:'participants',category:'diplomacy',
     title:'宗门月末一记',description:'这一月的宗门小事已记下。'};

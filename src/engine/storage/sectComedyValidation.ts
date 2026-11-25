@@ -10,7 +10,7 @@ import type { SectManagementState } from '../../types/sectManagement';
 import type { WorldState } from '../../types/world';
 import {sectFestivalForJob,sectMonthAt} from '../sectFestivals';
 import { SECT_JOB_IDS } from '../sectQuirkCatalog';
-import { arr, fail as rejectShape, id, num, oid, one, optional, structure, tick, type Validator } from './primitives';
+import { arr, fail as rejectShape, id, num, oid, one, optional, otick, structure, tick, type Validator } from './primitives';
 
 const jobId=one(...SECT_JOB_IDS);
 const ambient=structure({phase:one('ambient'),presence:one('home','away')});
@@ -64,7 +64,8 @@ const pending:Validator=(value,path)=>{
 };
 const moment=structure({tick,templateId:id,speakerId:id,siteId:oid,source,effects:arr(COMEDY_MAX_EFFECTS,effect)});
 const recentMonthCount=12;
-export const sectComedyShape=structure({moments:arr(recentMonthCount,moment),pending:optional(arr(COMEDY_PENDING_LIMIT,pending))});
+export const sectComedyShape=structure({moments:arr(recentMonthCount,moment),pending:optional(arr(COMEDY_PENDING_LIMIT,pending)),
+  catBond:optional(structure({feeds:num(0,3,true),fedTick:otick,shooedTick:otick,returnedTick:otick}))});
 
 const signed=(received:number,offered:number)=>received!==0&&Math.sign(received)===Math.sign(offered)&&
   Math.abs(received)<=Math.abs(offered)+1e-9;
@@ -158,6 +159,14 @@ export function validateSectComedy(
       source.phase!=='performed'&&!(source.phase==='ambient'&&row.siteId)&&row.effects.length||
       row.effects.some((applied,index)=>!matchesEffect(world,state,row,index,applied,authored.effects[index])))
       return fail('sectManagement.comedy.effects');
+  }
+  const bond=comedy.catBond;
+  if(bond){
+    const beast=world.spiritBeasts.find(beast=>beast.id===comedyRecurringIds(world)?.cat);
+    if(!beast||(bond.feeds>0)!==(bond.fedTick!==undefined)||
+      [bond.fedTick,bond.shooedTick,bond.returnedTick].some(t=>t!==undefined&&(t<=state.foundedTick||t>world.tick))||
+      bond.returnedTick!==undefined&&(bond.shooedTick===undefined||bond.returnedTick<bond.shooedTick+2))
+      return fail('sectManagement.comedy.catBond');
   }
   const queued=new Set<string>();
   for(const row of comedy.pending??[]){

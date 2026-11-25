@@ -66,7 +66,7 @@ it('shows one narrative and one quote on the exact settled report, never on its 
     expect(host.querySelector('[data-sect-comic-aside]')?.textContent??'').not.toContain(comic.report);
     expect(host.textContent).not.toContain(comic.templateId);
     const serialized=JSON.stringify(arrived);
-    const skip=[...scene.querySelectorAll('button')].find(button=>button.textContent==='跳过汇报');
+    const skip=[...scene.querySelectorAll('button')].find(button=>button.textContent==='知道了，回晨会');
     if(!skip)throw Error('Missing existing skip control');
     await act(async()=>skip.click());
     expect(host.querySelector('[data-sect-report]')).toBeNull();

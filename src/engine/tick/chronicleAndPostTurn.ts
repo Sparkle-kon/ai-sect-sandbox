@@ -3,6 +3,7 @@ import {settleSectMomentsMonth} from '../sectMoments';
 import {settleSectLiveMonth} from '../sectLive';
 import {ensureSectRecurringCast} from '../sectRecurringCast';
 import {settleSectRecurringMonth} from '../sectRecurring';
+import {settleCourtCatReturn} from '../sectCourtCat';
 import {settleSectComedyContinuations} from '../sectComedyContinuations';
 import {settleSectComedyMonth} from '../sectComedy';
 import {advanceSectGrowth} from '../sectGrowth';
@@ -99,10 +100,11 @@ export function runChronicleAndPostTurn(context: WorldTickContext): void {
     const closingEvents=advanceSectGrowth(nextState,prevState);
     if(!nextState.sectManagement.growth?.failure)ensureSectRecurringCast(nextState);
     ensureManagedSectQuirks(nextState);
+    const cat=settleCourtCatReturn(nextState);
     const followUps=settleSectComedyContinuations(nextState,prevState);
     const moment=settleSectComedyMonth(nextState,prevState);
     const guests=settleSectRecurringMonth(nextState,prevState,completedEvents.filter(event=>event.witnessScope===undefined));
-    const supplement=[...closingEvents,...followUps,...(moment?[moment]:[]),...guests];
+    const supplement=[...closingEvents,...(cat?[cat]:[]),...followUps,...(moment?[moment]:[]),...guests];
     if(supplement.length){
       for(const event of supplement)witnessEvent(nextState,event);
       newEvents.push(...supplement);

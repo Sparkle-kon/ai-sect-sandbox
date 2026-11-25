@@ -53,7 +53,7 @@ it.each([360,390])('lets players tap to assign, replace or undo on a %ipx mobile
     const mobile=host.querySelector('[aria-label="庭院弟子"]');
     const board=host.querySelector('[aria-label="晨会差事"]');
     if(!board||!mobile)throw Error('Missing responsive sections');
-    expect(mobile.className).toContain('lg:hidden');
+    expect(mobile.className).not.toContain('lg:hidden');
     expect(board.querySelector('.grid')?.className).toContain('grid-cols-2');
     expect(board.querySelector('.grid')?.querySelectorAll('button')).toHaveLength(10);
     const select=findButton(mobile,`点选 ${first.name}`);

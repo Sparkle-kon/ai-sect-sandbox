@@ -12,13 +12,14 @@ interface LocalCourtyardCanvasProps {
   embedded?:boolean;
   renderActor?:(actor:LocalCourtyardActor)=>ReactNode;
   reaction?:SectReactionCue;
+  idleLife?:boolean;
   /** Delegates to the same native map selection and focus, never moves the subject. */
   onFocusActor?:(id:string)=>boolean;
 }
 const pageSize=12;
 const button='min-h-11 min-w-0 rounded-md border border-amber-300/35 px-3 py-2 text-left text-sm text-amber-50 [overflow-wrap:anywhere] hover:bg-amber-950/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-200';
 
-export function LocalCourtyardCanvas({plan,onReturn,onFocusActor,embedded=false,renderActor,reaction}:LocalCourtyardCanvasProps){
+export function LocalCourtyardCanvas({plan,onReturn,onFocusActor,embedded=false,renderActor,reaction,idleLife=false}:LocalCourtyardCanvasProps){
   const title=useId(),detail=useId();
   const heading=useRef<HTMLHeadingElement>(null),canvas=useRef<HTMLCanvasElement>(null);
   const scenery=useRef<HTMLDivElement>(null);
@@ -65,14 +66,15 @@ export function LocalCourtyardCanvas({plan,onReturn,onFocusActor,embedded=false,
     try{pen=el.getContext('2d');}catch{return;}
     if(!pen)return;
     const context=pen,doc=el.ownerDocument,motion=win.matchMedia?.('(prefers-reduced-motion: reduce)');
-    const budget=2100,interval=1000/12;
+    const budget=2100,interval=1000/(idleLife?8:12);
     let raf:number|undefined,started:number|undefined,last=-Infinity,visible=true,spent=false,width=0,height=0;
     const canAnimate=()=>!!plan.atmosphere&&!plan.atmosphere.historical&&!motion?.matches&&!doc.hidden&&visible&&
       typeof win.requestAnimationFrame==='function'&&width>0&&height>0;
     const paint=(time=0)=>{
       if(!(width>0&&height>0))return;
       context.setTransform(el.width/plan.width,0,0,el.height/plan.height,0,0);
-      drawLocalCourtyard(context,plan,plan.width,plan.height,time);
+      if(idleLife)drawLocalCourtyard(context,plan,plan.width,plan.height,time,true);
+      else drawLocalCourtyard(context,plan,plan.width,plan.height,time);
       if(plan.atmosphere)drawSeasonalAtmosphere(context,plan.atmosphere,{x:0,y:0,width:plan.width,height:plan.height},time);
     };
     const stop=()=>{
@@ -84,7 +86,7 @@ export function LocalCourtyardCanvas({plan,onReturn,onFocusActor,embedded=false,
       if(!canAnimate()){paint();return;}
       started??=now;
       const elapsed=now-started;
-      if(elapsed>=budget){spent=true;paint();return;}
+      if(!idleLife&&elapsed>=budget){spent=true;paint();return;}
       if(now-last>=interval){last=now;paint(elapsed);}
       raf=win.requestAnimationFrame(frame);
     };
@@ -114,7 +116,7 @@ export function LocalCourtyardCanvas({plan,onReturn,onFocusActor,embedded=false,
       win.removeEventListener('resize',refresh);doc.removeEventListener('visibilitychange',refresh);
       motion?.removeEventListener?.('change',refresh);
     };
-  },[plan]);
+  },[plan,idleLife]);
 
   return <section aria-labelledby={title} data-local-courtyard=""
     className="min-w-0 space-y-3 bg-stone-950/80 px-3 py-3 sm:px-4"

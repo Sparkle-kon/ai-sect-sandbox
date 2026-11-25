@@ -46,7 +46,7 @@ async function until(get:()=>HTMLElement|null){
   throw Error('Expected an active report scene');
 }
 
-it.each([360,390])('plays one receipt at a time without a second turn, at %ipx',async width=>{
+it.each([360,390])('shows every receipt and returns in one action without a second turn, at %ipx',async width=>{
   const {world,report,resting,scavenger,injured,cook}=sample();
   const serialized=JSON.stringify(world),confirm=vi.fn().mockResolvedValue(true),dismiss=vi.fn();
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT',true);vi.stubGlobal('innerWidth',width);
@@ -68,26 +68,25 @@ it.each([360,390])('plays one receipt at a time without a second turn, at %ipx',
     const expression=()=>stage()?.querySelector('[data-portrait-expression]')?.getAttribute('data-portrait-expression');
     expect(first.className).toContain('order-first');
     expect(first.className).toContain('lg:order-none');
-    expect(first.textContent).toContain('第 1 / 4 位');
+    expect(first.textContent).toContain('4 位弟子交差');
+    expect(first.textContent).toContain('同门差事一览');
     expect(page()).toBe(scavenger.name);
-    expect(document.activeElement).toBe(first.querySelector('h3'));
+    expect(document.activeElement).toBe(first.querySelector('h2'));
     expect(expression()).toBe('surprise');
-    expect(first.textContent).toContain('人未在庭院露面');
-    expect(first.textContent).toContain('鼻子从来不认路牌');
+    for(const person of [resting,scavenger,injured,cook])expect(first.textContent).toContain(person.name);
     expect(first.textContent).toContain('翡翠灵叶 +2 株');
-    expect(first.textContent).not.toContain(injured.name);
     expect(sceneAnimation).not.toHaveBeenCalled();
-    const next=findButton(first,'下一位');
-    expect(next.className).toContain('min-h-11');
-    await act(async()=>{next.click();next.click();});
+    const drill=(name:string)=>first.querySelector<HTMLButtonElement>(`[aria-label="查看${name}的回报"]`);
+    await act(async()=>drill(cook.name)?.click());
     expect(page()).toBe(cook.name);expect(expression()).toBe('dismay');
-    await act(async()=>findButton(first,'下一位').click());
+    await act(async()=>drill(injured.name)?.click());
     expect(page()).toBe(injured.name);expect(expression()).toBe('wounded');
-    expect(first.textContent).toContain('后续：气血 −7');
-    await act(async()=>findButton(first,'下一位').click());
+    expect(first.textContent).toContain('气血 −7');
+    await act(async()=>drill(resting.name)?.click());
     expect(page()).toBe(resting.name);expect(expression()).toBe('calm');
     expect(first.textContent).toContain('真气进度 +7.15 个百分点');
-    const finish=findButton(first,'听完，回晨会');
+    const finish=findButton(first,'知道了，回晨会');
+    expect(finish.className).toContain('min-h-11');
     await act(async()=>{finish.click();finish.click();});
     expect(dismiss).toHaveBeenCalledTimes(1);expect(dismiss).toHaveBeenCalledWith(report);
     expect(stage()).toBeNull();
@@ -106,7 +105,7 @@ it('keeps quirk-based dialogue deterministic and avoids claiming incomplete erra
   const row=report.rows[1];
   expect(reportVoice(row,scavenger)).toBe(reportVoice(row,scavenger));
   expect(reportVoice(row,scavenger)).not.toBe(reportVoice(row,{...scavenger,quirks:['lost']}));
-  expect(reportVoice({...row,phase:'on_route'},scavenger)).toContain('莫忙着记作办成');
-  expect(reportVoice({...row,phase:'unavailable'},scavenger)).toContain('没能办成');
+  expect(reportVoice({...row,phase:'on_route'},scavenger)).toContain('余下的留到下回');
+  expect(reportVoice({...row,phase:'unavailable'},scavenger)).toContain('等掌门另派');
   expect(world.tick).toBe(2);
 });
