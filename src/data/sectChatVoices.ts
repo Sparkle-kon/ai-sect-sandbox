@@ -1,3 +1,4 @@
+import type {Cultivator,PersonalityTrait,WorldEvent} from '../types/world';
 import type {SectChatRoomId,SectChatSource} from '../types/sectChat';
 
 export const LABELS:Readonly<Record<SectChatRoomId,string>>={
@@ -14,12 +15,6 @@ export const GREETINGS:Readonly<Record<Greeting,Voices>>={
   market:['问价随意。若要以半卷剑诀抵半袋米，烦请说清是哪半卷。','诸位议价归议价。算盘的珠子，经不起用剑气拨。',
     '若是借秤，尽可开口。若是借秤砣去镇妖，请另寻一块大的。','有意换货不妨留话。只写「识货来」的，恕我先问是何货。'],
 };
-export const COMIC_NEUTRAL:Voices=['且留一句闲笔。话写得太满，下个月的我不好落款。','容我留个句读。不是话说完了，是这一盏茶要凉了。',
-  '请掌门宽坐。我先收起这一段话，再想下一段能不能短些。','一句话只占半张纸。余下半张，权作给自己留的退路。'];
-export const WITNESS_VOICES:Voices=['这桩我在场：「{title}」。别替我添后半折。','说的是「{title}」这回事。我只说我见过的那一段。',
-  '「{title}」，我当时就在跟前。后头如何，容旁人另说。','「{title}」这桩我见着了。诸位若押韵，莫把前后押颠倒。'];
-export const RUMOR_VOICES:Voices=['听闻「{title}」。我没在场，先把这句传话记在边上。','有人提起「{title}」。传话归传话，先别给它押韵。',
-  '听来的消息，说的是「{title}」。原委我还没见着。','听道友说起「{title}」。当不得亲见，诸位且慢下断语。'];
 export const GRAVE_VOICES:Readonly<Record<'witness'|'rumor',string>>={
   witness:'「{title}」是我亲见。余情未明，先不妄议。',rumor:'听闻「{title}」。不是亲见，还请待来者分说。',
 };
@@ -30,3 +25,24 @@ export const CHALLENGE_RESULT_VOICES:Readonly<Record<'witness'|'rumor',Voices>>=
   rumor:['听人传来，山门踢馆是{winner}胜了。','这一场山门交锋，传来的胜者是{winner}。',
     '我未在门前；只听说是{winner}赢了。','山门那场有消息了，听说{winner}取胜。'],
 };
+
+type Tone='blade'|'wary'|'food'|'keeper'|'silver'|'talk';
+const PERSONA_TONE:Readonly<Record<PersonalityTrait,Tone>>={
+  狂傲:'blade',嗜血:'blade',苟道:'wary',阴险:'wary',逍遥:'food',刚正:'keeper',诡诈:'silver',痴情:'talk',
+};
+const TONE_WORDS:Readonly<Record<Tone,Voices>>={
+  blade:['也请把我的剑谱拿来。我知道，你们还未问。','这下有人肯听我讲第一式了。','可惜这等热闹总慢我一步。','听得我袖中剑还想自己出鞘。'],
+  wary:['这回我离门口三步远，正好留条退路。','先让一让，后面那块石头早被我看作退路了。','这便是为何弟子从不坐第一排。','诸位忙着喝彩，我已经把回去的路认了一遍。'],
+  food:['我听得入神，连茶盏边都多啃了一口。','话说到这里，茶冷了，热饼倒还来得及。','掌勺的道友可有空？我还有半盘菜没听明白。','这事得配一样脆的，否则笑起来牙关不响。'],
+  keeper:['想起门里那只铜钟，它最见不得旁人比它响。','要记就写直一些，纸上歪了我得重抄。','照这份声势，师弟今晚得少敲一回钟。','可有人肯替我把袖口那滴墨拭了？'],
+  silver:['且让我看看，一声喝彩究竟收不收茶钱。','摊位还没摆，先有人问这段可否抄了卖。','若这故事值钱，请先告诉我卖的是哪一折。','我有一副旧算盘，听见热闹自己就会响。'],
+  talk:['我只续一句。至于这一句多长，诸位容我慢慢说。','故事若有下折，劳烦给我留半张凳。','话到静处最好听。谁再添一句？我正有茶。','这句我留到回山再讲，门里的鹤最肯听人说话。'],
+};
+export function sectChatWitnessLine(knowledge:'witness'|'rumor',category:WorldEvent['category'],person:Cultivator,variant:number){
+  if(category==='death')return GRAVE_VOICES[knowledge];
+  const quirks=person.quirks??[];
+  const tone:Tone=quirks.includes('glutton')?'food':quirks.includes('miser')?'silver':quirks.includes('chatterbox')?'talk':
+    quirks.includes('coward_king')?'wary':quirks.includes('chuunibyou')?'blade':PERSONA_TONE[person.personality];
+  const intro=category==='combat'?'擂边传来':category==='breakthrough'?'出关这桩':category==='heavenly'?'天上那桩':'这桩见闻';
+  return `${knowledge==='rumor'?'听说':'亲眼见了'}「{title}」。${intro}的声势颇大，${TONE_WORDS[tone][variant%4]}`;
+}

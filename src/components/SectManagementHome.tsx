@@ -13,7 +13,7 @@ import type {SectGrowthCommand} from '../types/sectGrowth';
 import {previewStarterSect} from '../engine/starterSectWorld';
 import {MANAGEMENT_BUILDING_IDS,STARTER_SECT_IDS,
   type ManagementBuildings,type StarterDraw,type StarterSectId} from '../types/sectManagement';
-import type {WorldState} from '../types/world';
+import type {LLMConfig,WorldState} from '../types/world';
 import type {SectJobObservation,SectJobReport} from '../types/sectJobs';
 import {CultivatorPortrait} from './CultivatorPortrait';
 import {projectCultivatorPortrait} from './cultivatorPortraitModel';
@@ -152,7 +152,7 @@ function StarterSelection({seed,busy,onStart}:Pick<SectManagementHomeProps,'busy
   </>;
 }
 
-function ManagedCourtyard({world,busy,onTick,onConfirmJobs,onSkipFirstMeeting,observations,report,onDismissReport,growth,command,onCatAction,onComedyChoice}:Pick<SectManagementHomeProps,'world'|'onTick'|'onConfirmJobs'|'onSkipFirstMeeting'|'observations'|'report'|'onDismissReport'|'onCatAction'|'onComedyChoice'>&{busy:boolean;growth?:SectGrowthView;command?:(command:SectGrowthCommand)=>void}){
+function ManagedCourtyard({world,busy,onTick,onConfirmJobs,onSkipFirstMeeting,observations,report,onDismissReport,growth,command,onCatAction,onComedyChoice,reportModel}:Pick<SectManagementHomeProps,'world'|'onTick'|'onConfirmJobs'|'onSkipFirstMeeting'|'observations'|'report'|'onDismissReport'|'onCatAction'|'onComedyChoice'>&{busy:boolean;reportModel?:LLMConfig;growth?:SectGrowthView;command?:(command:SectGrowthCommand)=>void}){
   const state=world.sectManagement;
   const sect=world.sects.find(row=>row.id===state?.sectId);
   const siteId=state?.homeSiteId;
@@ -203,7 +203,7 @@ function ManagedCourtyard({world,busy,onTick,onConfirmJobs,onSkipFirstMeeting,ob
         {cat}{buildings}
       </section>
       <Suspense fallback={<p role="status" className="order-first text-sm text-slate-300 lg:order-none">且等片刻，弟子就来回话…</p>}>
-        <SectJobReportStage world={world} report={report} present={presentIds} comic={currentComic} drama={drama} onDramaVisibility={updateDramaVisibility} continuations={continuations}
+        <SectJobReportStage world={world} report={report} present={presentIds} comic={currentComic} drama={drama} onDramaVisibility={updateDramaVisibility} continuations={continuations} model={reportModel}
           onReaction={showReaction} onDismiss={closing=>{
           if(closing!==report)return;
           setDismissedReport(closing);onDismissReport?.(closing);
@@ -260,7 +260,7 @@ export function SectManagementHome({world,busy=false,onStart,onOpen,onTick,onCon
     world.cultivators.find(row=>row.id===world.sectManagement?.leaderId):undefined;
   const chatKey=sect?`${chatScope??world.random.seed}:${sect.id}`:undefined;
   return <main className="xianxia-shell min-h-dvh bg-slate-950 px-3 pb-8 pt-[max(.75rem,env(safe-area-inset-top))] text-slate-100 sm:px-6">
-    <div className={`mx-auto max-w-6xl space-y-3 ${sect&&!growth?.failure?'min-[1440px]:max-w-[90rem]':''}`}>
+    <div className={`mx-auto max-w-6xl space-y-3 ${sect&&!growth?.failure?'lg:max-w-[90rem]':''}`}>
       <header className={`xianxia-header flex min-w-0 items-start justify-between gap-2 border-b border-amber-400/30 pb-2 ${growth?'sticky top-0 z-30 bg-slate-950 pt-2':''}`}>
         <div className="min-w-0">
           <p className="text-xs text-amber-200">天道沙盒 · 仙历 {world.year} 年 {world.month} 月</p>
@@ -275,9 +275,9 @@ export function SectManagementHome({world,busy=false,onStart,onOpen,onTick,onCon
         <button type="button" className={button} disabled={busy} onClick={()=>setRestarting(undefined)}>取消，留在旧山门</button>
         <StarterSelection key={restartSeed??world.random.seed} seed={restartSeed??world.random.seed} busy={busy} onStart={(starter,draw)=>onRestart(world,starter,draw)}/>
       </section>:<SectFailurePanel view={growth} busy={busy} onRestart={onRestart?()=>setRestarting(world):undefined}/>):
-        sect?<div className="grid min-w-0 items-start gap-3 min-[1440px]:grid-cols-[minmax(0,1fr)_19rem]">
+        sect?<div className="grid min-w-0 items-start gap-3 lg:grid-cols-[minmax(0,1fr)_19rem]">
           <div className="min-w-0 space-y-3"><ManagedCourtyard world={world} busy={busy} onTick={onTick} onConfirmJobs={onConfirmJobs} onSkipFirstMeeting={onSkipFirstMeeting}
-            observations={observations} report={report} onDismissReport={onDismissReport} onCatAction={onCatAction} onComedyChoice={onComedyChoice} growth={growth} command={command}/>
+            observations={observations} report={report} onDismissReport={onDismissReport} onCatAction={onCatAction} onComedyChoice={onComedyChoice} reportModel={chatModel?.config} growth={growth} command={command}/>
             {challengeAction&&chatKey&&<Suspense fallback={null}>
               <SectChallengePanel key={chatKey} world={world} busy={busy||pendingReport}
                 onRequest={(expected,discipleId,defenderSectId)=>challengeAction(expected,{kind:'request',discipleId,defenderSectId})}

@@ -160,7 +160,11 @@ describe('江湖小报取坊间真见闻，不拿台词编造结算',()=>{
     const issue=currentQuarter(printed);
     expect(issue.embarrassment).toMatchObject({actorId,sourceEventId:source.id,siteId});
     expect(currentQuarter(ordinary).embarrassment).toBeUndefined();
-    expect(read(printed).find(row=>row.id===issue.id)?.columns.find(col=>col.kind==='embarrassment')?.empty).toBe(false);
+    const ranking=read(printed).find(row=>row.id===issue.id)?.columns.find(col=>col.kind==='embarrassment');
+    expect(ranking?.empty).toBe(false);
+    expect(ranking?.text).toContain('本季榜首');
+    expect(ranking?.text).toContain(printed.cultivators.find(actor=>actor.id===actorId)?.name);
+    expect(ranking?.text).toContain(printed.locations.find(site=>site.id===siteId)?.name);
   });
 
   it('真正丧命不会成为丢人榜素材',()=>{

@@ -1,4 +1,5 @@
 import {describe,expect,it} from 'vitest';
+import {projectSectChat} from '../src/engine/sectChat';
 import {projectSectComicMoment} from '../src/engine/sectComedy';
 import {sectJobOutcomeOdds} from '../src/engine/sectJobReportRules';
 import {createManagedSectWorld} from '../src/engine/starterSectWorld';
@@ -23,6 +24,13 @@ describe('H6 投入新版桥段仍保留旧章',()=>{
       effects:[{kind:'herb',herb:'star_bloom',amount:3}]});
     expect(view?.report).toContain('拣回三株');
     expect(view?.report).toContain(actor.name);
+    const rooms=projectSectChat(advanced);
+    const jot=rooms.find(row=>row.id==='own')?.posts.find(post=>post.about==='comic');
+    expect(jot?.text).toContain(actor.name);
+    expect(jot?.text).toContain('青云杂役派');
+    expect(jot?.text).toContain('下山采药');
+    expect(jot?.text).not.toMatch(/\{[^}]+\}/u);
+    expect(rooms.filter(row=>row.id!=='own').flatMap(row=>row.posts).some(post=>post.text===jot?.text)).toBe(false);
     expect(advanced.cultivators.find(row=>row.id===actor.id)?.herbs.star_bloom).toBe(actor.herbs.star_bloom+3);
     expect(projectSectComicMoment(decodeEraWorldSave(encodeEraWorldSave(advanced)))?.report).toBe(view?.report);
 

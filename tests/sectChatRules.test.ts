@@ -57,7 +57,7 @@ describe('宗门传音离线话本与封口边界',()=>{
     expect(world.events.find(row=>row.id===event.id)?.title).toBe(title);
   });
 
-  it('工作趣谈只进本门密语，借用安全语气不转发真实未公开结果，换门后原密语仍归原读者',()=>{
+  it('工作趣谈只进本门密语，私群可读桥段原话而公开群不转发，换门后原密语仍归原读者',()=>{
     const {world,previous,managed,speaker}=scene();
     const templateId='work-gather-lost-windfall';
     managed.comedy={moments:[{tick:world.tick,speakerId:speaker.id,templateId,effects:[],
@@ -68,7 +68,7 @@ describe('宗门传音离线话本与封口边界',()=>{
     const own=()=>projectSectChat(world).find(room=>room.id==='own');
     const post=own()?.posts.find(row=>row.about==='comic');
     expect(post).toBeDefined();
-    expect(post?.text).not.toContain('采药');
+    expect(post?.text).toContain('今日采药小有所得');
     expect(post?.sourceEventId).toBeUndefined();
     expect(managed.chat?.months[0].posts.find(row=>row.about.kind==='comic')?.audience).toEqual([speaker.id,managed.leaderId]);
     expect(projectSectChat(world).filter(room=>room.id!=='own').flatMap(room=>room.posts).some(row=>row.about==='comic')).toBe(false);

@@ -23,7 +23,7 @@
   1) `SectMorningBoard.tsx`：修掉第 75 行翻月清空 `draftOrders` 的问题，**默认自动沿用每位弟子上月差事**（若本月仍可派），支持一键「沿用上月差事，直接过一个月」；去掉第 181 行的 `lg:hidden`，在桌面端也清晰展示弟子排班名册（头像+怪癖+当前差事）。
   2) `SectJobReportStage.tsx`：废除强制点 6 次「下一位」的单人翻页器，改为**一屏总览的《月末回山简报》**（顶部高亮 1–2 桩焦点奇遇含大立绘/动画/完整桥段/抉择，下方紧凑列出其余同门差事成果与各自的怪癖个性回话，彻底删除 `sectJobReportPresentation.ts:41` 的 4 句 `plain[tier]` 公文套话，只需点 1 次即可回晨会）。
   3) 庭院日常：未派工弟子闲逛/扫地/打盹/冒闲聊气泡；点弟子冒怪癖台词；偷丹灵猫可吓跑或喂食收养。
-- [ ] **[H6-6] 修复 `sectChat.ts:305` 自我阉割 + 重做群聊/弹幕/小报台词 + 大模型写回山汇报**：
+- [x] **[H6-6] 修复 `sectChat.ts:305` 自我阉割 + 重做群聊/弹幕/小报台词 + 大模型写回山汇报**：
   1) 修复 `src/engine/sectChat.ts:305`：删除 `COMIC_NEUTRAL` 降级逻辑，用真实 `{name}`/`{sect}`/`{site}`/`{job}` 渲染所有桥段的 `chatHook.line`；将 `SectChatPanel.tsx:17` 和 `SectManagementHome.tsx:271` 的群聊常驻断点从 `1440px` 降至 `lg`（`1024px`）。
   2) 重写 `sectChatVoices.ts`、`sectLiveLines.ts`、`sectMomentLines.ts`、`tianjiTabloid.ts` 的安监局公文腔：群聊按性格吐槽起哄，直播弹幕有修仙直播间气氛，小报丢人榜/头条必须连名带姓写出当事修士与狼狈细节（删掉 `"本报只记这声响，不拿伤势取笑"`）。
   3) 配置 API 后默认开启大模型写回山汇报（提示词见指南第 8 节），只用给定事实，校验不过回退模板。

@@ -108,23 +108,27 @@ export function projectTianjiTabloid(world:WorldState,scope:TianjiGazetteReadSco
       if(outcome){
         const a=label(world.cultivators,outcome.result.challengerId),b=label(world.cultivators,outcome.result.defenderId);
         const winner=label(world.cultivators,outcome.result.winnerId);
-        if(a&&b&&winner)articles.set('headline',{siteName,text:`${a}与${b}在公开演武处应帖比试，${winner}胜。此帖只问剑，不记仇。`});
+        if(a&&b&&winner)articles.set('headline',{siteName,text:`${a}与${b}在${siteName}过招，${winner}把头彩带回山。要是喝彩也记功，扫台阶的人该占头名。`});
       }
     }
     if(issue.embarrassment){
       const siteName=venue(issue.embarrassment.siteId);
-      if(siteName&&resolveTabloidEmbarrassment(world,issue.embarrassment))articles.set('embarrassment',
-        {siteName,text:'炉先响了，丹没出炉。本报只记这声响，不拿伤势取笑。'});
+      const receipt=siteName&&resolveTabloidEmbarrassment(world,issue.embarrassment);
+      const actor=receipt?world.cultivators.find(person=>person.id===issue.embarrassment?.actorId):undefined;
+      if(siteName&&receipt&&actor){
+        const sect=label(world.sects,actor.sectId);
+        articles.set('embarrassment',{siteName,text:`本季榜首：${clean(actor.name)}${sect?`（现属${sect}）`:''}。在${siteName}开炉，丹还没出来，炉声倒先出关了。`});
+      }
     }
     if(issue.advertisement){
       const ad=issue.advertisement,siteName=venue(ad.siteId),sect=siteName&&label(world.sects,ad.sectId);
       if(sect&&isTabloidAdvertisementProven(world,ad))articles.set('advertisement',
-        {siteName,text:`${sect}本季曾在九州群张贴招徒告示。旧告示照留，拜师仍须当事人点头。`});
+        {siteName,text:`${sect}本季在九州群贴了招徒告示。想学艺的道友，改日可上山喝盏茶。`});
     }
     const topic=issue.hotTopic,from=Math.max(1,(world.sectManagement?.foundedTick??0)+1,issue.tick-2);
     const topicHeadline=topic&&world.events.find(event=>event.id===topic.sourceEventId)?.title;
     const hotspot=topic&&topicHeadline&&venue(topic.siteId)&&isTabloidHotspotProven(world,topic,from,issue.tick)?
-      {title:'群聊热议',text:`${topic.roomId==='market'?'坊市群':'九州群'}里，有 ${topic.speakerCount} 位道友谈及「${clean(sectPlayerFactCopy(topicHeadline))}」。这里只记几人说过，不把闲话当实情。`}:undefined;
+      {title:'群聊热议',text:`${topic.roomId==='market'?'坊市群':'九州群'}里，有 ${topic.speakerCount} 位道友谈及「${clean(sectPlayerFactCopy(topicHeadline))}」。临散场又续了一壶的话。`}:undefined;
     return {id:issue.id,tick:issue.tick,year:issue.year,month:issue.month,quiet:articles.size===0&&!hotspot,
       columns:columns.map(([kind,title,emptyText])=>{
         const article=articles.get(kind);

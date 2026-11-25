@@ -21,7 +21,9 @@ const revised=legacy.map((original):SectComedyTemplate=>{
   const [report,quote,effects,fieldTier]=rewrites[original.id];
   const match=fieldTier&&original.match.phase!=='ambient'
     ?{...original.match,phase:'performed' as const,tier:fieldTier}:original.match;
-  return {...original,id:`h6-${original.id}`,match,report,quote,effects};
+  const chatHook=original.id==='work-gather-lost-windfall'?{group:'own' as const,
+    line:'{name}在{site}领了{job}，三株星辉花认得回{sect}的路。问弟子路引的话，请改日。'}:original.chatHook;
+  return {...original,chatHook,id:`h6-${original.id}`,match,report,quote,effects};
 });
 const baseline=[...revised,...ODDBALL_SCENES,...QUIET_SCENES];
 export const SECT_COMEDY_TEMPLATES:readonly SectComedyTemplate[]=Object.freeze(baseline.map(scene=>{

@@ -243,7 +243,7 @@ export function projectTianjiGazette(world:WorldState,scope:TianjiGazetteReadSco
       }
       case 'dark_horse':{
         const a=actor(entry.winnerId),b=actor(entry.opponentId);
-        return a&&b?{title:'下位签里杀出一匹黑马',text:`原列第${entry.winnerSeed}种子的${a}，在真擂台上战胜了第${entry.opponentSeed}种子${b}。`}:undefined;
+        return a&&b?{title:'下位签里杀出一匹黑马',text:`原列第${entry.winnerSeed}种子的${a}把第${entry.opponentSeed}种子${b}挑下擂台，签册上那行小字，今夜少不得重抄。`}:undefined;
       }
       case 'rivalry':{
         const [a,b]=entry.actorIds.map(actor);

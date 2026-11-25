@@ -1,6 +1,6 @@
 import {sectPlayerFactCopy} from '../data/sectPlayerFactCopy';
 import {isSectChallengeCut,matchSectChallengeResult} from './sectChallengeProof';
-import {CHALLENGE_RESULT_VOICES,LABELS,GREETINGS,COMIC_NEUTRAL,WITNESS_VOICES,RUMOR_VOICES,GRAVE_VOICES,type Greeting} from '../data/sectChatVoices';
+import {CHALLENGE_RESULT_VOICES,LABELS,GREETINGS,sectChatWitnessLine,type Greeting} from '../data/sectChatVoices';
 import {findSectComedyTemplate} from '../data/sectComedy';
 import {SECT_RECURRING_VOICES} from '../data/sectComedy/recurring';
 import {SECT_CHAT_MONTH_LIMIT,SECT_CHAT_POST_LIMIT,SECT_CHAT_ROOMS,SECT_CHAT_VARIANTS,isSectChatModelText,sameSectChatReplyContext,sectChatPostId,
@@ -309,9 +309,7 @@ export function projectSectChat(world:WorldState):readonly SectChatRoomView[]{
             break;
           }
           if(roomId!=='own'||template?.chatHook?.group!=='own')break;
-          // Only independent ambient quips may reuse original hook text. Work-hook variants never
-          // repeat the job, result, private site or any person mentioned in the original aside.
-          text=template.match.phase==='ambient'&&!/[{}]/.test(template.chatHook.line)?template.chatHook.line:COMIC_NEUTRAL[post.variant];
+          text=projectSectComicMoment(world,beat)?.chatHook?.line;
           break;
         }
         case 'recurring':{
@@ -347,8 +345,7 @@ export function projectSectChat(world:WorldState):readonly SectChatRoomView[]{
             sourceEventId=event.id;settledChallenge=true;
             break;
           }
-          const line=event.category==='death'?GRAVE_VOICES[about.knowledge]:
-            (about.knowledge==='witness'?WITNESS_VOICES:RUMOR_VOICES)[post.variant];
+          const line=sectChatWitnessLine(about.knowledge,event.category,actor,post.variant);
           text=line.replace('{title}',()=>escapeTitle(sectPlayerFactCopy(event.title)));
           sourceEventId=event.id;
           break;

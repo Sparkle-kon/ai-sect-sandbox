@@ -14,7 +14,7 @@ import type {SectMomentsAction} from './SectMomentsPanel';
 const SectLivePanel=lazy(async()=>({default:(await import('./SectLivePanel')).SectLivePanel}));
 const SectMomentsPanel=lazy(async()=>({default:(await import('./SectMomentsPanel')).SectMomentsPanel}));
 
-const WIDE='(min-width: 1440px)';
+const WIDE='(min-width: 1024px)';
 const isWide=()=>typeof window!=='undefined'&&window.matchMedia?.(WIDE)?.matches===true;
 function watchWide(update:()=>void){
   const query=window.matchMedia?.(WIDE);
@@ -67,12 +67,18 @@ function SectChatModelSettings({config,onChange,busy}:SectChatModelControls&{bus
     <div id={form} hidden={!expanded}>
       {expanded&&<fieldset disabled={busy} className="min-w-0 space-y-1.5 rounded-md bg-stone-900/80 p-2 disabled:opacity-70">
         <legend className="sr-only">群聊模型设置</legend>
-        <p id={notice} className="text-xs leading-5 text-stone-300">模型服务只会收到九州群、坊市群的公开见闻和发言人物资料。本宗群和掌门私聊留在游戏里。模型只写对白，不会改动灵石、伤势等游戏结果。服务可能收费；刷新页面后须重新填写。</p>
+        <p id={notice} className="text-xs leading-5 text-stone-300">群聊模式把九州群、坊市群的公开见闻和发言人物资料交给模型。本宗群和掌门私聊留在游戏里。模型只写对白，不会改动灵石、伤势等游戏结果。服务可能收费；刷新页面后须重新填写。</p>
         <label className="flex min-h-11 items-center gap-2 rounded border border-stone-700 px-2 text-sm text-amber-100">
           <input type="checkbox" checked={enabled} className="size-4 shrink-0 accent-amber-300" aria-describedby={notice}
             onChange={event=>onChange({...config,sectChatEnabled:event.currentTarget.checked})}/>
           <span>让大模型代写群聊</span>
         </label>
+        <label className="flex min-h-11 items-center gap-2 rounded border border-stone-700 px-2 text-sm text-amber-100">
+          <input type="checkbox" checked={config.sectReportsEnabled!==false} className="size-4 shrink-0 accent-amber-300"
+            onChange={event=>onChange({...config,sectReportsEnabled:event.currentTarget.checked})}/>
+          <span>让大模型润色回山简报</span>
+        </label>
+        <p className="text-xs text-stone-300">开启后，本月差事和得失也会交给已填写的模型写回话。</p>
         {enabled&&!ready&&<p className="text-xs text-amber-200">请填写有效的 API 地址和密钥。在此之前仍用离线对白。</p>}
         <label className="block space-y-1 text-xs text-stone-300"><span>API 地址</span>
           <input type="url" spellCheck={false} value={config.apiBaseUrl} className={control}
@@ -162,9 +168,9 @@ export function SectChatPanel({world,scope,busy,onOpenSource,model,posting,momen
   useEffect(()=>{if(failed?.world===world)failure.current?.focus({preventScroll:true});},[failed,world]);
   if(!selected)return null;
 
-  return <aside aria-label="仙门群聊" data-sect-chat="" className="min-w-0 rounded-xl border border-amber-300/25 bg-stone-950/90 p-2.5 min-[1440px]:sticky min-[1440px]:top-28">
+  return <aside aria-label="仙门群聊" data-sect-chat="" className="min-w-0 rounded-xl border border-amber-300/25 bg-stone-950/90 p-2.5 lg:sticky lg:top-28">
     <button type="button" aria-expanded={shown} aria-controls={panelId} onClick={()=>setOpen(value=>!value)}
-      className="flex min-h-11 w-full min-w-0 items-center justify-between gap-2 rounded-md px-1 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300 min-[1440px]:hidden">
+      className="flex min-h-11 w-full min-w-0 items-center justify-between gap-2 rounded-md px-1 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300 lg:hidden">
       <span className="font-serif font-semibold text-amber-100">仙门群聊</span>
       <span className="flex items-center gap-2 text-xs text-stone-300">
         {total>0&&<span className="inline-flex items-center gap-1" aria-live="polite">
@@ -174,7 +180,7 @@ export function SectChatPanel({world,scope,busy,onOpenSource,model,posting,momen
       </span>
     </button>
     <div id={panelId} hidden={!shown} className="space-y-2">
-      <h2 className="hidden font-serif text-lg font-semibold text-amber-100 min-[1440px]:block">仙门群聊</h2>
+      <h2 className="hidden font-serif text-lg font-semibold text-amber-100 lg:block">仙门群聊</h2>
       {(momentsAction||liveAction)&&<div role="group" aria-label="选择江湖见闻"
         className={`grid ${momentsAction&&liveAction?'grid-cols-3':'grid-cols-2'} gap-1 rounded-md bg-stone-900/75 p-0.5`}>
         <button type="button" aria-pressed={tab==='chat'} className="min-h-11 rounded px-2 text-sm text-stone-300 aria-pressed:bg-amber-950/60 aria-pressed:text-amber-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300"
