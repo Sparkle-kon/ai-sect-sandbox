@@ -1,7 +1,7 @@
 import {sectPlayerFactCopy} from '../data/sectPlayerFactCopy';
 import {isSectChallengeCut,matchSectChallengeResult} from './sectChallengeProof';
 import {CHALLENGE_RESULT_VOICES,LABELS,GREETINGS,COMIC_NEUTRAL,WITNESS_VOICES,RUMOR_VOICES,GRAVE_VOICES,type Greeting} from '../data/sectChatVoices';
-import {SECT_COMEDY_TEMPLATES} from '../data/sectComedy';
+import {findSectComedyTemplate} from '../data/sectComedy';
 import {SECT_RECURRING_VOICES} from '../data/sectComedy/recurring';
 import {SECT_CHAT_MONTH_LIMIT,SECT_CHAT_POST_LIMIT,SECT_CHAT_ROOMS,SECT_CHAT_VARIANTS,isSectChatModelText,sameSectChatReplyContext,sectChatPostId,
   type SectChatPost,type SectChatRoomId,type SectChatSource,type SectChatVariant} from '../types/sectChat';
@@ -67,7 +67,6 @@ function exactPrivateMarker(events:ReadonlyMap<string,WorldEvent>,id:string,tick
     event.locationId===undefined&&event.dialogue===undefined;
 }
 
-const templates=byId(SECT_COMEDY_TEMPLATES);
 const recurringRoles=['wang','rival','ancestor','host'] as const satisfies readonly Exclude<SectRecurringRole,'cat'>[];
 const managedContext=(world:WorldState)=>{
   const managed=world.sectManagement;
@@ -155,7 +154,7 @@ export function settleSectChatMonth(world:WorldState,prevWorld:WorldState,comple
   if(comedy&&chatActor(comicSpeaker)&&liveDisciple(comicSpeaker)&&
     exactPrivateMarker(retained,sectComicEventId(world.tick,managed.sectId),world.tick,[comicSpeaker.id])){
     const rumor=projectSectComicMoment(world,comedy)?.rumorHook;
-    const room=rumor?.group??(templates.get(comedy.templateId)?.chatHook?.group==='own'?'own':undefined);
+    const room=rumor?.group??(findSectComedyTemplate(comedy.templateId)?.chatHook?.group==='own'?'own':undefined);
     if(room&&room!=='leaders')drafts.push({roomId:room,senderId:comicSpeaker.id,
       about:{kind:'comic',templateId:comedy.templateId,...(rumor?{rumor:1 as const}:{})},
       ...(room==='own'?{audience:audience(comicSpeaker.id,leader.id)}:{})});
@@ -300,7 +299,7 @@ export function projectSectChat(world:WorldState):readonly SectChatRoomView[]{
           break;
         case 'comic':{
           if(roomId==='leaders')break;
-          const template=templates.get(about.templateId);
+          const template=findSectComedyTemplate(about.templateId);
           const beat=managed.comedy?.moments.find(row=>row.tick===post.tick&&row.templateId===about.templateId&&row.speakerId===actor.id);
           if(!beat||
             !exactPrivateMarker(events,sectComicEventId(post.tick,managed.sectId),post.tick,[actor.id]))break;

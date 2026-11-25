@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import {comedyTreasuryDelta} from './sectComedyAccountingFixture';
 import { requestCultivatorLLMDecision } from '../src/engine/llmBrain';
 import { SETTLEMENT_RECRUIT_STIPEND } from '../src/engine/settlementEngine';
 import { llmScheduler } from '../src/engine/llmScheduler';
@@ -137,7 +138,8 @@ describe('江湖节庆的月步与存档', () => {
     const record=next.settlements.records.find(row=>row.tick===next.tick&&row.actorId===discipleId&&row.kind==='recruitment');
     expect(record).toMatchObject({settlementId:village.id,volunteerId:candidate.id,people:1,stones:SETTLEMENT_RECRUIT_STIPEND});
     expect(next.sects.find(row=>row.id===sect.id)?.spiritStones)
-      .toBe(quiet.sects.find(row=>row.id===sect.id)!.spiritStones-SETTLEMENT_RECRUIT_STIPEND);
+      .toBe(quiet.sects.find(row=>row.id===sect.id)!.spiritStones-SETTLEMENT_RECRUIT_STIPEND
+        +comedyTreasuryDelta(next)-comedyTreasuryDelta(quiet));
     const save=encodeEraWorldSave(next);
     expect(encodeEraWorldSave(decodeEraWorldSave(save))).toBe(save);
   });

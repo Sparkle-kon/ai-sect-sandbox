@@ -18,7 +18,7 @@ export function associatedComicRow(comic:SectComicView|undefined,report:SectJobR
 }
 
 const buildingNames={hall:'大殿',kitchen:'饭堂',furnace:'丹房',trainingGround:'演武场',gate:'山门',library:'藏经阁'};
-const herbNames={jade_leaf:'碧叶草',earth_root:'地脉参',star_bloom:'星辉花',shadow_moss:'幽影苔'};
+const herbNames={jade_leaf:'翡翠灵叶',earth_root:'地脉灵根',star_bloom:'星辉花',shadow_moss:'幽影苔'};
 const npcNames={wang:'王掌柜',rival:'隔壁赵掌门',cat:'偷丹灵猫',ancestor:'后山老祖',host:'天机阁主播'};
 export function describeSectComicEffect(effect:SectComicAppliedEffect,world?:WorldState){
   const delta='amount' in effect?`${effect.amount>=0?'+':'−'}${Math.abs(effect.amount).toLocaleString('zh-CN',{maximumFractionDigits:3})}`:'';

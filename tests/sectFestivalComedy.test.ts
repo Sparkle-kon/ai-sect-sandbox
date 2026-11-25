@@ -33,19 +33,19 @@ describe('节令笑话跟着实际差事和旧月走',()=>{
     world=advance(world,[{discipleId:person.id,jobId:'festival-recruit'}]);
     expect(world.month).toBe(3);
     const moment=world.sectManagement?.comedy?.moments.at(-1);
-    expect(moment).toMatchObject({tick:world.tick,templateId:'festival-recruit-route',speakerId:person.id,
+    expect(moment).toMatchObject({tick:world.tick,templateId:'h6-festival-recruit-route',speakerId:person.id,
       source:{phase:'on_route',jobId:'festival-recruit'},effects:[]});
     expect(world.sectManagement?.latestReport?.rows[0]).toMatchObject({discipleId:person.id,phase:'on_route'});
     expect(world.settlements.records.some(record=>record.actorId===person.id&&record.tick===world.tick&&record.kind==='recruitment')).toBe(false);
     expect(world.events.find(event=>event.id===sectComicEventId(world.tick,world.sectManagement?.sectId??'')))
       .toMatchObject({witnessScope:'participants',actorIds:[person.id]});
-    expect(projectSectComicMoment(world,moment)?.report).toContain('名册还没动笔');
+    expect(projectSectComicMoment(world,moment)?.report).toContain('倒掉鞋里的沙');
 
     const april=advance(world),saved=encodeEraWorldSave(april);
     const reloaded=decodeEraWorldSave(saved);
     const oldMoment=reloaded.sectManagement?.comedy?.moments.find(row=>row.tick===world.tick);
     expect(encodeEraWorldSave(reloaded)).toBe(saved);
-    expect(projectSectComicMoment(reloaded,oldMoment)?.report).toContain('名册还没动笔');
+    expect(projectSectComicMoment(reloaded,oldMoment)?.report).toContain('倒掉鞋里的沙');
 
     const forged=structuredClone(april),managed=forged.sectManagement;
     if(!managed?.comedy)throw new Error('Expected archive of actual seasonal note');
@@ -56,11 +56,12 @@ describe('节令笑话跟着实际差事和旧月走',()=>{
 
   it('每种节令都有前一程及未办成的台词；挂卖不冒充成交',()=>{
     for(const id of ['recruit','social','market','review','debt'] as const){
-      expect(findSectComedyTemplate(`festival-${id}-route`)?.match.phase).toBe('on_route');
-      expect(findSectComedyTemplate(`festival-${id}-blocked`)?.match.phase).toBe('unavailable');
-      if(id==='market')expect(findSectComedyTemplate('festival-market-done-success')).toBeUndefined();
+      expect(findSectComedyTemplate(`h6-festival-${id}-route`)?.match.phase).toBe('on_route');
+      expect(findSectComedyTemplate(`h6-festival-${id}-blocked`)?.match.phase).toBe('unavailable');
+      if(id==='market')expect(findSectComedyTemplate('h6-festival-market-done-success')).toBeUndefined();
       else for(const tier of ['success','windfall','mishap'] as const){
-        expect(findSectComedyTemplate(`festival-${id}-done-${tier}`)).toMatchObject({match:{phase:'performed',tier},effects:[]});
+        expect(findSectComedyTemplate(`h6-festival-${id}-done-${tier}`)).toMatchObject({match:{phase:'performed',tier},
+          effects:expect.arrayContaining([expect.objectContaining({kind:expect.any(String)})])});
       }
     }
   });

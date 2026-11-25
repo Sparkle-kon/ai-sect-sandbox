@@ -87,7 +87,7 @@ function contextFor(world:WorldState,beat:Beat,template:SectComedyTemplate):Come
 }
 function effectsFor(world:WorldState,beat:Beat,template:SectComedyTemplate,context:ComedyContext){
   if(template.effects.length&&beat.source.phase!=='performed'&&
-    !(beat.source.phase==='ambient'&&beat.source.presence==='home'))return;
+    !(beat.source.phase==='ambient'&&beat.siteId))return;
   if(template.effects.some(effect=>effect.kind==='kitchen_damage')){
     const management=world.sectManagement;
     if(!management||beat.source.phase!=='performed'||beat.source.jobId!=='kitchen'||beat.source.tier!=='mishap'||

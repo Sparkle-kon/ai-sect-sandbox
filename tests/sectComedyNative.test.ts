@@ -79,16 +79,20 @@ function checkMoment(world: WorldState, moment: SectComicMoment) {
       expect(row?.effects).toEqual([]);
       expect(moment.effects).toEqual([]);
     }
-  } else {
-    expect(moment.effects).toEqual([]);
+  } else if(moment.effects.length){
+    expect(world.locations.some(site=>site.id===moment.siteId)).toBe(true);
+    expect(projection?.report).toContain(speaker.name);
   }
 }
 
 describe('原生月步的山门趣闻供给', () => {
-  it('真正登记六十个以上不同模板与十种以上不同的同人双怪癖组合', () => {
+  it('新版桥段过七成有物质后果、十种双怪癖组合、四位可入门的怪人', () => {
     const templates = SECT_COMEDY_TEMPLATES;
     expect(new Set(templates.map(row => row.id)).size).toBe(templates.length);
-    expect(templates.length).toBeGreaterThanOrEqual(60);
+    expect(templates.length).toBeGreaterThanOrEqual(86);
+    expect(templates.filter(row=>row.effects.some(effect=>effect.kind!=='qi')).length/templates.length).toBeGreaterThanOrEqual(.7);
+    expect(new Set(templates.flatMap(row=>row.effects.flatMap(effect=>effect.kind==='recruit'?[effect.template]:[]))).size)
+      .toBeGreaterThanOrEqual(4);
     const pairs = templates.flatMap(row => row.match.quirks?.length === 2
       ? [[...row.match.quirks].sort().join('|')] : []);
     expect(new Set(pairs).size).toBeGreaterThanOrEqual(10);
@@ -98,7 +102,9 @@ describe('原生月步的山门趣闻供给', () => {
       expect(row.report.trim().length).toBeGreaterThan(0);
       expect(row.quote.trim().length).toBeGreaterThan(0);
       expect(`${row.report}${row.quote}${row.chatHook?.line ?? ''}`).not.toMatch(/<[^>]*>|实付|托管|凭据|原生|不替|不补/u);
-      if (row.match.phase !== 'performed') expect(row.effects).toEqual([]);
+      if(row.match.phase==='on_route'||row.match.phase==='unavailable')expect(row.effects).toEqual([]);
+      if(row.match.quirks?.length===2)expect(row.effects.some(effect=>effect.kind!=='qi')).toBe(true);
+      if(row.effects.length)expect(row.report).toMatch(/\{name\}.*\{site\}/u);
     }
   });
 
@@ -155,7 +161,8 @@ describe('原生月步的山门趣闻供给', () => {
     expect(team(branch).buildings.kitchen).toBe(0);
     expect(branch.events.some(row => row.id === `evt-${branch.tick}-${cook}-management-kitchen`)).toBe(false);
     const moment = fresh(branch);
-    expect(moment.effects).toEqual([]);
+    expect(moment.source.phase).not.toBe('performed');
+    if(moment.source.phase!=='ambient')expect(moment.effects).toEqual([]);
     expect(moment.speakerId).not.toBe(departed);
     checkMoment(branch, moment);
   });

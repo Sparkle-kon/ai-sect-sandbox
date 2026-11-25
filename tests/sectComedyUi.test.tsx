@@ -59,7 +59,10 @@ it('shows one narrative and one quote on the exact settled report, never on its 
     expect(scene.querySelector('[data-sect-comic-report]')?.textContent).toBe(comic.report);
     expect(scene.querySelector('blockquote')?.textContent).toContain(comic.quote);
     expect(scene.querySelector('[aria-label="所得与折损"]')?.textContent).not.toContain(comic.quote);
-    expect(scene.querySelector('[aria-label="小插曲的得失"]')?.textContent).toContain('真气进度 +1 个百分点');
+    const consequences=scene.querySelector('[aria-label="小插曲的得失"]')?.textContent;
+    expect(consequences).toContain('屠大勺拜入山门');
+    expect(consequences).toContain('带回奇物：魔宗铁锅');
+    expect(consequences).toContain('与血月魔宗的交情 −5');
     expect(host.querySelector('[data-sect-comic-aside]')?.textContent??'').not.toContain(comic.report);
     expect(host.textContent).not.toContain(comic.templateId);
     const serialized=JSON.stringify(arrived);

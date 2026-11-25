@@ -1,0 +1,26 @@
+import type {SceneRewrite} from './types';
+
+export const FESTIVAL_SCENES={
+  "festival-recruit-route":["{name}把春招牌扛到{site}一段，停下来倒掉鞋里的沙。","最先赶来报名的是三粒沙，我把它们留在山路了。",[]],
+  "festival-recruit-blocked":["{name}在{site}没能开春招，索性把空名册晾在廊下。","先让春风翻几页，看它有没有想来学艺。",[]],
+  "festival-recruit-done-success":["{name}在{site}替春招向候选人写了门规，旁边卖纸的书匠付了八枚润笔钱。","头一条是好好吃饭。我本想写在末尾，墨自己滴到了上头。",[{"kind":"stones","amount":8}]],
+  "festival-recruit-done-windfall":["{name}在{site}把招新牌倒挂，一位自称无名的老客站着看了半晌，索性到{sect}来学种花。","他说从前的行当不提了。弟子只知道，他斩枝比铡草还轻。",[{"kind":"recruit","template":"retired-assassin"}]],
+  "festival-recruit-done-mishap":["{name}在{site}摆春招桌时把两壶茶压在名字上，补纸和浆糊花了六枚灵石。","本门的规矩里，拜师的人也得喝干茶才能落款。",[{"kind":"stones","amount":-6}]],
+  "festival-social-route":["{name}赶往{site}的联谊席，背着半篇还没找到听众的高论。","一共只备三句话，眼下用了一句：借过。",[]],
+  "festival-social-blocked":["{name}在{site}等联谊的席位，先把杯底花纹描了一遍。","明日若还有人问我修何道，我先问杯底那朵花。",[]],
+  "festival-social-done-success":["{name}在{site}论茶沏几遍，有人拿两株翡翠灵叶请他再烧一壶。","难得真人不论虚空，只论把水烧开。",[{"kind":"herb","herb":"jade_leaf","amount":2}]],
+  "festival-social-done-windfall":["{name}在{site}拿同桌人都不会的乡里说法讲道，一桌人听得尽兴，给{sect}传出四分名望。","道在俚语里，俚语在我阿婆家。我总不能说她也飞升了。",[{"kind":"fame","amount":4}]],
+  "festival-social-done-mishap":["{name}在{site}论道时不慎替茶托开了光，当众把热茶倒在袖口，烫红了手腕。","茶托如今灵得很，开口第一句便是「拿稳」。",[{"kind":"injury","rate":0.05}]],
+  "festival-market-route":["{name}往{site}赶大集，担子放下来，腿还像站着。","山道这一程最赚的是脚底的茧，它分文不出。",[]],
+  "festival-market-blocked":["{name}在{site}拢着没开张的摊布，看着算盘一直没响。","今日赚了九颗算盘珠的寿数。",[]],
+  "festival-review-route":["{name}沿山路往{site}赶回山演功，走错一段坡才折返。","山路先考一道题：这坡到底算不算捷径。",[]],
+  "festival-review-blocked":["{name}在{site}没赶上演功，把剑穗绕回剑鞘。","真急的，先帮我把功课背头一段。",[]],
+  "festival-review-done-success":["{name}在{site}演功三遍才记得收剑，米商看完寄下六枚灵石当茶钱。","我练的是收势。方才那三遍都是练收势。",[{"kind":"stones","amount":6}]],
+  "festival-review-done-windfall":["{name}在{site}演功时用剑挑回落花，观客传了几回，给{sect}添四分名望。","那一花的能耐，是谢过风就自己落着。",[{"kind":"fame","amount":4}]],
+  "festival-review-done-mishap":["{name}在{site}演到翻腕时剑和扫帚都落地，收拾折掉的器架花了六枚灵石。","隔壁看见的若只这一招，明年我只好换个入场法。",[{"kind":"stones","amount":-6}]],
+  "festival-debt-route":["{name}往{site}赶候账守门，袖中卷着还没用上的算盘袋。","整一路都是鞋底在响，钱袋还很体面。",[]],
+  "festival-debt-blocked":["{name}在{site}没接上候账的轮值，蹲在廊下擦算盘。","擦罢越发亮堂，珠子上仍只印着那几个数。",[]],
+  "festival-debt-done-success":["{name}在{site}替来人料理坏掉的书匣，获赠两株地脉灵根。","账上的话都说完了，他反倒为书匣肯多坐一炷香。",[{"kind":"herb","herb":"earth_root","amount":2}]],
+  "festival-debt-done-windfall":["{name}在{site}帮来客寻齐遗失的收据，王掌柜当场划去四枚灵石的欠款。","掌柜从前说纸比石头轻。找纸时看着比搬石头还辛苦。",[{"kind":"debt","amount":-4}]],
+  "festival-debt-done-mishap":["{name}在{site}候账时叫反人名，惹来两位同名客人。为谢他俩久等，公库拿出五枚灵石补茶钱。","如今弟子知道，光喊「王道友」可太热闹了。",[{"kind":"stones","amount":-5}]],
+} as const satisfies Readonly<Record<string,SceneRewrite>>;

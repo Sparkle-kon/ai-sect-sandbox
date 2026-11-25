@@ -39,7 +39,7 @@ it('keeps the same sect and disciples when an authorized Cognitive reply settles
   expect(chat?.months).toEqual([expect.objectContaining({tick:cognitive.tick,posts:expect.any(Array)})]);
   expect(recurring?.openedTick).toBe(cognitive.tick);
   expect(growth).toMatchObject({closing:{tick:cognitive.tick,overduePrincipal:0,negativeMonths:0,livingDisciples:3}});
-  expect(comedy?.moments).toEqual([expect.objectContaining({tick:cognitive.tick,source:expect.objectContaining({phase:'ambient'}),effects:[]})]);
+  expect(comedy?.moments).toEqual([expect.objectContaining({tick:cognitive.tick,source:expect.objectContaining({phase:'ambient'}),effects:expect.arrayContaining([expect.objectContaining({kind:expect.any(String)})])})]);
   expect(cognitive.sectManagement).toEqual(utility.sectManagement);
   expect(cognitive.cultivators.find(person=>person.id===actor.id)?.quirks).toEqual(actor.quirks);
   expect(cognitive.cultivators.find(person=>person.id===actor.id)?.currentAction).toBe('REST');

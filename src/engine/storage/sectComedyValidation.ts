@@ -151,7 +151,7 @@ export function validateSectComedy(
       return fail('sectManagement.comedy.receipt');
 
     if(row.effects.length!==authored.effects.length||
-      source.phase!=='performed'&&!(source.phase==='ambient'&&source.presence==='home')&&row.effects.length||
+      source.phase!=='performed'&&!(source.phase==='ambient'&&row.siteId)&&row.effects.length||
       row.effects.some((applied,index)=>!matchesEffect(world,state,row,index,applied,authored.effects[index])))
       return fail('sectManagement.comedy.effects');
   }

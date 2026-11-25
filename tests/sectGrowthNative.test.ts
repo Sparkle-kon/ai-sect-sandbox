@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import {comedyTreasuryDelta} from './sectComedyAccountingFixture';
 import { createInitialWorld } from '../src/data/initialWorld';
 import { requestCultivatorLLMDecision } from '../src/engine/llmBrain';
 import { llmScheduler } from '../src/engine/llmScheduler';
@@ -155,11 +156,11 @@ describe('掌门经营沿用原生月步钱粮与日期', () => {
     expect(review.stipend).toBeGreaterThan(0);
     expect(utility.events.filter(row => row.id === `evt-${utility.tick}-${management(world).sectId}-annual-review`)).toHaveLength(1);
     expect(sect(utility).spiritStones - sect(endOfYear).spiritStones)
-      .toBe((sect(utility).monthlyEconomy?.net ?? 0) + review.stipend);
+      .toBe((sect(utility).monthlyEconomy?.net ?? 0) + review.stipend + comedyTreasuryDelta(utility));
     const restarted = reseal(utility);
     const following = bump(restarted);
     expect(project(following).review).toEqual(review);
-    expect(sect(following).spiritStones - sect(restarted).spiritStones).toBe(sect(following).monthlyEconomy?.net);
+    expect(sect(following).spiritStones - sect(restarted).spiritStones).toBe((sect(following).monthlyEconomy?.net??0)+comedyTreasuryDelta(following));
     expect(following.resourceFlow.months.at(-1)?.entries.some(row => row.reason === 'management_annual_stipend')).toBe(false);
   });
 
@@ -180,7 +181,7 @@ describe('掌门经营沿用原生月步钱粮与日期', () => {
     expect(project(deficit1).closing).toMatchObject({ tick: dueTick + 1, overduePrincipal: 80, negativeMonths: 1 });
     expect(project(deficit2).closing).toMatchObject({ tick: dueTick + 2, overduePrincipal: 80, negativeMonths: 2 });
     expect(project(deficit2).failure).toBeUndefined();
-    expect(project(deficit2).closing?.closingNet).toBe(sect(deficit2).spiritStones - 80);
+    expect(project(deficit2).closing?.closingNet).toBe(sect(deficit2).spiritStones - comedyTreasuryDelta(deficit2) - 80);
     const deficit3 = bump(reseal(deficit2));
     expect(project(deficit3).failure).toMatchObject({ tick: dueTick + 3, reason: 'bankruptcy' });
     expect(sect(deficit3).spiritStones).toBeGreaterThanOrEqual(0);

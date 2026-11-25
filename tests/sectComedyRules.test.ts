@@ -56,7 +56,7 @@ describe('typed independent comedy effects',()=>{
     cook.hp=0;
     const beat=settleSectComedyMonth(world,before);
     expect(beat).toBeDefined();
-    expect(projectSectComicMoment(world)?.moment).toMatchObject({source:{phase:'ambient'},effects:[]});
+    expect(projectSectComicMoment(world)?.moment).toMatchObject({source:{phase:'ambient'}});
     expect(beat?.actorIds).not.toContain(cook.id);
     expect(management.buildings.kitchen).toBe(0);
   });

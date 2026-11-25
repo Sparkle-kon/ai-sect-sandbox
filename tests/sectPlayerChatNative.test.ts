@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import {comedyTreasuryDelta} from './sectComedyAccountingFixture';
 import { sectRelation } from '../src/engine/diplomacyEngine';
 import { requestCultivatorLLMDecision } from '../src/engine/llmBrain';
 import { llmScheduler } from '../src/engine/llmScheduler';
@@ -218,7 +219,8 @@ describe('掌门传音按真实世界结算', () => {
     const recruit = actor(utility, `recruit-${candidateId}`);
     expect(recruit).toMatchObject({ sectId: management(ready).sectId, spiritStones: SETTLEMENT_RECRUIT_STIPEND, currentAction: 'REST' });
     expect(village(utility).population).toBe(village(without).population - 1);
-    expect(sect(utility).spiritStones).toBe(sect(without).spiritStones - SETTLEMENT_RECRUIT_STIPEND);
+    expect(sect(utility).spiritStones).toBe(sect(without).spiritStones - SETTLEMENT_RECRUIT_STIPEND
+      +comedyTreasuryDelta(utility)-comedyTreasuryDelta(without));
     const record = utility.settlements.records.find(row => row.volunteerId === candidateId && row.kind === 'recruitment');
     expect(record).toMatchObject({ tick: utility.tick, people: 1, stones: SETTLEMENT_RECRUIT_STIPEND,
       settlementId: villageId, actorId: leader, cultivatorId: recruit.id });

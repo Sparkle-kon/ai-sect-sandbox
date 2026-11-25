@@ -1,0 +1,28 @@
+import type {SectComedyTemplate} from '../../../types/sectComedy';
+
+export const ODDBALL_SCENES=[
+  {id:'h6-guard-roof-bell',match:{phase:'performed',job:'guard',tier:'success'},
+    report:'{name}在{site}等铃响，一直调息到檐水落完，还用竹竿挑下一株绕在铃上的翡翠灵叶。',
+    quote:'门铃没响，是那株草嫌弟子打坐时呼吸太响。',
+    effects:[{kind:'herb',herb:'jade_leaf',amount:1},{kind:'qi',amount:5}]},
+  {id:'h6-home-runaway-princess',match:{phase:'ambient',presence:'home',quirks:['drama','miser']},
+    report:'{name}在{site}验戏班的旧衣匣，发现给大户人家抬轿的人正在找赵小满。赵姑娘解下簪子，拜入{sect}学起理账。',
+    quote:'她开口问咱们几座庄子，又自己改口，说一座漏雨堂也经得起算。',
+    effects:[{kind:'recruit',template:'runaway-princess'}],animation:'sparkle'},
+  {id:'h6-guard-retired-assassin',match:{phase:'performed',job:'guard',tier:'windfall',quirks:['neat_freak']},
+    report:'{name}在{site}重新摆正「请勿踩花」的牌。过路的无名见了，把旧刀搁在门外，走进{sect}投师学种花。',
+    quote:'她说种花才是大事。弟子问旧刀如何收，她说搁那儿，天亮自己会有人绕开走。',
+    effects:[{kind:'recruit',template:'retired-assassin'}],animation:'sparkle'},
+  {id:'h6-recruit-failed-scholar',match:{phase:'performed',job:'recruit',tier:'success'},
+    report:'{name}在{site}请教告示上的生字。孔落第从门外教到门里，替{sect}写完新告示，自己也拜了师。',
+    quote:'他嫌咱们旧告示有错字。我只好请他留下来慢慢挑。',
+    effects:[{kind:'recruit',template:'failed-scholar'}],animation:'sparkle'},
+  {id:'h6-kitchen-goose-on-duty',match:{phase:'performed',job:'kitchen',tier:'windfall',quirks:['coward_king']},
+    report:'{name}在{site}拿米粒把那只白眉胖鹅引走。它围着山门巡视一圈，末了认这位添米的人作主人。',
+    quote:'它第一次朝我叫是催饭，第二次是点卯。往后有它守灶，弟子方敢揭锅。',
+    effects:[{kind:'pet',template:'fat-goose'}],animation:'sparkle'},
+  {id:'h6-explore-talking-gourd',match:{phase:'performed',job:'explore',tier:'windfall',quirks:['lovestruck']},
+    report:'{name}在{site}对旧葫芦说了句心里话，葫芦原声回了一句。他把这只会说话的葫芦一并带回山门。',
+    quote:'掌门，若它日后对您行礼，那一声「喜欢」还请听过便罢。',
+    effects:[{kind:'item',template:'talking-gourd'}],animation:'sparkle'},
+] as const satisfies readonly SectComedyTemplate[];
