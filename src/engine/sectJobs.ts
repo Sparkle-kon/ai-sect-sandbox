@@ -1,18 +1,18 @@
 import type {SectJobAssignment,SectJobDefinition,SectJobEvidence,SectJobObservation,SectJobPlan,SectJobReportEffect} from '../types/sectJobs';
 import type {Cultivator,HerbId,LLMDecisionPayload,LocationNode,WorldEvent,WorldState} from '../types/world';
 import {availableAlchemy} from './alchemyEngine';
-import {activeAvatar} from './avatarEngine';
 import {availableCourierActions} from './sealedCourierEngine';
+import {availableOathActions} from './oathEngine';
+import {activeAvatar} from './avatarEngine';
 import {directorKnownReachableSites,directorSiteIsSafe} from './director/nudgeIntegrations';
 import {isGrandSiegeFighterPresent} from './grandSiegePresence';
 import {availableMarketActions,marketClosureReason} from './marketEngine';
-import {availableOathActions} from './oathEngine';
 import {rankOrdinaryIntents} from './ordinaryIntentEngine';
 import {isSectActive} from './sectActivity';
 import {rewardContribution} from './sectPoliticsEngine';
 import {availableSectEconomyActions} from './sectEconomyEngine';
 import {availableSettlementActions} from './settlementEngine';
-import {availableSparringActions} from './sparringEngine';
+import {isSectErrandJob,planSectErrand} from './sectErrands';
 import {isRetiredFromService} from './serviceRetirementEngine';
 import {SECT_FESTIVALS,sectFestivalDebtDue,sectFestivalForJob,sectFestivalReviewDue,sectMonthAt} from './sectFestivals';
 import {BASE_SECT_JOB_IDS,SECT_JOB_IDS,type SectJobId} from './sectQuirkCatalog';
@@ -28,15 +28,15 @@ const festivalCard=(id:typeof SECT_FESTIVALS[number]['jobId']):SectJobDefinition
 };
 export const SECT_JOB_DEFINITIONS:Readonly<Record<SectJobId,SectJobDefinition>>={
   gather:card('gather','下山采药','有灵草便采，身边没有就先寻药圃。'),
-  explore:card('explore','外出历练','挑一处认得的地方走走。机缘有没有，到了才知。'),
+  explore:card('explore','外出历练','往认得的地方历练，办完便回山。'),
   cultivate:card('cultivate','闭关修炼','就地静坐，吐纳炼气。'),
-  stall:card('stall','坊市摆摊','带货到坊市，挂价等买主；空手先问行市。'),
+  stall:card('stall','坊市摆摊','到坊市卖一份灵材；空手也可帮人照看摊位。'),
   kitchen:card('kitchen','饭堂掌勺','在本门用一份药材煮汤，让在场同门润一润气。'),
   guard:card('guard','看守山门','回本门巡一班；若已有守令，先到岗。'),
-  deliver:card('deliver','跑腿送货','已有信件、货约或救济才接办；没货先去坊市问一问。'),
-  recruit:card('recruit','下山招新','先去有村社的地方访人。入门要对方也愿意。'),
-  challenge:card('challenge','去别宗踢馆','登门邀人切磋。对方肯接招，才有一场比试。'),
-  matchmaking:card('matchmaking','参加联谊','与现场道友说说话，结不结缘不由一席话定。'),
+  deliver:card('deliver','跑腿送货','寻人递送山门来信，有已约定的货件则先履约。'),
+  recruit:card('recruit','下山招新','到村里亮出招徒牌，当月问得准信。'),
+  challenge:card('challenge','去别宗踢馆','到别宗递帖，当月比一场或带着回话归山。'),
+  matchmaking:card('matchmaking','参加联谊','到坊间与道友喝一盏茶，天黑前回山。'),
   'festival-review':festivalCard('festival-review'),
   'festival-recruit':festivalCard('festival-recruit'),
   'festival-social':festivalCard('festival-social'),
@@ -89,8 +89,8 @@ function homeChore(world:WorldState,actor:Cultivator,jobId:'kitchen'|'guard'):Se
   const active=authority(world);
   if(!active)return unavailable('本宗无人能主持这项差事。');
   const site=active.home;
-  if(active.ledger.buildings[jobId==='kitchen'?'kitchen':'gate']<1)
-    return unavailable(jobId==='kitchen'?'饭堂还不能开灶。':'山门未修，还不能在门下排值。');
+  if(jobId==='kitchen'?active.ledger.buildings.kitchen<1:active.ledger.buildings.gate<1&&active.ledger.buildings.hall<1)
+    return unavailable(jobId==='kitchen'?'饭堂还不能开灶。':'大殿和山门都需要先修一处。');
   if(actor.locationId!==site.id)return travel(directorKnownReachableSites(world,actor).find(row=>row===site))??unavailable('回山的路现在走不通。');
   if(!holdable(world,actor,site))return unavailable('眼下不能在此留班。');
   if(jobId==='kitchen'&&(!ingredient(site)||!diners(world,actor,site).length))
@@ -123,12 +123,21 @@ function planSectJobForTick(world:WorldState,actor:Cultivator,jobId:SectJobId,ac
   const seasonal=sectFestivalForJob(jobId);
   if(seasonal&&sectMonthAt(world,actionTick)!==seasonal.month)return unavailable('这项节令差事已不在当月。');
   const known=()=>directorKnownReachableSites(world,actor);
-  const toward=(type:LocationNode['type'])=>travel(known().find(site=>site.type===type));
   const localTalk=(differentSect:boolean)=>{
     const target=rankOrdinaryIntents(world,actor).find(option=>option.action==='SOCIALIZE'&&
       (!differentSect||world.cultivators.some(row=>row.id===option.targetCultivatorId&&row.sectId!==actor.sectId)));
     return target?.action==='SOCIALIZE'?native({chosenAction:'SOCIALIZE',targetCultivatorId:target.targetCultivatorId,innerMonologue:inward},here.id,jobId==='matchmaking'||jobId==='festival-social'?'performed':'on_route'):undefined;
   };
+  // Existing signed/paid assignments have their own legal custody and arrival dates.
+  if(jobId==='deliver'){
+    const oath=availableOathActions(actor,world,false).find(row=>row.action==='FULFILL_OATH');
+    if(oath?.targetOathId)return native({chosenAction:'FULFILL_OATH',targetOathId:oath.targetOathId,innerMonologue:inward},here.id);
+    const relief=availableSettlementActions(actor,world).find(row=>row.action==='DELIVER_RELIEF');
+    if(relief)return native({chosenAction:'DELIVER_RELIEF',targetSettlementId:relief.targetSettlementId,innerMonologue:inward},here.id);
+    const parcel=availableCourierActions(actor,world,false).find(row=>row.courierMove==='accept');
+    if(parcel?.targetDispatchId)return native({chosenAction:'SEALED_COURIER',courierMove:'accept',targetDispatchId:parcel.targetDispatchId,innerMonologue:inward},here.id,'on_route');
+  }
+  if(isSectErrandJob(jobId))return planSectErrand(world,actor,jobId,actionTick)??unavailable('附近没有走得通的去处。');
   switch(jobId){
     case 'festival-recruit':{
       const calm=(site:LocationNode)=>world.settlements.villages.some(village=>village.locationId===site.id&&
@@ -172,53 +181,15 @@ function planSectJobForTick(world:WorldState,actor:Cultivator,jobId:SectJobId,ac
       if(choice?.targetHerbId)return native({chosenAction:'GATHER_HERBS',targetHerbId:choice.targetHerbId,innerMonologue:inward},here.id);
       return travel(known().find(row=>row.type==='spirit_vein'&&(!row.ownerSectId||row.ownerSectId===actor.sectId)&&Object.values(row.herbs).some(amount=>amount>0)))??unavailable('近处没有认得的药地。');
     }
-    case 'explore':
-      return travel(known()[0])??unavailable('眼下没有认得又能走的去处。');
     case 'cultivate':
       return native({chosenAction:'CULTIVATE',innerMonologue:inward},here.id);
-    case 'stall':{
-      if(here.type!=='market')return toward('market')??unavailable('没找到走得通的坊市。');
-      if(marketClosureReason(world,here.id))return unavailable('此处今日不开市。');
-      const order=availableMarketActions(actor,world).find(row=>row.action==='PLACE_MARKET_SELL');
-      if(order?.marketGood)return native({chosenAction:'PLACE_MARKET_SELL',marketGood:order.marketGood,
-        marketQuantity:order.marketQuantity,marketLimitPrice:order.marketLimitPrice,innerMonologue:inward},here.id,'on_route');
-      return localTalk(false)??unavailable('手中没有货，也找不到可问行市的人。');
-    }
     case 'kitchen':return homeChore(world,actor,'kitchen');
     case 'guard':{
       const guard=availableSectEconomyActions(actor,world).find(row=>row.action==='GUARD_DUTY'&&row.targetLocationId);
       if(guard?.targetLocationId)return native({chosenAction:'GUARD_DUTY',targetLocationId:guard.targetLocationId,innerMonologue:inward},guard.targetLocationId);
       return homeChore(world,actor,'guard');
     }
-    case 'deliver':{
-      const oath=availableOathActions(actor,world,false).find(row=>row.action==='FULFILL_OATH');
-      if(oath?.targetOathId)return native({chosenAction:'FULFILL_OATH',targetOathId:oath.targetOathId,innerMonologue:inward},here.id);
-      const relief=availableSettlementActions(actor,world).find(row=>row.action==='DELIVER_RELIEF');
-      if(relief)return native({chosenAction:'DELIVER_RELIEF',targetSettlementId:relief.targetSettlementId,innerMonologue:inward},here.id);
-      const parcel=availableCourierActions(actor,world,false).find(row=>row.courierMove==='accept');
-      if(parcel?.targetDispatchId)return native({chosenAction:'SEALED_COURIER',courierMove:'accept',targetDispatchId:parcel.targetDispatchId,innerMonologue:inward},here.id,'on_route');
-      if(here.type!=='market')return toward('market')??unavailable('暂时没有能接的货件。');
-      return localTalk(false)??unavailable('这处没有可接的货件。');
-    }
-    case 'recruit':{
-      const volunteer=availableSettlementActions(actor,world).find(row=>row.action==='RECRUIT_SETTLER');
-      if(volunteer)return native({chosenAction:'RECRUIT_SETTLER',targetSettlementId:volunteer.targetSettlementId,
-        targetVolunteerId:volunteer.targetVolunteerId,innerMonologue:inward},here.id);
-      if(world.settlements.villages.some(row=>row.locationId===here.id&&row.population>0))
-        return localTalk(true)??unavailable('村里暂没有可打听入门的人。');
-      return travel(known().find(site=>world.settlements.villages.some(row=>row.locationId===site.id&&row.population>0)))??
-        unavailable('没有认得路的村社可去。');
-    }
-    case 'challenge':{
-      const offer=availableSparringActions(actor,world).find(row=>row.sparringMove==='offer'&&row.sparringRounds===1&&
-        world.cultivators.some(peer=>peer.id===row.targetCultivatorId&&peer.sectId!==actor.sectId));
-      if(offer?.sparringMove==='offer')return native({chosenAction:'SPARRING',sparringMove:'offer',sparringRounds:1,
-        targetCultivatorId:offer.targetCultivatorId,innerMonologue:inward},here.id,'on_route');
-      return travel(known().find(site=>site.type==='sect_hq'&&site.ownerSectId&&site.ownerSectId!==actor.sectId))??
-        unavailable('附近没有肯听招呼的擂台。');
-    }
-    case 'matchmaking':
-      return localTalk(true)??(here.type==='market'?localTalk(false):toward('market'))??unavailable('眼下没有能当面交谈的道友。');
+
   }
 }
 
@@ -309,6 +280,7 @@ export function observeSectJob(world:WorldState,actor:Cultivator,assignment:Sect
   const base={tick:world.tick,discipleId:assignment.discipleId,jobId:assignment.jobId};
   const blocked=(line:string):SectJobObservation=>({...base,phase:'unavailable',line});
   if(plan.kind==='blocked')return blocked(plan.reason);
+  if(plan.kind==='errand')return blocked('这一趟未能出山。');
   if(!nativeApplied||before.tick!==world.tick||before.discipleId!==actor.id||assignment.discipleId!==actor.id||
     !world.cultivators.includes(actor)||!actor.alive||actor.currentAction!==plan.decision.chosenAction)
     return blocked('这回未能照差事行事。');

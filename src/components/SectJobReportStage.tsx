@@ -47,6 +47,8 @@ export function SectJobReportStage({world,report,present,comic,drama,onDismiss,o
   },[report,index]);
 
   if(!row)return null;
+  const errandLine=row.errand&&world.events.find(event=>event.id===row.sourceEventId&&
+    event.tick===report.settledTick&&event.locationId===row.siteId&&event.actorIds[0]===row.discipleId)?.description;
   const sceneComic=row===comicRow?comic:undefined;
   const matches=world.cultivators.filter(item=>item.id===row.discipleId);
   const actor=matches.length===1?matches[0]:undefined;
@@ -86,6 +88,7 @@ export function SectJobReportStage({world,report,present,comic,drama,onDismiss,o
           <p className="text-xs text-stone-300">{!speaks?'差事记在册上':atHome?'人在山门':'人未在庭院露面，且读回话'}</p>
         </div>
       </div>
+      {errandLine&&<p className="text-sm leading-6 text-stone-200">{errandLine}</p>}
       {sceneComic&&<p data-sect-comic-report="" className="text-sm leading-6 text-stone-200">{sceneComic.report}</p>}
       {speaks&&<blockquote className="border-l border-amber-400/40 pl-2 font-serif text-sm leading-6 text-stone-100">「{sceneComic?.quote??reportVoice(row,actor)}」</blockquote>}
       <section aria-label="所得与折损" className="space-y-1 text-xs text-stone-300">

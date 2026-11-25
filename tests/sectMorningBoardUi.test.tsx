@@ -130,6 +130,7 @@ it('reveals unavailable reasons and last month evidence without claiming a route
   const {world,disciples:[first]}=fixture();
   if(!world.sectManagement)throw Error('Managed starter is required');
   world.sectManagement.buildings.gate=0;
+  world.sectManagement.buildings.hall=0;
   const confirm=vi.fn().mockResolvedValue(true);
   const {host,render,cleanup}=mount(world,confirm,[
     {tick:world.tick,discipleId:first.id,jobId:'gather',phase:'on_route',line:'沿山路去药圃。'},
@@ -141,7 +142,7 @@ it('reveals unavailable reasons and last month evidence without claiming a route
     const guard=findButton(host,'看守山门');
     expect(guard.textContent).toContain('暂不能领');
     await act(async()=>guard.click());
-    expect(host.querySelector('[role="status"]')?.textContent).toContain('山门未修');
+    expect(host.querySelector('[role="status"]')?.textContent).toContain('大殿和山门');
     expect(host.textContent).toContain('已派 0 人');
     const evidence=[...host.querySelectorAll('details')].find(row=>row.firstElementChild?.textContent?.startsWith('上月差事'));
     expect(evidence?.open).toBe(false);

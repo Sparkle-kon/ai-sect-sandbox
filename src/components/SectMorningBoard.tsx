@@ -202,7 +202,7 @@ export function SectMorningBoard({world,busy,plan,moving,onConfirmJobs,buildings
         </ul>
       </details>}
       <p aria-live="polite" className="my-1.5 text-sm text-slate-200">
-        {actor?<>{actor.name}：{selectedJob?SECT_JOB_DEFINITIONS[selectedJob].label:'还没领差事'}{selectedPlan?.kind==='native'&&selectedPlan.phase==='on_route'&&(selectedPlan.decision.chosenAction==='EXPLORE'?' · 先赶路':' · 先办头一步')}</>:
+        {actor?<>{actor.name}：{selectedJob?SECT_JOB_DEFINITIONS[selectedJob].label:'还没领差事'}{selectedPlan?.kind==='errand'?' · 当月往返':selectedPlan?.kind==='native'&&selectedPlan.phase==='on_route'&&(selectedPlan.decision.chosenAction==='EXPLORE'?' · 先赶路':' · 先办头一步')}</>:
           members.length?'先点弟子，再点差事牌。':'眼下没有可派工的弟子。'}
         {!actor&&members.length>0&&<span className="hidden lg:inline">也可把弟子拖到差事牌上。</span>}
       </p>

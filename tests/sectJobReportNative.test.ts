@@ -60,7 +60,7 @@ function findRow(rows: readonly SectJobReportRow[], discipleId: string) {
 }
 
 describe('回山汇报来自真实差事结算', () => {
-  it('Utility 与真实 JSON 解码后的 Cognitive 以同一派工得同一可存读报告，途中不冒算交货', async () => {
+  it('Utility 与真实 JSON 解码后的 Cognitive 以同一派工得同一可存读报告，跑腿当月回山', async () => {
     const { world, management, gatherer, runner, meditator } = fixture();
     const board: readonly SectJobAssignment[] = [
       { discipleId: gatherer, jobId: 'gather' }, { discipleId: runner, jobId: 'deliver' },
@@ -68,7 +68,7 @@ describe('回山汇报来自真实差事结算', () => {
     const herbPlan = planSectJob(world, person(world, gatherer), 'gather');
     const deliveryPlan = planSectJob(world, person(world, runner), 'deliver');
     if (herbPlan.kind !== 'native' || !herbPlan.decision.targetHerbId ||
-      deliveryPlan.kind !== 'native' || deliveryPlan.phase !== 'on_route' || !deliveryPlan.siteId)
+      deliveryPlan.kind !== 'errand' || !deliveryPlan.siteId)
       throw new Error('Expected one local herb harvest and one genuine known delivery route');
     const herbId = herbPlan.decision.targetHerbId;
     const original = encodeEraWorldSave(world);
@@ -112,9 +112,10 @@ describe('回山汇报来自真实差事结算', () => {
     ]);
 
     const runnerRow = findRow(report.rows, runner);
-    expect(runnerRow).toMatchObject({ phase: 'on_route', siteId: deliveryPlan.siteId, effects: [] });
-    expect(runnerRow).not.toHaveProperty('tier');
-    expect(person(utility.after, runner).locationId).toBe(deliveryPlan.siteId);
+    expect(runnerRow).toMatchObject({ phase: 'performed', siteId: deliveryPlan.siteId,
+      errand:{fromId:management.homeSiteId,homeId:management.homeSiteId} });
+    expect(runnerRow).toHaveProperty('tier');
+    expect(person(utility.after, runner).locationId).toBe(management.homeSiteId);
     expect(utility.after.couriers.dispatches.some(row => row.courierId === runner)).toBe(false);
     expect(encodeEraWorldSave(world)).toBe(original);
     const packed = encodeEraWorldSave(utility.after);

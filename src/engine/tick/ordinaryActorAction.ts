@@ -1,5 +1,6 @@
 import { chooseSectChallengeAction } from '../sectChallenges';
 import {deferSectPairChore} from '../sectMeetingOrders';
+import {settleSectErrand} from '../sectErrands';
 import {observeSectJob,planSectJob,settleSectJobChore,snapshotSectJobEvidence} from '../sectJobs';
 import type {SectJobPlan} from '../../types/sectJobs';
 import type { Cultivator, LLMDecisionPayload, WorldEvent, WorldState } from '../../types/world';
@@ -626,12 +627,22 @@ export function runOrdinaryActorAction(
     (decision.chosenAction === 'REST' && decision.targetHeartDemonAftermathId===undefined) || decision.chosenAction === 'CULTIVATE' ||
     (decision.chosenAction === 'EXPLORE' && previousLocation !== cultivator.locationId));
   if(job&&sectMeeting&&plannedJob&&jobBefore){
-    const deferred=validEffect&&plannedJob.kind==='chore'&&deferSectPairChore(sectMeeting,cultivator,job,plannedJob,jobBefore);
-    if(!deferred){
-      const choreEvent=validEffect&&plannedJob.kind==='chore'?settleSectJobChore(nextState,cultivator,plannedJob):undefined;
-      if(choreEvent){newEvents.push(choreEvent);witnessEvent(nextState,choreEvent);}
-      sectMeeting.observations.set(cultivator.id,
-        observeSectJob(nextState,cultivator,job,plannedJob,jobBefore,choreEvent??evt??undefined,validEffect));
+    if(plannedJob.kind==='errand'&&validEffect){
+      const trip=settleSectErrand(nextState,cultivator,plannedJob,rng);
+      if(trip){
+        if(trip.otherEvent){newEvents.push(trip.otherEvent);witnessEvent(nextState,trip.otherEvent);}
+        newEvents.push(trip.event);
+        witnessEvent(nextState,trip.event);
+        sectMeeting.observations.set(cultivator.id,{...job,...trip.observation});
+      }
+    }else{
+      const deferred=validEffect&&plannedJob.kind==='chore'&&deferSectPairChore(sectMeeting,cultivator,job,plannedJob,jobBefore);
+      if(!deferred){
+        const choreEvent=validEffect&&plannedJob.kind==='chore'?settleSectJobChore(nextState,cultivator,plannedJob):undefined;
+        if(choreEvent){newEvents.push(choreEvent);witnessEvent(nextState,choreEvent);}
+        sectMeeting.observations.set(cultivator.id,
+          observeSectJob(nextState,cultivator,job,plannedJob,jobBefore,choreEvent??evt??undefined,validEffect));
+      }
     }
   }
   if(story)completeStorytellerChoice(nextState,cultivator,story,

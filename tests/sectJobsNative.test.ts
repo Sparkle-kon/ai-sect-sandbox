@@ -55,6 +55,7 @@ describe('晨会差事走真实月步', () => {
     ];
     const routes = assignments.map(({ discipleId, jobId }) => {
       const job = planSectJob(world, actor(world, discipleId), jobId);
+      if (job.kind === 'errand') return job.siteId;
       if (job.kind !== 'native' || job.decision.chosenAction !== 'EXPLORE' || !job.decision.targetLocationId)
         throw new Error(`Expected a genuine legal destination for ${jobId}`);
       return job.decision.targetLocationId;
@@ -91,18 +92,23 @@ describe('晨会差事走真实月步', () => {
     for (const [index, assignment] of assignments.entries()) {
       const { discipleId, jobId } = assignment;
       const actual = actor(after, discipleId);
-      expect(actual.locationId).toBe(routes[index]);
-      expect(actual.locationId).not.toBe(actor(before, discipleId).locationId);
-      expect(actual.currentAction).toBe('EXPLORE');
-      expect(actual.herbs).toEqual(actor(before, discipleId).herbs);
+      const roundTrip=jobId==='deliver';
+      expect(actual.locationId).toBe(roundTrip?before.sectManagement?.homeSiteId:routes[index]);
+      expect(actual.currentAction).toBe(roundTrip?'REST':'EXPLORE');
+      const originalHerbs={...actor(before,discipleId).herbs};
+      const comedy=after.sectManagement?.comedy?.moments.at(-1);
+      if(comedy?.tick===after.tick&&comedy.speakerId===discipleId)for(const effect of comedy.effects){
+        if(effect.kind==='herb')originalHerbs[effect.herb]+=effect.amount;
+      }
+      expect(actual.herbs).toEqual(originalHerbs);
       const observation = batches[0].find(row => row.discipleId === discipleId);
-      expect(observation).toMatchObject({ discipleId, jobId, tick: after.tick, siteId: routes[index], phase: 'on_route' });
+      expect(observation).toMatchObject({ discipleId, jobId, tick: after.tick, siteId: routes[index], phase: roundTrip?'performed':'on_route' });
       if (observation?.sourceEventId) {
         expect(months[0].find(row => row.id === observation.sourceEventId))
           .toMatchObject({ tick: after.tick, actorIds: expect.arrayContaining([discipleId]) });
       }
       expect(months[0].some(row => row.actorIds.includes(discipleId) &&
-        /delivery|deliver|cargo/iu.test(row.id))).toBe(false);
+        /delivery|deliver|cargo/iu.test(row.id))).toBe(roundTrip);
     }
     expect(batches[0].some(row => row.discipleId === freeDisciple || row.discipleId === outsider)).toBe(false);
     expect(after.decisionTrace.records.find(row => row.actorId === freeDisciple && row.tick === after.tick))

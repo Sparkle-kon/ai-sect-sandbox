@@ -87,16 +87,19 @@ function followUp(actor:Cultivator,tier:SectJobTier):SectJobReportEffect|undefin
 /** Only the trusted completed meeting hands us a native observation, once per assigned disciple. */
 export function settleSectJobReportRow(world:WorldState,observation:SectJobObservation,rng:()=>number):SectJobReportRow{
   const base:Omit<SectJobReportRow,'effects'>={discipleId:observation.discipleId,jobId:observation.jobId,phase:observation.phase,
-    ...(observation.siteId?{siteId:observation.siteId}:{}),...(observation.sourceEventId?{sourceEventId:observation.sourceEventId}:{})};
+    ...(observation.errand?{errand:observation.errand}:{}),...(observation.siteId?{siteId:observation.siteId}:{}),...(observation.sourceEventId?{sourceEventId:observation.sourceEventId}:{})};
   if(observation.phase!=='performed')return {...base,effects:[]};
   const effects=[...observation.nativeEffects??[]];
   const candidates=world.cultivators.filter(actor=>actor.id===observation.discipleId);
   const actor=candidates.length===1?candidates[0]:undefined,managed=world.sectManagement;
   if(!managed||observation.tick!==world.tick||!actor||!actor.alive||actor.hp<=0||
     actor.sectId!==managed.sectId||actor.id===managed.leaderId||actor.positionPlane!==undefined||
-    actor.locationId!==observation.siteId)return {...base,tier:'success',effects};
-  const picked=pickSectJobTier(sectJobOutcomeOdds(world,actor,observation.jobId),rng());
+    actor.locationId!==(observation.errand?.homeId??observation.siteId))return {...base,tier:'success',effects};
+  const drawn=pickSectJobTier(sectJobOutcomeOdds(world,actor,observation.jobId),rng());
+  const outcome=observation.errand?.outcome;
+  const picked=outcome==='road_disaster'?'disaster':
+    outcome==='road_mishap'||outcome==='refused'||outcome==='contest_lost'?'mishap':drawn;
   const extra=followUp(actor,picked);
   if(extra?.amount)effects.push(extra);
-  return {...base,tier:extra?.amount?picked:'success',effects};
+  return {...base,tier:extra?.amount||observation.errand?picked:'success',effects};
 }

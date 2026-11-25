@@ -139,20 +139,25 @@ function boundedDelta(edge:RelationshipEdge,wanted:number):number{
 export function settleSectPairDrama(world:WorldState,plan:SectPairDramaPlan,report:SectJobReport,
   actualAbortedBlame=false):WorldEvent|undefined{
   const managed=world.sectManagement,active=activeDrama(world,plan),aborted=plan.kind==='blame';
+  const matching=plan.pair.map(id=>reportRow(report,id));
+  const [first,second]=matching;
+  const sharedDestination=first?.errand?.homeId===plan.siteId&&second?.errand?.homeId===plan.siteId&&
+    first.errand.outcome==='completed'&&second.errand.outcome==='completed'&&first.siteId===second.siteId&&first.siteId;
+  const scene=sharedDestination?{...plan,siteId:sharedDestination}:plan;
   if(!managed||!active||managed.latestReport!==report||managed.pairDrama?.tick===world.tick||
     aborted&&!canFinishSectPairBlame(world,plan)||
     report.settledTick!==world.tick||report.openedTick!==world.tick-1||
     report.sectId!==managed.sectId||report.leaderId!==managed.leaderId||actualAbortedBlame!==aborted||
-    !plan.pair.every(id=>matchesReport(reportRow(report,id),plan,aborted)))return;
+    !matching.every(row=>matchesReport(row,scene,aborted)))return;
   const id=sectPairDramaEventId(world.tick,managed.sectId);
   if(world.events.some(event=>event.id===id))return;
   const before=active.edge.affinity,delta=boundedDelta(active.edge,active.template.affinity);
   if(delta!==0)adjustRelationship(world,...plan.pair,delta,active.edge.type);
-  managed.pairDrama={...plan,sectId:managed.sectId,outcome:aborted?'aborted':'completed',affinityChange:(relationship(world,plan.pair)?.affinity??before)-before};
+  managed.pairDrama={...scene,sectId:managed.sectId,outcome:aborted?'aborted':'completed',affinityChange:(relationship(world,plan.pair)?.affinity??before)-before};
   const privateBeat=plan.kind==='crush';
   return {id,tick:world.tick,year:world.year,month:world.month,category:'diplomacy',witnessScope:'participants',
     title:SECT_PAIR_DRAMA_EVENT_TITLE,description:SECT_PAIR_DRAMA_EVENT_DESCRIPTION,
-    actorIds:privateBeat?[plan.initiatorId]:[...plan.pair],...(!privateBeat?{locationId:plan.siteId}:{})};
+    actorIds:privateBeat?[plan.initiatorId]:[...plan.pair],...(!privateBeat?{locationId:scene.siteId}:{})};
 }
 
 export interface SectPairDramaView {

@@ -1,9 +1,10 @@
 import {describe,expect,it} from 'vitest';
 import {createManagedSectWorld} from '../src/engine/starterSectWorld';
 import {eligibleSectDisciples,observeSectJob,planSectJob,SECT_JOB_DEFINITIONS,SECT_JOB_IDS,settleSectJobChore,snapshotSectJobEvidence} from '../src/engine/sectJobs';
-import {resolveMarketAction} from '../src/engine/marketEngine';
+import {availableMarketActions,resolveMarketAction} from '../src/engine/marketEngine';
 import {resolveOathAction} from '../src/engine/oathEngine';
-import {availableSparringActions} from '../src/engine/sparringEngine';
+import {settleSectErrand} from '../src/engine/sectErrands';
+import type {SectJobPlan} from '../src/types/sectJobs';
 
 function start(){
   const world=createManagedSectWorld(2031,'classic','qingyun-odd-jobs',0)!;
@@ -20,23 +21,17 @@ describe('ten lawful sect job plans',()=>{
     expect(eligibleSectDisciples(world).map(row=>row.id)).not.toContain(management.leaderId);
     expect(planSectJob(world,actor,'gather')).toMatchObject({kind:'native',decision:{chosenAction:'GATHER_HERBS'}});
     const parcel=planSectJob(world,actor,'deliver'),stall=planSectJob(world,actor,'stall');
-    expect(parcel).toMatchObject({kind:'native',phase:'on_route',decision:{chosenAction:'EXPLORE'}});
-    expect(stall).toMatchObject({kind:'native',phase:'on_route',decision:{chosenAction:'EXPLORE'}});
-    const previous=snapshotSectJobEvidence(world,actor);
-    if(parcel.kind!=='native'||!parcel.siteId)throw Error('Need lawful market approach');
-    actor.locationId=parcel.siteId;
-    actor.currentAction='EXPLORE';
-    expect(eligibleSectDisciples(world)).toContain(actor);
-    expect(observeSectJob(world,actor,{discipleId:actor.id,jobId:'deliver'},parcel,previous,undefined,false).phase).toBe('unavailable');
-    expect(observeSectJob(world,actor,{discipleId:actor.id,jobId:'deliver'},parcel,previous,undefined,true)).toMatchObject({
-      phase:'on_route',siteId:parcel.siteId,line:expect.stringContaining('刚开头'),
-    });
-    expect(actor.locationId).not.toBe(home.id);
+    expect(parcel).toMatchObject({kind:'errand',phase:'performed',fromId:home.id,homeId:home.id});
+    expect(stall).toMatchObject({kind:'errand',phase:'performed',fromId:home.id,homeId:home.id});
+    if(parcel.kind!=='errand')throw Error('Need real errand');
+    const trip=settleSectErrand(world,actor,parcel,()=>.9);
+    expect(trip?.observation).toMatchObject({phase:'performed',siteId:parcel.siteId,errand:{homeId:home.id}});
+    expect(actor.locationId).toBe(home.id);
     expect(peer.locationId).toBe(home.id);
     expect(world.couriers.dispatches).toEqual([]);
   });
 
-  it('spends one real local herb on actual bowls and credits guard contribution only at a functioning home gate',()=>{
+  it('spends one real local herb on actual bowls and credits guard contribution in the standing hall or gate',()=>{
     const {world,management,home,actor,peer}=start();
     const cooking=planSectJob(world,actor,'kitchen');
     expect(cooking.kind).toBe('chore');
@@ -55,6 +50,8 @@ describe('ten lawful sect job plans',()=>{
     world.events.push(event!);
     expect(settleSectJobChore(world,actor,cooking)).toBeUndefined();
     management.buildings.gate=0;
+    expect(planSectJob(world,peer,'guard')).toMatchObject({kind:'chore'});
+    management.buildings.hall=0;
     expect(planSectJob(world,peer,'guard')).toMatchObject({kind:'blocked'});
   });
 
@@ -62,8 +59,10 @@ describe('ten lawful sect job plans',()=>{
     const {world,actor}=start();
     actor.locationId='loc-market';
     actor.herbs.jade_leaf=2;
-    const plan=planSectJob(world,actor,'stall');
-    if(plan.kind!=='native'||plan.decision.chosenAction!=='PLACE_MARKET_SELL')throw Error('Need stocked real market');
+    const order=availableMarketActions(actor,world).find(row=>row.action==='PLACE_MARKET_SELL');
+    if(!order||order.action!=='PLACE_MARKET_SELL')throw Error('Need stocked real market');
+    const plan:SectJobPlan={kind:'native',phase:'on_route',siteId:actor.locationId,decision:{chosenAction:'PLACE_MARKET_SELL',
+      marketGood:order.marketGood,marketQuantity:order.marketQuantity,marketLimitPrice:order.marketLimitPrice,innerMonologue:'出一份市价。'}};
     const evidence=snapshotSectJobEvidence(world,actor),stones=actor.spiritStones;
     const listing=resolveMarketAction(world,actor,plan.decision);
     actor.currentAction='PLACE_MARKET_SELL';
@@ -94,11 +93,7 @@ describe('ten lawful sect job plans',()=>{
       .toMatchObject({phase:'on_route',line:'已携货到场，对方未到，货还在手里。'});
     expect(actor.herbs.jade_leaf).toBe(evidence.herbs.jade_leaf);
     actor.locationId='loc-market';
-    const nearby=availableSparringActions(actor,world).find(row=>row.sparringMove==='offer'&&row.sparringRounds===1);
-    const challenge=planSectJob(world,actor,'challenge');
-    expect(challenge.kind).toBe('native');
-    if(nearby&&challenge.kind==='native'&&challenge.decision.chosenAction==='SPARRING')
-      expect(challenge.decision).toMatchObject({sparringMove:'offer',sparringRounds:1});
+    expect(planSectJob(world,actor,'challenge')).toMatchObject({kind:'errand',phase:'performed',homeId:world.sectManagement?.homeSiteId});
     expect(world.sparring.agreements).toEqual([]);
   });
 });

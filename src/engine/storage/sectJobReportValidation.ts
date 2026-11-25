@@ -1,5 +1,7 @@
-import { SECT_JOB_TIERS, type SectJobReport, type SectJobReportEffect, type SectJobReportRow } from '../../types/sectJobs';
+import { SECT_ERRAND_OUTCOMES, SECT_JOB_TIERS, type SectJobReport, type SectJobReportEffect, type SectJobReportRow } from '../../types/sectJobs';
 import type { ChronicleAnchor, WorldState } from '../../types/world';
+import {isSectErrandJob,sectErrandEventId} from '../sectErrands';
+import {terrainTileAt} from '../terrainEngine';
 import { SECT_JOB_IDS } from '../sectQuirkCatalog';
 import { sectFestivalForJob, sectMonthAt } from '../sectFestivals';
 import { arr, fail as rejectShape, id, num, oid, one, optional, SAVE_COLLECTION_LIMIT, structure, tick, type Validator } from './primitives';
@@ -11,9 +13,11 @@ const effect:Validator = (value,path) => {
   if(!value||typeof value!=='object'||!('kind' in value))return rejectShape(path);
   return (value.kind==='herb'?herb:ordinary)(value,path);
 };
+const errand=structure({fromId:id,homeId:id,turnAt:num(0,6401,true),
+  path:arr(6402,structure({x:num(0,1000),y:num(0,600)})),outcome:one(...SECT_ERRAND_OUTCOMES)});
 const rowShape=structure({
   discipleId:id, jobId:one(...SECT_JOB_IDS), phase:one('performed','on_route','unavailable'),
-  tier:optional(one(...SECT_JOB_TIERS)), siteId:oid, sourceEventId:oid, effects:arr(3,effect),
+  tier:optional(one(...SECT_JOB_TIERS)), siteId:oid, sourceEventId:oid,errand:optional(errand), effects:arr(3,effect),
 });
 export const sectJobReportShape=structure({
   openedTick:tick,settledTick:tick,sectId:id,leaderId:id,rows:arr(SAVE_COLLECTION_LIMIT,rowShape),
@@ -25,7 +29,7 @@ function nativeAmount(row:SectJobReportRow,effect:SectJobReportEffect):boolean{
     case 'herb': return row.jobId==='gather'&&(effect.amount===1||effect.amount===2)||
       row.jobId==='kitchen'&&effect.amount===-1&&(effect.herbId==='jade_leaf'||effect.herbId==='earth_root');
     case 'contribution': return (row.jobId==='guard'||row.jobId==='festival-debt')&&effect.amount>0&&effect.amount<=3;
-    case 'hp': return false;
+    case 'hp': return row.errand!==undefined&&Number.isInteger(effect.amount)&&effect.amount>=-60&&effect.amount<0;
   }
 }
 
@@ -40,6 +44,7 @@ function followUpAmount(row:SectJobReportRow,effect:SectJobReportEffect):boolean
 }
 
 function matchesExactJobId(row:SectJobReportRow,tick:number):boolean{
+  if(row.errand)return row.phase==='performed'&&isSectErrandJob(row.jobId)&&row.sourceEventId===sectErrandEventId(tick,row.discipleId,row.jobId);
   const prefix=`evt-${tick}-${row.discipleId}-`;
   // Seasonal routes cannot be persisted as completed trades, and a travelled recruit
   // is not an enrollment. Retained event/ledger evidence is checked separately.
@@ -64,6 +69,10 @@ function matchesReceipt(world:WorldState,report:SectJobReport,row:SectJobReportR
   const {settledTick}=report;
   const calendar=world.year*12+world.month-(world.tick-settledTick);
   if(event.tick!==settledTick||event.year*12+event.month!==calendar)return false;
+  if(row.errand){
+    return event.locationId===row.siteId&&event.actorIds[0]===row.discipleId&&
+      (event.category==='combat'&&row.jobId==='challenge'||event.category==='diplomacy');
+  }
   if(event.locationId!==undefined){
     if(event.locationId!==row.siteId||!event.actorIds.includes(row.discipleId))return false;
     if(row.jobId==='festival-recruit'&&row.phase==='performed'){
@@ -140,6 +149,19 @@ export function validateSectJobReport(
         row.phase!=='unavailable'&&(row.siteId===undefined||!sites.has(row.siteId))||
         (row.phase==='performed')!==(row.tier!==undefined)||
         row.phase!=='performed'&&row.effects.length!==0)return fail('sectManagement.latestReport.phase');
+    if(row.errand){
+      const route=row.errand;
+      const start=world.locations.find(site=>site.id===route.fromId),end=world.locations.find(site=>site.id===route.homeId);
+      const target=world.locations.find(site=>site.id===row.siteId);
+      const at=(i:number,site:typeof target)=>!!site&&route.path[i]?.x===site.x&&route.path[i]?.y===site.y;
+      const cells=route.path.map(point=>terrainTileAt(world,point.x,point.y));
+      if(route.homeId!==state.homeSiteId||route.path.length<2||!at(0,start)||!at(route.turnAt,target)||
+        !at(route.path.length-1,end)||cells.some((cell,i)=>!cell||i>0&&cells[i-1]&&
+          Math.abs(cells[i-1]!.col-cell.col)+Math.abs(cells[i-1]!.row-cell.row)>1)||
+        route.outcome==='road_disaster'&&row.tier!=='disaster'||
+        (route.outcome==='refused'||route.outcome==='road_mishap'||route.outcome==='contest_lost')&&row.tier!=='mishap'||
+        route.outcome==='contest_lost'&&row.jobId!=='challenge')return fail('sectManagement.latestReport.errand');
+    }
     if(!matchesExactJobId(row,report.settledTick))return fail('sectManagement.latestReport.source');
     if(row.sourceEventId!==undefined){
       const eventId=row.sourceEventId;
@@ -160,7 +182,7 @@ export function validateSectJobReport(
     if(row.phase==='performed'&&(row.jobId==='festival-review'&&!effectKeys.has('native:qi')||
         row.jobId==='festival-debt'&&!effectKeys.has('native:contribution')))
       return fail('sectManagement.latestReport.effects');
-    if(followUps!==(row.tier!==undefined&&row.tier!=='success'?1:0))
+    if(!(row.errand&&followUps===0)&&followUps!==(row.tier!==undefined&&row.tier!=='success'?1:0))
       return fail('sectManagement.latestReport.effects');
   }
 }

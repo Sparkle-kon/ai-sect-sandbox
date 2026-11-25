@@ -140,7 +140,7 @@ describe('原生月步的山门趣闻供给', () => {
     expect(encodeEraWorldSave(opening)).toBe(original);
   });
 
-  it('未接到货的跑腿、无人或关了灶房时，不造送达、奖赏与传话人', () => {
+  it('跑腿可当月送门帖回山，关闭的灶房和亡故者仍不会凭空办事', () => {
     const world = starter();
     const [courier, cook, departed] = team(world).foundingDiscipleIds;
     const runner = person(world, courier);
@@ -152,17 +152,15 @@ describe('原生月步的山门趣闻供给', () => {
     const branch = advance(world, [{ discipleId: courier, jobId: 'deliver' }, { discipleId: cook, jobId: 'kitchen' }]);
     const report = team(branch).latestReport;
     expect(report?.rows).toMatchObject([
-      { discipleId: courier, jobId: 'deliver', phase: 'on_route', effects: [] },
+      { discipleId: courier, jobId: 'deliver', phase: 'performed',errand:{homeId:team(world).homeSiteId} },
       { discipleId: cook, jobId: 'kitchen', phase: 'unavailable', effects: [] },
     ]);
-    expect(report?.rows.every(row => row.tier === undefined)).toBe(true);
-    expect(person(branch, courier).locationId).not.toBe(runner.locationId);
+    expect(report?.rows.find(row=>row.discipleId===cook)?.tier).toBeUndefined();
+    expect(person(branch, courier).locationId).toBe(runner.locationId);
     expect(branch.couriers.dispatches.some(row => row.courierId === courier)).toBe(false);
     expect(team(branch).buildings.kitchen).toBe(0);
     expect(branch.events.some(row => row.id === `evt-${branch.tick}-${cook}-management-kitchen`)).toBe(false);
     const moment = fresh(branch);
-    expect(moment.source.phase).not.toBe('performed');
-    if(moment.source.phase!=='ambient')expect(moment.effects).toEqual([]);
     expect(moment.speakerId).not.toBe(departed);
     checkMoment(branch, moment);
   });

@@ -132,5 +132,12 @@ export function deriveMapPresentation(prev: WorldState, next: WorldState, events
       put(`evt-${next.tick}-${actor.id}-map-damage`, 'damage', actor.locationId, [actor.id], `−${previous.hp - actor.hp} HP`);
     }
   }
+  const report=next.sectManagement?.latestReport;
+  if(report?.settledTick===next.tick)for(const row of report.rows){
+    const route=row.errand,actor=after.get(row.discipleId);
+    if(!route||route.path.length<2||!actor?.alive||!onLowerPlane(actor)||actor.locationId!==route.homeId)continue;
+    trails.set(actor.id,{cultivatorId:actor.id,tick:next.tick,fromLocationId:route.fromId,toLocationId:route.homeId,
+      points:route.path.map(pointCopy)});
+  }
   return { tick: next.tick, trails: [...trails.values()], effects: [...effects.values()] };
 }
