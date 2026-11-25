@@ -21,6 +21,6 @@ export function CourierHandoffReceipt({ record }: { record?: CourierHandoffRecor
       {record.lastHeldTick !== undefined && ` · 第 ${record.lastHeldTick} 轮实停候交`}
       {record.settledTick !== undefined && ` · 第 ${record.settledTick} 轮${record.status === 'transferred' ? '实交' : '结案'}`}。</p>
     {record.reason && <p>实录：{REASON[record.reason]}。</p>}
-    {record.status === 'transferred' && <p className="text-emerald-200">封泥未拆，信先换了肩。同一原件续送；换手不等于收件人签收。</p>}
+    {record.status === 'transferred' && <p className="text-emerald-200">封泥未拆，信先换了肩。同一原件续送；收件人的回执还在前路等着。</p>}
   </section>;
 }

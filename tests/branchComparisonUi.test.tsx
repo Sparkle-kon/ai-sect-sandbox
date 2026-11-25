@@ -81,7 +81,7 @@ describe('read-only same-turn branch comparison presentation', () => {
     expect(text).toContain('乙减甲 +1');
     expect(text).toContain('数量差不证明哪条事件造成了变化。');
     expect(text).toContain('其中未保留：第 2 至 3 轮。');
-    expect(text).toContain('不等于没有发生事件。');
+    expect(text).toContain('此轮凭据暂未核实。');
     const left = text.split('aria-label="甲的独立证据"')[1]?.split('</section>')[0];
     const right = text.split('aria-label="乙的独立证据"')[1]?.split('</section>')[0];
     expect(left).not.toContain('当场交割');

@@ -79,7 +79,7 @@ export function LlmTelemetryView({ snapshot, configured, hasCredential, model, w
       <div className="mt-2 space-y-3 border-t border-slate-800 pt-2">
         <p className="text-xs leading-relaxed text-slate-400">
           当前配置：{configured ? (hasCredential ? '模型模式已启用，已填凭证（未据此确认连通）' : '缺少访问凭证，使用规则脑') : '模型模式关闭'}。
-          调用与费用是本会话累计，并非单一 Tick 的结果；收到响应不等于模型决策已写入世界。
+          调用与费用是本会话累计，并非单一 Tick 的结果；响应次数与落实的决策分列。
           {worldTick !== undefined && <> 当前世界：Tick #{worldTick}。</>}
         </p>
         <dl aria-label="调用与决策" className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">

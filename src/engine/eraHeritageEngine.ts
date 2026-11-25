@@ -54,7 +54,7 @@ export function projectEraHeritage(world: WorldState, viewer?: Cultivator): EraH
   for (const oath of state.oaths.slice().sort(reverseDate)) {
     if (oath.tick > world.tick || !canReadOriginalHere || (oath.requesterId !== viewer.id && oath.providerId !== viewer.id)) continue;
     view.originals.push({ kind: 'oath', title: '本人所签契书',
-      evidence: `原签约定：${OATH_TERMS[oath.term].name} × ${oath.quantity}，实托价款 ${oath.payment}、质押 ${oath.collateral} 枚灵石。签书不等于已经交货。`, ...date(oath) });
+      evidence: `原签约定：${OATH_TERMS[oath.term].name} × ${oath.quantity}，实托价款 ${oath.payment}、质押 ${oath.collateral} 枚灵石。货到后另留签收。`, ...date(oath) });
   }
   const currentEvents=new Map(world.events.map(event=>[event.id,event]));
   for (const fact of state.facts.slice().sort(reverseDate)) {

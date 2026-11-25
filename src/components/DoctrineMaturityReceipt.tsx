@@ -24,7 +24,7 @@ export function DoctrineMaturityReceipt({ view }: { view?: DoctrineMaturityView 
     {offer && <div className="min-w-0 space-y-0.5 rounded border border-slate-800 px-2 py-1.5">
       <p className="font-medium">{offerStatus[offer.status]} · 第 {offer.openedTick} 轮提议{offer.status === 'offered' && ` · 第 ${offer.expiresTick} 轮届期`}</p>
       <p>实记同意 {offer.memberConsents}/{offer.memberCount}（含发起的掌门）；{offer.receivingLeaderSigned ? '接纳方掌门已另行同意' : '尚未有接纳方掌门同意'}。</p>
-      {offer.status === 'offered' && <p className="text-slate-400">拟交割 {offer.agreedStones} 灵石。签字并不等于已划款或已改宗籍。</p>}
+      {offer.status === 'offered' && <p className="text-slate-400">拟交割 {offer.agreedStones} 灵石。签约、交割、改宗籍三步分列。</p>}
       {offer.status !== 'offered' && offer.status !== 'merged' && <p className="text-slate-400">此项筹议未划款、未改宗籍。</p>}
     </div>}
     {settlement?.kind === 'merged' && <>

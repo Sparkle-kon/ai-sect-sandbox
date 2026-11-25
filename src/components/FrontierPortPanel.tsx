@@ -122,7 +122,7 @@ function terms(order:FrontierPortOrder){
     case 'load':return `实际装船才收港方 ${PORT_TRADE_FEE_STONES} 灵石、${PORT_TRADE_RIGGING} 份实船具，用 ${PORT_TRADE_SALT} 份潮晶作本单实货；船实际出航另耗 ${PORT_TRADE_HULL_WEAR} 耐久。不带你本人离岸。`;
     case 'receive':return '中坊确有原货、本人实际在场才验收，随后才走地根返港手续。';
     case 'recover_roots':return '按本约已经可退的原根，到中坊由原买方本人实领；不预添包。';
-    case 'collect_roots':return '原根真实靠港后，港方本人到登验泊位或验货仓才实领；在途不算本仓库存。';
+    case 'collect_roots':return '原根真实靠港后，港方本人到登验泊位或验货仓才实领；仍在途中者另列。';
   }
 }
 

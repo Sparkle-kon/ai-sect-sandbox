@@ -456,7 +456,7 @@ export function applyCultivatorBrainDecision(
   }
   if(activeBellWatchForActor(world,cultivator)||bellWatchActedThisTick(world,cultivator)){
     cultivator.currentAction='BELL_WATCH';
-    cultivator.innerMonologue='沿自己认得的山路走，未到不算传过话。';
+    cultivator.innerMonologue='沿自己认得的山路走，走到再当面传话。';
     return null;
   }
   if (activeCourierForActor(world, cultivator) || courierActedThisTick(world, cultivator)) {

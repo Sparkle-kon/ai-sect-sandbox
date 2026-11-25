@@ -19,7 +19,7 @@ describe('夜行 card',()=>{
   it('can identify a proved, retained trail without stating it saw a creature or showing a target ID',()=>{
     const html=renderToStaticMarkup(<FrontierNightHuntCard view={{...view,observed:{kind:'妖兽',siteId:'frontier-north-lee-mid',alive:true}}}/>);
     expect(html).toContain('确曾辨得妖兽足迹');
-    expect(html).toContain('不等于见了真身');
+    expect(html).toContain('妖兽行踪仍待追查');
     expect(html).not.toMatch(/<button|frontier-north-lee-mid/);
   });
   it('keeps an independently verified arrival notice without resurrecting the hunt',()=>{

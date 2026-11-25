@@ -44,7 +44,7 @@ describe('narrow subject fate comparison inside the established branch pair', ()
     expect(html).toContain('本支有实际赐宝凭据');
     expect(html).toContain('已核实的后续 · 乙 · 第 2 轮');
     expect(html).toContain('金丹7 重 → 金丹8 重');
-    expect(html).toContain('已核实的后续不等于因果；更远的原因未明');
+    expect(html).toContain('此处列已核实的后续，起因仍待查');
     expect(html).not.toMatch(/secret-|导致|必然/);
     const leadership = renderToStaticMarkup(<BranchFateReading result={{ ...actualFate, consequence: {
       kind:'leader',side:'left',tick:11,eventId:'secret-election-event',previousLeaderId:'secret-prev',leaderId:'secret-new',

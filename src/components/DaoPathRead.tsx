@@ -61,7 +61,7 @@ function DaoChoice({option,busy,onChoose}:{option:DaoPathOption;busy:boolean;onC
   }[option.daoPathMove];
   const note={
     choose:path.description,practice:`本轮消耗 ${practicePrice}。`,
-    ready:`蓄意不等于施展。实际出手时才耗 ${DAO_INTENT_QI} 真气。`,cancel:'只收回蓄意，不会施展道意。',
+    ready:`此刻先蓄意，出手另有时机。实际出手时才耗 ${DAO_INTENT_QI} 真气。`,cancel:'只收回蓄意，不会施展道意。',
   }[option.daoPathMove];
   return <button type="button" className={touch} disabled={busy} onClick={onChoose}>
     <span className="block font-semibold">{label}</span>

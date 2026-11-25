@@ -338,7 +338,7 @@ export function quoteNativeDecision(
   if(furnaceEmergency.length){
     if(requestTick!==world.tick+1||activeAvatar(world)===cultivator)return handledDecision(undefined);
     return handledDecision(requestDecisionPrompt(config,requestTick,options,
-      '只原样抄写本人确在现场的护炉、撤出、求援或应援许可。求援不等于应允，应允不等于抵达。不得填写伤亡、炉损、路线、物资或他人决定：'+JSON.stringify(furnaceEmergency.map(furnaceEmergencyCommand)),
+      '只原样抄写本人确在现场的护炉、撤出、求援或应援许可。求援、应允和抵达是三项不同进度。不得填写伤亡、炉损、路线、物资或他人决定：'+JSON.stringify(furnaceEmergency.map(furnaceEmergencyCommand)),
       parsed=>requestTick===world.tick+1&&activeAvatar(world)!==cultivator&&exactFurnaceEmergencyDecision(parsed,furnaceEmergency)
         ?exactFurnaceEmergencyDecision(parsed,availableFurnaceEmergencyActions(cultivator,world,requestTick)):undefined,160));
   }
@@ -465,7 +465,7 @@ export function quoteNativeDecision(
   if(campaign.length){
     if(activeAvatar(world)===cultivator||requestTick!==world.tick+1)return handledDecision(undefined);
     return handledDecision(requestDecisionPrompt(config,requestTick,options,
-      '仅原样复制这一战本人获准的一项命令。提出议和不等于另一宗答应，赴阵不等于已经到场。不可填写战果、人物、身份或伤势：'+
+      '仅原样复制这一战本人获准的一项命令。议和要等回话，赴阵要以实到为准。不可填写战果、人物、身份或伤势：'+
         JSON.stringify(campaign.map(row=>row.command)),
       parsed=>{
         if(requestTick!==world.tick+1||activeAvatar(world)===cultivator)return undefined;

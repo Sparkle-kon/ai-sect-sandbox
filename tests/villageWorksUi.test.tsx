@@ -33,7 +33,7 @@ describe('observed village public works and real carrying-capacity change', () =
     const { village, html } = fixture();
     const markup = html();
     expect(markup).toMatch(/<details class="[^"]+"><summary class="[^"]+">村镇工役与承载增长/);
-    expect(markup).toContain('有住位不等于新增居民');
+    expect(markup).toContain('住位与新居民各有册');
     expect(markup).toContain(`村镇现有人口 ${village.population} · 当前总承载 ${village.capacity}`);
     expect(markup).toContain('工役实付宗门公库实付 32 灵石 · 现场赞助人自付玄土根 2 株');
     expect(markup).toContain('实记劳力 2/4 份工 · 若完工，可新增最多 8 人的承载');

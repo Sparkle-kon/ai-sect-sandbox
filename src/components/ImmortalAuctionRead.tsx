@@ -52,7 +52,7 @@ function auctionChoices(view:ImmortalAuctionView,named?:ActorName,artifactQuote?
         const lot=view.lots.find(row=>row.id===option.targetAuctionLotId&&!row.terminal);
         if(!lot)continue;
         label=`出价 ${option.auctionBidStones} 灵石 · ${assetName(lot.asset)}`;
-        description=`${actor}报价 ${option.auctionBidStones} 灵石。竞价成立才会托管灵石；若被加价超越，退回原押，不等于已买下拍品。`;
+        description=`${actor}报价 ${option.auctionBidStones} 灵石。竞价成立才会托管灵石；若被加价超越，退回原押。最高有效价才得拍品。`;
         break;
       }
       case 'consign_pill':{

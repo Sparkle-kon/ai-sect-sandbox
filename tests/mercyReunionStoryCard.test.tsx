@@ -23,7 +23,7 @@ describe('real later meeting after mercy',()=>{
   it('only the distinct actual answer appears when allowed, with no other implied result',()=>{
     const html=renderToStaticMarkup(<MercyReunionStoryCard view={{...view,options:[accept]}} busy onChoose={()=>{}}/>);
     expect(html).toContain('答应同走这一步');
-    expect(html).toContain('不等于尽释旧怨');
+    expect(html).toContain('旧事且留日后分说');
     expect(html).toContain('disabled=""');
     expect(html).not.toMatch(/提议同行|当面再战|这次且不拔剑/);
   });

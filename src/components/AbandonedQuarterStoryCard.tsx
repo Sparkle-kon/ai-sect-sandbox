@@ -32,7 +32,7 @@ export function AbandonedQuarterStoryCard({view,busy=false,sceneScope,onChoose}:
     {view.receipt?<section aria-label="旧址亲历" className="space-y-1 font-serif text-sm leading-relaxed">
       <p className="font-semibold text-slate-100">{view.receipt.title}</p>
       <p className="text-slate-200">{view.receipt.description}</p>
-    </section>:<p className="font-serif text-sm leading-relaxed text-slate-200">{view.standing==='former_resident'?`从前住过${view.villageName}，而今又踏回了旧地。`:`今到${view.villageName}的遗址，旧章里的炊烟不在眼前。`}眼下来往的人，不算旧城住户。</p>}
+    </section>:<p className="font-serif text-sm leading-relaxed text-slate-200">{view.standing==='former_resident'?`从前住过${view.villageName}，而今又踏回了旧地。`:`今到${view.villageName}的遗址，旧章里的炊烟不在眼前。`}如今来往的多是过客，另有籍册可查。</p>}
     {onChoose&&view.options.length>0&&<div role="group" aria-label="旧址前如何行动" className="grid gap-1.5 sm:grid-cols-2">
       {view.options.map((option,index)=><button key={index} type="button" disabled={busy}
         className="min-h-[44px] w-full min-w-0 rounded-md border border-slate-300/35 bg-slate-950/65 px-2.5 py-1.5 text-left text-sm text-slate-50 hover:bg-slate-950/35 focus-visible:outline focus-visible:outline-2 focus-visible:outline-slate-200 disabled:opacity-50"

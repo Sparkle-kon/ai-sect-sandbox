@@ -25,7 +25,7 @@ export function VillageWorksPanel({ world, village, projects }: {
     <details className="min-w-0 rounded border border-emerald-400/20 bg-slate-950/55">
       <summary className="min-h-11 cursor-pointer break-words px-3 py-2.5 text-xs font-semibold text-emerald-200">村镇工役与承载增长</summary>
       <div className="space-y-2 px-3 pb-3 text-xs leading-relaxed text-slate-300">
-        <p>村镇现有人口 {village.population} · 当前总承载 {village.capacity}。有住位不等于新增居民；只有完工才记入新增承载。此处只查看实际工役。</p>
+        <p>村镇现有人口 {village.population} · 当前总承载 {village.capacity}。住位与新居民各有册；工程完工才添新住位。此处只查看实际工役。</p>
         <ul aria-label="本村可查的工役项目" className="max-h-[29rem] space-y-2 overflow-y-auto">
           {rows.map((project) => {
             const rules = VILLAGE_WORK_RULES[project.kind];

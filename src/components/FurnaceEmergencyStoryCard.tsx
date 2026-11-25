@@ -2,7 +2,7 @@ import {useId,useRef} from 'react';
 import type {FurnaceEmergencyOption,FurnaceEmergencyView} from '../engine/furnaceEmergency';
 
 const words={
-  brace:['留下护炉','在原处应付这一轮险情。只有确实挡下伤害才耗八点真气；并不等于丹炉修好了。'],
+  brace:['留下护炉','在原处应付这一轮险情。只有确实挡下伤害才耗八点真气；炉体还得另修。'],
   retreat:['先撤到近处','只走眼下已知可行的一步。到了才算撤出，先前受的伤不会因此抹去。'],
   request_rescue:['向在场人求援','只是递出求援，对方须亲自答复；此刻还无人因此得救。'],
   accept_rescue:['应下求援','这一步只应下求援。两人后来确实越过这一段，才算一同撤离。'],

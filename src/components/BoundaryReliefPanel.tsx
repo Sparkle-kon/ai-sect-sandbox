@@ -5,7 +5,7 @@ type BoundaryView = ReturnType<typeof visibleBoundaryReliefs>[number];
 const STATUS: Record<BoundaryRelief['status'], string> = {
   offered: '换防邀约待同意',
   travelling: '接防者实际行进中，未交接',
-  returning: '已开始退回，不算抵达阵位',
+  returning: '已走上回程',
   completed: '已到阵位并完成交接',
   declined: '邀约已拒绝',
   withdrawn: '换防已撤回',
@@ -41,7 +41,7 @@ export function BoundaryReliefPanel({ world, cultivator }: { world: WorldState; 
   return <details className="min-w-0 rounded border border-emerald-400/20 bg-slate-950/60">
     <summary className="min-h-11 cursor-pointer break-words px-3 py-2.5 text-xs font-semibold text-emerald-200">巡界阵位与换防交接</summary>
     <div className="space-y-2 px-3 pb-3 text-xs leading-relaxed text-slate-300">
-      <p>受命并不等于到岗。只有在阵位完成实际交接，才改记守者；途中不会记作两人同时覆盖。此页只读。</p>
+      <p>到阵位交接后才改记守者。行程中仍由在岗者值守。此页只读。</p>
       {live.length > 0 && <div className="space-y-1">
         <h4 className="font-semibold text-emerald-100">当前可观测阵位</h4>
         <ol className="max-h-40 space-y-1.5 overflow-y-auto" aria-label="阵位已核验覆盖">

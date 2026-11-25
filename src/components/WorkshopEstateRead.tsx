@@ -16,7 +16,7 @@ const labels:Record<WorkshopEstateOption['workshopEstateMove'],string>={
 };
 const terms:Record<WorkshopEstateOption['workshopEstateMove'],string>={
   offer:'按已核的继承权，在旧工坊请原工匠续作。只是提出，不另收钱，不起炉。',
-  accept:'认原来的坯和未耗托管。核准后才续原单，不重做旧坯，也不算已经交割。',
+  accept:'认原来的坯和未耗托管。核准后从旧坯接着做，验质完工再交器。',
   decline:'不再续这方旧坯。原工序照录，只按实有未耗托管结案。',
 };
 const close:Record<WorkshopEstateReleaseReason,string>={
@@ -57,7 +57,7 @@ export function WorkshopEstateRead({order,actorId,tick,controls}:{
     <p>原工匠已经制成这一方坯，实耗照旧记在原单。先封护这方坯和尚未用的托管，不能再收一份。</p>
     {record.phase==='held'&&<p>旧坯仍封存。只有承接权已经核定的人，才能到原工坊请续作。此处尚未复工。</p>}
     {record.phase==='offered'&&<p>核定的受益人已请续制，等原工匠亲自答复。没有重新出资，也未复工。{record.replyUntilTick!==undefined&&<> 原工匠须在第 {record.replyUntilTick} 轮前答复。</>}</p>}
-    {record.phase==='resumed'&&<p>原工匠已同意，从旧坯接着做。还须实际完工验质，不等于已经交器。</p>}
+    {record.phase==='resumed'&&<p>原工匠已同意，从旧坯接着做。完工验质后再交器。</p>}
     {record.phase==='completed'&&<p>{finished?.artifactId&&finished.feePaid!==undefined?
       '同一方坯已续制验收。器物已实际交给核定的受益人，工钱只在这次交割时付。':
       '同一方坯已续作验质，未达原约门槛。无器物交割，也未付工钱。'}

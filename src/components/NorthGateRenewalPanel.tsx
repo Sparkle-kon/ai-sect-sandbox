@@ -72,7 +72,7 @@ export function NorthGateRenewalPanel({view,nowTick,now,controls}:{view:NorthGat
         <p>{stamp(dateAt(outcome.openedTick))}，已依「{labels[outcome.stance]}」实开天门。宗库实付 {outcome.paidStones} 灵石；{
           outcome.granaryRoots?`乡仓实出 ${outcome.granaryRoots} 份灵根`:'未取乡仓灵根'
         }；{outcome.borrowedUnits?`实借下界水脉灵压 ${outcome.borrowedUnits} 份`:'未借下界水脉灵压'}。</p>
-        <p>{upper?'这是本人在上界核到的旧门账，不能据此断定眼下井水或乡仓。':'过门仍须验人、验时；开门不等于已经过门。'}</p>
+        <p>{upper?'这是本人在上界核到的旧门账，不能据此断定眼下井水或乡仓。':'过门仍须验人、验时；门虽开了，仍要亲自走过去。'}</p>
       </>}
     </div>
   </details>;

@@ -65,7 +65,7 @@ function CapacityReceipt({ order, tick, patron, receipts }: {
       <p>原委托方于 Tick #{amendment.acceptedTick} 同意。第 2 件未动工，已解除；
         {patron ? '退回本人' : '退给原委托方'} {amendment.releasedStones} 灵石、玄土根 {amendment.releasedHerbs} 株（已计入累计实退）。</p>
       <p>原先的首坯保留，只续制第 1 件。补签截止 Tick #{amendment.workUntilTick}（仅首件延后 {WORKSHOP_CAPACITY_RECOVERY_TICKS} 轮，该轮起不能续作）。</p>
-      <p>按原约已交割 {delivered ? 1 : 0}/2 件；补签保留件已交割 {delivered ? 1 : 0}/1 件。解除件不等于仍欠交割。</p>
+      <p>按原约已交割 {delivered ? 1 : 0}/2 件；补签保留件已交割 {delivered ? 1 : 0}/1 件。解除的那件已从约中划去。</p>
       {closed && (order.refundedStones > amendment.releasedStones || order.refundedHerbs > amendment.releasedHerbs) &&
         <p>结案另实退首件未耗余料：{order.refundedStones - amendment.releasedStones} 灵石、玄土根 {order.refundedHerbs - amendment.releasedHerbs} 株。</p>}
     </>}

@@ -18,7 +18,7 @@ const ACTION:Record<Move,string> = {
 const TERMS:Record<Move,string> = {
   propose:'只提出以已登记的原宗旧址为据点，不会立即改宗、占地或动用学舍钱库。',
   join:'只为你本人留下同意，不能替同门表态；只有正式另立且届时仍合资格，才实际改宗。',
-  authorize:'此项允议须由原宗掌门亲自在原宗迁后的山门作出。允议本身不动原宗土地与债务，也不等于已另立。',
+  authorize:'此项允议须由原宗掌门亲自在原宗迁后的山门作出。允议后仍待另立；原宗土地与借据保持原样。',
   decline:'这一步记录原宗掌门拒绝该项提议，不占地、不改宗籍。',
   withdraw:'这里只撤回你的原提议或本人同意，其他人的意愿不由此更改。',
   establish:'下月须再核对原宗实地允议、至少三名合格实地成员、供养地和真实传承；仅将学舍实有钱库和授权抄本记入新宗，原宗旧债与器物不随转。',
@@ -33,7 +33,7 @@ export function DoctrineFoundingConfirmation({choice,groupId,disabled,onConfirm,
   return <div id={groupId} role="group" aria-label="核对立宗选择" className="space-y-1.5 rounded border border-amber-500/40 bg-amber-950/30 p-2 text-xs leading-relaxed text-slate-300">
     <p className="font-semibold text-amber-100">{title(choice)}</p>
     <p>{TERMS[choice.option.doctrineFoundingMove]}</p>
-    <p>成功排入消耗 {AVATAR_ORDER_COST} 神识，不推进月份；下月按当时条件再次核对。排入指令本身不算签字，也不算另立宗门。</p>
+    <p>成功排入消耗 {AVATAR_ORDER_COST} 神识，不推进月份；下月按当时条件再次核对。签字与另立须届时亲自办成。</p>
     <div className="flex flex-wrap gap-1.5">
       <button type="button" className={`${action} py-1.5 text-xs`} disabled={disabled} onClick={onConfirm}>确认排入：{ACTION[choice.option.doctrineFoundingMove]}</button>
       <button type="button" className={`${action} py-1.5 text-xs`} onClick={onCancel}>返回核对</button>

@@ -130,7 +130,7 @@ function quotedTerms(world:WorldState,viewerId:string,choice:MarketFreightOption
       '。实际发约才封存委托人 '+quote.fee+' 灵石；承运人同意时另封 '+quote.rations+' 株玄土根，尚不付运费。';
   }
   const f=rows.find(row=>row.contract.id===choice.targetEscortId)?.contract.freight;
-  if(choice.marketFreightMove==='accept'&&f)return '委托人已封存 '+f.fee+' 灵石；实际应允时封承运人 '+f.rations+' 株玄土根。待实走才支付运费和耗用行粮，不算交货。';
+  if(choice.marketFreightMove==='accept'&&f)return '委托人已封存 '+f.fee+' 灵石；实际应允时封承运人 '+f.rations+' 株玄土根。走过路才付运费、耗行粮，交货另留回条。';
   return '这次不承运；只按实账退未动用的托管，不改原挂单或货价。';
 }
 export function MarketFreightRead({world,viewer,rows,controls}:{world:WorldState;viewer:Cultivator;rows:readonly EscortView[];controls?:MarketFreightControls}){

@@ -40,7 +40,7 @@ describe('one private actual work tool inside the existing workshop fold', () =>
     const record = f.world.toolLoans.loans[0];
     const actual = html(f.world, f.lenderId);
     expect(actual).toContain('借用已结束，原件仍待领取');
-    expect(actual).toContain('尚未实际交还；停止借用不等于归还');
+    expect(actual).toContain('借用已停，器物等候交还');
     expect(actual).not.toContain('原物主已领回');
     expect(actual).toContain('对应工坊委制已结束');
     expect(actual).toContain(`耐久 ${record.wear!.durabilityBefore} → ${record.wear!.durabilityAfter}，实磨 2 点`);

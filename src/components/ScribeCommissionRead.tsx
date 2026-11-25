@@ -24,7 +24,7 @@ const terms:Record<ScribeCommissionOption['scribeCommissionMove'],string>={
   accept:'只有对方实接稿约，才从原委托人实扣 '+SCRIBE_COMMISSION_DEPOSIT+' 灵石托管。',
   decline:'未应允时谢绝，不扣托管；已应允则只实退尚存的余款，不退已付墨钱。',
   withdraw:'依现有账退还未耗托管，已经实付的墨钱不退。',
-  verify:'实核原卷时才从本单托管中支 '+SCRIBE_COMMISSION_INK+' 灵石购墨，不算交付。',
+  verify:'实核原卷时才从本单托管中支 '+SCRIBE_COMMISSION_INK+' 灵石购墨；作品另行交验。',
   deliver:'两人实到才交付核过的原稿，同时从本单托管实付 '+SCRIBE_COMMISSION_WAGE+' 灵石稿酬。',
 };
 const button='min-h-11 min-w-0 max-w-full rounded border border-amber-500/35 bg-slate-950 px-2 text-amber-100 [overflow-wrap:anywhere] focus-visible:outline focus-visible:outline-amber-300 disabled:opacity-50';
@@ -89,7 +89,7 @@ function Commission({world,viewer,row}:{world:WorldState;viewer:Cultivator;row:S
         <summary className={summary}>看原稿所据与异文</summary>
         <p>已核史料：{manuscript.sourceTitle}{evidence&&<> · {date(evidence)}</>}。</p>
         {manuscript.disagreement&&<div className="space-y-1 py-1">
-          <p>两则署名传本说法不同，以下保留所述，均不等于已核史实：</p>
+          <p>两则署名传本说法不同，以下保存各家说法，与已核史实分列：</p>
           <ul className="list-inside list-disc">
             <li>{manuscript.disagreement.witnessA}</li>
             <li>{manuscript.disagreement.witnessB}</li>

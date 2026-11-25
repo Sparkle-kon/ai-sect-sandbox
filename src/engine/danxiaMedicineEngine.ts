@@ -201,7 +201,7 @@ export function resolveDanxiaMedicineAction(world:WorldState,actor:Cultivator,pa
     const route=putativePath(world,row.originId,row.destinationId);
     if (!route) return null;
     row.acceptedTick=world.tick;row.path=route;row.pathIndex=0;row.status='in_transit';
-    return note(world,row,'accepted','指定护送人同意运药','护送须走真实路线，签约当月不算出发或交付。');
+    return note(world,row,'accepted','指定护送人同意运药','护送须走真实路线，签约后等下次起行，交付须另行签收。');
   }
   if (move==='brew') {
     const result = brewDanxiaCustody(world,actor,row,rng);
@@ -265,7 +265,7 @@ function physicalProgress(world:WorldState,row:DanxiaMedicineCommitment,escort:C
   row.receiveUntilTick=world.tick+DANXIA_MEDICINE_ACK_TICKS;
   row.status='arrived';
   escort.locationId=row.destinationId;
-  return [...events,note(world,row,'arrived','封药实到原村','到达不等于签收；期限内须原定本人到场认可。',row.destinationId)];
+  return [...events,note(world,row,'arrived','封药实到原村','已经到村，等原定收药人在期限内签收。',row.destinationId)];
 }
 
 export function advanceDanxiaMedicine(world:WorldState):WorldEvent[] {

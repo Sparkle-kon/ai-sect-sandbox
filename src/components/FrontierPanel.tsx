@@ -129,20 +129,20 @@ function terms(option:FrontierOrder,north:boolean):string{
   }
   if(option.action==='FRONTIER_TRADE'){
     if(option.frontierTradeMove==='propose'||option.frontierTradeMove==='accept')
-      return `货约拟各换 ${FRONTIER_TRADE_AMOUNT} 份；当面落笔不扣实货，不算装运。`;
+      return `货约拟各换 ${FRONTIER_TRADE_AMOUNT} 份；当面落笔先记货约，装运时才扣货。`;
     if(option.frontierTradeMove==='load_winter')return `实装扣本方 ${FRONTIER_TRADE_AMOUNT} 份货与 ${FRONTIER_TRADE_WINTER_REEDS} 份随行御寒芦；旁路确有格程，不立刻到货。`;
-    return `实装托管本方 ${FRONTIER_TRADE_AMOUNT} 份成品；遇封闭仍可能等待或退回，装货不等于交割。`;
+    return `实装托管本方 ${FRONTIER_TRADE_AMOUNT} 份成品；遇封闭仍可能等待或退回，到码头交收后才记交割。`;
   }
   switch(option.frontierProductionMove){
     case 'tend_spring':return '实际加固才耗本人 1 份地根。此刻不添水；下月按本地泉路复核。';
     case 'draw_tide':return '实际到闸才能引水；只引本月潮窗许可的水，潮池满则不再收。';
-    case 'sow':return '实际下种才用本人 1 份地根及本地水；未到熟期不算收成。';
+    case 'sow':return '实际下种才用本人 1 份地根及本地水；等到成熟再收割。';
     case 'irrigate':return '实际补灌才耗本地有限的水，与当月其他用水同算。';
     case 'harvest':return '实际成熟且有库位才收；同一批不能再收一次。';
     case 'rest_field':return '实际休养的是眼下这块田，不会凭空生出芦草。';
     case 'cultivate':return north?'实修才耗 1 份实际入库的御寒芦，不凭在途货物增长修为。':
       `实修占当月一次劳动，并实耗 ${FRONTIER_SOUTH_PRACTICE_WATER} 份潮池水；同月不能又用这份水灌田。`;
-    case 'protect_crop':return '实际动用 1 份已入本地库的霜药才护苗；未到货不算。';
+    case 'protect_crop':return '实际动用 1 份已入本地库的霜药才护苗；霜药入库后方可动用。';
   }
 }
 
@@ -231,7 +231,7 @@ export function FrontierPanel(props:Props){
   return <section className={`${shell} p-3`} aria-label={chart.name}>
     <h2 className="text-base font-semibold text-emerald-100">{chart.name}</h2>
     <FrontierChart chart={chartData} trail={props.nightTrail} crossing={props.gorgeCrossing} lamp={props.farewellLamp}/>
-    <p className="text-xs text-slate-300">格子靠近不等于眼下路通；按此人此月能走的路复核。</p>
+    <p className="text-xs text-slate-300">两地是否通行，须按此人此月能走的路复核。</p>
     <p>{view.residence?'已在本地实缴并登记驻住。':'此人是访客，尚未驻住。'}</p>
     {view.visit&&<p className="text-xs text-slate-300">入关实账：第 {view.visit.enteredTick} 轮实付 {view.visit.paidStones} 灵石、{view.visit.paidRoots} 份地根。</p>}
     {movement}

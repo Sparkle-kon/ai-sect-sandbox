@@ -17,10 +17,10 @@ type View=ReturnType<typeof projectHallOfImmortals>;
 type Category=keyof View['rankings']|'lives';
 const tabs=[['power','战力'],['karma','业缘'],['alchemy','丹道'],['lives','列传']] as const;
 const descriptions:Record<Category,string>={
-  power:'眼下可见的战力。榜序不等于实战胜负。',
+  power:'此榜按眼下战力排序，交锋结果另载。',
   karma:'只列负业未消之人。业力是修行所载，不是罪名。',
   alchemy:'只数可核实的成丹批次，不以名望和资质代替。',
-  lives:'有据便记，无据则留白。暂入上界不等于飞升，未归也不等于陨落。',
+  lives:'有据便记，无据则留白。上界行旅、飞升与陨落各有独立记载。',
 };
 const control='min-h-11 min-w-0 rounded-md border border-amber-300/30 px-2 py-1 text-sm text-amber-100 [overflow-wrap:anywhere] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300 disabled:opacity-50';
 const pageSize=12;

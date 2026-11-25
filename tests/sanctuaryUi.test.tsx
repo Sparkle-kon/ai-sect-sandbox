@@ -66,7 +66,7 @@ describe('sanctuary scoped real rights and ward outcomes', () => {
   it('distinguishes exhausted ward from live pass, exact expiry, no-fault site loss and absence in defaults', () => {
     const { world, viewer, charter, pass, panel, map, site } = fixture();
     charter.shieldHp = 10;
-    expect(panel()).toContain('护阵已耗尽，通行权不等于仍受护阵保护');
+    expect(panel()).toContain('护阵已耗尽，仍可通行');
     expect(panel()).toContain('本人通行权：有效');
     expect(map(true).get(site.id)).toBe(0);
     const visualAlternative = renderToStaticMarkup(<WorldMapCanvas toolsOpen world={world} selectedCultivatorId={viewer.id} onSelectCultivator={() => {}} compact />);

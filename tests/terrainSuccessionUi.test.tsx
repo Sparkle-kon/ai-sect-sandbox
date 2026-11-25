@@ -71,7 +71,7 @@ describe('observed bounded terrain recovery and actual route proofs', () => {
     expect(proveObservedTerrainRoute(world, blind, source.id, outside.id)).toEqual({ kind: 'invalid' });
     const unverified = proveObservedTerrainRoute(world, blind, source.id, destination.id);
     expect(unverified).toEqual({ kind: 'unverified' });
-    expect(renderToStaticMarkup(<TerrainRouteReceipt proof={unverified} />)).toContain('不等于道路已阻断');
+    expect(renderToStaticMarkup(<TerrainRouteReceipt proof={unverified} />)).toContain('道路状态待查');
     const observed = visibility([tile, barred, end, at(8, 9), at(9, 9), at(10, 9)]);
     const detour = proveObservedTerrainRoute(world, observed, source.id, destination.id, barred.id);
     expect(detour.kind).toBe('connected');

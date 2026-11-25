@@ -22,7 +22,7 @@ const stanceText:Record<RingAudienceStance,string>={steady:'心意未动',waveri
 const statusText:Record<RingAudienceStatus,string>={open:'话还没说完',sealed:'已定下约定，尚未践行',declined:'对方已经拒绝',
   closed:'此话已止，未定约',executed:'已见践行',expired:'时机已过，未见践行'};
 const executionText:Record<NonNullable<RingAudienceSession['execution']>['effect'],string>={
-  left:'此人已离开原宗门。',learned:'此人已习得禁篇。',confronted:'此人已向掌门问剑。此事不等于夺位。',
+  left:'此人已离开原宗门。',learned:'此人已习得禁篇。',confronted:'此人已向掌门问剑。掌门席位未动。',
 };
 const button='min-h-11 rounded-md border border-violet-500/50 px-3 py-2 text-xs font-medium text-violet-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-300 disabled:opacity-40';
 
@@ -89,7 +89,7 @@ export function RingAudiencePanel({role,target,aims,session,busy,exchangeCost,ca
           {current?.stance==='accepts'&&<button type="button" className={button} disabled={busy} onClick={()=>onSeal(cursor)}>定下约定</button>}
           <button type="button" className={button} disabled={busy} onClick={()=>onClose(cursor)}>就此收声</button>
         </div>
-        {current?.stance==='accepts'&&<p className="text-xs text-slate-400">应允不等于践行。定约后，仍须等人物亲自行动。</p>}
+        {current?.stance==='accepts'&&<p className="text-xs text-slate-400">这番话已经应下，接下来且看对方何时履约。</p>}
       </>}
       {current?.status==='sealed'&&cursor&&<button type="button" className={button} disabled={busy} onClick={()=>onClose(cursor)}>收回约定</button>}
       {!isOpen&&current?.status!=='sealed'&&!!aims.length&&<div role="group" className="flex flex-wrap gap-2" aria-label="此刻可谈之事">

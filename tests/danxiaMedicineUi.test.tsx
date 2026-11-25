@@ -31,7 +31,7 @@ describe('scoped 丹荒 medicine choices and receipts',()=>{
     expect(read(retain)).toContain('确认排入：留下开炉');
     const ship=read(escort);
     expect(ship).toContain('确认排入：请护送');
-    expect(ship).toContain('须对方另行同意，此步不算启程或交货');
+    expect(ship).toContain('等对方应允，再依路线启程送药');
     expect(ship).toContain('成功排入指令即扣 5 神识，不移动药叶、不推进回合');
     expect(ship).not.toContain('private-');
   });

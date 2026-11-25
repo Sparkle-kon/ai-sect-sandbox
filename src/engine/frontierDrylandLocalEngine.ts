@@ -172,7 +172,7 @@ const story:Readonly<Record<FrontierDrylandLocalMove,readonly [string,string]>>=
   tend_herd:['风口拢住两头牧兽','当世住民实付一回栏料，把本地两头未驯牧兽收作一群；不是凭空多了一队人。'],
   feed_herd:['雪草里见两口食','先看今月确实入圈的地根或西盐，再给本期有限牧工记账。'],
   quarry_stone:['雷石应手','人到石坳，实费这期喂养换来的牧工与气力；仅将这两件原矿收入仓。'],
-  charge_ward:['避雷桩上添一枚见证','雷石与地根实付布下近月一储；未遇下一道雷，不算已挡。'],
+  charge_ward:['避雷桩上添一枚见证','雷石与地根实付布下近月一储；这份储备留待下一道雷。'],
 };
 export function resolveFrontierDrylandLocalAction(world:WorldState,actor:Cultivator,payload:LLMDecisionPayload,
   {attemptNativeLayer}:{attemptNativeLayer?:NativeSameRealmAttempt}={}):WorldEvent|null{

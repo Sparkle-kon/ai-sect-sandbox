@@ -55,7 +55,7 @@ export function InfirmaryPanel({ world, cultivator, medicineControls, seasonRevi
           </dl>
         ) : <p className="text-slate-400">未在诊台现场，仅显示本人档案，不显示当前排队或耗材。</p>}
         {followupCapacity && <p className="text-slate-400">诊台本轮剩余复诊名额 {followupCapacity.available}（普通救治优先；不是已预约或已就诊人数）。</p>}
-        <p className="text-slate-400">实际救治须由本人同意。规则每次用本宗 {INFIRMARY_TREATMENT_STONES} 灵石和院中翡翠灵叶 {INFIRMARY_TREATMENT_HERBS} 株，至多恢复最大气血的 {Math.round(100 * INFIRMARY_HEAL_FRACTION)}%，最多消解 {INFIRMARY_DETOX_MAX} 点丹毒。等待和拒绝不算救治，也不扣耗材。</p>
+        <p className="text-slate-400">实际救治须由本人同意。规则每次用本宗 {INFIRMARY_TREATMENT_STONES} 灵石和院中翡翠灵叶 {INFIRMARY_TREATMENT_HERBS} 株，至多恢复最大气血的 {Math.round(100 * INFIRMARY_HEAL_FRACTION)}%，最多消解 {INFIRMARY_DETOX_MAX} 点丹毒。开治时才消耗药资。</p>
         {ownShift && <p>本人值守记录：{sites.get(ownShift.siteId) ?? '旧院地点未详'} · Tick #{ownShift.startedTick} 至 #{ownShift.expiresTick} 前
           {ownShift.lastServedTick !== undefined && ownShift.lastServedTick <= world.tick && ` · 最近救治 Tick #${ownShift.lastServedTick}`}
         </p>}

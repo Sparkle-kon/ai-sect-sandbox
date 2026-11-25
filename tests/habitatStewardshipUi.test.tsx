@@ -81,7 +81,7 @@ describe('habitat stewardship and uniquely observed rewilding', () => {
     receipt.status = 'unconfirmed';
     receipt.settledTick = world.tick;
     const content = details();
-    expect(content).toContain('未获复见，不等于死亡或仍在此地 · 记录结束 Tick #23');
+    expect(content).toContain('近来未再见它，生死去处待查 · 记录结束 Tick #23');
     expect(content).not.toContain('复见 · Tick');
   });
 });

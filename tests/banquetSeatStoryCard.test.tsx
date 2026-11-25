@@ -14,8 +14,8 @@ const view:BanquetSeatView={id:'private-row',hallEventId:'private-hall',siteId:'
 
 it('does not treat an invitation as attendance or silence as refusal',()=>{
   const html=renderToStaticMarkup(<BanquetSeatStoryCard view={view} onChoose={()=>true}/>);
-  expect(html).toContain('受邀本身不算来过');
-  expect(html).toContain('旁人不作答，不算辞席');
+  expect(html).toContain('到席前亲自入座后才留名');
+  expect(html).toContain('暂未回话者另列');
   expect(html.match(/min-h-\[44px\]/g)).toHaveLength(2);
   expect(html).not.toMatch(/private-|正式开席时，实到|迟来一见/);
 });

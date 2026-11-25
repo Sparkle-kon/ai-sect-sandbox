@@ -2,7 +2,7 @@ import {useId,useRef} from 'react';
 import type {NightDoorOption,NightDoorView} from '../engine/nightDoor';
 
 const words={
-  identify:['亲自报上姓名','由来客自己说。门内人的猜测不算认出了谁。'],
+  identify:['亲自报上姓名','由来客自己说。门内人且听他亲口回话。'],
   shelter:['请进暂避','只开口留宿，须来客自己应下并真正住下，才算安顿。'],
   close:['今夜关门','只闭自己这道门，不替来客定下去处。'],
   escort:['提议护送一步','只问来客愿不愿同行，尚未走出这里。'],

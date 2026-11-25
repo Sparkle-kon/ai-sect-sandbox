@@ -4,7 +4,7 @@ import type {MercyReunionOption,MercyReunionView} from '../engine/mercyReunion';
 const words={
   stand_down:['这次且不拔剑','只收自己的兵刃，不替对方答应和解。'],
   aid:['提议同行','只提议同走安全的一步。对方须另作答复，眼下并未同行。'],
-  accept_aid:['答应同走这一步','只应下眼前这一程，不等于尽释旧怨。'],
+  accept_aid:['答应同走这一步','先并肩走眼前这一程，旧事且留日后分说。'],
   challenge:['当面再战','按眼前情形发起斗法，不预断输赢。'],
 } as const;
 

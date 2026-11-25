@@ -24,7 +24,7 @@ export function MentorshipRenewalReceipts({ view, viewerId, nameByExactId }: { v
     <details className="min-w-0 rounded border border-amber-500/25 bg-slate-950/50">
       <summary className="min-h-11 cursor-pointer px-2 py-2.5 text-xs font-semibold text-amber-100 [overflow-wrap:anywhere] focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300">续结师承</summary>
       <div className="space-y-3 px-2 pb-2 text-xs leading-relaxed text-slate-300">
-        <p>旧约结束不改已发生的授艺；新约仍续原功法，不另立谱系。应允不等于实授。</p>
+        <p>旧约结束不改已发生的授艺；新约仍续原功法，不另立谱系。授业时另记所教。</p>
         {view.releases.length > 0 && (
           <ol aria-label="本人旧约留档" className="max-h-48 space-y-1.5 overflow-y-auto">
             {view.releases.map((row) => (

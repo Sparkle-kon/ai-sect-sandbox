@@ -23,7 +23,7 @@ export function DamageAssuranceReceipts({ receipts, onsiteId }: {
           第 {record.inspectionTick} 轮查验，第 {record.sealedTick} 轮封存初记。</p>
         <p>实修入账 +{record.credited} 点，补偿账尚缺 {record.remaining} 点。</p>
         {record.siteId === onsiteId && record.physicalRemaining !== undefined && <p>
-          现场炉体距受损前尚差 {record.physicalRemaining} 点；此值不等于补偿账差额。
+          现场炉体距受损前尚差 {record.physicalRemaining} 点；补偿差额另见补偿账。
         </p>}
         {record.contributions.length > 0 ? <ol aria-label="逐次已核实实修" className="space-y-1 border-t border-slate-800 pt-1">
           {record.contributions.map((work, index) => <li key={index} className="rounded bg-slate-900/70 p-1.5">

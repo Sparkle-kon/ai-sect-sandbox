@@ -58,7 +58,7 @@ export function BranchFateReading({ result }: { result: BranchFateResult }) {
         {result.coverage === 'broken_after_difference'
           ? '分歧后的留档或可核对凭据不连续，不能补推缺失轮次。'
           : '只涵盖所选保留快照中，本对象可以核对的项目。'}
-        已核实的后续不等于因果；更远的原因未明。
+        此处列已核实的后续，起因仍待查。
       </p>
     </section>
   );

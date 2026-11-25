@@ -97,7 +97,7 @@ describe('historic evidence retains native identity and independent scope',()=>{
     expect(world.eraHeritage!.oaths[0]).toMatchObject({oathId:oath.id,requesterId:payer.id,providerId:supply.id,quantity:3,payment:48});
     expect(projectEraHeritage(world,outsider).originals).toEqual([]);
     payer.locationId='loc-market-east';
-    expect(projectEraHeritage(world,payer).originals).toMatchObject([{kind:'oath',evidence:expect.stringContaining('签书不等于已经交货')}]);
+    expect(projectEraHeritage(world,payer).originals).toMatchObject([{kind:'oath',evidence:expect.stringContaining('货到后另留签收')}]);
     const reopened=step(world);
     expect(reopened.eraHeritage!.oaths).toEqual(world.eraHeritage!.oaths);
     const packed=encodeEraWorldSave(reopened),copy=decodeEraWorldSave(packed);

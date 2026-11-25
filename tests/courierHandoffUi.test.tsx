@@ -23,7 +23,7 @@ describe('one original sealed packet and an exact shared-post transfer in the ex
     const invited = html(f.world, f.newId);
     expect(invited).toContain('本人受邀转接');
     expect(invited).toContain('原件在驿站候交，待受邀人明确同意');
-    expect(invited).toContain('受邀不等于已承运；不可查看载荷');
+    expect(invited).toContain('等待信使接下邀约；信中内容未公开');
     expect(invited).not.toContain('本人转接承运');
     expect(invited).not.toContain('承运费已实付');
     expect(invited).not.toContain('表达赈济意愿');
@@ -50,7 +50,7 @@ describe('one original sealed packet and an exact shared-post transfer in the ex
     for (const owned of [oldHtml, newHtml, sender]) {
       expect(owned.match(/aria-label="驿站转接"/g)).toHaveLength(1);
       expect(owned).toContain('封泥未拆，信先换了肩');
-      expect(owned).toContain('换手不等于收件人签收');
+      expect(owned).toContain('收件人的回执还在前路等着');
       expect(owned).not.toContain('明确签收');
     }
     expect(oldHtml).toContain('本人原承运 · 已在驿站交出，本人无后续递送实录');

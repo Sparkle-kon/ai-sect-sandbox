@@ -209,7 +209,7 @@ export function computeHeuristicDecision(
     if (boundaryRow.status === 'offered') {
       const move = choices.find(({ boundaryReliefMove }) => boundaryReliefMove === (fatigued ? 'decline' : 'accept'));
       if (move) return { ...move, chosenAction: move.action, innerMonologue: fatigued ?
-        '伤势未愈，由本人谢绝，不让同门失去已有岗哨。' : '我愿按实际路线前往；抵达前不算换防。' };
+        '伤势未愈，由本人谢绝，不让同门失去已有岗哨。' : '我愿按实际路线前往；到阵位再换防。' };
     } else {
       // This is an explicit reversal only while the return leg is no longer than the unfinished outward leg.
       const returnCostIsLower = boundaryRow.pathIndex * 2 <= boundaryRow.path.length - 1;
@@ -587,7 +587,7 @@ export function computeHeuristicDecision(
       .find(({ villageSupplyMove }) => villageSupplyMove === 'accept');
     if (accepted) return {
       chosenAction: 'VILLAGE_SUPPLY', villageSupplyMove: 'accept', targetVillageSupplyId: accepted.targetVillageSupplyId,
-      innerMonologue: '我自愿按本地实存和写明的运费应允；签字不等于货物已经到站。',
+      innerMonologue: '我自愿按本地实存和写明的运费应允；签字后货物还须走完全程。',
     };
   }
 

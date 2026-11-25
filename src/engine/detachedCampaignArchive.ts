@@ -122,7 +122,7 @@ export function* chunkDetachedArchiveBlob(bytes:Uint8Array,blob:DetachedArchiveB
 }>{
   const checked=checkDetachedArchiveBlob(blob);
   requireBytes(bytes,checked.bytes);
-  if(bytes.byteLength!==checked.bytes)return fail('integrity','内容字节长度不等于块索引。');
+  if(bytes.byteLength!==checked.bytes)return fail('integrity','内容长度与块索引不符。');
   for(const [index,ref] of checked.chunks.entries()){
     const offset=index*DETACHED_ARCHIVE_CHUNK_BYTES;
     yield {ref,bytes:bytes.subarray(offset,offset+ref.bytes)};
@@ -222,7 +222,7 @@ function manifestBody(value:unknown):DetachedArchiveManifestBody {
   const active=Object.freeze({branchId:value.active.branchId,tick:value.active.tick,sha256:value.active.sha256});
   const head=parents.get(active.branchId)?.snapshots.at(-1);
   if(!head||active.tick!==head.tick||active.sha256!==head.world.sha256)
-    return fail('integrity','独立年代包 活动头 不等于对应分支的真实最后快照。');
+    return fail('integrity','独立年代包的活动记录与分支末档不符。');
   const nextBranchNumber=value.nextBranchNumber;
   if(typeof nextBranchNumber==='number'&&branches.some(branch=>{
     const serial=/^branch-([1-9][0-9]*)$/u.exec(branch.id);

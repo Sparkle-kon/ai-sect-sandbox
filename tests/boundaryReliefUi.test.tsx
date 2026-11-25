@@ -64,7 +64,7 @@ describe('confirmed boundary post coverage and private handoff journey', () => {
     world.tick = 22;
     Object.assign(row, { status: 'returning', firstGapTick: 21, returnSteps: 1, strainSpent: 2,
       coverage: { kind: 'gap', tick: 22 } });
-    expect(html()).toContain('已开始退回，不算抵达阵位');
+    expect(html()).toContain('已走上回程');
     expect(html()).toContain('退回已走 1 步');
     expect(html(nearby)).toContain('实测空岗');
     expect(html()).not.toContain('已到阵位并完成交接');

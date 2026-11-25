@@ -207,7 +207,7 @@ export function resolveFurnaceSafetyAction(world:WorldState,actor:Cultivator,pay
   if(kind==='reopen') row.reopenedTick=world.tick;
   row.receipts.push(record);
   if(kind==='inspect') return event(world,row,kind,'实付验炉，查明炉体损伤','已当场验明炉体完整度；复检本身不修炉、不开放炉位。',actor);
-  if(kind==='repair') return event(world,row,kind,'实付材料修炉',`本次炉体完整度由 ${record.integrityBefore} 升至 ${row.integrity}；修炉不等于已经复开。`,actor);
+  if(kind==='repair') return event(world,row,kind,'实付材料修炉',`本次炉体完整度由 ${record.integrityBefore} 升至 ${row.integrity}；复开须另行验炉。`,actor);
   return event(world,row,kind,'现场复验，丹炉准予复开','炉体现已达到安全阈值；本轮仍停炉，下一轮才重新派位。',actor);
 }
 

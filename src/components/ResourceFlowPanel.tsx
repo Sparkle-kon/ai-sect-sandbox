@@ -190,7 +190,7 @@ export function ResourceFlowPanel({ world, cultivator }: { world: WorldState; cu
       onToggle={(event) => setOpened(event.currentTarget.open)}>
       <summary className="min-h-11 cursor-pointer break-words px-3 py-2.5 text-xs font-semibold text-cyan-100">物资流向与月度对账</summary>
       <div className="space-y-2 px-3 pb-3 text-xs leading-relaxed text-slate-300">
-        <p>只统计已接入对账的活动，不是全世界总账。转移单列，不算新增或净变化；不同物资不相加。</p>
+        <p>只统计已接入对账的活动，不是全世界总账。转移单列，新增和净变化各记一栏；不同物资不相加。</p>
         {opened && <>
           <div className="grid min-w-0 gap-1.5 sm:grid-cols-2">
             <label className="grid min-w-0 gap-1">对账视角

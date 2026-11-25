@@ -21,7 +21,7 @@ export function ChronicleErrataPanel({ world, chapter, cultivator }: { world: Wo
     <details className="min-w-0 rounded border border-amber-400/20 bg-slate-950/65">
       <summary className="min-h-11 cursor-pointer break-words px-3 py-2.5 text-xs font-semibold text-amber-200">异闻与勘误</summary>
       <div className="space-y-2 px-3 pb-3 text-xs leading-relaxed text-slate-300">
-        <p>只显示所选修士在当前地点能查到的公开传本。传本署名不等于已核实；勘误单独附录，不改写正文或原始事件。</p>
+        <p>只显示所选修士在当前地点能查到的公开传本。署名传本与已核记录分开；勘误单独附录，不改写正文或原始事件。</p>
         {rows.length === 0 ? <p className="text-slate-400">{selected ? '此时此地暂无可查的异闻与勘误。' : '选中修士后，可在其能够阅览的公开地点查阅。'}</p> : (
           <ol aria-label="此地可查的公开传本与勘误" className="max-h-[25rem] space-y-2 overflow-y-auto">
             {rows.map(({ source, retellings, conflict, correction, chapterLinked }) => (

@@ -2,8 +2,8 @@ import {useId,useRef} from 'react';
 import type {BanquetSeatOption,BanquetSeatView} from '../engine/banquetSeats';
 
 const words={
-  attend:['赴席','只有真到席前才算入座；受邀本身不算来过。'],
-  decline:['辞席','只辞这次邀约；旁人不作答，不算辞席。'],
+  attend:['赴席','到席前亲自入座后才留名。'],
+  decline:['辞席','只谢绝这回邀约。暂未回话者另列。'],
   late:['迟来一见','席已散，再到场只记散席后的相见，不补坐旧席。'],
 } as const;
 

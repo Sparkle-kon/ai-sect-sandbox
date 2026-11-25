@@ -46,7 +46,7 @@ export function HabitatStewardshipPanel({ world, cultivator }: { world: WorldSta
                         ) : entry.status === 'monitoring' && world.tick < entry.deadlineTick ? (
                           <p>等待到场复查 · Tick #{entry.earliestSurveyTick} 起，Tick #{entry.deadlineTick} 前 · 尚无复见</p>
                         ) : (
-                          <p className="text-slate-400">未获复见，不等于死亡或仍在此地{entry.settledTick !== undefined && ` · 记录结束 Tick #${entry.settledTick}`}</p>
+                          <p className="text-slate-400">近来未再见它，生死去处待查{entry.settledTick !== undefined && ` · 记录结束 Tick #${entry.settledTick}`}</p>
                         )}
                       </li>
                     ))}

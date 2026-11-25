@@ -99,7 +99,7 @@ function name(option:FrontierDrylandOrder,props:FrontierDrylandPanelProps){
 function terms(option:FrontierDrylandOrder,props:FrontierDrylandPanelProps){
   if(option.action==='FRONTIER_DRYLAND_TRADE'){
     if(option.frontierDrylandTradeMove==='propose'||option.frontierDrylandTradeMove==='accept')
-      return `实在中坊当面才落笔，提约方供井盐，应约方供雷石，各 ${DRYLAND_TRADE_AMOUNT} 份。这里不改住籍、不扣货，也不算装运。`;
+      return `实在中坊当面才落笔，提约方供井盐，应约方供雷石，各 ${DRYLAND_TRADE_AMOUNT} 份。此步留下提议，住籍、库存和装运维持原状。`;
     return localView(props)?.regionId===west?
       `实际装运才托管 ${DRYLAND_TRADE_AMOUNT} 份本仓原批，并实耗 ${cost.haulWater} 份井水，井里仍须留 ${cost.waterReserve} 份。实耗的水不随退货退回。`:
       `实际装运才托管 ${DRYLAND_TRADE_AMOUNT} 份本仓原批，并实耗 ${cost.haulWork} 份本期牧工。实耗的牧工不随退货退回。`;
@@ -113,7 +113,7 @@ function terms(option:FrontierDrylandOrder,props:FrontierDrylandPanelProps){
     case 'feed_herd':return option.frontierDrylandFeed==='salt'?'只用已经到这处库中的 1 份井盐，不扣在途货。':
       '只付本人真有的 1 株玄土根作饲料，留下一笔实际牧工。';
     case 'quarry_stone':return `实际采石才用 ${cost.quarryWork} 份牧工和本人 ${cost.gatherHp} 气血；真逢雷窗时还要实扣阵储，不把近旁阵桩当已抵雷。`;
-    case 'charge_ward':return `真正补阵才用本地已实到的 1 块雷石和本人 ${cost.wardRoots} 株玄土根；留一份避雷储备，不算已经抵挡。`;
+    case 'charge_ward':return `真正补阵才用本地已实到的 1 块雷石和本人 ${cost.wardRoots} 株玄土根；备下一回挡雷的用量。`;
   }
 }
 

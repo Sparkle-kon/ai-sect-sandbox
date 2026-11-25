@@ -1412,7 +1412,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       {pilgrimageMark && <p className="sr-only">所选修士的巡礼关口：第 {pilgrimageMark.row} 行，第 {pilgrimageMark.col} 列。</p>}
       {campMarks.length > 0 && <p className="sr-only">已观测夜宿营地 {campMarks.length} 处，共 {campMarks.reduce((count, camp) => count + camp.parties, 0)} 队，不是新地点。</p>}
       {extractionMarks.length > 0 && <p className="sr-only">当前看见 {extractionMarks.length} 处实际撤离关口；不是新地点，也未公开路线。</p>}
-      {boundaryMarks.length > 0 && <p className="sr-only">当前看见 {boundaryMarks.length} 处换防行程的实到路点。候补在途，不算守关。</p>}
+      {boundaryMarks.length > 0 && <p className="sr-only">当前看见 {boundaryMarks.length} 处换防行程的实到路点。候补尚在途中，值守另记。</p>}
       {observedCohortSites.size > 0 && <p className="sr-only">当前亲见 {observedCohortSites.size} 处实际合班授课场所，不显示学徒身份。</p>}
       {observedSalvageSites.size > 0 && <p className="sr-only">当前见到 {observedSalvageSites.size} 处已发现并封存原货的地点，不显示货主身份。</p>}
       {localGranary && <p className="sr-only">在场确认：村镇义仓有实际库存。</p>}

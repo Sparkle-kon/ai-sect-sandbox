@@ -25,7 +25,7 @@ export function AttestationPanel({ world, cultivator }: { world: WorldState; cul
       <header className="space-y-1">
         <h3 className="text-sm font-semibold text-indigo-100">证词与名誉复核</h3>
         <p className="break-words text-xs text-slate-300">{viewer ? `${viewer.name}当前可阅的本地公开案卷 · ${claims.length} 件` : '选择修士后查看其已获知的说法。'}</p>
-        <p className="text-xs text-slate-400">原呈报与传话不计入独立证词。证词表示当事人立场，不等于确定事实。</p>
+        <p className="text-xs text-slate-400">原呈报与传话不计入独立证词。此处列当事人的说法，原案结果另查。</p>
       </header>
       {claims.length === 0 ? <p className="text-xs text-slate-400">{viewer ? '此修士当前没有可阅案卷。' : '未选中修士，不显示全局案卷。'}</p> : (
         <div className="max-h-[27rem] space-y-1.5 overflow-y-auto">

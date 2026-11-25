@@ -13,7 +13,7 @@ export const FESTIVAL_SCENES={
   "festival-social-done-mishap":["{name}在{site}论道时不慎替茶托开了光，当众把热茶倒在袖口，烫红了手腕。","茶托如今灵得很，开口第一句便是「拿稳」。",[{"kind":"injury","rate":0.05}]],
   "festival-market-route":["{name}往{site}赶大集，担子放下来，腿还像站着。","山道这一程最赚的是脚底的茧，它分文不出。",[]],
   "festival-market-blocked":["{name}在{site}拢着没开张的摊布，看着算盘一直没响。","今日赚了九颗算盘珠的寿数。",[]],
-  "festival-review-route":["{name}沿山路往{site}赶回山演功，走错一段坡才折返。","山路先考一道题：这坡到底算不算捷径。",[]],
+  "festival-review-route":["{name}沿山路往{site}赶回山演功，走错一段坡才折返。","山路先考一道题：这坡是捷径还是回头路。",[]],
   "festival-review-blocked":["{name}在{site}没赶上演功，把剑穗绕回剑鞘。","真急的，先帮我把功课背头一段。",[]],
   "festival-review-done-success":["{name}在{site}演功三遍才记得收剑，米商看完寄下六枚灵石当茶钱。","我练的是收势。方才那三遍都是练收势。",[{"kind":"stones","amount":6}]],
   "festival-review-done-windfall":["{name}在{site}演功时用剑挑回落花，观客传了几回，给{sect}添四分名望。","那一花的能耐，是谢过风就自己落着。",[{"kind":"fame","amount":4}]],

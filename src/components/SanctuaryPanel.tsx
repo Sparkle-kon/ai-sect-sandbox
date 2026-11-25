@@ -44,7 +44,7 @@ export function SanctuaryPanel({ world, cultivator }: { world: WorldState; culti
               <div className="space-y-2 px-3 pb-3 text-xs leading-relaxed text-slate-300">
                 <p>{sponsors.get(charter.sponsorSectId) ?? '宗门未详'}立敕 · Tick #{charter.openedTick} · 到期 Tick #{charter.expiresTick}（到期时即失效）</p>
                 {!charterLive && <p>{charter.endReason ? charterEnd[charter.endReason] : world.tick >= charter.expiresTick ? '敕令到期' : '设立地点已不符条件'}{charter.endedTick !== undefined ? ` · Tick #${charter.endedTick}` : ''}</p>}
-                <p>护阵：{charter.shieldHp}/{charter.maxShieldHp} 点 · {charterLive ? (charges > 0 ? `可挡 ${charges} 次决斗` : '护阵已耗尽，通行权不等于仍受护阵保护') : '已不提供保护'}</p>
+                <p>护阵：{charter.shieldHp}/{charter.maxShieldHp} 点 · {charterLive ? (charges > 0 ? `可挡 ${charges} 次决斗` : '护阵已耗尽，仍可通行') : '已不提供保护'}</p>
                 {charter.lastRepairTick !== undefined && charter.lastRepairTick <= world.tick && <p>最近修复：Tick #{charter.lastRepairTick}</p>}
                 {viewer && <p className={passLive ? 'text-emerald-200' : 'text-slate-400'}>
                   {!ownPass || ownPass.issuedTick > world.tick ? '本人无已记录通行权' : <>

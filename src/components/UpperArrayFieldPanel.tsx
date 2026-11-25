@@ -102,7 +102,7 @@ function terms(order:UpperArrayFieldOrder){
     const {condense,cultivate}=cost;
     return order.upperArrayFieldLocalMove==='condense'?
       '实际凝取才付本人 '+condense.stones+' 灵石、'+condense.roots+' 株玄土根和 '+condense.hp+' 气血，成 '+condense.produced+' 枚有源阵片。':
-      '实修耗 '+cultivate.lattice+' 枚有源阵片、'+cultivate.stones+' 灵石和 '+cultivate.hp+' 气血，最多增 '+cultivate.qi+' 点灵气，不算破境。';
+      '实修耗 '+cultivate.lattice+' 枚有源阵片、'+cultivate.stones+' 灵石和 '+cultivate.hp+' 气血，最多增 '+cultivate.qi+' 点灵气；破境另择时机。';
   }
   if(order.action==='UPPER_ARRAY_FIELD_TRADE'){
     switch(order.upperArrayFieldTradeMove){

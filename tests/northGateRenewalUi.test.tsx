@@ -63,7 +63,7 @@ describe('native gate hearing read and order',()=>{
     const local=panel({controls},{...view,status:'reopened',outcome});
     expect(local).toContain('宗库实付 64 灵石');
     expect(local).toContain('未借下界水脉灵压');
-    expect(local).toContain('开门不等于已经过门');
+    expect(local).toContain('门虽开了，仍要亲自走过去');
     const upper=panel({controls},{...view,scope:'upper',status:'reopened',outcome});
     expect(upper).toContain('观阵抄录：再启实账');
     expect(upper).toContain('不能据此断定眼下井水或乡仓');

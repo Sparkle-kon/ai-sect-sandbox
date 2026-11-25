@@ -14,7 +14,7 @@ const at=(world:WorldState,actor:Cultivator,siteId:string,tick:number)=>
   doctrineFoundingPhysicallyAt(world,actor,siteId,tick);
 const words={
   salvage:{title:'实卷带离火场',description:'只取这一本在阁的卷册，携到亲临的避火处；尚未安置。'},
-  ward:{title:'留在火前护住一人',description:'留在经阁护人。这一步不移动对方，也不算已经脱险。'},
+  ward:{title:'留在火前护住一人',description:'留在经阁护人。两人仍在原处，等脱身的时机。'},
   leave:{title:'由近路退出火场',description:'走到实有的邻地；这一步没带走卷册，也没带走旁人。'},
   secure:PAVILION_FIRE_SECURE_RECEIPT,
 } as const;

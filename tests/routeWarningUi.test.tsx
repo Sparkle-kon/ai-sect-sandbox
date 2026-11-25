@@ -75,7 +75,7 @@ describe('current public warning reading and owner-only expiry records', () => {
       expect(available).not.toContain(hidden);
     const endpoints = new Set([notice.observation.fromTileId, notice.observation.toTileId]);
     const withoutExit = panel(posted, outsider, endpoints);
-    expect(withoutExit).toContain('当前视野不足以核验绕行，不等于道路已阻断');
+    expect(withoutExit).toContain('当前视野不足，绕行路待查');
     expect(withoutExit).not.toContain('另证 4 步');
     expect(panel(posted, outsider, new Set([notice.observation.fromTileId]))).toBe('');
     const baseMap = renderToStaticMarkup(<TerrainSuccessionPanel world={posted} view={createTerrainMapView(posted, stranger, false)} selected={stranger} />);

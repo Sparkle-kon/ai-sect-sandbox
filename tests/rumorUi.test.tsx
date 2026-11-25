@@ -77,7 +77,7 @@ describe('cultivator rumor UI', () => {
     expect(heard).toContain(hearsay);
     expect(heard).toContain('当面转述');
     expect(heard).toContain('飞剑传书');
-    expect(heard).toContain('传闻不等于事实');
+    expect(heard).toContain('信任度是修士对传闻的判断');
     expect(heard).not.toContain('自己编造');
     expect(heard).not.toContain('山门外曾起异光。');
     expect(heard).toContain(`传自：${inventor.name}`);

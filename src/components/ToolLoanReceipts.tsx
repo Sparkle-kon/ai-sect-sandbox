@@ -32,7 +32,7 @@ export function ToolLoanReceipts({ receipts }: { receipts: readonly Receipt[] })
               : <p>名义评分 +{wear.scoreBonus}；未见可核对的实际评分增幅。</p>}
           </div>}
           {receipt.release && <p>第 {receipt.release.tick} 轮停止借用：{RELEASE[receipt.release.reason]}。</p>}
-          {receipt.status === 'awaiting_recovery' && <p className="text-amber-200">尚未实际交还；停止借用不等于归还。</p>}
+          {receipt.status === 'awaiting_recovery' && <p className="text-amber-200">借用已停，器物等候交还。</p>}
           {receipt.status === 'returned' && receipt.closedTick !== undefined &&
             <p>第 {receipt.closedTick} 轮由原物主现场领回同一原件；不代表如今仍持有。</p>}
           {receipt.status === 'probate' && receipt.closedTick !== undefined &&

@@ -22,11 +22,11 @@ const ACTION: Record<Move,string> = {
 };
 const TERMS: Record<Move,string> = {
   retain:`执行成功后，从本人药囊封存翡翠灵叶 ${DANXIA_MEDICINE_LEAVES} 株，留待另行开炉。此步不炼丹，也不施治。`,
-  offer_ship:`执行成功后，从本人药囊封存翡翠灵叶 ${DANXIA_MEDICINE_LEAVES} 株，再向所选修士发出护送邀约。须对方另行同意，此步不算启程或交货。`,
+  offer_ship:`执行成功后，从本人药囊封存翡翠灵叶 ${DANXIA_MEDICINE_LEAVES} 株，再向所选修士发出护送邀约。等对方应允，再依路线启程送药。`,
   brew:'须届时仍有可用炉位及其他耗材。实际开炉才消耗封存灵叶，可能炼制失败；出丹也不是已用药。',
-  accept:'须届时仍符合本地护送条件。同意只登记承接，不算已经启程或抵达。',
-  decline:'拒绝不算实际收到药材，也不等于封存药材已经退回。',
-  receive:'须届时仍能实地签收。成功时，封存药叶才转入本人药囊；不等于服用或完成复诊。',
+  accept:'须届时仍符合本地护送条件。应允后记作承接，随后亲自走完这程。',
+  decline:'谢绝后原药仍封存，须另行退回。',
+  receive:'须届时仍能实地签收。成功时，封存药叶才转入本人药囊；服药与复诊另办。',
   recover:'只有原出资人实地领回成功，才从封存转回本人药囊。',
 };
 const control='min-h-11 min-w-0 max-w-full rounded border border-teal-500/40 bg-slate-950 px-2 text-teal-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-300 disabled:opacity-50';

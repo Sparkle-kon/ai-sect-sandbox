@@ -29,7 +29,7 @@ export function FrontierNightHuntCard({view,siteName,busy=false,notice,onChoose}
       <p className="text-xs text-cyan-200">{siteName&&`${siteName} · `}{view.weather.kind}</p>
       <h3 id={heading} className="font-serif text-lg font-semibold text-cyan-50">雪谷夜行</h3>
     </header>
-    {hasScene&&(view.observed?<p className="font-serif text-sm leading-relaxed text-cyan-100">此处确曾辨得妖兽足迹。脚印仍只是脚印，不等于见了真身。</p>:
+    {hasScene&&(view.observed?<p className="font-serif text-sm leading-relaxed text-cyan-100">此处确曾辨得妖兽足迹。所见是足迹，妖兽行踪仍待追查。</p>:
       <p className="font-serif text-sm leading-relaxed text-slate-200">天色已晚，这一步该如何走？</p>)}
     {view.last&&<section aria-label="夜行实录" className="space-y-1 text-sm text-slate-200">
       <p>{words[view.last.move][0]}：{aftermath[view.last.outcome]}</p>

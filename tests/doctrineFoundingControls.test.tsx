@@ -26,7 +26,7 @@ describe('only exact native and unexecuted doctrine decisions', () => {
     expect(html).toContain('确认排入：以原宗掌门身份允议');
     expect(html).toContain('亲自在原宗迁后的山门');
     expect(html).toContain('成功排入消耗 5 神识，不推进月份');
-    expect(html).toContain('排入指令本身不算签字，也不算另立宗门');
+    expect(html).toContain('签字与另立须届时亲自办成');
     expect(html).not.toContain('internal-founding');
   });
 });

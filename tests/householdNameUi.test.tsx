@@ -38,7 +38,7 @@ describe('onsite explicit household name lookup', () => {
     expect(markup).toMatch(/<details class="[^"]+"><summary class="[^"]+">家户称名与同名核验/);
     expect(markup).toContain('姓名或已核验称名');
     expect(markup).toContain('核验本地称名');
-    expect(markup).toContain('同名不等于同一人，也不证明亲属关系');
+    expect(markup).toContain('同名者按各自来历列册，亲缘另有记载');
     expect(markup).not.toContain('同名家户');
     expect(panel(remote)).toBe('');
   });

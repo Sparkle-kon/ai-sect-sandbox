@@ -27,7 +27,7 @@ export function ExpeditionRescuePanel({ world, cultivator }: { world: WorldState
   return <details className="min-w-0 rounded border border-teal-400/20 bg-slate-950/60">
     <summary className="min-h-11 cursor-pointer break-words px-3 py-2.5 text-xs font-semibold text-teal-100">秘境求援与实际撤离</summary>
     <div className="space-y-2 px-3 pb-3 text-xs leading-relaxed text-slate-300">
-      <p>仅显示本人有权查看的求援。有人同意不等于获救，沿路线抵达永久出口才会记为完成。本页只读。</p>
+      <p>仅显示本人有权查看的求援。一路护送抵达永久出口，才记救援完成。本页只读。</p>
       <ol className="max-h-64 space-y-1.5 overflow-y-auto" aria-label="本人可查的求援与撤离凭证">
         {rows.map((row) => <RescueReceipt key={row.id} row={row} tick={world.tick}
           exitName={row.arrived && row.exitSiteId ? world.locations.find(({ id }) => id === row.exitSiteId)?.name : undefined} />)}

@@ -19,7 +19,7 @@ const tileLabel = (tile: MapTile) => `第 ${tile.row + 1} 行、第 ${tile.col +
 
 export function TerrainRouteReceipt({ proof, alternate }: { proof: ObservedRouteProof; alternate?: boolean }) {
   if (proof.kind === 'invalid') return <p>{alternate ? '绕行地格无效，须不是起点或终点且当前可见。' : '请选择两个不同的当前可见地点。'}</p>;
-  if (proof.kind !== 'connected') return <p>当前观测范围不足以证明{alternate ? '绕行可通' : '连通'}；不等于道路已阻断。</p>;
+  if (proof.kind !== 'connected') return <p>当前观测范围不足以证明{alternate ? '绕行可通' : '连通'}，道路状态待查。</p>;
   const sample = proof.tiles.slice(0, LIMIT);
   return (
     <div className="space-y-0.5">

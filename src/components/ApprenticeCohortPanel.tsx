@@ -22,7 +22,7 @@ export function ApprenticeCohortPanel({ world, cultivator }: { world: WorldState
   return <details className="min-w-0 rounded border border-indigo-400/20 bg-slate-950/60">
     <summary className="min-h-11 cursor-pointer break-words px-3 py-2.5 text-xs font-semibold text-indigo-200">合班学徒与实绩出师</summary>
     <div className="space-y-2 px-3 pb-3 text-xs leading-relaxed text-slate-300">
-      <p>每班至多 {COHORT_MAX_INVITEES} 席，只限本班，不限制世界人数。应允不等于到课，入席不等于出师；原师承另行留档。本页只读。</p>
+      <p>每班至多 {COHORT_MAX_INVITEES} 席，只限本班，不限制世界人数。应允、到课、出师各有记载；原师承另行留档。本页只读。</p>
       {cohorts.length > 0 && <ol className="max-h-64 space-y-1.5 overflow-y-auto" aria-label="本人可查的合班与到课凭证">
         {cohorts.map((row) => <CohortReceipt key={row.id} row={row} tick={world.tick} viewerId={viewer.id} />)}
       </ol>}

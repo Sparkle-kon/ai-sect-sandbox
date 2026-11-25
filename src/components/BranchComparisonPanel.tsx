@@ -68,7 +68,7 @@ function EvidenceSide({ side, designation }: { side: Side; designation: '甲' | 
       {receipts.map((node) => <li key={node.entry.eventId} className="border-t border-slate-800 pt-1.5">
         <ReceiptTrace node={node} />
       </li>)}
-    </ol> : <p className="text-slate-400">此轮未呈现当前可核验的凭据；不等于没有发生事件。</p>}
+    </ol> : <p className="text-slate-400">此轮凭据暂未核实。</p>}
   </section>;
 }
 

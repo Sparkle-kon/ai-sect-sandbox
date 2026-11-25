@@ -46,7 +46,7 @@ export function planPhysicalAtlasDrawing(view:PhysicalAtlasView|undefined,{cols,
     result.borders.push({style:'border',
       start:{x:p.x-sides.dx,y:p.y-sides.dy},end:{x:p.x+sides.dx,y:p.y+sides.dy},
       mark:{id:`atlas-border:${key}`,kind:'route',title:`${names[from.regionId]}与${names[to.regionId]}界线`,
-        summary:'仅两格均在眼下视野内的点线；不等于宗门地权，也不是通行路。',point:p}});
+        summary:'两格均在视野内时才画的观测连线。地权与道路在别层查看。',point:p}});
   }
   const strokeKeys=new Set<string>();
   for(const route of view.routes){

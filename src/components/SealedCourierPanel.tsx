@@ -35,12 +35,12 @@ export function SealedCourierPanel({ world, cultivator }: { world: WorldState; c
     <details className="min-w-0 rounded border border-sky-400/20 bg-slate-950/55">
       <summary className="min-h-11 cursor-pointer break-words px-3 py-2.5 text-xs font-semibold text-sky-100">密函递送与消息失联</summary>
       <div className="space-y-2 px-3 pb-3 text-xs leading-relaxed text-slate-300">
-        <p>只读的游戏内凭证。信使同意后才收一次承运费，退回或失联不追回已付承运费。签收只证明信息送达，不等于私人意愿已经兑现。</p>
+        <p>只读的游戏内凭证。信使同意后才收一次承运费，退回或失联不追回已付承运费。信件签收与后续行事分开记录。</p>
         <ol aria-label="本角色可查的密函凭证" className="max-h-[28rem] space-y-2 overflow-y-auto">
           {packets.map(({ id, row, handoff }) => {
             if (!row) return <li key={id} className="min-w-0 space-y-1 break-words rounded border border-slate-800 p-2">
               <h5 className="font-semibold text-sky-100">本人受邀转接</h5>
-              <p className="text-slate-400">受邀不等于已承运；不可查看载荷。</p>
+              <p className="text-slate-400">等待信使接下邀约；信中内容未公开。</p>
               <CourierHandoffReceipt record={handoff} />
             </li>;
             const former = row.role === 'previous_courier';

@@ -22,9 +22,9 @@ describe('native scoped next-season commands',()=>{
   it('explains immediate essence versus later actual independent assent without rewriting affiliation',()=>{
     const html=renderToStaticMarkup(<DanxiaSeasonReviewConfirmation choice={switched} onConfirm={()=>undefined} onCancel={()=>undefined}/>);
     expect(html).toContain('确认排入：提议改约');
-    expect(html).toContain('不等于已签新约，也不会更改宗门归属');
+    expect(html).toContain('随后等对方另签；双方仍各归原宗');
     expect(html).toContain('成功排入消耗 5 神识，不推进月份');
-    expect(html).toContain('排入指令并不算签约');
+    expect(html).toContain('签约仍须当月双方应允');
     expect(html).not.toContain('private-');
   });
 });

@@ -15,7 +15,7 @@ type WaypostJourneyView=Pick<PilgrimageJourney,'id'|'status'|'organizerId'|'comp
 const buttons='min-h-11 min-w-0 max-w-full rounded border border-teal-500/40 bg-slate-950 px-2 text-teal-100 [overflow-wrap:anywhere] focus-visible:outline focus-visible:outline-amber-300 disabled:opacity-50';
 const terms:Record<WaypostMealOption['waypostMealMove'],string>={
   offer:'真正开茶约才封本人 1 株翡翠灵叶。只备茶，不恢复气血，也不赶路。',
-  accept:'同在山驿且来客实应，才用这株已封的真叶；各按气血缺口回复，最多 '+WAYPOST_MEAL_REST+' 点。分茶不算赶路。',
+  accept:'同在山驿且来客实应，才用这株已封的真叶；各按气血缺口回复，最多 '+WAYPOST_MEAL_REST+' 点。两人仍在山驿歇脚。',
   decline:'谢绝这席茶，未用的原叶只退给备茶人。',
   withdraw:'撤下茶约，只收回尚在茶约里的原叶。',
 };
@@ -58,7 +58,7 @@ function Receipt({row,people,actorId,tick}:{row:WaypostMeal;people:ReadonlyMap<s
   return <div className="min-w-0 space-y-1 rounded border border-slate-800 p-2">
     <p>{party}</p>
     {status==='offered'?<p>已封存 1 株翡翠灵叶，等原来客在第 {row.expiresTick} 轮前回应。两人尚未分茶。</p>:
-      status==='served'?<><p>茶已分，实用 {row.spentLeaves} 株原封翡翠灵叶；这不算启程。</p>
+      status==='served'?<><p>茶已分，实用 {row.spentLeaves} 株原封翡翠灵叶；两人仍在山驿。</p>
         {row.recovery?.map(receipt=><p key={receipt.actorId}>{receipt.actorId===actorId?'本人':nameOf(people,receipt.actorId)??'另一人'}
           {receipt.actorId===row.hostId?'（备茶）':'（来客）'}实回 {receipt.afterHp-receipt.beforeHp} 点气血。</p>)}</>:
         <p>{failed}{row.returnedLeaves>0&&<>原封叶未用，实退 {row.returnedLeaves} 株给备茶人。</>}</p>}

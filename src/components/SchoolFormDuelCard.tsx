@@ -47,7 +47,7 @@ export function SchoolFormDuelCard({view,receipt,busy=false,notice,onChoose,onCo
       <p ref={resultTitle} tabIndex={receiptFocus&&!historical?-1:undefined} className="font-semibold text-amber-100 focus-visible:outline focus-visible:outline-amber-200">{receipt.title}</p>
       <p className="text-slate-200">{receipt.description}</p>
     </section>:<>
-      <p className="font-serif text-sm leading-relaxed text-slate-200">认得这一式，却不等于接得住。还招，还是就此收剑？</p>
+      <p className="font-serif text-sm leading-relaxed text-slate-200">认得这一式，真接招还得看手上功夫。还招，还是就此收剑？</p>
       {historical&&<ul aria-label="当时的选择" className="grid gap-1.5 sm:grid-cols-2">
         {choices.map(choice=><li key={choice} className="min-w-0 text-sm text-amber-50">
           {words[choice][0]}<span className="block text-xs leading-relaxed text-slate-300">{words[choice][1]}</span>

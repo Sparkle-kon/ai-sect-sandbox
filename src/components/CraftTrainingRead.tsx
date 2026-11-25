@@ -82,7 +82,7 @@ function quote(choice:CraftTrainingOption){
   const {stones,roots,blankStones,finishStones}=craftTrainingCosts();
   switch(choice.craftTrainingMove){
     case 'offer':return '点定先铸坯和后完工的两位学员，各人还须亲自应下。只发约，不开炉。';
-    case 'join':return '两位都实应后才封存掌坊人 '+stones+' 灵石和 '+roots+' 株玄土根；报名不算学会。';
+    case 'join':return '两位都实应后才封存掌坊人 '+stones+' 灵石和 '+roots+' 株玄土根；学成另有考校。';
     case 'decline':return '谢绝接这道工序，不记学成，也不生器物。';
     case 'blank':return '真铸这一方坯才用托管 '+blankStones+' 灵石和 1 株玄土根；只记当场实作。';
     case 'finish':return '以同一方坯完工，实际耗托管 '+finishStones+' 灵石和 1 株玄土根；验质后才知能否得器。';

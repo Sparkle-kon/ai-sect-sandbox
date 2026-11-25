@@ -15,7 +15,7 @@ const view:AbandonedQuarterView={siteName:'坊市',villageName:'坊外旧村',st
 it('separates old chapter, actual visitors, and only present choices',()=>{
   const visitor=renderToStaticMarkup(<AbandonedQuarterStoryCard view={view} onChoose={()=>true}/>);
   expect(visitor).toContain('今到坊外旧村的遗址');
-  expect(visitor).toContain('眼下来往的人，不算旧城住户');
+  expect(visitor).toContain('如今来往的多是过客，另有籍册可查');
   expect(visitor.match(/min-h-\[44px\]/g)).toHaveLength(3);
   expect(visitor).not.toMatch(/private-|从前住过|已经到达/);
   const former=renderToStaticMarkup(<AbandonedQuarterStoryCard view={{...view,standing:'former_resident'}}/>);

@@ -176,7 +176,7 @@ export function resolveWaterVeinAction(world:WorldState,actor:Cultivator,payload
     state.observations.push({id,actorId:actor.id,tick:world.tick,year:world.year,month:world.month,
       paidStones:WATER_VEIN_SURVEY_STONES,wellDepth,mineYield,...(fieldDeficit===undefined?{}:{fieldDeficit}),...(symptom?{symptom}:{})});
     spending(world,actor,id,WATER_VEIN_SURVEY_STONES,'observe');
-    return event(world,`evt-${id}`,'北井实地落尺','本人实付两枚灵石校验北井，取得有日期的本地尺记，不等于勘出暗处来因。',[actor.id],'participants');
+    return event(world,`evt-${id}`,'北井实地落尺','本人实付两枚灵石校验北井，取得有日期的本地尺记，暗处来因仍待查。',[actor.id],'participants');
   }
   if(move==='open'&&well){
     const sect=world.sects.find(row=>row.id===actor.sectId);

@@ -39,7 +39,7 @@ export function DoctrineFoundingReceipts({ rows, maturity }: {
           ? <p>第 {row.authorizedTick} 轮，原宗掌门在原宗迁后的山门{row.authorizationSiteName ? `（${row.authorizationSiteName}）` : ''}亲自允议。</p>
           : <p>尚无原宗掌门在迁后山门允议的记录。</p>}
         {row.status === 'proposed' && <p className="text-slate-400">第 {row.expiresTick} 轮届期。提议时学舍账面 {row.schoolTreasury} 灵石，尚未交割。</p>}
-        <p>本案留有 {row.consentCount} 人的同意（含发起人，已撤回者不计）；同意不等于已经改宗。</p>
+        <p>本案留有 {row.consentCount} 人的同意（含发起人，已撤回者不计）；宗籍仍按原册，改宗另有文书。</p>
         {!!row.joins?.length && <ul className="list-inside list-disc space-y-0.5 text-slate-400" aria-label="本人分别签下的入宗意愿">
           {row.joins.map((join, index) => <li key={index}>
             第 {join.tick} 轮 · {join.own ? '你本人' : `第 ${index + 1} 位成员`}同意

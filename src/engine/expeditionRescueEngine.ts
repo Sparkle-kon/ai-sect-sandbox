@@ -216,7 +216,7 @@ export function resolveExpeditionRescueAction(world: WorldState, actor: Cultivat
   if (!plan || !hasHerb(actor)) return null;
   actor.herbs[EXPEDITION_RESCUE_HERB]-=1;
   Object.assign(row,{ rescuerId:actor.id,acceptedTick:world.tick,exitSiteId:plan.exit.id,path:plan.path,status:'extracting',supplySpent:1 });
-  return event(world,row,'accepted','同行者同意实路撤离','救援者实耗一株青玉叶；同意不等于已经离开，下回合方能起行。',row.gateSiteId);
+  return event(world,row,'accepted','同行者同意实路撤离','救援者实耗一株青玉叶；双方应下后，下回合方能起行。',row.gateSiteId);
 }
 
 export function expireOccasionRescues(world: WorldState,occasionId: string): WorldEvent[] {

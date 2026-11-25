@@ -5,7 +5,7 @@ const thought: Record<FurnaceEmergencyOption['furnaceEmergencyMove'], string> = 
   brace: '护住还能带走的炉边物件，不开炉，不冒充已修。',
   retreat: '先沿认得的近路离险，不替旁人作主。',
   request_rescue: '我只能开口相求，他来不来仍由他自己定。',
-  accept_rescue: '是我自己应下。脚步未到，便不算救成。',
+  accept_rescue: '是我自己应下。等一同走出险地，再说平安。',
 };
 
 export function furnaceEmergencyCommand(option: FurnaceEmergencyOption) {

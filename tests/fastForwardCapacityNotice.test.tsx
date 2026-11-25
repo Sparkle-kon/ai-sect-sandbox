@@ -13,7 +13,7 @@ describe('separate native archive capacities are not actor ceilings',()=>{
     expect(ui).toContain('每份快照 32 MiB，各分支保留的不同快照合计 128 MiB');
     expect(ui).toContain('这里只测了当前一份');
     expect(ui).toContain('不会删除既有分支');
-    expect(ui).toContain('这不等于超过长局上限');
+    expect(ui).toContain('可再核长局存档的容量');
     expect(ui).not.toContain('不能启动本次可续长局');
   });
   it('blocks only a measured too-large durable frame and leaves a short detached run independent',()=>{

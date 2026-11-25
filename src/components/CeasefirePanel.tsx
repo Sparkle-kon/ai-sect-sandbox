@@ -26,7 +26,7 @@ export function CeasefirePanel({ world, cultivator }: { world: WorldState; culti
       <header className="space-y-1">
         <h4 className="text-sm font-semibold text-emerald-100">本宗停战与重建档案</h4>
         <p className="break-words text-xs text-slate-300">{sect ? `${sect.name} · Tick #${world.tick}` : viewer ? '散修无本宗协定。' : '选择修士后查看所属宗门的协定。'}</p>
-        {sect && <p className="text-xs text-slate-400">协定与托管数据只读。已撤军不作战败计算，承诺的援助不等于已拨款。</p>}
+        {sect && <p className="text-xs text-slate-400">协定与托管数据只读。已撤军不作战败计算，援助承诺和拨款各记一栏。</p>}
       </header>
       {sect && !agreements.length && <p className="text-xs text-slate-400">本宗暂无可阅停战协定。</p>}
       <div className="max-h-[30rem] space-y-2 overflow-y-auto">

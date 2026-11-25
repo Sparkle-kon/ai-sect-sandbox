@@ -44,7 +44,7 @@ it('requires the same maker and a timely reply; stale and duplicate reviewed quo
 it('distinguishes permission from exact finish or refused return, with only actual original money',()=>{
   const resumed:WorkshopOrder={...order,status:'active',estateContinuation:{...terms,phase:'resumed',resumeTick:7,workUntilTick:10}};
   const read=(row:WorkshopOrder)=>renderToStaticMarkup(<WorkshopEstateRead order={row} actorId="heir" tick={10}/>);
-  expect(read(resumed)).toContain('还须实际完工验质');
+  expect(read(resumed)).toContain('完工验质后再交器');
   const finished:WorkshopOrder={...resumed,status:'completed',estateContinuation:{...resumed.estateContinuation!,phase:'completed',closedTick:8},
     work:[blank,{...blank,tick:8,stage:'finish',artifactId:'private-canonical-artifact',feePaid:6}]};
   expect(read(finished)).toContain('器物已实际交给核定的受益人');
@@ -94,6 +94,6 @@ it('queues the adjudicated heir and later the original maker with strict pending
   expect(possessAvatar(world,estateMakerId)).toBe(true);
   use(estateMakerId,'accept');
   expect(estateWork(world)).toMatchObject({work:[original],escrowStones:cash,status:'active',estateContinuation:{phase:'resumed'}});
-  expect(scene(estateHeirId)).toContain('还须实际完工验质');
+  expect(scene(estateHeirId)).toContain('完工验质后再交器');
   expect(scene(estateHeirId)).not.toContain('器物已实际交给');
 });

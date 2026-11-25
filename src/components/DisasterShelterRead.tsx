@@ -56,7 +56,7 @@ function shelterStory(row:DisasterShelter,tick:number){
     case 'offered':return '有一封借住邀约，尚未应允。没人启程，住处也没有被占用。';
     case 'reserved':return '原户代表已应约，留有一处可借住；尚未启程，也没有入住。';
     case 'outbound':return has(row.departedTick)?
-      '赴避客已在去路上，仍未到借住处。只留位，不算已经入住。':'尚无启程凭据，也没有入住。';
+      '赴避客已在去路上，仍未到借住处。借住的席位仍留着。':'尚无启程凭据，也没有入住。';
     case 'occupied':return has(row.arrivedTick)?
       '赴避客确已到原订住处，正在借住。只有这位实际到场的代表占一处。':'有借住约，但眼下不能核实已经入住。';
     case 'returning':return has(row.returnDepartedTick)?

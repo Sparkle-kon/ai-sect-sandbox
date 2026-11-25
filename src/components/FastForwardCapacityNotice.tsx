@@ -20,7 +20,7 @@ export function FastForwardCapacityNotice({campaign,currentBytes,ordinaryLimit}:
     </p>}
     {tooLarge?<p role="status" className="text-amber-200">当前这份已经超过长局单份上限，不能启动本次可续长局。</p>:
       currentBytes>ordinaryLimit&&<p role="status" className="text-amber-200">
-        普通 JSON 超过导入上限。{campaign?'这不等于超过长局上限。':'本次仅在独立副本短跑，不以普通 JSON 导入为前提。'}
+        普通 JSON 超过导入上限。{campaign?'可再核长局存档的容量。':'本次仅在独立副本短跑，不以普通 JSON 导入为前提。'}
       </p>}
   </>;
 }

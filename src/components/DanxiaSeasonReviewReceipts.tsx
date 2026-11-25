@@ -8,9 +8,9 @@ function original(row:DanxiaSeasonReviewView) {
   switch(row.source.outcome) {
     case 'delivered': return row.source.deliveredLeaves===2 ?
       '原案同批翡翠灵叶 2 株已由原定收药人实际签收。' : '原案交付凭据不完整，不能认定已实交。';
-    case 'unfulfilled': return '原案没有实交记录；封存、同意或抵达都不等于签收。';
+    case 'unfulfilled': return '原案暂无签收，封存、应允、抵达另记。';
     case 'observed': return '原案选择旁观，没有拨药或承诺交付。';
-    case 'no_commitment': return '原案未立备药承诺，不等于曾拒绝履约。';
+    case 'no_commitment': return '原案未许备药，拒约另有记载。';
   }
 }
 
@@ -20,7 +20,7 @@ function seasonStatus(row:DanxiaSeasonReviewView):string {
     case 'open': return '复议已开始，尚未订新约。';
     case 'proposed': return '已提出合作办法，尚未签定。';
     case 'renewed': return decision==='signed'?'双方已明确同意续约。':'尚不能核定此前续约的同意。';
-    case 'switched': return decision==='signed'?'双方已明确同意改与另一宗合作；不等于改换宗门。':'尚不能核定此前改投的同意。';
+    case 'switched': return decision==='signed'?'双方已明确同意改与另一宗合作；两边仍各归原宗。':'尚不能核定此前改投的同意。';
     case 'refused': return decision==='refused'?'原定求药人已明确拒绝下季合作。':'尚不能核定此前的拒绝。';
     case 'no_agreement': return decision==='expired'?'复议期限已过，未达成新约。':
       decision==='declined'?'提议未获应允，未达成新约。':'未达成可核对的新约。';
@@ -34,7 +34,7 @@ function ReviewReceiptDetails({row}: {row: DanxiaSeasonReviewView}) {
     {row.proposal&&<>
       <p>第 {row.proposal.proposedTick} 轮提出{row.proposal.kind==='renew'?'续合作':'改与另一宗合作'}。</p>
       {row.proposal.kind==='switch'&&row.proposal.reliefTick!==undefined&&
-        <p>该提议所据的赈济已实际发生于第 {row.proposal.reliefTick} 轮；不等于双方已经签约。</p>}
+        <p>该提议所据的赈济已实际发生于第 {row.proposal.reliefTick} 轮。新约仍待双方签字。</p>}
     </>}
     <p className="font-medium text-teal-100">{row.decision&&`第 ${row.decision.tick} 轮：`}{seasonStatus(row)}</p>
   </>;

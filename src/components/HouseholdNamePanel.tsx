@@ -28,7 +28,7 @@ function HouseholdNameLookup({ world, viewer, settlementId }: { world: WorldStat
   return <details className="min-w-0 rounded border border-emerald-400/20 bg-slate-950/55">
     <summary className="min-h-11 cursor-pointer break-words px-3 py-2.5 text-xs font-semibold text-emerald-200">家户称名与同名核验</summary>
     <div className="space-y-2 px-3 pb-3 text-xs leading-relaxed text-slate-300">
-      <p>只查本人当前在场的村镇。可核验姓名或已生效的称名；同名不等于同一人，也不证明亲属关系。</p>
+      <p>只查本人当前在场的村镇。可核验姓名或已生效的称名；同名者按各自来历列册，亲缘另有记载。</p>
       <form aria-label="本人在场村镇的称名核验" className="grid min-w-0 gap-1.5 min-[380px]:grid-cols-[minmax(0,1fr)_auto] min-[380px]:items-end" onSubmit={(event) => {
         event.preventDefault();
         if (query) setSubmitted({ world, result: lookupHouseholdNames(world, viewer, settlementId, query) });

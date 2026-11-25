@@ -54,7 +54,7 @@ function CreditLedger({ world, viewer, sectId, sects }: { world: WorldState; vie
         {restricted ? `本宗暂不得新借款 · 限制于 Tick #${restriction} 解除。` : '本宗当前无生效中的违约借款限制。'}
         {legalOffers > 0 ? ` 所选修士此时可向 ${legalOffers} 宗提出贷款报价；报价并非放款。` : ' 所选修士此时无合规的新出借报价。'}
       </p>
-      <p className="text-xs leading-relaxed text-slate-400">出借需留足 {SECT_CREDIT_RESERVE} 灵石准备金及自身欠款和待放款报价；应收本金加待放款报价不得超过 {SECT_CREDIT_EXPOSURE_MAX} 灵石。借款限制不等于禁放贷款。</p>
+      <p className="text-xs leading-relaxed text-slate-400">出借需留足 {SECT_CREDIT_RESERVE} 灵石准备金及自身欠款和待放款报价；应收本金加待放款报价不得超过 {SECT_CREDIT_EXPOSURE_MAX} 灵石。限制借款时仍可出借。</p>
       {!rows.length ? <p className="text-xs text-slate-400">此时点无本宗可阅的借贷记录。</p> : (
         <div className="max-h-[30rem] space-y-2 overflow-y-auto">
           {rows.map((loan) => {

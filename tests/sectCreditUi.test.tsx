@@ -72,7 +72,7 @@ describe('sect credit scoped financing display', () => {
     const { world, own, markup } = fixture();
     world.credit.restrictions.push({ sectId: own.id, untilTick: 21 });
     expect(markup()).toContain('本宗暂不得新借款 · 限制于 Tick #21 解除。');
-    expect(markup()).toContain('借款限制不等于禁放贷款');
+    expect(markup()).toContain('限制借款时仍可出借');
     world.tick = 21;
     expect(markup()).not.toContain('本宗暂不得新借款');
     expect(markup()).toContain('本宗当前无生效中的违约借款限制');

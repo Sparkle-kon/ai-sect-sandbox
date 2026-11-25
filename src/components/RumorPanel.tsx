@@ -26,7 +26,7 @@ export function RumorPanel({ cultivator, locations, cultivators }: RumorPanelPro
       <h4 className="text-xs font-semibold text-slate-200">见闻与流言 · {ordered.length} 条</h4>
       <p className="text-[11px] text-slate-400 leading-relaxed">
         {cultivator.alive ? '只显示此修士已获知的消息。' : '此处保留修士陨落时获知的消息。'}
-        传闻不等于事实，信任度表示修士的判断；同源转述不会增加独立证人数。
+        信任度是修士对传闻的判断；同源转述不会增加独立证人数。
       </p>
       {ordered.length === 0 ? (
         <p className="rounded border border-dashed border-slate-700 p-2 text-xs text-slate-400">暂无见闻或流言。</p>

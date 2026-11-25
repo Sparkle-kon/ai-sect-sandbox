@@ -17,7 +17,7 @@ it('renders authorized reachable options, not an ordinary cooldown or an invente
   const html=renderToStaticMarkup(<FurnaceEmergencyStoryCard view={view} onChoose={()=>true}/>);
   expect(html.match(/min-h-\[44px\]/g)).toHaveLength(3);
   expect(html).toContain('只有确实挡下伤害才耗八点真气');
-  expect(html).toContain('并不等于丹炉修好了');
+  expect(html).toContain('炉体还得另修');
   expect(html).toContain('到了才算撤出');
   expect(html).toContain('对方须亲自答复');
   expect(html).not.toMatch(/private-|应下求援|冷却/);

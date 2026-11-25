@@ -30,7 +30,7 @@ function SourceProof({ entry, id }: { entry: ChronicleDigestEntry; id: string })
     </section>}
     {!!proof.interpretations?.length && <section aria-label="传本与勘误" className="space-y-1 border-t border-slate-800 pt-2">
       <h6 className="font-semibold text-amber-100">另附传本与勘误</h6>
-      <p className="text-slate-400">传本是独立说法，不等于实录；已有的勘误另列，不改写原记录。</p>
+      <p className="text-slate-400">此处列各家传本；原始记录与勘误另卷可查。</p>
       <ul className="space-y-1">
         {proof.interpretations.map(({ id: interpretationId, tick, label, reading }) => <li key={interpretationId} className="[overflow-wrap:anywhere]">
           <span className="font-semibold text-slate-200">{label} · 回合 #{tick}：</span>{reading}

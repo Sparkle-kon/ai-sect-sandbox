@@ -8,8 +8,8 @@ const phaseCopy={
 } as const;
 
 const optionNotes={
-  guard:'选择守阵，不等于人人留阵，也不保证守住。',
-  negotiate:'提出议和，不等于对方应允。',
+  guard:'决定守阵，看看谁愿留下，再迎敌。',
+  negotiate:'向对方递出议和书，等其回话。',
   join:'动身赴阵，须真正抵达才算在阵前。',
 } as const;
 

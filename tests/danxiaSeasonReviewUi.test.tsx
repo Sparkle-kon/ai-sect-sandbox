@@ -15,7 +15,7 @@ const render=(...rows:DanxiaSeasonReviewView[])=>renderToStaticMarkup(<DanxiaSea
 describe('personal seasonal medicine review and exact private paired view',()=>{
   it('shows a real receipt rather than guessing from arrival, and distinguishes a proposal from explicit assent',()=>{
     const pending=render({...base,status:'proposed',proposal:{kind:'switch',proposedTick:41,reliefTick:39}});
-    expect(pending).toContain('封存、同意或抵达都不等于签收');
+    expect(pending).toContain('封存、应允、抵达另记');
     expect(pending).toContain('次季复议第 40 轮开始');
     expect(pending).toContain('赈济已实际发生于第 39 轮');
     expect(pending).toContain('尚未签定');

@@ -40,7 +40,7 @@ export function DoctrineMaturityConfirmation({choice,groupId,disabled,onConfirm,
       原始依据：第 {choice.proof.observedTick} 轮实记{choice.proof.kind==='sustained_hazard'?'连续三个月的严重灾势':'失去在册地权'}。
     </p>}
     <p>{TERMS[choice.option.doctrineMaturityMove]}</p>
-    <p>成功排入消耗 {AVATAR_ORDER_COST} 神识，不推进月份；下月按当时条件再次核对。排入指令本身不算签字，也不算并宗。</p>
+    <p>成功排入消耗 {AVATAR_ORDER_COST} 神识，不推进月份；下月按当时条件再次核对。签字与并宗须届时亲自办成。</p>
     <div className="flex flex-wrap gap-1.5">
       <button type="button" className={`${action} py-1.5 text-xs`} disabled={disabled} onClick={onConfirm}>确认排入：{ACTION[choice.option.doctrineMaturityMove]}</button>
       <button type="button" className={`${action} py-1.5 text-xs`} onClick={onCancel}>返回核对</button>

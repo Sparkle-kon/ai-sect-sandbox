@@ -17,7 +17,7 @@ const ACTION:Record<Move,string> = {
 };
 const TERMS:Record<Move,string> = {
   propose_renew:'这一步只提出继续合作；仍须对方另行同意，不会支出或送达新药。',
-  propose_switch:'所据赈济确已发生；提出改与另一宗合作不等于已签新约，也不会更改宗门归属。',
+  propose_switch:'所据赈济确已发生；可提改约，随后等对方另签；双方仍各归原宗。',
   refuse:'这一步只代表原定求药人明确拒绝此项合作，不替全村表态，也不改动原案交付。',
   accept:'实际生效须下月双方仍具资格，并由本人当场同意。这不会自动开新药账或施治。',
   decline:'拒绝现有提议只会使这项新约未能达成，不会取消原案实交。',
@@ -32,7 +32,7 @@ export function DanxiaSeasonReviewConfirmation({choice,groupId,disabled,onConfir
   return <div id={groupId} role="group" aria-label="核对次季选择" className="space-y-1.5 rounded border border-amber-500/40 bg-amber-950/30 p-2 text-xs leading-relaxed text-slate-300">
     <p className="font-semibold text-amber-100">{title(choice)}</p>
     <p>{TERMS[choice.option.danxiaReviewMove]}</p>
-    <p>成功排入消耗 {AVATAR_ORDER_COST} 神识，不推进月份；下月按当时条件再次核对。排入指令并不算签约。</p>
+    <p>成功排入消耗 {AVATAR_ORDER_COST} 神识，不推进月份；下月按当时条件再次核对。签约仍须当月双方应允。</p>
     <div className="flex flex-wrap gap-1.5">
       <button type="button" className={`${action} py-1.5 text-xs`} disabled={disabled} onClick={onConfirm}>确认排入：{ACTION[choice.option.danxiaReviewMove]}</button>
       <button type="button" className={`${action} py-1.5 text-xs`} onClick={onCancel}>返回核对</button>

@@ -64,7 +64,7 @@ describe('maturity choices are only native and explicit', () => {
     const html = renderToStaticMarkup(<DoctrineMaturityConfirmation choice={offer} onConfirm={() => {}} onCancel={() => {}}/>);
     expect(html).toContain('第 17 轮实记失去在册地权');
     expect(html).toContain('成功排入消耗 5 神识，不推进月份');
-    expect(html).toContain('排入指令本身不算签字，也不算并宗');
+    expect(html).toContain('签字与并宗须届时亲自办成');
     expect(html).not.toMatch(/private-|连续三个月的严重灾势/);
   });
 });

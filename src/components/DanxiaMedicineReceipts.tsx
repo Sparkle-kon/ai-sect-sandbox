@@ -30,7 +30,7 @@ export function DanxiaMedicineReceipts({rows}: {rows: readonly DanxiaMedicineVie
             {row.arrivedTick!==undefined&&<p>原村实到第 {row.arrivedTick} 轮
               {row.status==='arrived'&&row.receiveUntilTick!==undefined&&` · 需在第 ${row.receiveUntilTick} 轮之前实际签收`}。</p>}
             {row.returnStartedTick!==undefined&&<p>开始原路返程第 {row.returnStartedTick} 轮。</p>}
-            {row.returnedTick!==undefined&&<p>实际折返第 {row.returnedTick} 轮，不等于原主已领回。</p>}
+            {row.returnedTick!==undefined&&<p>实际折返第 {row.returnedTick} 轮，仍等原主来领。</p>}
             {row.disposition&&<p>第 {row.disposition.tick} 轮：{DISPOSITION[row.disposition.reason]}。</p>}
             {row.settledTick!==undefined&&<p>实际结记第 {row.settledTick} 轮
               {transferred&&` · 同批翡翠灵叶 ${DANXIA_MEDICINE_LEAVES} 株已入本单应收人的药囊`}

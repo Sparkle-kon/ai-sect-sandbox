@@ -76,7 +76,7 @@ it('prints the actual returned leaf on separation without inventing tea, shared 
   const html=read(separated,mealHost);
   expect(html).toContain('两路没能在原处相候');
   expect(html).toContain('实退 1 株给备茶人');
-  expect(html).not.toMatch(/这不算启程|实回|茶已分/);
+  expect(html).not.toMatch(/两人仍在山驿|实回|茶已分/);
   const wrong:WaypostMealOption={action:'WAYPOST_MEAL',waypostMealMove:'accept',targetWaypostMealId:'wrong-waypost'};
   expect(queueAvatarWaypostMeal(separated,mealGuest,wrong)).toBe(false);
 });

@@ -59,7 +59,7 @@ function WarningReadout({ rows, own }: { rows: readonly LocalWarning[]; own: rea
             {notice.corroborated ? `已有另一支同行队伍独立旁证${notice.corroboratedTick === undefined ? '' : ` · 第 ${notice.corroboratedTick} 轮`}。` : '尚无另一支同行队伍的独立旁证。'}
           </p>
           <p>{alternate ? `当前视野内另证 ${alternate.steps} 步局部绕行。不改变普通路线，不保证下轮安全。`
-            : '当前视野不足以核验绕行，不等于道路已阻断。'}</p>
+            : '当前视野不足，绕行路待查。'}</p>
         </li>
       ))}
     </ol> : <p className="text-slate-400">此时没有可查的有效警示；这不表示道路安全。</p>}

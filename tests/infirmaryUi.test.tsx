@@ -48,7 +48,7 @@ describe('private patient care in the existing sect treasury view', () => {
     expect(markup).toContain(`本轮值守</dt><dd>${aggregate.onDuty}`);
     expect(markup).toContain(`本轮可救治</dt><dd>${aggregate.available}`);
     expect(markup).toContain('本人当前排位：第 ');
-    expect(markup).toContain('等待和拒绝不算救治，也不扣耗材');
+    expect(markup).toContain('开治时才消耗药资');
     expect(markup).not.toContain('不公开的排队病患');
     expect(markup).not.toContain('do-not-render-other-id');
     expect(markup).not.toContain('实际用药');
